@@ -128,7 +128,11 @@ const rig = (opts: { processes?: Record<string, readonly ProcessInfo[] | null> }
       operation: "decision.answer",
       role: "human",
       params: { decisionId, choice: "A" },
-    } as unknown as HandlerRequest<"decision.answer">)) as { ok: boolean; error?: Failure };
+    } as unknown as HandlerRequest<"decision.answer">)) as {
+      ok: boolean;
+      value?: Record<string, unknown>;
+      error?: Failure;
+    };
   return { log, ev, ask, reconcile, answer, calls, flags, s: () => log.state() };
 };
 
@@ -142,6 +146,12 @@ describe("再起動で失われた、判断待ちの子の再開", () => {
     expect(JSON.stringify(r.s().reports) + JSON.stringify(r.s().inbox)).toContain(decisionId);
     const res = await r.answer(decisionId);
     expect(res.ok, JSON.stringify(res)).toBe(true);
+    // 答えを添えて再開したので、結果は delivered・deliveredVia: resumed（追加の指示の instructed と対）
+    expect(res.value).toMatchObject({
+      accepted: true,
+      delivery: "delivered",
+      deliveredVia: "resumed",
+    });
     expect(stateOf(r.s(), "a")).toBe("running");
     expect(r.calls.started).toHaveLength(1);
     expect(r.calls.started[0]?.nodeId).toBe("a");
