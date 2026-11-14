@@ -314,6 +314,7 @@ export function createPauseHandlers(deps: PauseHandlerDeps) {
     if (!restarted.ok) {
       note(target, `再開を記録できない: ${restarted.error.code}: ${restarted.error.cause}`);
       try {
+        // 停止の要求は記録していない（後始末の停止）。stopSeq は、停止の要求の seq ではなく、いまのログの末尾の seq（#10）。
         await adapter.stop(target, { mode: "immediate", stopSeq: log.state().lastSeq });
       } catch (e) {
         note(target, `起動した子を止められない: ${String(e)}`);
