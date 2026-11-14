@@ -241,6 +241,7 @@ export function createSpawner(deps: SpawnHandlerDeps) {
     /** 起動したかもしれない子を止め、停止を確認できたか。確認できなければ、プロセスが残っているとみなす。 */
     const stoppedForSure = async (): Promise<boolean> => {
       try {
+        // 停止の要求は記録していない（後始末の停止）。stopSeq は、停止の要求の seq ではなく、いまのログの末尾の seq（#10）。
         const r = await adapter.stop(nodeId, { mode: "immediate", stopSeq: log.state().lastSeq });
         return r.ok && r.value.state === "stopped";
       } catch (e) {

@@ -323,7 +323,14 @@ export function createRuntimeHandlers(deps: RuntimeHandlerDeps) {
 
       // 停止の進行はアダプタが行う。起動前の取り消し・進行中の穏当な停止の再送（効果なし）は、アダプタを呼ばない。
       if (adapter !== undefined && (effect === "gracefulStop" || effect === "immediateStop")) {
-        const attempt = [...after.stopRequests].reverse().find((q) => q.nodeId === nodeId);
+        // 停止の試行は、追記の結果の seq でとる（追記のあとに別の記録が入っても、ずれない。NFR_002）。
+        // 新しい試行にならない要求（猶予中の即時への切り替え）は、進行中の試行（そのノードの最後の停止要求）を使う。
+        const stopSeq = r.value.events[0]?.seq;
+        if (stopSeq === undefined)
+          return fail("internal", "記録した停止の要求の番号を取得できない", "もう一度試す");
+        const attempt =
+          after.stopRequests.find((q) => q.seq === stopSeq && q.nodeId === nodeId) ??
+          [...after.stopRequests].reverse().find((q) => q.nodeId === nodeId && q.seq < stopSeq);
         if (attempt !== undefined) {
           const adapterMode = effect === "immediateStop" ? "immediate" : "graceful";
           void adapter
