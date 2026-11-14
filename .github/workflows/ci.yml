@@ -38,6 +38,8 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - name: コミットのメール（author・committer・Co-authored-by）が noreply の形かを確かめる（docs だけの変更でも必ず動く）
+        # matrix で 2 回走らせないよう、node 22 の job だけで確かめる（node 24 の job では飛ばし、check は success のまま）
+        if: matrix.node == 22
         env:
           EVENT: ${{ github.event_name }}
           PR_BASE: ${{ github.event.pull_request.base.sha }}
@@ -57,6 +59,7 @@ jobs:
                 bash scripts/ci-commit-emails.sh "${BEFORE}..${AFTER}"
               else
                 # 新しいブランチの push・before が取れない（force push で消えた）とき: ほかの origin のブランチにない after のコミット。なければ after だけ
+                # （既にほかのブランチにあるコミットは、そのブランチの push・PR のときに確かめ済み）
                 others="$(git for-each-ref --format='%(objectname)' refs/remotes/origin | grep -vx "${AFTER}" || true)"
                 # shellcheck disable=SC2086 # others は sha の並び（語に分ける）
                 if [ -n "$(git rev-list "${AFTER}" --not ${others} | head -n 1)" ]; then

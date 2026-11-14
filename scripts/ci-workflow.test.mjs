@@ -205,7 +205,7 @@ test("ci-commit-emails.sh: author・committer・Co-authored-by のどれかが�
   }
 });
 
-test("ci.yml: コミットのメールの確かめは、変更の判定より前で、条件なしに動く。fetch-depth: 0。pull_request は base..head、push は before..after", () => {
+test("ci.yml: コミットのメールの確かめは、変更の判定より前で、node 22 の job だけで（docs だけの変更でも）動く。fetch-depth: 0。pull_request は base..head、push は before..after", () => {
   const steps = ci
     .slice(ci.indexOf("\n    steps:\n"))
     .split(/\n(?= {6}- )/)
@@ -213,7 +213,9 @@ test("ci.yml: コミットのメールの確かめは、変更の判定より前
   const at = steps.findIndex((s) => /bash scripts\/ci-commit-emails\.sh/.test(s));
   const changes = steps.findIndex((s) => /id: changes/.test(s));
   assert.ok(at > 0 && at < changes);
-  assert.doesNotMatch(steps[at], /\n {8}if:/);
+  // 条件は node 22 の job だけ（変更の判定には依らない。docs だけでも動く）
+  assert.match(steps[at], /\n {8}if: matrix\.node == 22\n/);
+  assert.doesNotMatch(steps[at], /steps\.changes/);
   assert.match(steps[0], /fetch-depth: 0/);
   assert.match(steps[at], /ci-commit-emails\.sh "\$\{PR_BASE\}\.\.\$\{PR_HEAD\}"/);
   assert.match(steps[at], /ci-commit-emails\.sh "\$\{BEFORE\}\.\.\$\{AFTER\}"/);
