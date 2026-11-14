@@ -1,4 +1,4 @@
-// plugin/.mcp.json の起動（scripts/mcp-stdio-command.mjs）と、落ちない中継（plugin/bin/touryou-mcp-shim.sh）を、実際に走らせて確かめる。
+// plugin/.mcp.json の起動（scripts/mcp-stdio-command.mjs）と、落ちない中継（plugin/scripts/touryou-mcp-shim.sh）を、実際に走らせて確かめる。
 // `node --test scripts/*.test.mjs`
 import assert from "node:assert/strict";
 import { execSync, spawn, spawnSync } from "node:child_process";
@@ -16,7 +16,7 @@ import { join } from "node:path";
 import { after, test } from "node:test";
 import { MCP_STDIO_ARGS, MCP_STDIO_COMMAND } from "./mcp-stdio-command.mjs";
 
-const SHIM = new URL("../plugin/bin/touryou-mcp-shim.sh", import.meta.url).pathname;
+const SHIM = new URL("../plugin/scripts/touryou-mcp-shim.sh", import.meta.url).pathname;
 const made = [];
 after(() => {
   for (const d of made) rmSync(d, { recursive: true, force: true });
@@ -110,7 +110,7 @@ const INIT = {
 
 test(".mcp.json の起動は /bin/bash と plugin の中の中継。中継のファイルがあり、${…} は CLAUDE_PLUGIN_ROOT だけ", () => {
   assert.equal(MCP_STDIO_COMMAND, "/bin/bash");
-  assert.deepEqual(MCP_STDIO_ARGS, ["${CLAUDE_PLUGIN_ROOT}/bin/touryou-mcp-shim.sh"]);
+  assert.deepEqual(MCP_STDIO_ARGS, ["${CLAUDE_PLUGIN_ROOT}/scripts/touryou-mcp-shim.sh"]);
   assert.ok(existsSync(SHIM));
   assert.equal(spawnSync("/bin/bash", ["-n", SHIM]).status, 0, "bash の構文");
   const code = readFileSync(SHIM, "utf8")

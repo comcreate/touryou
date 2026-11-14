@@ -132,7 +132,7 @@ jobs:
           fi
           (cd plugin && zip -r -X "../${name}" . -x '*.gitkeep')
           # 許可するのは、plugin の決まった置き場のファイルだけ（.env・node_modules などを入れない）
-          bad="$(unzip -Z1 "${name}" | grep -v '/$' | grep -Ev '^(\.claude-plugin/plugin\.json|\.mcp\.json|checksums\.json|hooks/hooks\.json|skills/[a-z0-9-]+/SKILL\.md|commands/[a-z0-9-]+\.md|agents/[a-z0-9-]+\.md|bin/touryou-mcp-shim\.sh)$' || true)"
+          bad="$(unzip -Z1 "${name}" | grep -v '/$' | grep -Ev '^(\.claude-plugin/plugin\.json|\.mcp\.json|checksums\.json|hooks/hooks\.json|skills/[a-z0-9-]+/SKILL\.md|commands/[a-z0-9-]+\.md|agents/[a-z0-9-]+\.md|scripts/touryou-mcp-shim\.sh)$' || true)"
           if [ -n "${bad}" ]; then
             echo "::error::zip に許可していないファイルがあります: ${bad}"
             exit 1

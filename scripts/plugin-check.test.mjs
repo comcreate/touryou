@@ -371,3 +371,17 @@ test(".mcp.json: type・command・サーバー名・余計なキー（env・url�
   assert.match(text({ ".mcp.json": "{" }), /\.mcp\.json を読み込めません/);
   assert.match(text({ ".mcp.json": "[]" }), /mcpServers/);
 });
+
+test("#36: 一番上の bin/ を拒む（中にファイルがあっても、空のディレクトリでも）。scripts/ は通す", () => {
+  assert.match(
+    text({ "bin/touryou-mcp-shim.sh": "#!/bin/bash\n" }),
+    /plugin\/bin\/ を置かないでください/,
+  );
+  const root = build();
+  mkdirSync(join(root, "bin"));
+  assert.match(
+    checkPlugin({ pluginDir: root, tools: TOOLS, forbidden: [] }).join("\n"),
+    /plugin\/bin\//,
+  );
+  assert.doesNotMatch(text({ "scripts/touryou-mcp-shim.sh": "#!/bin/bash\n" }), /plugin\/bin\//);
+});

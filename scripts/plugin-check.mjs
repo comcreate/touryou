@@ -214,6 +214,13 @@ export function checkPlugin({ pluginDir, tools, forbidden = [] }) {
     if (!isDir(join(pluginDir, dir))) errors.push(`plugin/${dir}/ ディレクトリがありません`);
   }
 
+  // 一番上の bin/ は置かない（空のディレクトリも）。claude.ai・Cowork・組織の設定は、bin/ のある plugin を入れない（#36）
+  if (existsSync(join(pluginDir, "bin"))) {
+    errors.push(
+      "plugin/bin/ を置かないでください（claude.ai・Cowork が入れられなくなる。中継などは plugin/scripts/ に置く）",
+    );
+  }
+
   // hooks/hooks.json（なければ空。あれば、JSON として正しいこと）
   const hooksFile = join(pluginDir, "hooks", "hooks.json");
   if (existsSync(hooksFile)) {
