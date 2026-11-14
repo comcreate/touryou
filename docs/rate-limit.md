@@ -110,7 +110,7 @@ daemon の窓口（`POST /v1/request`・`GET /v1/whoami`・`POST /v1/hook`〔フ
 
 トークン・`nodeId`・内容は、記録に出さない。1 件ずつは出さず、窓（1 分）の**最初の 1 件**をすぐに、窓の終わりに**種類別の件数**を 1 行にまとめる（停止のときにも、溜まっている件数をまとめる）。
 
-- `apiAuthFailed`（窓の最初の 1 件）: `reason` は `missing`（トークンがない・形式が違う）・`invalid`（形式は正しいが未知）・`principalRejected`（失効・止まったノード）。紐付け（`/v1/bind`）の失敗は `bindFailed` として、まとめに数える。
+- `apiAuthFailed`（窓の最初の 1 件）: `reason` は `missing`（トークンがない・形式が違う）・`invalid`（形式は正しいが未知）・`principalRejected`（失効・止まったノード）・`expired`（期限切れのトークン）・`retiredExpired`（役目の終わり〔受理など〕で失効させた紐付けのトークン。子の mcp の購読が、退役で切られたあとに 1 回だけ張り直すため、退役の直後に 1 件出るのは設計どおり。起動し直しのあとは `expired` に戻る）・`hookExpired`（フック専用のトークンの期限切れ）。`expired`・`retiredExpired`・`hookExpired` は、受信箱の警告の閾値に数えない。紐付け（`/v1/bind`）の失敗は `bindFailed` として、まとめに数える。
 - `apiRateLimited`（窓の最初の 1 件）: `key` は `principal`（主体ごとの制限）・`inflight`（同時数の制限）・`origin`（認証の失敗の制限。応答は 401 + `Retry-After`）。
 - `apiSummary`: `windowSec`・`authFailed`・`rateLimited`（種類別の件数）。フックの受け口（`POST /v1/hook`）に要求があった窓では、`hook`も出る:
   - `received`: 受け口に届いた要求の数。**窓口の入口の検査（Host・Origin）とメソッドの検査の後、認証と回数の制限の前に数える**ので、認証に失敗した要求・回数の制限で断った要求（401・429）も含む。断った理由は、今までどおり `authFailed`・`rateLimited` に出る。

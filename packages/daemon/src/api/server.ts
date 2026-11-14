@@ -537,13 +537,16 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       "フックの設定（作業ツリーの .claude/settings.json）を変えていないか、人に確かめてもらう",
     );
   /** 認証の失敗の理由。直近に期限で失効させたトークンなら expired。 */
-  type FailReason = "missing" | "invalid" | "expired" | "hookExpired";
+  type FailReason = "missing" | "invalid" | "expired" | "retiredExpired" | "hookExpired";
   /** フック専用のトークンの期限切れ（`hookExpired`）は、フックの受け口でだけ見る。 */
   const failReason = (token: string | undefined, hook = false): FailReason =>
     token === undefined
       ? "missing"
       : deps.credentials.wasExpired?.(token) === true
-        ? "expired"
+        ? // 役目の終わり（受理など）で失効させた紐付けのトークン。子の mcp の購読の張り直しなど、退役の直後の 1 回は設計どおり起きる
+          deps.credentials.wasRetired?.(token) === true
+          ? "retiredExpired"
+          : "expired"
         : hook && deps.hookTokens?.wasExpired?.(token) === true
           ? "hookExpired"
           : "invalid";
@@ -563,7 +566,7 @@ export function createApiServer(deps: ApiDeps): ApiServer {
             "フック専用のトークンの期限が切れた（発行から時間がたった）",
             '人が eval "$(touryou hook-env <nodeId>)" で出し直し、セッションを起動し直す',
           )
-        : reason === "expired"
+        : reason === "expired" || reason === "retiredExpired"
           ? failure(
               "tokenExpired",
               "ノードのトークンの期限が切れた（使わなかった時間が長い・発行から時間がたった・子の役目が終わった）",

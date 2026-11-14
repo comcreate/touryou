@@ -55,6 +55,7 @@ interface Rig {
   calls: string[];
   logs: ApiLogEvent[];
   mono: { now: () => number; advance: (ms: number) => void };
+  credentials: ReturnType<typeof createCredentialStore>;
 }
 let rig: Rig | undefined;
 afterEach(async () => {
@@ -129,6 +130,7 @@ const start = async (
     calls,
     logs,
     mono,
+    credentials,
     tokens: {
       human: HUMAN,
       m1: credentials.issueNodeToken("m1", "integrator"),
@@ -271,6 +273,20 @@ describe("窓口の回数の制限", () => {
     expect((await who(r.tokens.m1)).status).toBe(200);
     expect((await who(UNKNOWN_A)).status).toBe(401);
     expect(r.logs.some((e) => e.event === "apiAuthFailed" && e.reason === "invalid")).toBe(true);
+  });
+
+  it("役目の終わり（退役）で失効させたトークンの呼び出し: 401 tokenExpired。記録の理由は retiredExpired（期限切れの expired と分ける）", async () => {
+    const r = await start();
+    const bound = r.credentials.issueNodeToken("b", "child", "bind");
+    expect(r.credentials.expireNode?.("b")).toBe(true);
+    const res = await post(r, list("r1"), bound);
+    expect(res.status).toBe(401);
+    expect(res.json.error?.code).toBe("tokenExpired");
+    expect(r.logs).toContainEqual(
+      expect.objectContaining({ event: "apiAuthFailed", reason: "retiredExpired" }),
+    );
+    expect(JSON.stringify(r.logs)).not.toContain(bound);
+    expect(r.credentials.wasRetired?.(UNKNOWN_A)).toBe(false);
   });
 
   it("認証の失敗は、理由の種類だけ（窓の最初の 1 件をすぐに、窓の終わりに件数のまとめ）。制限の発動も同様。トークン・nodeId は出ない", async () => {
