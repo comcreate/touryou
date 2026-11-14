@@ -35,7 +35,7 @@ claude plugin marketplace add comcreate/touryou
 
 daemon・`touryou-mcp`・`touryou` は、plugin とは**別に**入れます（plugin には入っていません。上の `/setup` が Release から取得して入れるか、ここのとおり手元でビルドします）。
 
-### 1. daemon・touryou-mcp・touryou を入れる
+### 1. daemon・`touryou-mcp`・`touryou` を入れる
 
 `git`（Xcode の Command Line Tools）が要ります（daemon が、子の作業ツリーを `git worktree` で作るため。Xcode か Command Line Tools のどちらかがあればよい）。入っていなければ、Terminal で `xcode-select --install` を実行します（`/setup` の導入の script は、最初に `xcode-select -p` で確かめ、なければ止まります）。
 

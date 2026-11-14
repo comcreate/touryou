@@ -11,7 +11,7 @@ tags: ["claude-code", "mcp", "orchestration"]
 category: "developer-tooling"
 ---
 
-# touryou 決定ログ
+# TouRyou 決定ログ
 
 技術設計は [touryou_design.md](../specification/touryou_design.md) にある。
 

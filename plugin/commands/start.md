@@ -5,7 +5,7 @@ allowed-tools: mcp__node__whoami, mcp__plugin_touryou_node__whoami, mcp__node__t
 
 ツール名の `mcp__node__<名前>` は、plugin から入れたセッションでは `mcp__plugin_touryou_node__<名前>` として見える（同じツール）。見えているほうの名前で呼ぶ。
 
-touryou を使えるようにします。リポジトリやファイルの場所は、この指示に埋め込まれていません。`/touryou:setup` が置いた場所（`$HOME/.touryou`）を使います。
+TouRyou を使えるようにします。リポジトリやファイルの場所は、この指示に埋め込まれていません。`/touryou:setup` が置いた場所（`$HOME/.touryou`）を使います。
 
 1. まず、`mcp__node__whoami` を呼ぶ。`role` が `integrator` で返れば、すでに接続できている。手順 4 へ進む。
 2. 接続できなければ（ツールが見えない、または失敗）、`/touryou:setup` を実行済みかを、人間に尋ねる（設定ファイル `$HOME/.touryou/config.json` と、`$HOME/.touryou/current/bin` の配布物を、`/setup` が置く）。未実行なら、先に `/setup` を案内する。

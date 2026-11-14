@@ -15,7 +15,7 @@ priority: "high"
 risk: "high"
 ---
 
-# touryou 技術設計
+# TouRyou 技術設計
 
 **関連 Spec:** [touryou_spec.md](touryou_spec.md)
 **関連決定ログ:** [touryou.md](../adr/touryou.md)
@@ -145,14 +145,14 @@ interface Capabilities {
   - 作業ツリーは、信頼済みのリポジトリの `git worktree` として作る。
   - 子ごとにフォークも選べる: `claude --resume <親の id> --fork-session --bg --name <名前>`（親の id は `claude agents --json` で調べる）。
 - 子の許可: ふつうのモードの子は、道具を使うたびに許可の確認で止まり、人が子の画面を開くまで進まない。そこで、子は**範囲だけを許し（`permissions.allow`）、ほかは `--permission-mode dontAsk` で確認を出さずに断る**。範囲の外が要るときは、子が `scope_extend` で範囲の拡張を頼む。
-  - 一覧は daemon の純粋関数 `childAllowList(scope, toolNames)`（`sdk/child-permissions.ts`）が、ノードの範囲から作る。中身は 4 つだけ: (1) 子の touryou の道具を `mcp__node__<道具>` と `mcp__plugin_<plugin 名>_node__<道具>` の 2 つの形で。(2) `allowedCommands` を `Bash(<コマンド>:*)` に。(3) `writableLocations` を `Edit(./<相対>/**)` に（ファイルを書く道具の規則は `Edit(...)` にまとめて照合される。`Write(...)` は一致しないので入れない）。(4) 作業ツリーの中の読み取り `Read(./**)`・`Grep(./**)`・`Glob(./**)`。
+  - 一覧は daemon の純粋関数 `childAllowList(scope, toolNames)`（`sdk/child-permissions.ts`）が、ノードの範囲から作る。中身は 4 つだけ: (1) 子の TouRyou の道具を `mcp__node__<道具>` と `mcp__plugin_<plugin 名>_node__<道具>` の 2 つの形で。(2) `allowedCommands` を `Bash(<コマンド>:*)` に。(3) `writableLocations` を `Edit(./<相対>/**)` に（ファイルを書く道具の規則は `Edit(...)` にまとめて照合される。`Write(...)` は一致しないので入れない）。(4) 作業ツリーの中の読み取り `Read(./**)`・`Grep(./**)`・`Glob(./**)`。
   - 入れないもの: ほかの MCP の道具、WebFetch・WebSearch、範囲の外の Bash。次のものは一覧に入れず `invalidScope` で失敗にする（起動の文を返さない）: シェルの特殊文字（`*` `;` `&` `|` `` ` `` `$` `<` `>` `"` `'` `\` 括弧・改行）を含むコマンド、`cd` で始まるもの、1 語だけのもの（前方一致で任意の引数が通る）、任意のコードが動く形（1 語目が `sh`・`bash`・`env`・`node`・`python`・`npx`・`sudo` など、2 語目が `exec`・`-e`・`-c` など、`git config`・`git -c`、`find` の `-exec`・`-delete` など。`npm run` などはスクリプトの名前まで書いたものだけ）、作業ツリーの外を指す書き込みの場所。
   - deny: `forbiddenLocations` と `.git` を、`Edit`・`Read` の `./<f>` と `./<f>/**` の両方の形で `permissions.deny` に入れる（場所がファイルのときにも当たるように）。作業ツリーの外の禁止の場所は allow にも入らないので、dontAsk が断る。
   - Bash の前方一致の限界: `Bash(git status:*)` は続く任意の旗も通す。git の危ない旗は、フックの範囲の判定（git の大域のオプションの拒否）に任せる。
   - `--settings` は利用者・リポジトリの settings に足される（置き換えない）。利用者や作業ツリーの settings に広い allow があれば、子も受け継ぐ。plugin の有効化まで外れるおそれがあるため、`--setting-sources` では絞らない。
   - 守りは二重: 範囲の外は dontAsk が断り、さらにフック（6.4）も断る。子に plugin（フック）が付かなかったときも、一覧の外は断られる。`acceptEdits`・`bypassPermissions` には切り替えない（範囲の外まで通るため）。
 - 子の plugin: `claude --bg` で起動する子は新しいセッションなので、親の `--plugin-dir` は引き継がれない。そこで、親の mcp が自分の `CLAUDE_PLUGIN_ROOT` を `parent_request` に添え（道具の引数には出さない）、daemon が起動の文にいつも `--plugin-dir '<その場所>'` を足す。marketplace から入れた同じ plugin と重なっても 1 つにまとまる。
-  - daemon の確かめ（`sdk/plugin-dir.ts` の `checkPluginDir`）: 実パスにしてから、絶対パスであること、1 重の引用符で安全にくくれること、`.claude-plugin/plugin.json` の `name` が touryou の plugin の名前と一致することを確かめる。実パスが `repoRoot`・`worktreeRoot`・`stateDir`・`~/.touryou` の中なら付けない（作業ツリーに偽の plugin を作って子に読ませるのを防ぐ）。満たさなければ付けず、親の受信箱に理由を出す（依頼ごとに 1 回。値・パスは出さない）。
+  - daemon の確かめ（`sdk/plugin-dir.ts` の `checkPluginDir`）: 実パスにしてから、絶対パスであること、1 重の引用符で安全にくくれること、`.claude-plugin/plugin.json` の `name` が TouRyou の plugin の名前と一致することを確かめる。実パスが `repoRoot`・`worktreeRoot`・`stateDir`・`~/.touryou` の中なら付けない（作業ツリーに偽の plugin を作って子に読ませるのを防ぐ）。満たさなければ付けず、親の受信箱に理由を出す（依頼ごとに 1 回。値・パスは出さない）。
   - 付けられなかった子を見つける: 親の起動の報告から `cliWatch.unboundMinutes`（既定 3 分）が過ぎても紐付けのない CLI の子を、受信箱に failure で出す（子ごとに 1 回）。「紐付けた」は、紐付けのトークンか `node.sessionBound` の記録だけで決める。紐付けのトークンはメモリだけなので、daemon の起動より前に起動の報告があった子は対象にせず、「紐付けをやり直して」の知らせに任せる。
 - 紐付け: 子の最初の番で、子の mcp が `child_bind` を引数なしで呼び、daemon が子ごとの資格情報を返す（Desktop と同じ `POST /v1/bind`）。資格情報は mcp のプロセスの中だけに持つ。
   - 紐付けのコードは、起動の文にも指示にも会話にも入れない。daemon が作業ツリーの git のディレクトリに `touryou-bind-code`（0600。一時ファイルから名前を替える。リンクでないことを確かめる）を置き、子の mcp がそれを読む（持ち主・0600・リンクでないことを確かめてから）。bind が通ったら消す。コードの正は daemon のメモリで、ファイルは写し。
@@ -179,7 +179,7 @@ interface Capabilities {
   2. 見張り: 設定 `cliWatch`（`stallMinutes` 既定 30 分・`unreadMinutes` 既定 30 分・`intervalSec` 既定 60 秒）。親が起動を報告した running の子で、最後の動きから `stallMinutes` を超えたら「止まっているかもしれない」を受信箱に出す（同じ最後の動きには 1 回）。子が受け取らないまま `unreadMinutes` を超えた指示も、指示ごとに 1 回出す（FR_009）。判断待ちの子は出さない。daemon の起動の時刻を「最後の動き」の下限にする。知らせはノードごとに 24 時間で 20 件まで。
   3. 親の確かめ: 親が `claude agents --json` の状態を読み、mcp で報告する。止まっている子は、人間に attach を頼む（受信箱）。
 - daemon は Claude Code を呼ばない（記録の時刻だけで決める。NFR_014）。
-- 親の Bash の許可の確認: ふつうのモードでは確認が出うるので、touryou が使うコマンド（`claude --bg`・`claude stop`・`claude rm`・`claude agents --json`）を許可の一覧に入れる案内を `/touryou:setup` に置く。skill が親に実行させるコマンドは、変数を使わず値を書き込んだ形にする。
+- 親の Bash の許可の確認: ふつうのモードでは確認が出うるので、TouRyou が使うコマンド（`claude --bg`・`claude stop`・`claude rm`・`claude agents --json`）を許可の一覧に入れる案内を `/touryou:setup` に置く。skill が親に実行させるコマンドは、変数を使わず値を書き込んだ形にする。
 - 案内に書く注意: agent view の入力欄に貼った文は、新しい裏のセッションとして起動される。組織の管理の設定がある環境では、モデルの切り替えで設定の読み込みの失敗が出ることがある。
 
 ## 6.3. 知らせ（Pub/Sub）
@@ -213,11 +213,11 @@ interface Capabilities {
 
 ## 6.4. フック
 
-- フックは plugin の `hooks.json` で入れる。フックの入力（`session_id`、`cwd`、ツール名、引数）を daemon のフック受付へ渡し、許可・拒否を決める。紐付けの前のセッション（touryou の子でないもの）には何もしない。拒否は範囲違反としてイベントに記録する。受信箱の違反の要約は「範囲違反（フックが拒んだ・<理由>）: <対象>」とし、拒否されたことを明示する（`daemon/src/compose.ts`。統合の skill は、その言葉のまま人に伝える）。`node.spawn`・`scope.decide` の `scopeNotSubset` は、上限が設定の根の範囲（`rootScope`）のとき、`cause` に `config.json` の `rootScope` を、`nextActions` に daemon の起動し直しを出す（設定は起動時にだけ読む）。
+- フックは plugin の `hooks.json` で入れる。フックの入力（`session_id`、`cwd`、ツール名、引数）を daemon のフック受付へ渡し、許可・拒否を決める。紐付けの前のセッション（TouRyou の子でないもの）には何もしない。拒否は範囲違反としてイベントに記録する。受信箱の違反の要約は「範囲違反（フックが拒んだ・<理由>）: <対象>」とし、拒否されたことを明示する（`daemon/src/compose.ts`。統合の skill は、その言葉のまま人に伝える）。`node.spawn`・`scope.decide` の `scopeNotSubset` は、上限が設定の根の範囲（`rootScope`）のとき、`cause` に `config.json` の `rootScope` を、`nextActions` に daemon の起動し直しを出す（設定は起動時にだけ読む）。
 - 拒否の判定は、`core` の純粋関数（作業範囲と操作を入力にして判定を返す）で行う。
 - CLI の子のフックはトークンを持たないので、daemon は紐付けの記録（`sessionBindings.lookupNodeBySession`）で session_id からノードを引き、running・waiting のときだけ扱う。入力の cwd がそのノードの作業ツリーの中かも確かめる。知らない session_id には何もしない。この形の報告は木の状態を動かさず、記録の行為者に `trust: "sessionIdOnly"` を写す。
 - 子のノードでは、daemon の state のディレクトリ（`stateDir`）と設定ファイルを読み取り・書き込みとも禁じる。作業ツリーの git のディレクトリと `<作業ツリー>/.git` は書き込み・削除を禁じる（Bash の rm・mv・ln・cp・tee・sed -i・dd の of=・リダイレクト、git worktree の書き換えも）。`<共通の git>/worktrees`（ほかのノードの git のディレクトリ）は読み取りも禁じ、自分の git のディレクトリだけを除く。
-- 印のある作業ツリーでは、紐付けの前の PreToolUse を、紐付けの道具（`child_bind`・`whoami`）のほかは拒否する。紐付けの前の例外の道具（`child_bind`・`whoami`・`ToolSearch`・touryou の plugin の `Skill`）は、紐付けが外れたあとも通る（読み取りと紐付けの試みだけで害が小さい）。
+- 印のある作業ツリーでは、紐付けの前の PreToolUse を、紐付けの道具（`child_bind`・`whoami`）のほかは拒否する。紐付けの前の例外の道具（`child_bind`・`whoami`・`ToolSearch`・TouRyou の plugin の `Skill`）は、紐付けが外れたあとも通る（読み取りと紐付けの試みだけで害が小さい）。
 - 入力待ちの知らせ（Notification）は、同じノードに直近 10 分に出していれば足さない。窓はトークンつきの報告と session_id で引いた報告で分ける。
 - git の設定は、`-c`・`--config-env`・`git config` の書き込みで、`alias.*`・`include.path`・`includeIf.*` を拒む。
 - 線引き: Bash の検査はコマンドの字面の解析で、`python -c` の中の文字列や変数で組み立てたパスは見ない。印と禁じる場所は誤りと事故を防ぐためのもので、モデルが意図して外そうとすることに対する境界ではない。バックグラウンド起動（`run_in_background`、`&`、`nohup`、`setsid` など）は既定で拒否する。

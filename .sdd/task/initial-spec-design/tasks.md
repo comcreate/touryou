@@ -89,8 +89,8 @@ depends-on: ["design-touryou"]
 | T21-pr | daemon: 読み取りも禁じる場所 | 済み |
 | T21-ce | daemon: 子のトークンを環境変数で渡す | 済み（のちに外した） |
 | T21-te | daemon: トークンの期限 | 済み |
-| T21-cc | cli: touryou child bind・touryou child report | 済み |
-| T21-cb | daemon: touryou child の配線 | 済み |
+| T21-cc | cli: `touryou` child bind・`touryou` child report | 済み |
+| T21-cb | daemon: `touryou` child の配線 | 済み |
 | T21-ch | daemon・cli: Desktop の子のフックの経路 | 済み |
 | T21-cs | daemon: Desktop の子の見張りを置く・塞ぐ | 済み |
 | T21-cu | daemon: フックと session_id の結び付けの直し | 済み |
@@ -104,7 +104,7 @@ depends-on: ["design-touryou"]
 | T22-ht | daemon・cli: 手動の CLI セッション用のフック専用のトークン | 済み |
 | T22-c | daemon・plugin: SDK で起動する子に skill を渡す | 済み（のちに外した） |
 | T22d | cli・画面: 停止の宣言 | 済み |
-| T22-cli | cli: touryou の実行ファイルと HTTP のクライアント | 済み |
+| T22-cli | cli: `touryou` の実行ファイルと HTTP のクライアント | 済み |
 | T22-auth | daemon: 子の認証の確認 | 済み（のちに外した） |
 | T22-hh | plugin: .mcp.json の headersHelper で根のトークンを読む | 済み |
 | T22-stdio | plugin・mcp: 統合セッション用の MCP を stdio にする | 済み |

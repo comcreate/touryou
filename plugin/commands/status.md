@@ -5,7 +5,7 @@ allowed-tools: mcp__node__whoami, mcp__plugin_touryou_node__whoami, mcp__node__t
 
 ツール名の `mcp__node__<名前>` は、plugin から入れたセッションでは `mcp__plugin_touryou_node__<名前>` として見える（同じツール）。見えているほうの名前で呼ぶ。
 
-touryou の、いまの状態を要約します。書き込む操作は、しません。
+TouRyou の、いまの状態を要約します。書き込む操作は、しません。
 
 1. `mcp__node__whoami` で、自分の nodeId と role を確かめる。失敗したら、`/touryou:start` を案内して、終わる（daemon・`touryou-mcp` の起動は、`/setup` が置いた `$HOME/.touryou/current/bin` の `touryou-daemon`・`touryou-mcp` と、`$HOME/.touryou/config.json` を使う。統合セッションの接続は、plugin の `.mcp.json` が stdio で `touryou-mcp --stdio` を起動し、`touryou-mcp` が `$HOME/.touryou/state/root-token` を読む（環境変数は使わない）。環境変数 `TOURYOU_DAEMON_URL` は、統合セッションに設定しない）。
 2. `mcp__node__tree_list` で、木を見る。状態ごとの数と、止まっている・待っているノードを挙げる。

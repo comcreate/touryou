@@ -56,26 +56,26 @@ daemon は、CLI の子を起動しない。親のセッションが起動する
 
 ## 親から子を起動する流れ
 
-touryou は、**セッションを起動しません**。**Anthropic の認証も扱いません**（子は、親と同じ Claude Code のログインで動きます）。CLI の子は、親のセッション（Claude Code）が Bash で起動します。
+TouRyou は、**セッションを起動しません**。**Anthropic の認証も扱いません**（子は、親と同じ Claude Code のログインで動きます）。CLI の子は、親のセッション（Claude Code）が Bash で起動します。
 
-1. **起動**: 統合が `node_spawn` を呼ぶと、touryou は作業ツリーを作り、親のセッションに「受信箱を読んで…（番号）」の知らせを届ける。親は `parent_request` で受け取ったコマンド `cd <作業ツリー> && claude --bg '<指示>' --name <名前> [--plugin-dir <plugin の場所>] --permission-mode dontAsk --settings '{"crossSessionInbound":"accept","permissions":{"allow":[...],"deny":[...]}}'`（`--plugin-dir` は、親の mcp の plugin の場所〔例: `<H>/.claude/plugins/…`〕が確かめを通ったときだけ入る。`--permission-mode` の前に `--model`・`--effort`、フォークのときは後ろに `--resume <id> --fork-session` が入ることがある）を、そのまま Bash で実行し、`parent_report` で報告する。
+1. **起動**: 統合が `node_spawn` を呼ぶと、TouRyou は作業ツリーを作り、親のセッションに「受信箱を読んで…（番号）」の知らせを届ける。親は `parent_request` で受け取ったコマンド `cd <作業ツリー> && claude --bg '<指示>' --name <名前> [--plugin-dir <plugin の場所>] --permission-mode dontAsk --settings '{"crossSessionInbound":"accept","permissions":{"allow":[...],"deny":[...]}}'`（`--plugin-dir` は、親の mcp の plugin の場所〔例: `<H>/.claude/plugins/…`〕が確かめを通ったときだけ入る。`--permission-mode` の前に `--model`・`--effort`、フォークのときは後ろに `--resume <id> --fork-session` が入ることがある）を、そのまま Bash で実行し、`parent_report` で報告する。
 2. **紐付け**: 子は最初の番で `child_bind` を引数なしで呼ぶ（コードは、mcp が作業ツリーの git のディレクトリのファイルから読む）。続けて `inbox_fetch` でブリーフと指示を読む。
 3. **知らせ**: 以後、親から子・子から親への連絡は、受信箱と 1 行の知らせ（受信箱を読め）で届く。
-4. **停止**: `node_stop` は 2 段。子へ停止の知らせ → 猶予 → 親に `claude stop <子>` を依頼。子のセッションの id が記録にないとき（起動の報告に `sessionRef` がなかった）は、親はコマンドを組まず、`claude agents --json` で調べた id を `parent_report` の `sessionRef` で返す。touryou がその id で依頼を作り直す。
-5. **削除**: 止まったあと、親に `claude rm <子>` を依頼。`claude rm` は子のセッションだけを消す。touryou の作業ツリーとコミット（未 push を含む）は残る（`claude rm` が未 push を守るのは Claude Code 自身が作った作業ツリーのときだけ）。作業ツリーの片付けは回収（人が破棄を決める → `node_reclaimPreview` で失われるものを見る → `node_reclaim`）。念のため、`claude rm` が拒んだら消さない。`--discard-unpushed` は、人間が破棄を決めたときだけ。
+4. **停止**: `node_stop` は 2 段。子へ停止の知らせ → 猶予 → 親に `claude stop <子>` を依頼。子のセッションの id が記録にないとき（起動の報告に `sessionRef` がなかった）は、親はコマンドを組まず、`claude agents --json` で調べた id を `parent_report` の `sessionRef` で返す。TouRyou がその id で依頼を作り直す。
+5. **削除**: 止まったあと、親に `claude rm <子>` を依頼。`claude rm` は子のセッションだけを消す。TouRyou の作業ツリーとコミット（未 push を含む）は残る（`claude rm` が未 push を守るのは Claude Code 自身が作った作業ツリーのときだけ）。作業ツリーの片付けは回収（人が破棄を決める → `node_reclaimPreview` で失われるものを見る → `node_reclaim`）。念のため、`claude rm` が拒んだら消さない。`--discard-unpushed` は、人間が破棄を決めたときだけ。
 
 手順の本文は、skill の `integrator`（親）と `child`（子）にある。
 
 ## 注意（CLI の子）
 
-- **CLI の子と plugin**: `--plugin-dir` で開いたのは、そのセッションだけ。`--plugin-dir` だけで開いた親の子（`claude --bg`）には plugin が付かず、子は `child_bind` を見つけられないまま止まり、touryou のフック（守り）も効かない。そこで touryou は、親の mcp の plugin の場所（`CLAUDE_PLUGIN_ROOT`）が確かめを通れば、子の起動の文に `--plugin-dir` を足す（marketplace から入れた plugin と重なっても 1 つにまとまる）。付けられなかったときは、受信箱に理由が出る。そのときは plugin を設定の置き場に入れる（marketplace から入れる）。daemon は、起動の報告のあと所定の時間（`cliWatch.unboundMinutes`。既定 3 分）紐付けのない子を、受信箱に 1 回だけ出す。
+- **CLI の子と plugin**: `--plugin-dir` で開いたのは、そのセッションだけ。`--plugin-dir` だけで開いた親の子（`claude --bg`）には plugin が付かず、子は `child_bind` を見つけられないまま止まり、TouRyou のフック（守り）も効かない。そこで TouRyou は、親の mcp の plugin の場所（`CLAUDE_PLUGIN_ROOT`）が確かめを通れば、子の起動の文に `--plugin-dir` を足す（marketplace から入れた plugin と重なっても 1 つにまとまる）。付けられなかったときは、受信箱に理由が出る。そのときは plugin を設定の置き場に入れる（marketplace から入れる）。daemon は、起動の報告のあと所定の時間（`cliWatch.unboundMinutes`。既定 3 分）紐付けのない子を、受信箱に 1 回だけ出す。
 - **agent view の入力欄に貼った文は、新しい裏のセッションになる**。子に答えるつもりで agent view の入力欄に書くと、別の子が増える。子に入力するときは `claude attach <名前>` でつなぐ。
 - **組織の管理の設定（managed settings）がある環境では、モデルの切り替えで失敗が出ることがある**（`--model` で、許されていないモデルを指定したときなど）。そのときは、出た文面を `parent_report` の `reason` に入れて報告する。
-- **auto でないモード（ふつうのモード）では、`claude` のコマンドごとに許可の確認が出る**。変数を含むコマンドは「A variable in this command can't be checked before it runs」の確認が出るので、touryou の依頼のコマンドは、変数のない形にしている（値は単一引用符で 1 語にする）。親の skill も、コマンドを書き換えない・変数を足さない・つなげない。確認を減らすには、`/touryou:setup` の「許可の一覧」を見る。
+- **auto でないモード（ふつうのモード）では、`claude` のコマンドごとに許可の確認が出る**。変数を含むコマンドは「A variable in this command can't be checked before it runs」の確認が出るので、TouRyou の依頼のコマンドは、変数のない形にしている（値は単一引用符で 1 語にする）。親の skill も、コマンドを書き換えない・変数を足さない・つなげない。確認を減らすには、`/touryou:setup` の「許可の一覧」を見る。
 - **子は `--settings '{"crossSessionInbound":"accept",…}'` で起動する**。bypassPermissions の受け手は、ほかのセッションからの知らせを保留するため（知らせが届かないと、子が受信箱を読まない）。
-- **子は `--permission-mode dontAsk` で動き、範囲（書き込みの場所・許可のコマンド）と touryou の道具・作業ツリーの中の読み取りだけを確認なしで使う。範囲の外の操作は、確認を出さずに断られる。要るときは、子が受信箱で範囲の拡張（`scope_extend`）を頼む**。許しの一覧（`permissions.allow`）は、touryou が子の範囲から作って `--settings` に入れる。書き込みの場所は `Edit(...)` の形で入れる（新しいファイルを作る Write も、`Edit(...)` の規則で照合される）。禁止の場所と `.git` は `permissions.deny` に `Edit(...)`・`Read(...)` で入れる。範囲の判定（フック）も別に効く。
+- **子は `--permission-mode dontAsk` で動き、範囲（書き込みの場所・許可のコマンド）と TouRyou の道具・作業ツリーの中の読み取りだけを確認なしで使う。範囲の外の操作は、確認を出さずに断られる。要るときは、子が受信箱で範囲の拡張（`scope_extend`）を頼む**。許しの一覧（`permissions.allow`）は、TouRyou が子の範囲から作って `--settings` に入れる。書き込みの場所は `Edit(...)` の形で入れる（新しいファイルを作る Write も、`Edit(...)` の規則で照合される）。禁止の場所と `.git` は `permissions.deny` に `Edit(...)`・`Read(...)` で入れる。範囲の判定（フック）も別に効く。
 - 子の範囲のコマンド（`allowedCommands`）は、2 語以上で書く（`git status`・`git add`・`git commit`・`pnpm test` など）。`git`・`node` のような 1 語だけのものや、`;`・`>`・引用符などを含むものがあると、子の起動の依頼が `invalidScope` で失敗する（前方一致で何でも通ってしまうため）。`bash`・`node`・`npx`・`npm exec`・`pnpm dlx`・`git config`・`find -exec` など任意のコードを動かせる形と、スクリプトの名前のない `pnpm run` も同じく失敗する（`pnpm run build` のように書く）。`yarn <スクリプト>` は `run` がなくてもスクリプトを動かすので、`yarn` で 2 語のコマンドを許すときは、それがスクリプトの名前でないことを確かめる。子に `git add`・`git commit` をさせたいときは、根の範囲（`rootScope`）か子の範囲に入れておく（入れないと、子は確認なしで断られる）。
-- **根（統合）のセッションは、touryou のフックで絞らない（フックが働くのは、子の印のある作業ツリーだけ**。`cli/src/hook.ts`）。根の Bash・書き込みは、利用者の Claude Code の許可の設定のとおりに動く。`rootScope` は、子に渡す範囲の上限で、根自身の操作の制限ではない。
+- **根（統合）のセッションは、TouRyou のフックで絞らない（フックが働くのは、子の印のある作業ツリーだけ**。`cli/src/hook.ts`）。根の Bash・書き込みは、利用者の Claude Code の許可の設定のとおりに動く。`rootScope` は、子に渡す範囲の上限で、根自身の操作の制限ではない。
 - **親（統合）の、読むだけの道具の許可（任意）**: `whoami`・`inbox_fetch`・`tree_list`・`node_capabilities`・`decision_get`・`report_get`・`node_reclaimPreview` の 7 つだけは、確認なしにしてよい（記録を書かない。試験で確かめている）。例は `/touryou:setup` の「許可の一覧」（名前は `mcp__plugin_touryou_node__<道具>`。`/permissions` で実際の形を確かめる）。ものを変える道具と `parent_request`（起動のコマンドを返す入口）は足さない。一覧は core の `PARENT_READONLY_TOOL_NAMES`。
 - 利用者や作業するリポジトリの settings にある許可（`permissions.allow`）は、子も受け継ぐと見ている（推測）。広い許可を置いていると、子もそれを使える。
 
@@ -88,7 +88,7 @@ touryou は、**セッションを起動しません**。**Anthropic の認証�
 
 **フック専用のトークンが無効になるとき**: ノードのトークンが発行し直される・失効すると、フック専用のトークンも一緒に無効になる。発行し直されるのは、**子が止められて再開したとき**（判断要求の `pauseNodeIds` で止め、回答で再開）・子の作り直し・bind のとき（CLI の子（`childRuntime: "cli"`）で実際に起こるのは、このうち**再開だけ**（作り直しは新しいノードになり、bind は Desktop の子だけ）。）。**子を止めない判断（`pauseNodeIds` なし、子が自分で出した判断など）に回答しても、子は動いたまま（回答は指示として届く）で、トークンは変わらない。手動のセッションは、そのまま使える**。手動のセッションのフックは拒否されるようになるので、`eval "$(touryou hook-env <nodeId>)"` から起動し直す。daemon の再起動でも無効になる。**`touryou hook-env` の出力を、パイプやファイルに出さない**（`eval` 以外に渡すと、トークンがそこに残る）。**互換**: 記録のイベント `node.hookTokenIssued` を書いたあとは、古い版の daemon に戻せない（ダウングレード不可）。
 
-**touryou の子は、必ず `TOURYOU_DAEMON_URL`（窓口の URL）と `TOURYOU_NODE_TOKEN`（その子のノードのトークン）の両方を設定して起動する。どちらもない場合、フックは働かない**（touryou の子ではないセッションを壊さないため、素通しして、標準エラーに一言出す）。片方だけのときは、設定の誤りとして、拒否する。
+**TouRyou の子は、必ず `TOURYOU_DAEMON_URL`（窓口の URL）と `TOURYOU_NODE_TOKEN`（その子のノードのトークン）の両方を設定して起動する。どちらもない場合、フックは働かない**（TouRyou の子ではないセッションを壊さないため、素通しして、標準エラーに一言出す）。片方だけのときは、設定の誤りとして、拒否する。
 
 **`touryou`（`touryou hook`）が配置されているときの判定**:
 
@@ -104,15 +104,15 @@ touryou は、**セッションを起動しません**。**Anthropic の認証�
 | 場面 | PreToolUse（拒否版） | PostToolUse・Stop（止めない版） |
 |:--|:--|:--|
 | 環境変数が両方ない（片方だけ・空文字を含む） | 素通し（終了コード 0。標準エラーに一言） | 素通し |
-| **`TOURYOU_NODE_TOKEN` と `TOURYOU_DAEMON_URL` の両方がある**（touryou の子なのに、`touryou` がない・動かない） | **拒否**（終了コード 2。`/setup` を実行する、と理由を示す） | 止めない（終了コード 0。標準エラーに一言） |
+| **`TOURYOU_NODE_TOKEN` と `TOURYOU_DAEMON_URL` の両方がある**（TouRyou の子なのに、`touryou` がない・動かない） | **拒否**（終了コード 2。`/setup` を実行する、と理由を示す） | 止めない（終了コード 0。標準エラーに一言） |
 
 `touryou hook` が配置されて動いているときは、その終了コード（0・2）が、そのまま返る（止めない版は、どの終了コードでも 0）。**壊れた `touryou` の扱い**（子の環境変数が両方あれば PreToolUse は拒否、なければ素通し＋一言）は、`onFailure: "block"` を付けない代わりに、この 1 行が担う。
 
-**未配置のとき「片方だけ」を拒否しない理由**（決定）: `/setup` の前の統合セッションに `TOURYOU_DAEMON_URL` が残っているだけで、全ツール（ToolSearch・Bash を含む）が止まり、原因を調べられなくなるため。touryou の子は daemon が作るので、その時点で `touryou` は配置済みで、「片方だけ」の拒否は、`touryou hook` が行う。
+**未配置のとき「片方だけ」を拒否しない理由**（決定）: `/setup` の前の統合セッションに `TOURYOU_DAEMON_URL` が残っているだけで、全ツール（ToolSearch・Bash を含む）が止まり、原因を調べられなくなるため。TouRyou の子は daemon が作るので、その時点で `touryou` は配置済みで、「片方だけ」の拒否は、`touryou hook` が行う。
 
 **PostToolUse・Stop が「止めない版」である理由**: シェルは入力（JSON）を読まないので、イベントを区別できない。イベントごとに、別の command を登録する。Claude Code の公式のドキュメントでは、終了コード 2 は、PreToolUse ではツールの呼び出しを止め、**Stop では Claude が止まるのを妨げる**（会話が続く）。`touryou` 未配置・子の環境変数ありで、Stop が 2 を返すと、Claude が止まれなくなるので、止めない版は、どの場合も 0 を返す。
 
-**未確認・留意**: Claude Code の公式のドキュメントでは、hook の command が見つからない・終了コード 127 などは「ブロックしないエラー」（操作は進む）。`onFailure: "block"` を付ければ、失敗を拒否にできるが、この plugin は、touryou の子でないセッションにも入る（`touryou` が壊れていると、全セッションのツールが止まる）ので、付けていない。
+**未確認・留意**: Claude Code の公式のドキュメントでは、hook の command が見つからない・終了コード 127 などは「ブロックしないエラー」（操作は進む）。`onFailure: "block"` を付ければ、失敗を拒否にできるが、この plugin は、TouRyou の子でないセッションにも入る（`touryou` が壊れていると、全セッションのツールが止まる）ので、付けていない。
 
 ### `touryou hook`（Node がない Mac のため）
 
@@ -134,7 +134,7 @@ touryou は、**セッションを起動しません**。**Anthropic の認証�
 - **本文の上限**: 1 MiB（窓口と同じ）。超えたら 413（「本文が大きすぎる」）で、フックは拒否として扱う。
 - 応答: `{ ok: true, value: { decision: "allow" } }` か `{ ok: true, value: { decision: "deny", reason } }`。
 
-**統合セッションには `TOURYOU_DAEMON_URL` を設定しない**（`touryou-mcp` の起動の端末だけで使う）。設定すると、「片方だけ」の拒否で、ToolSearch や Bash も止まる。そのときは、起動した端末で `unset TOURYOU_DAEMON_URL` して起動し直す。「片方だけ」の拒否は、touryou の子に付け忘れがあっても気づけるようにするためで、統合ノードでも緩めない（緩めると、根の権限を持つ端末〔以前の `TOURYOU_ROOT_TOKEN` のように、環境に根のトークンを置いた端末〕で起動した子が、無防備に素通しになりうる）。
+**統合セッションには `TOURYOU_DAEMON_URL` を設定しない**（`touryou-mcp` の起動の端末だけで使う）。設定すると、「片方だけ」の拒否で、ToolSearch や Bash も止まる。そのときは、起動した端末で `unset TOURYOU_DAEMON_URL` して起動し直す。「片方だけ」の拒否は、TouRyou の子に付け忘れがあっても気づけるようにするためで、統合ノードでも緩めない（緩めると、根の権限を持つ端末〔以前の `TOURYOU_ROOT_TOKEN` のように、環境に根のトークンを置いた端末〕で起動した子が、無防備に素通しになりうる）。
 
 ## デスクトップ版の起動の方法と、接続の失敗
 
@@ -193,7 +193,7 @@ touryou は、**セッションを起動しません**。**Anthropic の認証�
   rm "$(git rev-parse --absolute-git-dir)/touryou-child"
   ```
 
-  touryou の子として動いている作業ツリーでは、外さない（外すと、その子の mcp が根で開いてしまう）。
+  TouRyou の子として動いている作業ツリーでは、外さない（外すと、その子の mcp が根で開いてしまう）。
 - **印がないのに紐付け待ちになったとき**: mcp の記録（標準エラー）に `stdioPendingBind` が出ていて、上の `rm` で消す印がない（`No such file`）なら、`.git` が読めないか、形が変なことが原因（安全のため紐付け待ちに倒している）。次で見分ける。
   - `ls -la .git` と `cat .git`（ファイルなら `gitdir: <path>` の 1 行のはず）。権限が足りない・中身が壊れているなら直す（`git worktree repair` など）。
   - 作業ディレクトリの上のフォルダに、読めない `.git` がないかも確かめる。
@@ -203,7 +203,7 @@ touryou は、**セッションを起動しません**。**Anthropic の認証�
 
 Desktop の子へのフックの継承と、接続設定の引き継ぎは、`docs/desktop-runtime.md` を見る。この節は、CLI の分だけ。
 
-**注意（未解決）**: Desktop の子には、touryou の作業範囲外の拒否（FR_014）が、まだ効かない（フックの受け口は Desktop の子に許可を返さず、プロジェクトのフックは確認用の deny だけ）。子は同じユーザーとして、stateDir の人間のトークン・根のトークンのファイルを読める（stateDir のパスは、`ps` に出る daemon の `--config` から分かる）。人間のトークンを使えば、`node.purge` など取り消せない操作もできる。**今は、Desktop の子を、信頼できない文章（他人のリポジトリ・Issue・Web の内容など）を読む作業に使わない。** 直し方は未決定（計画）。詳しくは [`docs/desktop-runtime.md`](desktop-runtime.md) の冒頭の注意。
+**注意（未解決）**: Desktop の子には、TouRyou の作業範囲外の拒否（FR_014）が、まだ効かない（フックの受け口は Desktop の子に許可を返さず、プロジェクトのフックは確認用の deny だけ）。子は同じユーザーとして、stateDir の人間のトークン・根のトークンのファイルを読める（stateDir のパスは、`ps` に出る daemon の `--config` から分かる）。人間のトークンを使えば、`node.purge` など取り消せない操作もできる。**今は、Desktop の子を、信頼できない文章（他人のリポジトリ・Issue・Web の内容など）を読む作業に使わない。** 直し方は未決定（計画）。詳しくは [`docs/desktop-runtime.md`](desktop-runtime.md) の冒頭の注意。
 
 **stateDir の守り**: FR_014 のフックは読み込みを制限しないので、そのままでは CLI の子も Read の道具で stateDir のトークンを読める。そこで、stateDir と daemon の設定ファイルを、読み取りも範囲外にしている（自分の HOME と skill の写しは除く。拒否の文面には場所の種類だけを出す）。Bash は書かれたパスに見える語だけを見る歯止めで、確実ではない。詳しくは [`docs/desktop-runtime.md`](desktop-runtime.md) の冒頭の注意。
 

@@ -3,7 +3,7 @@
 macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動かす手順です。常駐させるのは **daemon だけ**です（統合セッション用の `touryou-mcp` は、plugin が stdio で起動するので、常駐は要りません）。
 
 - **起動スクリプトと plist は、`touryou launchd init` が生成します**。読み込み・止める・外すは、`touryou launchd apply|status|restart|stop|uninstall`（`docs/cli.md`）か、plugin の `/touryou:setup`（手順 3）・`/touryou:service` で行います。
-- 生成物にも plist にも、秘密は入りません（touryou は Anthropic の認証を扱いません。daemon が作るトークンは `state` の中だけにあります）。
+- 生成物にも plist にも、秘密は入りません（TouRyou は Anthropic の認証を扱いません。daemon が作るトークンは `state` の中だけにあります）。
 - 文書では、パスを記号で書きます: `<H>` は、自分の `$HOME` の絶対パス（`printf %s "$HOME"` で得る）。
 - 事実（docs の記載・コードで確認）と、推測・未確認は、分けて書きます。
 
@@ -56,7 +56,7 @@ macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動か�
 | 状態を見る | `touryou launchd status` | `launchctl print` の state・pid・last exit code と、窓口の応答 |
 | 起動し直す | `touryou launchd restart` | `launchctl kickstart -k`（版を上げたあと） |
 | 止める | `touryou launchd stop` | `launchctl bootout`（plist は残るので、次のログインでまた動く） |
-| 外す | `touryou launchd uninstall --yes` | 止めてから、touryou が生成したと判定できる plist・起動スクリプトだけを消す（`logs`・`state` は残す） |
+| 外す | `touryou launchd uninstall --yes` | 止めてから、TouRyou が生成したと判定できる plist・起動スクリプトだけを消す（`logs`・`state` は残す） |
 
 - `apply`・`uninstall` は、`--yes` がないと何もしない（永続化・削除なので、利用者の同意を取ってから付ける。`/setup`・`/touryou:service` は定型文で聞く）。
 - 読み込むと、システム設定の「一般」→「ログイン項目」に、`run-daemon.sh` が「開発元を識別できない項目」として出る（署名しない方針どおり）。

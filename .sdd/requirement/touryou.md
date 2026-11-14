@@ -11,7 +11,7 @@ tags: ["claude-code", "claude-desktop", "mcp", "multi-session", "orchestration",
 category: "developer-tooling"
 ---
 
-# touryou 要求仕様書
+# TouRyou 要求仕様書
 
 ## 概要
 
@@ -1009,7 +1009,7 @@ Claude Code CLI 環境では、**親のセッションが Claude Code の機能�
 
 - 子のセッションは、利用者の Claude Code の認証で動く。システムは Anthropic の認証を扱わない（NFR_013）。
 - 停止・削除は、親のセッションが Claude Code の機能（`claude stop`・`claude rm`）で行う（FR_010）。
-- 前提: 親の Bash から裏のセッションを起動できる（ふつうのモードでは、変数を含むコマンドに許可の確認が出るので、touryou が使うコマンドを前もって許可しておく案内を用意する）。作業ツリーのフォルダが未信頼でも止まらない。裏のセッションは plugin（MCP・フック）を読む。フォークでの起動もできる。`claude stop`・`claude rm` も親から実行できる。裏のセッションは research preview の機能で、変わりうる。
+- 前提: 親の Bash から裏のセッションを起動できる（ふつうのモードでは、変数を含むコマンドに許可の確認が出るので、TouRyou が使うコマンドを前もって許可しておく案内を用意する）。作業ツリーのフォルダが未信頼でも止まらない。裏のセッションは plugin（MCP・フック）を読む。フォークでの起動もできる。`claude stop`・`claude rm` も親から実行できる。裏のセッションは research preview の機能で、変わりうる。
 - 起動の依頼には、モデルと深さ（`--model`・`--effort`）を含める。指定しないと、親とは別の既定で起動する。plan モードの子では、指定と違うモデルになることがある。実際のモデルは子の記録から読んで残す。`--effort` が効くかは未確認。
 - 作業ツリーは、信頼済みのリポジトリの git worktree として作る（信頼済みのリポジトリの worktree なら、確認なしで起動する）。
 - 子が知らせを受け取れるよう、起動の依頼に `--settings '{"crossSessionInbound":"accept"}'` を含める（許可を飛ばすモードの子では、これがないと知らせが止められる）。

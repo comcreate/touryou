@@ -13,7 +13,7 @@ priority: "high"
 risk: "high"
 ---
 
-# touryou
+# TouRyou
 
 **関連 Design:** [touryou_design.md](./touryou_design.md)
 **関連 Decision Log:** [touryou.md](../adr/touryou.md)

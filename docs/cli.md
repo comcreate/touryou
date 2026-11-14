@@ -98,7 +98,7 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 - **コード・トークンは、引数にも、標準出力・標準エラーにも出さない。** 報告の本文は、引き出しの `report` から読む（コマンドの文字列に入らない）が、daemon の記録・受信箱・親の会話に残るので、秘密を書かない。
 - ファイルは、lstat で種類（通常のファイル・リンクでない）・持ち主・リンクの数（1）・権限・大きさを確かめてから O_NOFOLLOW で開き、fstat で同じものかを確かめて読む。`code` は子が Write で書くので 0644 でよい（書き込みの権限がグループ・他者にないこと）。`token`・`url`・`node` は 0600 でなければ読まない。引き出しは、実のディレクトリ・持ち主が自分・0700。
 - `--url` は、ループバックの http(s) の窓口だけ（パスなし。`127.0.0.1`・`localhost`・`[::1]`。`127.1` は `127.0.0.1` と同じに扱い、`localhost.`・`[::ffff:127.0.0.1]` は拒否する）。**`bind` と `report` には、同じ URL を書く**。`report` は、`--url` が `url` のファイル（紐付けた窓口）と違えば、トークンを送らない（`urlMismatch`）。
-- **daemon の身元を確かめる**: `bind` はコードを送る前に、`report` はトークンを送る前に毎回、touryou・touryou-mcp と同じ仕組み（`/v1/identity`）で、窓口の相手が引き出しを作った daemon かを確かめる。秘密のファイルは、引き出しの場所から決まる `<stateDir>/daemon-identity`（引き出しは `<stateDir>/children.noindex/<鍵>`。ほかの場所の引き出しは `dirInvalid`）。確かめられなければ送らない（`daemonIdentityFailed`）。daemon が止まっている・起動し直している途中（秘密のファイルがない・接続の拒否・503）なら、touryou-mcp と同じく最大 8 秒待ってかけ直し、尽きたら `daemonUnreachable`（daemon が戻ったら、同じコマンドをやり直す）。待ちの上限と、標準エラーの記録（`daemonRetry`・`daemonRecovered`・`daemonGaveUp`）の形は [`daemon-identity.md`](daemon-identity.md) の §3a。同じポートで別のプロセスが待ち受けていても、コード・トークンはそこへ送らない。
+- **daemon の身元を確かめる**: `bind` はコードを送る前に、`report` はトークンを送る前に毎回、`touryou`・`touryou-mcp` と同じ仕組み（`/v1/identity`）で、窓口の相手が引き出しを作った daemon かを確かめる。秘密のファイルは、引き出しの場所から決まる `<stateDir>/daemon-identity`（引き出しは `<stateDir>/children.noindex/<鍵>`。ほかの場所の引き出しは `dirInvalid`）。確かめられなければ送らない（`daemonIdentityFailed`）。daemon が止まっている・起動し直している途中（秘密のファイルがない・接続の拒否・503）なら、touryou-mcp と同じく最大 8 秒待ってかけ直し、尽きたら `daemonUnreachable`（daemon が戻ったら、同じコマンドをやり直す）。待ちの上限と、標準エラーの記録（`daemonRetry`・`daemonRecovered`・`daemonGaveUp`）の形は [`daemon-identity.md`](daemon-identity.md) の §3a。同じポートで別のプロセスが待ち受けていても、コード・トークンはそこへ送らない。
 - `--dir` と値は、別の語にする（`--dir=値` の形は、作業範囲の判定で拒否される）。
 - `bind` の順序: 引き出し → `node` を確かめる → `code` を読む（読めても読めなくても、すぐ消す）→ 身元を確かめる → 送る → `url` を置く → `token` を置く（`token` を置けなければ `url` も消す）。置いたあとに、ディレクトリを fsync する。
 - daemon の失敗の文面は、コード・トークンを伏せ、制御文字を除き、長さを切ってから出す。`unauthenticated`（コードが使用済み・期限切れなど）のときも、会話で人（親）に `node.bindCode` での出し直しを頼むよう案内する。
@@ -106,8 +106,8 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 - 結果が分からない失敗（窓口から応答がない）は、同じ本文で `--request-id <出した ID>` を付けて送り直す（同じ要求として扱われる）。
 - 終了コード: 0 成功・1 失敗・2 使い方の誤り・3 トークンの期限切れ。
 
-**`touryou child hook --dir <引き出し> --url <窓口>`**: Desktop の子のフック（Claude Code の PreToolUse・PostToolUse・Stop）のコマンド。標準入力のフック入力を、引き出しの `hook-token`（daemon が spawn・`node.bindCode` のときに 0600 で置く。24 時間の絶対の期限）で `POST /v1/hook` へ送り、判定を返す（許可は終了コード 0、拒否は 2 で、標準エラーの文が拒否の理由としてモデルに伝わる）。送る前に、daemon の身元を確かめる。PreToolUse は、**touryou が走り切ったときだけ**フェイルクローズ（届かない・形が違う・身元を確かめられない・`hook-token` がない・予期しない例外のときは、終了コード 2 で拒否）。429 で `Retry-After` が 2 秒以下なら、2 回まで送り直す。PostToolUse・Stop は判定しないので、失敗しても 0。トークンは出さない。
-  - **守れないもの**: Claude Code は、フックが**終了コード 2 で終わったときだけ**拒否する。終了コード 1・touryou が起動できない（127 など）・フックの時間切れは、**許可になる**。そのため、daemon が置く settings.jsonでは、PreToolUse のコマンドを `<touryou> child hook … || exit 2`、PostToolUse・Stop を `… || true` にし、`timeout` を、touryou の内側の時間の合計（身元の確認と、送る 8 秒）より十分長くする（必須の要件）。
+**`touryou child hook --dir <引き出し> --url <窓口>`**: Desktop の子のフック（Claude Code の PreToolUse・PostToolUse・Stop）のコマンド。標準入力のフック入力を、引き出しの `hook-token`（daemon が spawn・`node.bindCode` のときに 0600 で置く。24 時間の絶対の期限）で `POST /v1/hook` へ送り、判定を返す（許可は終了コード 0、拒否は 2 で、標準エラーの文が拒否の理由としてモデルに伝わる）。送る前に、daemon の身元を確かめる。PreToolUse は、**`touryou` が走り切ったときだけ**フェイルクローズ（届かない・形が違う・身元を確かめられない・`hook-token` がない・予期しない例外のときは、終了コード 2 で拒否）。429 で `Retry-After` が 2 秒以下なら、2 回まで送り直す。PostToolUse・Stop は判定しないので、失敗しても 0。トークンは出さない。
+  - **守れないもの**: Claude Code は、フックが**終了コード 2 で終わったときだけ**拒否する。終了コード 1・`touryou` が起動できない（127 など）・フックの時間切れは、**許可になる**。そのため、daemon が置く settings.jsonでは、PreToolUse のコマンドを `<touryou> child hook … || exit 2`、PostToolUse・Stop を `… || true` にし、`timeout` を、`touryou` の内側の時間の合計（身元の確認と、送る 8 秒）より十分長くする（必須の要件）。
   - Desktop の子の `/v1/hook` は、フック専用のトークンだけを受け付ける（ノードのトークンは 401）。
   - **daemon を再起動すると**、フック専用のトークンと、アダプタが持つ子の範囲（どちらもメモリだけ）が失われ、Desktop の子の道具は、すべて拒否される（拒否の文に「再起動」と出る）。人は、子を止めたと宣言して、作り直す。
   - **フック専用のトークンは、発行から 24 時間で切れ**、そのあと子の道具はすべて止まる。親か人が `node.bindCode` を出し直すと、フック専用のトークンと、ノードのトークン（結び直しのあと）の両方が新しくなる。起動したときに stopped だった子の引き出しの `hook-token` は、ほかのファイルと一緒に消す。daemon は、Desktop の子の bind・報告を、そのノードの PreToolUse のフックを直前（設定 `hookFreshSeconds`。既定 30 秒）に**許可していなければ** `hooksNotActive` で断る（拒否した呼び出しは数えない。`touryou child bind`・`report` の Bash 自体がフックを通るので、フックが効いていれば、いつも通る）。**これは、設定の誤り（チップで作った子・フックのない子）を見つける検査で、敵対的な子は止められない**（子は、引き出しの `hook-token` を読んで、自分で `/v1/hook` を呼べる）。守りの本体は、フックの設定を書き換えさせない守り（[`docs/desktop-runtime.md`](desktop-runtime.md) の「見張り（FR_014 のフック）を Desktop の子に効かせる」）。
@@ -137,7 +137,7 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 | `status` | `launchctl print` の state・pid・last exit code と、窓口の応答。終了コード 78（前の版の起動スクリプト）なら、外し方の案内と、`logs/daemon.log` の起動スクリプトの決まった文の行だけを出す |
 | `restart` | daemon を `launchctl kickstart -k` し、窓口の応答を待つ（版を上げたあと） |
 | `stop` | daemon を `launchctl bootout`（前の版の touryou-mcp が読み込まれていれば、先に止める。plist は残るので、次のログインでまた動く） |
-| `uninstall --yes` | 止めてから、touryou が生成したと判定できる plist（LaunchAgents と `.touryou/launchd`）・起動スクリプト（`.touryou/bin`）だけを消す。判定できないものは残して終了コード 1。`logs`・`state` は残す。トークンのファイルは消さない |
+| `uninstall --yes` | 止めてから、TouRyou が生成したと判定できる plist（LaunchAgents と `.touryou/launchd`）・起動スクリプト（`.touryou/bin`）だけを消す。判定できないものは残して終了コード 1。`logs`・`state` は残す。トークンのファイルは消さない |
 
 - `apply`・`uninstall` は、**`--yes` がないと何もしない**（終了コード 2）。永続化・削除なので、利用者の同意を取ってから付ける（`/setup`・`/touryou:service` が定型文で聞く）。
 - `apply`・`restart` が途中で止まったとき（窓口が約 60 秒で応答しない）は、**daemon は読み込み済みのまま**（KeepAlive で動き続けうる）。`touryou launchd stop` で止めるか、直してから `apply --yes` をやり直す。

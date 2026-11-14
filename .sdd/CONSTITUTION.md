@@ -6,7 +6,7 @@
 
 ## 目的
 
-このドキュメントは、touryou の開発を統制する非交渉原則と基準を定義します。すべてのコード、仕様、設計判断はこれらの原則に従う必要があります。
+このドキュメントは、TouRyou の開発を統制する非交渉原則と基準を定義します。すべてのコード、仕様、設計判断はこれらの原則に従う必要があります。
 
 本プロジェクトは、複数の Claude セッションを「統合セッション 1 対 作業セッション n」の木構造で束ねる、単一開発者のローカル開発ツールです。構成は TypeScript の pnpm モノレポ（`packages/core`、`packages/daemon`、`packages/mcp`、`packages/cli`）と Claude Code plugin（`plugin/`）です。要求は `requirement/touryou.md`（PRD）に定義されています。
 

@@ -3,7 +3,7 @@ description: ビルド済みの配布物（macOS の arm64）を、plugin の中
 allowed-tools: Read
 ---
 
-touryou の配布物（Node 同梱。daemon・`touryou-mcp`・`touryou`）を、この Mac に置きます。**利用者が、自分で実行するコマンド**です。置く場所は `$HOME` の下の `.touryou` です（実際のパスは、この文書に書きません）。
+TouRyou の配布物（Node 同梱。daemon・`touryou-mcp`・`touryou`）を、この Mac に置きます。**利用者が、自分で実行するコマンド**です。置く場所は `$HOME` の下の `.touryou` です（実際のパスは、この文書に書きません）。
 
 最初に、利用者に伝える（定型文）: 「これから、約 3 回、コマンドの承認の確認が出ます（本体の導入・設定・常駐の登録で 1 回ずつ）。1 回ごとに、画面のコマンドを読んで、問題なければ承認してください。」
 
@@ -21,7 +21,7 @@ Claude Code の auto モード（権限の自動判定）で実行している�
 - **quarantine を、外さない**（`xattr` の書き換え〔`-d`・`-c`・`-w`〕・`sudo`・`rm` は、実行しない）。付いていたら、script が止まる。macOS が、出所の確かでないコードを実行する前に検査する安全装置なので、黙って外さない。
 - `root-token` などのトークンのファイルは、読まない・出さない。トークンの値は、チャットに貼らせない。
 - **常駐（launchd）の登録は、利用者が定型文の問いに、はっきり「はい」と答えたときだけ**行う（手順 3）。承認の画面で許可されただけでは、登録しない。**`--yes`・`--restart-daemon` は、利用者が定型文の問いにチャットで「はい」と答えたあとにだけ付ける。承認ダイアログの許可だけでは付けない**。登録・止める・起動し直すのは `touryou launchd` の決まったサブコマンド（と、それを呼ぶ導入の script）だけで、`launchctl` を直接は実行しない。
-- **子の認証は扱わない**（touryou は Anthropic の認証を扱わない。CLI の子は、親のセッションが `claude --bg` で起動する）。
+- **子の認証は扱わない**（TouRyou は Anthropic の認証を扱わない。CLI の子は、親のセッションが `claude --bg` で起動する）。
 - **「止まる」とは**: 次の手順に進まず、原因（出力）をそのまま利用者に伝え、定型文があれば、それを添える。
 - 人が入力するパスは、引用符で囲んで使う。**改行・引用符（`"`・`'`・`` ` ``）・`$`・`;`・`\` を含むときは、止まる**。
 
@@ -49,7 +49,7 @@ Claude Code の auto モード（権限の自動判定）で実行している�
    定型文: 「daemon が作業するフォルダを、教えてください（ホームの下の、フォルダの場所を、最初から最後まで書いてください）。」
    コマンド（`<repoRoot>`・`<worktreeRoot>`・`<allowedCommands>` だけを置き換える）: `R="<repoRoot>" W="<worktreeRoot>" C="$HOME/.touryou/config.json" && [ "${R#"$HOME/"}" != "$R" ] && [ "${W#"$HOME/"}" != "$W" ] && [ "$(git -C "$R" rev-parse --is-inside-work-tree)" = true ] && [ ! -e "$C" ] && mkdir -p "$HOME/.touryou/state" "$W" && chmod 700 "$HOME/.touryou/state" && (umask 077 && printf '{\n  "stateDir": "%s/.touryou/state",\n  "repoRoot": "%s",\n  "worktreeRoot": "%s",\n  "rootCwd": "%s",\n  "rootScope": { "writableLocations": ["src"], "forbiddenLocations": [".git"], "allowedCommands": [%s] }\n}\n' "$HOME" "$R" "$W" "$R" '<allowedCommands>' >"$C") && chmod 600 "$C" && echo OK`
    `OK` が出なければ、止まる（ホームの下でない・git のリポジトリでない・`config.json` がすでにある、のどれか。すでにあるときは、上書きしない。中身を直すなら、利用者が自分で直す）。
-   書く中身は、必須の 5 項目（`stateDir`・`repoRoot`・`worktreeRoot`・`rootCwd`・`rootScope`。`docs/config.md` と同じ）だけで、パスは絶対パス（`$HOME` は、シェルが展開する）。`rootScope` は、子の権限の上限（根〔統合〕のセッション自身は touryou のフックで絞らない。根の操作は、利用者の Claude Code の許可の設定のとおり）。この例は最小で、人に確かめる（既定を、勝手に広げない）。**トークンの値は、設定ファイルに書かない**（daemon が `state` の下に作る）。
+   書く中身は、必須の 5 項目（`stateDir`・`repoRoot`・`worktreeRoot`・`rootCwd`・`rootScope`。`docs/config.md` と同じ）だけで、パスは絶対パス（`$HOME` は、シェルが展開する）。`rootScope` は、子の権限の上限（根〔統合〕のセッション自身は TouRyou のフックで絞らない。根の操作は、利用者の Claude Code の許可の設定のとおり）。この例は最小で、人に確かめる（既定を、勝手に広げない）。**トークンの値は、設定ファイルに書かない**（daemon が `state` の下に作る）。
 3. **起動のしかたを選ぶ**: 利用者に、次の定型文で尋ねる。答えが「常駐」なら 3-A、「手で」なら 3-B へ進む。分からなければ 3-B。
    定型文: 「daemon の起動のしかたを選んでください。(1) 常駐にする（推奨。ログインしたら自動で動きます。macOS のログイン項目に 1 項目が追加されます） (2) 手で起動する（使うたびに Terminal で起動します）」
    **3-A. 常駐にする**（コマンドは 1 つ。`"$HOME/.touryou/current/bin/touryou"` の `launchd` サブコマンド）:
@@ -68,11 +68,11 @@ Claude Code の auto モード（権限の自動判定）で実行している�
 
 ## CLI の子と plugin の置き場
 
-**CLI の子と plugin**: `--plugin-dir` で開いたのは、そのセッションだけ。`--plugin-dir` だけで開いた親の子（`claude --bg`）には plugin が付かず、子は `child_bind` を見つけられないまま止まり、touryou のフック（守り）も効かない。そこで touryou は、親の mcp の plugin の場所（`CLAUDE_PLUGIN_ROOT`）が確かめを通れば、子の起動の文に `--plugin-dir` を足す（marketplace から入れた plugin と重なっても 1 つにまとまる）。付けられなかったときは、受信箱に理由が出る。そのときは plugin を設定の置き場に入れる（marketplace から入れる）。daemon は、起動の報告のあと所定の時間（`cliWatch.unboundMinutes`。既定 3 分）紐付けのない子を、受信箱に 1 回だけ出す。
+**CLI の子と plugin**: `--plugin-dir` で開いたのは、そのセッションだけ。`--plugin-dir` だけで開いた親の子（`claude --bg`）には plugin が付かず、子は `child_bind` を見つけられないまま止まり、TouRyou のフック（守り）も効かない。そこで TouRyou は、親の mcp の plugin の場所（`CLAUDE_PLUGIN_ROOT`）が確かめを通れば、子の起動の文に `--plugin-dir` を足す（marketplace から入れた plugin と重なっても 1 つにまとまる）。付けられなかったときは、受信箱に理由が出る。そのときは plugin を設定の置き場に入れる（marketplace から入れる）。daemon は、起動の報告のあと所定の時間（`cliWatch.unboundMinutes`。既定 3 分）紐付けのない子を、受信箱に 1 回だけ出す。
 
 ## 許可の一覧（任意。CLI の子を動かすとき）
 
-CLI の子は、親のセッション（統合）が Bash で `claude` のコマンドを実行して、起動・停止・削除します（touryou は起動しない）。auto でないモード（ふつうのモード）では、そのたびに許可の確認が出ます。確認を減らしたいときは、**利用者が自分で**、Claude Code の settings に許可の一覧を足します。この手順では、settings のファイルを書き換えない（案内だけ。利用者に任せる）。
+CLI の子は、親のセッション（統合）が Bash で `claude` のコマンドを実行して、起動・停止・削除します（TouRyou は起動しない）。auto でないモード（ふつうのモード）では、そのたびに許可の確認が出ます。確認を減らしたいときは、**利用者が自分で**、Claude Code の settings に許可の一覧を足します。この手順では、settings のファイルを書き換えない（案内だけ。利用者に任せる）。
 
 - **plugin の設定では入れられない**: plugin が持てる `settings.json` は、既定の agent などに限られ、許可（`permissions`）は入れられない（Claude Code の plugin の仕様）。そこで、利用者の settings に足してもらう。
 - 足す場所: 自分だけなら、利用者の設定の置き場の `settings.json`（全部のプロジェクト。ふつうは `<H>/.claude/settings.json`。`CLAUDE_CONFIG_DIR` を使っているなら、そのディレクトリの下の `settings.json`）か、作業するリポジトリの `.claude/settings.local.json`。
@@ -89,7 +89,7 @@ CLI の子は、親のセッション（統合）が Bash で `claude` のコマ
   }
   ```
 
-- 親（統合）のセッションで、読むだけの touryou の道具も確認なしにしてよい（任意）。足すのは次の 7 つだけ（plugin から入れた親の道具の名前。`whoami`・`inbox_fetch`・`tree_list`・`node_capabilities`・`decision_get`・`report_get`・`node_reclaimPreview`）:
+- 親（統合）のセッションで、読むだけの TouRyou の道具も確認なしにしてよい（任意）。足すのは次の 7 つだけ（plugin から入れた親の道具の名前。`whoami`・`inbox_fetch`・`tree_list`・`node_capabilities`・`decision_get`・`report_get`・`node_reclaimPreview`）:
 
   ```json
   {
@@ -118,11 +118,11 @@ CLI の子は、親のセッション（統合）が Bash で `claude` のコマ
     - 「Yes, and don't ask again for: cd *」: 以後、`cd` で始まれば `&&` のあとに何がつながっても確認なしで通ってしまう（起動・停止・削除以外の任意のコマンドも通る）。
     - 「Yes, and switch to auto mode」: 以後の操作がすべて確認なしになる。
     - 「Yes, allow reading from … from this project」: 範囲外の読み取りまで黙って許してしまう。
-    理由は、touryou の依頼のコマンド（`cd <作業ツリー> && claude …`・`claude stop`・`claude rm`・`claude agents --json`）だけを、毎回、目で見て通すため。減らしたいときは、下の「`permissions.allow` に足す」の 2 つだけを足す（`cd *` などの広い許可は足さない）。
-  - 変数を含むコマンドは「A variable in this command can't be checked before it runs」の確認が、許可の一覧があっても出る。touryou の依頼のコマンドは、変数のない形にしてある。書き換えないで実行する。
+    理由は、TouRyou の依頼のコマンド（`cd <作業ツリー> && claude …`・`claude stop`・`claude rm`・`claude agents --json`）だけを、毎回、目で見て通すため。減らしたいときは、下の「`permissions.allow` に足す」の 2 つだけを足す（`cd *` などの広い許可は足さない）。
+  - 変数を含むコマンドは「A variable in this command can't be checked before it runs」の確認が、許可の一覧があっても出る。TouRyou の依頼のコマンドは、変数のない形にしてある。書き換えないで実行する。
   - 足したあとは、Claude Code の `/permissions` で、入ったかを確かめられる。
 
-- 子の許可: 子は `--permission-mode dontAsk` で動き、範囲（書き込みの場所・許可のコマンド）と touryou の道具・作業ツリーの中の読み取りだけを確認なしで使う。範囲の外の操作は、確認を出さずに断られる。要るときは、子が受信箱で範囲の拡張（`scope_extend`）を頼む。子の許可は、利用者の settings に足さなくてよい（touryou が起動の文に入れる）。
+- 子の許可: 子は `--permission-mode dontAsk` で動き、範囲（書き込みの場所・許可のコマンド）と TouRyou の道具・作業ツリーの中の読み取りだけを確認なしで使う。範囲の外の操作は、確認を出さずに断られる。要るときは、子が受信箱で範囲の拡張（`scope_extend`）を頼む。子の許可は、利用者の settings に足さなくてよい（TouRyou が起動の文に入れる）。
 - 子の範囲のコマンド（`allowedCommands`）は、2 語以上で書く（`git status`・`git add`・`git commit`・`pnpm test` など）。`git`・`node` のような 1 語だけのものや、`;`・`>`・引用符などを含むものがあると、子の起動の依頼が `invalidScope` で失敗する（前方一致で何でも通ってしまうため）。`bash`・`node`・`npx`・`npm exec`・`pnpm dlx`・`git config`・`find -exec` など任意のコードを動かせる形と、スクリプトの名前のない `pnpm run` も同じく失敗する（`pnpm run build` のように書く）。`yarn <スクリプト>` は `run` がなくてもスクリプトを動かすので、`yarn` で 2 語のコマンドを許すときは、それがスクリプトの名前でないことを確かめる。子に `git add`・`git commit` をさせたいときは、根の範囲（`rootScope`）と子の範囲の両方に入れておく（子の範囲は根の範囲の内側でないと、子の起動が `scopeNotSubset` で失敗する。子の範囲に入れないと、子は確認なしで断られる）。根の範囲を直したら、daemon を起動し直す（`config.json` は起動のときだけ読む）。
 - 利用者や作業するリポジトリの settings にある許可（`permissions.allow`）は、子も受け継ぐと見ている（推測）。広い許可を置いていると、子もそれを使える。
 

@@ -24,7 +24,7 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 |:--|:--|:--|
 | `rootNodeId` | `root` | 根のノードの ID |
 | `port` | `0` | 窓口のポート（127.0.0.1）。0 なら `--port` → 保存した前回のポート → 空いているポート（`docs/plugin.md` の「使う順序」） |
-| `childRuntime` | `cli` | 子の実行環境。`cli` は親のセッションが `claude --bg` で起動する子（touryou は起動しない。親への依頼の形。[`plugin.md`](plugin.md) の「親から子を起動する流れ」）。`desktop` は実験的（[`desktop-runtime.md`](desktop-runtime.md)） |
+| `childRuntime` | `cli` | 子の実行環境。`cli` は親のセッションが `claude --bg` で起動する子（TouRyou は起動しない。親への依頼の形。[`plugin.md`](plugin.md) の「親から子を起動する流れ」）。`desktop` は実験的（[`desktop-runtime.md`](desktop-runtime.md)） |
 | `maxTurns` | `100` | 子ごとのターン数の上限 |
 | `maxBudgetUsd` | `5` | 子ごとの費用の上限（USD） |
 | `startLimits` | `perParent: 4`・`total: 4` | スケジューラが同時に起動する数の上限（1〜64） |
@@ -43,7 +43,7 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 | `desktopRequireVerifiedHooks` | `true` | Desktop の子で、フックの確認前の起動を拒否する |
 | `touryouCommand` | なし | Desktop の子が `touryou` を起動する語（Desktop の子で必要） |
 | `hookFreshSeconds` | `30` | Desktop の子のフックの鮮度の窓（秒） |
-| `cliWatch` | `{ "stallMinutes": 30, "unreadMinutes": 30, "unboundMinutes": 3, "intervalSec": 60 }` | CLI の子の見張り。`unboundMinutes` 分、親の起動の報告（done）のあとも紐付け（`child_bind`）がない子を、子ごとに 1 回だけ受信箱に出す（touryou の plugin が子の設定の置き場にない見込み。`--plugin-dir` だけでは子に付かない）。`stallMinutes` 分、報告も道具の使用の記録もない子を「止まっているかもしれない」として受信箱に出す。`unreadMinutes` 分、子が受け取らない指示も受信箱に出す。`intervalSec` は見回りの間隔 |
+| `cliWatch` | `{ "stallMinutes": 30, "unreadMinutes": 30, "unboundMinutes": 3, "intervalSec": 60 }` | CLI の子の見張り。`unboundMinutes` 分、親の起動の報告（done）のあとも紐付け（`child_bind`）がない子を、子ごとに 1 回だけ受信箱に出す（TouRyou の plugin が子の設定の置き場にない見込み。`--plugin-dir` だけでは子に付かない）。`stallMinutes` 分、報告も道具の使用の記録もない子を「止まっているかもしれない」として受信箱に出す。`unreadMinutes` 分、子が受け取らない指示も受信箱に出す。`intervalSec` は見回りの間隔 |
 | `hookSettingsCheckSeconds` | `2` | Desktop の子の見張りの間隔（秒） |
 | `hookFirstSeenMinutes` | `5` | Desktop の子でフックが来ないときに知らせるまでの時間（分） |
 | `claudeConfigDirs` | なし | 見張りが守る設定のディレクトリに足す場所（`~/.claude` と `CLAUDE_CONFIG_DIR` に加えて） |
@@ -54,7 +54,7 @@ SDK による子の起動・子の認証・子の HOME の隔離・子用の HTT
 
 範囲・下限の細かい値は、`packages/daemon/src/config.ts` の各項目のコメントにあります。
 
-根（統合）のセッションは、touryou のフックで絞らない（フックが働くのは、子の印のある作業ツリーだけ。`cli/src/hook.ts`）。根の Bash・書き込みは、利用者の Claude Code の許可の設定のとおりに動く。`rootScope` は、子に渡す範囲の上限で、根自身の操作の制限ではない。
+根（統合）のセッションは、TouRyou のフックで絞らない（フックが働くのは、子の印のある作業ツリーだけ。`cli/src/hook.ts`）。根の Bash・書き込みは、利用者の Claude Code の許可の設定のとおりに動く。`rootScope` は、子に渡す範囲の上限で、根自身の操作の制限ではない。
 
 子の範囲は、親の範囲（根の子なら `rootScope`）の内側でなければなりません。外にはみ出すと、子の起動（`node_spawn`）や範囲の拡張の承認が `scopeNotSubset` で失敗します。子に `git add`・`git commit` をさせるなら、`rootScope.allowedCommands` に `"git add"`・`"git commit"` を入れておきます。`config.json` は daemon の起動のときだけ読むので、`rootScope` を直したら daemon を起動し直します（常駐なら `/touryou:service` の起動し直し）。
 

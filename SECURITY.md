@@ -22,11 +22,11 @@
 
 ### 公開の時点で残る制限（いまわかっているもの）
 
-- **同じユーザーの別のプロセス**は、daemon の根のトークン（`state/root-token`）を読め、`ps` で daemon の環境変数を読めます。touryou の権限の確かめは、ほかのユーザーと設定の誤りを防ぐためのもので、同じユーザーの悪意あるプロセスは防ぎません（`docs/plugin.md`・`docs/launchd.md`）。
+- **同じユーザーの別のプロセス**は、daemon の根のトークン（`state/root-token`）を読め、`ps` で daemon の環境変数を読めます。TouRyou の権限の確かめは、ほかのユーザーと設定の誤りを防ぐためのもので、同じユーザーの悪意あるプロセスは防ぎません（`docs/plugin.md`・`docs/launchd.md`）。
 - **作業の範囲の拒否**（書き込み・読み取り・コマンド）は、Bash では確実ではありません（`docs/plugin.md`）。
 - **Desktop の木**では、同じユーザーの子が `state` の下のファイルを読めます（`docs/desktop-runtime.md`）。信頼できない入力に使わないでください。
 - 配布物（tar.gz・.mcpb）は署名していません。`/setup` は、plugin に入った `checksums.json` の sha256 と照合してから展開します。
 
 ## 子の認証
 
-touryou は、Anthropic の認証を扱いません（子のセッションを起動せず、トークン・API キーを読まない・保管しない）。
+TouRyou は、Anthropic の認証を扱いません（子のセッションを起動せず、トークン・API キーを読まない・保管しない）。
