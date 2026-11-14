@@ -2161,6 +2161,13 @@ describe("Desktop の子（childRuntime: desktop・仮置き）", () => {
     expect(read.code, read.stderr).toBe(0);
     const state = d.daemon.log.state();
     expect(state.inbox.some((x) => x.kind === "violation" && x.nodeId === nodeId)).toBe(true);
+    // 受信箱の項目は、フックが拒んだことをはっきり言う（Issue #6）
+    expect(
+      state.inbox.some(
+        (x) =>
+          x.kind === "violation" && x.nodeId === nodeId && x.summary?.includes("フックが拒んだ"),
+      ),
+    ).toBe(true);
     // 子がスクリプトなどで書き換えた形
     writeFileSync(join(b.worktree, ".claude", "settings.json"), "{}");
     const after = await b.hook("pnpm test");

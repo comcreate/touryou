@@ -203,7 +203,7 @@ interface Capabilities {
 
 ## 6.4. フック
 
-- フックは plugin の `hooks.json` で入れる。フックの入力（`session_id`、`cwd`、ツール名、引数）を daemon のフック受付へ渡し、許可・拒否を決める。紐付けの前のセッション（touryou の子でないもの）には何もしない。拒否は範囲違反としてイベントに記録する。
+- フックは plugin の `hooks.json` で入れる。フックの入力（`session_id`、`cwd`、ツール名、引数）を daemon のフック受付へ渡し、許可・拒否を決める。紐付けの前のセッション（touryou の子でないもの）には何もしない。拒否は範囲違反としてイベントに記録する。受信箱の違反の要約は「範囲違反（フックが拒んだ・<理由>）: <対象>」とし、拒否されたことを明示する（`daemon/src/compose.ts`。統合の skill は、その言葉のまま人に伝える）。`node.spawn`・`scope.decide` の `scopeNotSubset` は、上限が設定の根の範囲（`rootScope`）のとき、`cause` に `config.json` の `rootScope` を、`nextActions` に daemon の起動し直しを出す（設定は起動時にだけ読む）。
 - 拒否の判定は、`core` の純粋関数（作業範囲と操作を入力にして判定を返す）で行う。
 - CLI の子のフックはトークンを持たないので、daemon は紐付けの記録（`sessionBindings.lookupNodeBySession`）で session_id からノードを引き、running・waiting のときだけ扱う。入力の cwd がそのノードの作業ツリーの中かも確かめる。知らない session_id には何もしない。この形の報告は木の状態を動かさず、記録の行為者に `trust: "sessionIdOnly"` を写す。
 - 子のノードでは、daemon の state のディレクトリ（`stateDir`）と設定ファイルを読み取り・書き込みとも禁じる。作業ツリーの git のディレクトリと `<作業ツリー>/.git` は書き込み・削除を禁じる（Bash の rm・mv・ln・cp・tee・sed -i・dd の of=・リダイレクト、git worktree の書き換えも）。`<共通の git>/worktrees`（ほかのノードの git のディレクトリ）は読み取りも禁じ、自分の git のディレクトリだけを除く。

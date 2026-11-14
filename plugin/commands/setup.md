@@ -68,6 +68,8 @@ Claude Code の auto モード（権限の自動判定）で実行している�
    }
    ```
    `rootScope` は、子の権限の上限（根〔統合〕のセッション自身は touryou のフックで絞らない。根の操作は、利用者の Claude Code の許可の設定のとおり）。この例は最小で、人に確かめる（既定を、勝手に広げない）。**トークンの値は、設定ファイルに書かない**（daemon が `state` の下に作る）。
+   **書く前に、次の定型文で、子に commit させるかを尋ねる**。「はい」なら、`allowedCommands` を `["git status", "git add", "git commit"]` にする。「いいえ」・あいまいなら、例のまま（`["git status"]`）にする。ほかに子に使わせたいコマンド（`pnpm test` など）を言われたら、2 語以上の形で足す（下の「子の範囲のコマンド」の決まり）。
+   定型文（commit）: 「子（作業のセッション）に、自分の作業ツリーで git add・git commit をさせますか（はい／いいえ）。いいえにすると、子の範囲に git add・git commit を入れて起動したときに、子の起動が scopeNotSubset で失敗します。あとで変えるときは、config.json の rootScope を直して、daemon を起動し直します。」
    定型文: 「daemon が作業するフォルダを、教えてください（ホームの下の、フォルダの場所を、最初から最後まで書いてください）。」
 9. **起動のしかたを選ぶ**: 利用者に、次の定型文で尋ねる。答えが「常駐」なら 9-A、「手で」なら 9-B へ進む。分からなければ 9-B。
    定型文: 「daemon の起動のしかたを選んでください。(1) 常駐にする（推奨。ログインしたら自動で動きます。macOS のログイン項目に 1 項目が追加されます） (2) 手で起動する（使うたびに Terminal で起動します）」
@@ -143,7 +145,7 @@ CLI の子は、親のセッション（統合）が Bash で `claude` のコマ
   - 足したあとは、Claude Code の `/permissions` で、入ったかを確かめられる。
 
 - 子の許可: 子は `--permission-mode dontAsk` で動き、範囲（書き込みの場所・許可のコマンド）と touryou の道具・作業ツリーの中の読み取りだけを確認なしで使う。範囲の外の操作は、確認を出さずに断られる。要るときは、子が受信箱で範囲の拡張（`scope_extend`）を頼む。子の許可は、利用者の settings に足さなくてよい（touryou が起動の文に入れる）。
-- 子の範囲のコマンド（`allowedCommands`）は、2 語以上で書く（`git status`・`git add`・`git commit`・`pnpm test` など）。`git`・`node` のような 1 語だけのものや、`;`・`>`・引用符などを含むものがあると、子の起動の依頼が `invalidScope` で失敗する（前方一致で何でも通ってしまうため）。`bash`・`node`・`npx`・`npm exec`・`pnpm dlx`・`git config`・`find -exec` など任意のコードを動かせる形と、スクリプトの名前のない `pnpm run` も同じく失敗する（`pnpm run build` のように書く）。`yarn <スクリプト>` は `run` がなくてもスクリプトを動かすので、`yarn` で 2 語のコマンドを許すときは、それがスクリプトの名前でないことを確かめる。子に `git add`・`git commit` をさせたいときは、根の範囲（`rootScope`）か子の範囲に入れておく（入れないと、子は確認なしで断られる）。
+- 子の範囲のコマンド（`allowedCommands`）は、2 語以上で書く（`git status`・`git add`・`git commit`・`pnpm test` など）。`git`・`node` のような 1 語だけのものや、`;`・`>`・引用符などを含むものがあると、子の起動の依頼が `invalidScope` で失敗する（前方一致で何でも通ってしまうため）。`bash`・`node`・`npx`・`npm exec`・`pnpm dlx`・`git config`・`find -exec` など任意のコードを動かせる形と、スクリプトの名前のない `pnpm run` も同じく失敗する（`pnpm run build` のように書く）。`yarn <スクリプト>` は `run` がなくてもスクリプトを動かすので、`yarn` で 2 語のコマンドを許すときは、それがスクリプトの名前でないことを確かめる。子に `git add`・`git commit` をさせたいときは、根の範囲（`rootScope`）と子の範囲の両方に入れておく（子の範囲は根の範囲の内側でないと、子の起動が `scopeNotSubset` で失敗する。子の範囲に入れないと、子は確認なしで断られる）。根の範囲を直したら、daemon を起動し直す（`config.json` は起動のときだけ読む）。
 - 利用者や作業するリポジトリの settings にある許可（`permissions.allow`）は、子も受け継ぐと見ている（推測）。広い許可を置いていると、子もそれを使える。
 
 定型文: 「CLI の子の停止と状態の確かめのたびに許可の確認が出ます。減らしたいときは、ご自分の Claude Code の settings の permissions.allow に、次の 2 つを足してください。起動（`claude --bg`）と削除（`claude rm`）は、任意の旗の起動や成果を捨てる削除も通ってしまうので、足さずに、毎回の確認で目で見ることを勧めます。」
