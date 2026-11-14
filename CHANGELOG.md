@@ -8,8 +8,8 @@
 - **setup で子に commit させるかを尋ねる**（#5）: `/touryou:setup` の設定の手順で、子に commit させるか（`git add`・`git commit` を根の範囲に入れるか）を尋ねるようにした。根の範囲に収まらない子の起動の失敗（`scopeNotSubset`）は、直す場所（`config.json` の `rootScope`）と、daemon の起動し直しが要ることを言う。
 - **範囲違反は「フックが拒んだ」と明示**（#6）: 範囲違反の受信箱の項目は、「フックが拒んだ」ことをはっきり言う。統合の skill は、その言葉のまま人に伝える。
 - **画面の使い勝手の直し**（#13）: 確認を開くと、確認の欄まで動いてフォーカスが移る。Desktop・CLI の子の停止未完了と、根に出る Desktop の子を確かめる依頼は、赤の「失敗」でなく「停止の代行依頼」として出す。受理・回収可・アーカイブのノードに「要対応」の数を出さない。打ち込ませる ID は 1 回のクリックで選べる。接続できないときに理由と確かめることを出す。入力欄に id・name を付ける。
-- 受理（`node_review` の accept）した CLI の子の裏のセッションは、親への依頼（`claude stop` → `claude rm`）で片付くようになった。状態は verified のまま。依頼の出し直しは `node_stop`（Issue #3）。
-- 統合ロールに `node_integrate` を足した。受理した子のブランチを親のブランチへ fast-forward だけで統合し、できなければ何も変えずに理由（`notFastForward`・`targetDirty`）を返す（Issue #4）。
+- **受理した子のセッションの片付け**（#3）: 受理（`node_review` の accept）した CLI の子の裏のセッションは、親への依頼（`claude stop` → `claude rm`）で片付くようになった。状態は verified のまま。依頼の出し直しは `node_stop`。
+- **統合の道具 `node_integrate`**（#4）: 受理した子のブランチを親のブランチへ fast-forward だけで統合する。できなければ何も変えずに理由（`notFastForward`・`targetDirty`）を返す。
 
 ## 0.1.0（最初の公開）
 
