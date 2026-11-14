@@ -140,7 +140,7 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
         "scopeNotSubset",
         "拡張後の範囲が、親の範囲に収まらない",
         "却下する",
-        "親の範囲を広げてから、もう一度判定する",
+        "親の範囲を広げてから、もう一度判定する（親が根なら、設定ファイル〔config.json〕の rootScope を広げ、daemon を起動し直す）",
       );
     }
     return undefined;

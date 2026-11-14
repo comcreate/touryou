@@ -364,6 +364,10 @@ describe("node.spawn（子の生成と起動）", () => {
       "m2",
     );
     expect(wide.error?.code).toBe("scopeNotSubset");
+    // 上限が根の範囲のときは、直す場所（config.json の rootScope）と、daemon の起動し直しが要ることを出す（Issue #5）
+    expect(wide.error?.cause).toContain("config.json");
+    expect(wide.error?.cause).toContain("rootScope");
+    expect(wide.error?.nextActions.join("\n")).toContain("daemon を起動し直す");
     const none = rig({ rootScope: null });
     const res = await none.call("node.spawn", { parentId: "m2", ...brief() }, "m2");
     expect(res.error?.code).toBe("rootScopeUnconfigured");

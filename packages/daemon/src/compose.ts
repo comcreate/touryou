@@ -1166,7 +1166,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           id: deriveId("inbox", "system", requestId, "violation"),
           kind: "violation",
           nodeId,
-          summary: summarize(`範囲違反（${reason}）: ${subject}`),
+          summary: summarize(`範囲違反（フックが拒んだ・${reason}）: ${subject}`),
         },
       });
     } else if (count === 0 && !v.overflow) {
@@ -1178,7 +1178,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           kind: "violation",
           nodeId,
           summary: summarize(
-            "ほかにも範囲違反がある（受信箱には、これ以上出さない。記録を確認する）",
+            "ほかにも範囲違反がある（どれもフックが拒んだ。受信箱には、これ以上出さない。記録を確認する）",
           ),
         },
       });

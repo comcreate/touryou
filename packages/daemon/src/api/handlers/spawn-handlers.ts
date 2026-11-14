@@ -470,6 +470,14 @@ export function createSpawner(deps: SpawnHandlerDeps) {
       );
     }
     if (!isScopeSubset(brief.scope, parentScope, { child: parentCwd, parent: parentCwd })) {
+      // 上限が根の範囲（設定ファイル）のときは、直す場所と、起動し直しが要ることを出す（Issue #5）
+      if (deps.rootScope === parentScope)
+        return fail(
+          "scopeNotSubset",
+          "子の範囲が、根の範囲（設定ファイル config.json の rootScope）に収まらない（コマンド・書き込み可能な場所・禁止の場所）",
+          "子の範囲を、根の範囲の内側に絞って指定し直す",
+          "根の範囲を広げるなら、人に確かめてから config.json の rootScope（allowedCommands・writableLocations）を直し、daemon を起動し直す（起動し直すまで、変更は効かない）",
+        );
       return fail(
         "scopeNotSubset",
         "子の範囲が、親の範囲に収まらない（コマンド・書き込み可能な場所・禁止の場所）",
