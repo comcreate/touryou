@@ -18,6 +18,7 @@ const { foldEvents } = await import(`${R}/core/dist/index.js`);
 const { createCredentialStore } = await import(`${R}/daemon/dist/api/credentials.js`);
 const { createApiServer } = await import(`${R}/daemon/dist/api/server.js`);
 const { stopDelegatedOf } = await import(`${R}/daemon/dist/compose.js`);
+const { EXTERNAL_CHECK_SUMMARY } = await import(`${R}/daemon/dist/external-check.js`);
 const { DesktopRuntimeAdapter } = await import(`${R}/daemon/dist/sdk/desktop-adapter.js`);
 const { createConfirmationGate } = await import(`${R}/daemon/dist/api/confirmation-gate.js`);
 const HUMAN = "human-token-human-token-human-token-1234";
@@ -1315,6 +1316,104 @@ out.throttleWindowMs = Date.now() - tt;
   out.confirmation = cf;
   await pageCf.context().close();
   await csrv.close();
+}
+
+// ---- 使い勝手（#13）: 確認の欄へのスクロールとフォーカス・停止の代行依頼の帯・止まったノードの要対応・入力欄の id と name ----
+{
+  const ux = {};
+  const item = (seq, id, kind, nodeId, summary) => ({
+    seq,
+    id,
+    kind,
+    nodeId,
+    dependsOn: [],
+    at: "2026-10-20T00:00:02Z",
+    summary,
+  });
+  state = {
+    ...state,
+    nodes: [
+      ...state.nodes,
+      { id: "s9", role: "implement", parentId: "m1", state: "stopped", dependsOn: [] },
+    ],
+    inbox: [
+      ...state.inbox,
+      item(201, "u1", "stopIncomplete", "c1", "停止未完了（代行）"),
+      item(202, "u2", "stopIncomplete", "c2", "停止未完了（直接）"),
+      item(203, "u3", "info", "s2", "止まったノードの情報"),
+      item(204, "u4", "info", "arch2", "アーカイブ済みノードの情報"),
+      item(205, "u5", "stopIncomplete", "root", `${EXTERNAL_CHECK_SUMMARY}（1 件: c1）`),
+    ],
+    lastSeq: state.lastSeq + 1,
+  };
+  const pageU = await (
+    await browser.newContext({ viewport: { width: 900, height: 600 } })
+  ).newPage();
+  const uxErrors = [];
+  pageU.on("pageerror", (e) => uxErrors.push(String(e)));
+  await pageU.goto(`${url}/ui#token=${HUMAN}`);
+  await pageU.waitForFunction(
+    () => document.getElementById("inbox").innerText.includes("停止未完了（代行）"),
+    null,
+    { timeout: 8000 },
+  );
+  const card = (text) => pageU.locator("#inbox .card", { hasText: text });
+  ux.delegatedNotFailed =
+    (await card("停止未完了（代行）").getAttribute("class")).includes("request") &&
+    (await card("停止未完了（代行）").innerText()).includes("停止の代行依頼") &&
+    !(await card("停止未完了（代行）").innerText()).includes("失敗");
+  ux.directStillFailed = (await card("停止未完了（直接）").innerText()).includes("失敗");
+  const row = (id, st) => pageU.locator("#tree .node", { hasText: id }).filter({ hasText: st });
+  ux.stoppedHasCount = (await row("s2", "停止").innerText()).includes("要対応");
+  ux.externalCheckNotFailed = (await card("daemon 再起動後").getAttribute("class")).includes(
+    "request",
+  );
+  ux.archivedNoCount = await pageU.evaluate(() =>
+    [...document.querySelectorAll("#tree .node")].every(
+      (r) => !(r.firstChild.textContent === "arch2" && r.textContent.includes("要対応")),
+    ),
+  );
+  ux.archivedRowShown = await pageU.evaluate(() =>
+    [...document.querySelectorAll("#tree .node")].some((r) => r.firstChild.textContent === "arch2"),
+  );
+  ux.runningHasCount = await pageU.evaluate(() =>
+    [...document.querySelectorAll("#tree .node")].some(
+      (r) => r.firstChild.textContent === "a" && r.textContent.includes("要対応"),
+    ),
+  );
+  // 入力欄は、すべて id と name を持つ（id は一意）
+  ux.fields = await pageU.evaluate(() => {
+    const xs = [...document.querySelectorAll("textarea, input")];
+    const ids = xs.map((x) => x.id);
+    return {
+      count: xs.length,
+      allNamed: xs.every((x) => x.id !== "" && x.name !== ""),
+      uniqueIds: new Set(ids).size === ids.length,
+    };
+  });
+  // ページの下のボタンを押すと、確認の欄が見える所まで動き、フォーカスが欄の中に移る
+  const reclaimBtn = row("s9", "停止").getByRole("button", { name: "破棄して回収を指示…" });
+  await reclaimBtn.scrollIntoViewIfNeeded();
+  ux.scrolledDown = (await pageU.evaluate(() => window.scrollY)) > 0;
+  await reclaimBtn.click();
+  await pageU.waitForSelector("#confirm:not([hidden])", { timeout: 5000 });
+  await pageU.waitForTimeout(300);
+  ux.confirmVisible = await pageU.evaluate(() => {
+    const r = document.getElementById("confirm").getBoundingClientRect();
+    return r.top >= 0 && r.top < window.innerHeight;
+  });
+  ux.focusInConfirm = await pageU.evaluate(() =>
+    document.getElementById("confirm").contains(document.activeElement),
+  );
+  ux.typedValueSelectable = await pageU.evaluate(() => {
+    const t = document.querySelector("#confirm .typed-value");
+    return t !== null && getComputedStyle(t).userSelect === "all";
+  });
+  if (process.env.TOURYOU_OUT)
+    await pageU.screenshot({ path: `${process.env.TOURYOU_OUT}/ux-confirm.png` });
+  ux.errors = uxErrors;
+  out.ux = ux;
+  await pageU.context().close();
 }
 
 // 使い終わったページを閉じる（SSE の同時接続の上限）

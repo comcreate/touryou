@@ -7,6 +7,8 @@ pnpm build
 TOURYOU_PLAYWRIGHT=$(npm root -g)/playwright TOURYOU_OUT=/tmp/ui node scripts/ui-browser-check.mjs
 ```
 
+スクリーンショットは `TOURYOU_OUT` のディレクトリに書かれる（指定しないと、今のディレクトリ）。リポジトリの外の一時ディレクトリを指定する（`/ui-*.png`・`/ux-*.png` は `.gitignore` にある）。
+
 `TOURYOU_CHROMIUM` で実行ファイルを変えられる（既定 `/opt/pw-browsers/chromium`）。スクリプトは、daemon の窓口を、種になる状態（子の報告・判断要求に、スクリプトタグと `onerror` の文字列を入れる）で立てて、明・暗の両方で開く。
 
 ## 表示と接続
@@ -118,3 +120,16 @@ daemon の窓口の実物に、記録するだけの仮のハンドラ（`decisi
 | 期限切れ | 理由が赤い通知に出る |
 | 実行のあとの失敗（`purgeStale`） | 理由が赤い通知に出る。実行は数えない |
 | ほかの入力欄で打っている最中に、確認待ちが出る | フォーカスを奪わない。打った文字が残る |
+
+## 使い勝手（#13）
+
+`scripts/ui-browser-check.mjs` の `ux`（実ブラウザ。Chromium。高さ 600 の画面）。
+
+| 確かめること | 期待 |
+| --- | --- |
+| ページの下の「破棄して回収を指示…」を押す | 確認の欄が画面の中に入り、フォーカスが欄の中にある（`confirmVisible`・`focusInConfirm`） |
+| 打ち込ませる ID | 1 回のクリックで全体が選ばれる（`typedValueSelectable`） |
+| stopDelegated の子の停止未完了 | 受信箱に「停止の代行依頼」（赤の「失敗」でない）。直接止める子は「失敗」のまま |
+| 根に出る、Desktop の子を確かめる依頼 | 「停止の代行依頼」（赤の「失敗」でない） |
+| 停止したノードの未解決の項目 | 木の行に「要対応」を出す（人が決めることが残りうる）。アーカイブ済みのノードには出さない |
+| 入力欄 | すべて id と name を持ち、id は一意 |
