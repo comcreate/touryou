@@ -2,6 +2,7 @@ name: CI
 
 # ubuntu（node 22・24）。macOS は ci-macos.yml（コードが変わったときだけ。macOS の runner の費用のため）。
 # 必須の check（check (ubuntu-latest, node 22)・check (ubuntu-latest, node 24)）が必ず報告されるよう、paths-ignore は使わない。
+# コミットのメール（author・committer・Co-authored-by）が noreply の形かを、いつも確かめる（scripts/ci-commit-emails.sh）。
 # docs・.sdd・CHANGELOG・README・LICENSE だけの変更では、ジョブの中で重い段を飛ばして成功で終える（scripts/ci-code-changed.sh。docs/release.md の「CI のワークフロー」）。
 # workflow_dispatch: release.yml の marketplace-self が、GITHUB_TOKEN で出した PR のブランチに CI を走らせるため（GITHUB_TOKEN の PR では pull_request が動かない）。
 on:
@@ -32,16 +33,55 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          # pull_request は merge のコミット（親 2 つ）。HEAD^1 との差分が、PR の変更
-          fetch-depth: 2
+          # すべての履歴（コミットのメールの確かめで base..head・before..after を見るため。
+          # pull_request は merge のコミット〔親 2 つ〕で、HEAD^1 との差分が、PR の変更）
+          fetch-depth: 0
           persist-credentials: false
+      - name: コミットのメール（author・committer・Co-authored-by）が noreply の形かを確かめる（docs だけの変更でも必ず動く）
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: |
+          zero=0000000000000000000000000000000000000000
+          case "${EVENT}" in
+            pull_request)
+              # base と head の間（PR のすべてのコミット）
+              bash scripts/ci-commit-emails.sh "${PR_BASE}..${PR_HEAD}"
+              ;;
+            push)
+              if [ -n "${BEFORE}" ] && [ "${BEFORE}" != "${zero}" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+                # before と after の間（force push で before が after の祖先でなくても、after にだけあるコミットを見る）
+                bash scripts/ci-commit-emails.sh "${BEFORE}..${AFTER}"
+              else
+                # 新しいブランチの push・before が取れない（force push で消えた）とき: ほかの origin のブランチにない after のコミット。なければ after だけ
+                others="$(git for-each-ref --format='%(objectname)' refs/remotes/origin | grep -vx "${AFTER}" || true)"
+                # shellcheck disable=SC2086 # others は sha の並び（語に分ける）
+                if [ -n "$(git rev-list "${AFTER}" --not ${others} | head -n 1)" ]; then
+                  bash scripts/ci-commit-emails.sh "${AFTER}" --not ${others}
+                else
+                  bash scripts/ci-commit-emails.sh -1 "${AFTER}"
+                fi
+              fi
+              ;;
+            *)
+              # workflow_dispatch など: main にないこの ref のコミット。なければ HEAD だけ
+              if [ -n "$(git rev-list origin/main..HEAD | head -n 1)" ]; then
+                bash scripts/ci-commit-emails.sh origin/main..HEAD
+              else
+                bash scripts/ci-commit-emails.sh -1 HEAD
+              fi
+              ;;
+          esac
       - name: コードに関わる変更があるかを見る（docs などだけなら、重い段を飛ばす）
         id: changes
         env:
           EVENT: ${{ github.event_name }}
           BEFORE: ${{ github.event.before }}
         run: |
-          # workflow_dispatch・差分を取れないときは、すべて走らせる
+          # workflow_dispatch・差分を取れないときは、すべて走らせる（fetch-depth: 0 なので before はたいてい手元にある）
           files=""
           case "${EVENT}" in
             pull_request)
@@ -49,7 +89,7 @@ jobs:
               ;;
             push)
               if [ -n "${BEFORE}" ] && [ "${BEFORE}" != "0000000000000000000000000000000000000000" ] &&
-                git fetch --depth=1 --no-tags origin "${BEFORE}"; then
+                git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
                 files="$(git diff --name-only "${BEFORE}" HEAD || true)"
               fi
               ;;
