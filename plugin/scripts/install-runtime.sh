@@ -24,6 +24,8 @@ REPO_URL="https://github.com/comcreate/touryou"
 DIST_DIR="touryou-darwin-arm64"
 TARGET="darwin-arm64"
 LABEL_PLIST="touryou.daemon.plist"
+# 自分の場所は、読み込んだ時点で決める（bash 3.2 は、source した file の関数の中で BASH_SOURCE[0] が自分を指さないことがある）
+SELF="${BASH_SOURCE[0]:-$0}"
 CONTACT="この plugin を配布した COMCREATE（連絡先: contact@comcreate-info.com）"
 
 # --- 出力（HOME を伏せる） ---
@@ -177,7 +179,7 @@ main() {
 
   # 2. 配布物の情報（この plugin の中だけ）
   local P CK PJ ver pver repo name sha
-  P="$(cd -P "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
+  P="$(cd -P "$(dirname "$SELF")/.." && pwd -P)"
   CK="$P/checksums.json"
   PJ="$P/.claude-plugin/plugin.json"
   [ -f "$CK" ] || die "この plugin の版には、配布物の情報（checksums.json）が入っていない" "$CONTACT に確かめる"
@@ -302,6 +304,6 @@ main() {
   finish 0 installed
 }
 
-if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+if [ "$SELF" = "$0" ]; then
   main "$@"
 fi
