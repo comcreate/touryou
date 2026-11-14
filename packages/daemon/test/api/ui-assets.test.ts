@@ -211,6 +211,10 @@ describe("画面の資産（走査）", () => {
       "placeholder",
       "delete",
       "focus",
+      // 入力欄の name（自動入力・支援技術のため）・確認を開いた直後の印・受信箱の帯
+      "name",
+      "justOpened",
+      "cls",
       "setSelectionRange",
       "seq",
       "partial",
@@ -994,5 +998,90 @@ describe("画面の資産（走査）", () => {
     expect(body).toContain("typed: nodeId");
     expect(body).toContain("confirmStoppedParams(nodeId, note)");
     expect(UI_JS.split("fetch('/v1/request'").length - 1).toBe(1);
+  });
+});
+
+describe("画面の使い勝手（#13）", () => {
+  const fnOf = (name: string): string => {
+    const i = UI_JS.indexOf(`  function ${name}(`);
+    expect(i, name).toBeGreaterThan(-1);
+    return UI_JS.slice(i, UI_JS.indexOf("\n  }\n", i) + 5);
+  };
+  const lineOf = (prefix: string): string => {
+    const i = UI_JS.indexOf(`  ${prefix}`);
+    expect(i, prefix).toBeGreaterThan(-1);
+    return UI_JS.slice(i, UI_JS.indexOf("\n", i));
+  };
+  const api = runInNewContext(
+    [
+      lineOf("var PRIORITY_NAMES ="),
+      lineOf("var SETTLED_STATES ="),
+      lineOf("var UNREACHABLE_TEXT ="),
+      lineOf("function name("),
+      fnOf("isStopRequest"),
+      fnOf("inboxBand"),
+      fnOf("fetchFailureText"),
+      "({ inboxBand: inboxBand, fetchFailureText: fetchFailureText, SETTLED_STATES: SETTLED_STATES, UNREACHABLE_TEXT: UNREACHABLE_TEXT })",
+    ].join("\n"),
+    {},
+  ) as {
+    inboxBand(i: Record<string, unknown>, delegated: Set<string>): { cls: string; label: string };
+    fetchFailureText(status: number): string;
+    SETTLED_STATES: Record<string, boolean>;
+    UNREACHABLE_TEXT: string;
+  };
+
+  it("(4) 停止を代行してもらうノードの停止未完了は、赤の「失敗」でなく「停止の代行依頼」。直接止めるノードは、これまでどおり失敗", () => {
+    const delegated = new Set(["c1"]);
+    expect(
+      api.inboxBand({ kind: "stopIncomplete", nodeId: "c1", priority: "failed" }, delegated),
+    ).toEqual({ cls: "request", label: "停止の代行依頼" });
+    expect(
+      api.inboxBand({ kind: "stopIncomplete", nodeId: "c2", priority: "failed" }, delegated),
+    ).toEqual({ cls: "failed", label: "失敗" });
+    expect(api.inboxBand({ kind: "failure", nodeId: "c1", priority: "failed" }, delegated)).toEqual(
+      { cls: "failed", label: "失敗" },
+    );
+    expect(api.inboxBand({ kind: "info", nodeId: "c1", priority: "info" }, delegated)).toEqual({
+      cls: "",
+      label: "情報",
+    });
+  });
+
+  it("(6) 止まった・終わったノード（停止・受理・回収可・アーカイブ）には、要対応の数を出さない。動いているノードには出す", () => {
+    for (const s of ["stopped", "verified", "reclaimable", "archived"])
+      expect(Object.hasOwn(api.SETTLED_STATES, s), s).toBe(true);
+    for (const s of ["running", "waiting", "pending", "done", "stopping", "stopIncomplete"])
+      expect(Object.hasOwn(api.SETTLED_STATES, s), s).toBe(false);
+    expect(UI_JS).toContain("n.openItems > 0 && !Object.hasOwn(SETTLED_STATES, n.state)");
+  });
+
+  it("(3) 接続できない・取得に失敗したときは、理由と確かめることを言う", () => {
+    expect(api.UNREACHABLE_TEXT).toContain("daemon が動いているか");
+    expect(api.UNREACHABLE_TEXT).toContain("ポート");
+    expect(api.fetchFailureText(429)).toContain("要求が多すぎます");
+    expect(api.fetchFailureText(500)).toContain("daemon のログ");
+    expect(api.fetchFailureText(404)).toBe("取得に失敗（404）。再試行します");
+  });
+
+  it("(1) 確認を開いた直後に、確認の欄まで動かして、フォーカスを欄の中に移す。通知も見える所まで動かす", () => {
+    expect(UI_JS).toContain("justOpened: true");
+    const body = fnOf("renderConfirm");
+    expect(body).toContain("box.scrollIntoView({ block: 'start' })");
+    expect(body).toContain("target.focus({ preventScroll: true })");
+    expect(fnOf("notice")).toContain("n.scrollIntoView({ block: 'nearest' })");
+  });
+
+  it("(2) 打ち込ませる文字列は、1 回のクリックで全体を選べる（コピーして貼り付けられる）", () => {
+    expect(fnOf("renderConfirm")).toContain("el('span', 'typed-value', pending.typed)");
+    expect(UI_CSS).toMatch(/\.typed-value\{[^}]*user-select:all/);
+  });
+
+  it("(5) 入力欄は、すべて id と name を持つ（textarea は field() だけで作る。トークンの欄にも name）", () => {
+    expect(UI_JS.split("el('textarea'").length - 1).toBe(1); // field の中の 1 か所だけ
+    const body = fnOf("field");
+    expect(body).toContain("e.name = fieldName");
+    expect(body).toContain("e.id = fieldName + '-' + fieldSeq");
+    expect(UI_HTML).toContain('<input id="token" name="token"');
   });
 });
