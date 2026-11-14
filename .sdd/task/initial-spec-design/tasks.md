@@ -33,7 +33,7 @@ depends-on: ["design-touryou"]
 | T10b-r | daemon: 回収の実ポート（git） | 済み |
 | T10b-w | daemon: 根の用意のあとに待ち受けを始める | 済み |
 | T10b-a | daemon: 起動の順番の直し | 済み |
-| T10b-d | daemon: Desktop の子を起動時の整合から外す方針 | 残り |
+| T10b-d | daemon: Desktop の子を起動時の整合から外す方針（ADR「2026-11-14 Desktop の子は起動時の整合でプロセスと照合しない」） | 済み |
 | T10c | core/daemon: 記録専用のイベント | 済み |
 | T10s | daemon: スケジューラ（依存がそろった子の起動） | 済み |
 | T10m | mcp: MCP サーバーの起動口 | 済み |
@@ -164,7 +164,6 @@ depends-on: ["design-touryou"]
 
 ## 残りの課題
 
-- **T10b-d**: Desktop の子は daemon が管理しないので、起動時の整合（`reconcileOnStartup`）の対象から外す。Desktop の子の整合の方針を決める（FR_036）。
 - **T10x**: `pnpm-workspace.yaml` の `minimumReleaseAgeExclude`（既存の開発用ツールの除外）を消し、除外なしでも `pnpm install` が通ることを確かめる（NFR_010）。
 - **T21-ec2**: `pause-handlers.ts`・`spawn-handlers.ts` が、停止の要求を追記したあとの `log.state().lastSeq` を停止の要求の seq として使っている。追記の結果の seq を使う形に直す。いまは停止中のまま解決が起きないのでずれないが、停止の追記のあとに記録を足す形になったときにずれる（NFR_002）。
 - **T22-bundle**: 本体（`touryou-daemon`・`touryou-mcp`・`touryou`）を plugin と一緒に配り、plugin の側で起動して、`/setup` での本体の別取得と daemon の別起動をなくすか減らす。方針は未決。制約は、配布物の大きさ・Node の同梱・quarantine・sha256 の照合・NFR_012（絶対パスなし）・daemon が統合セッションより長く動くこと（IR_002）。

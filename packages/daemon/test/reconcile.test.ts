@@ -20,7 +20,7 @@ const rig = (
     processes?: Record<string, readonly ProcessInfo[] | null>;
     managed?: string[];
     noCwd?: string[];
-    external?: boolean;
+    external?: boolean | readonly string[];
   } = {},
 ) => {
   const opened = EventLog.open(createMemoryStore().open(), { clock });
@@ -68,7 +68,11 @@ const rig = (
           : [];
       },
       has: (id) => opts.managed?.includes(id) ?? false,
-      ...(opts.external === true ? { external: () => true } : {}),
+      ...(opts.external === true
+        ? { external: () => true }
+        : Array.isArray(opts.external)
+          ? { external: (id: string) => (opts.external as readonly string[]).includes(id) }
+          : {}),
     });
   return { log, run, probed, s: () => log.state() };
 };
@@ -141,6 +145,25 @@ describe("reconcileOnStartup（再起動の後、記録と実際のプロセス�
 });
 
 describe("daemon の外で動く子（Desktop）", () => {
+  // 設定（childRuntime）では木の中で混在しないが、判定は子ごとなので、混ざっても正しく扱う
+  // （たとえば childRuntime を切り替えて再起動したあとに、前の子が残る場合）。
+  it("Desktop の子と daemon の子が混ざるとき: Desktop の子はプロセスで調べず状態も変えず、ほかの子だけを照合する（FR_036）", async () => {
+    const r = rig({ external: ["a", "w"] });
+    const out = await r.run();
+    expect(r.probed).not.toContain("/wt/a");
+    expect(r.probed).not.toContain("/wt/w");
+    expect(r.probed).toContain("/wt/s");
+    expect(out.map((o) => o.nodeId).sort()).toEqual(["g", "i", "s"]);
+    expect(stateOf(r.s(), "a")).toBe("running");
+    expect(stateOf(r.s(), "w")).toBe("waiting");
+    const ask = r
+      .s()
+      .inbox.find(
+        (i) => i.resolved === undefined && i.summary?.startsWith(EXTERNAL_CHECK_SUMMARY) === true,
+      );
+    expect(ask?.summary).toContain("2 件");
+  });
+
   it("照合せず状態を変えない。根の受信箱に、優先度のある項目（stopIncomplete）をまとめて 1 件。再実行で重複しない", async () => {
     const r = rig({ external: true });
     const before = r.s().nodes.map((x) => [x.id, x.state]);
