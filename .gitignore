@@ -14,3 +14,7 @@ coverage/
 # release.yml が、zip にだけ入れる生成物（リポジトリには入れない）
 plugin/checksums.json
 *.tsbuildinfo
+
+# 画面の確かめ（scripts/ui-browser-check.mjs）の出力。TOURYOU_OUT を指定しないとルートに書かれる
+/ui-*.png
+/ux-*.png

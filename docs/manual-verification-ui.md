@@ -7,6 +7,8 @@ pnpm build
 TOURYOU_PLAYWRIGHT=$(npm root -g)/playwright TOURYOU_OUT=/tmp/ui node scripts/ui-browser-check.mjs
 ```
 
+スクリーンショットは `TOURYOU_OUT` のディレクトリに書かれる（指定しないと、今のディレクトリ）。リポジトリの外の一時ディレクトリを指定する（`/ui-*.png`・`/ux-*.png` は `.gitignore` にある）。
+
 `TOURYOU_CHROMIUM` で実行ファイルを変えられる（既定 `/opt/pw-browsers/chromium`）。スクリプトは、daemon の窓口を、種になる状態（子の報告・判断要求に、スクリプトタグと `onerror` の文字列を入れる）で立てて、明・暗の両方で開く。
 
 ## 表示と接続
