@@ -334,6 +334,44 @@ describe("node.stop（停止要求の記録 → アダプタの 2 段階停止�
     expect(adapter.stops).toEqual([["a", { mode: "graceful", stopSeq: first?.seq }]]);
   });
 
+  it("切り替えの要求（猶予中の即時）の追記のあとに別の停止要求が入っても、進行中の試行の seq を使う（NFR_002）", async () => {
+    const r = rig();
+    const adapter = new FakeAdapter();
+    let inject = false;
+    const shifting = {
+      state: () => r.log.state(),
+      append: (q: Parameters<typeof r.log.append>[0]) => r.log.append(q),
+      appendAll: (qs: Parameters<typeof r.log.appendAll>[0]) => {
+        const res = r.log.appendAll(qs);
+        if (res.ok && inject) {
+          inject = false;
+          r.ev("a", { type: "stopTimeout" });
+          r.ev("a", { type: "retryStop" });
+        }
+        return res;
+      },
+    };
+    const h = createRuntimeHandlers({ log: shifting, clock, adapterFor: () => adapter });
+    const stop = (requestId: string, mode: "graceful" | "immediate") =>
+      h["node.stop"]({
+        requestId,
+        operation: "node.stop",
+        role: "integrator",
+        caller: { nodeId: "m1" },
+        params: { nodeId: "a", mode },
+      } as unknown as HandlerRequest<"node.stop">);
+    expect((await stop("sw-1", "graceful")).ok).toBe(true);
+    inject = true;
+    expect((await stop("sw-2", "immediate")).ok).toBe(true);
+    const [first, later] = r.state().stopRequests.filter((q) => q.nodeId === "a");
+    expect(later?.seq).toBeGreaterThan(first?.seq ?? 0);
+    await flush();
+    expect(adapter.stops.map(([, q]) => [q.mode, q.stopSeq])).toEqual([
+      ["graceful", first?.seq],
+      ["immediate", first?.seq],
+    ]);
+  });
+
   it("起動前（pending）の停止は、取り消し（stopped）。アダプタは呼ばない", async () => {
     const r = rig();
     const res = await r.call("node.stop", { nodeId: "p", mode: "graceful" });
