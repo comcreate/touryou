@@ -2,6 +2,8 @@
 
 ## 未公開
 
+- **止まった子の未回答の判断を tree に出す**（#8）: `touryou tree --json`・`touryou tree <nodeId>` に、止まった子の未回答の判断（`pendingDecisions`）が出る。
+- **回答を子に届けたかを answer に出す**（#9）: `touryou answer` が、回答を子に届けたか（daemon の `decision.answer` の結果の `delivery`）を出す。
 - **依存の脆弱性の修正**（#15）: 配布物に入る依存を、既知の脆弱性を直した版に上げた（zod 4.6.7〔high〕・body-parser 2.4.0〔high〕・qs 6.16.2・fast-uri 3.1.9・ip-address 10.7.5）。
 - **setup で子に commit させるかを尋ねる**（#5）: `/touryou:setup` の設定の手順で、子に commit させるか（`git add`・`git commit` を根の範囲に入れるか）を尋ねるようにした。根の範囲に収まらない子の起動の失敗（`scopeNotSubset`）は、直す場所（`config.json` の `rootScope`）と、daemon の起動し直しが要ることを言う。
 - **範囲違反は「フックが拒んだ」と明示**（#6）: 範囲違反の受信箱の項目は、「フックが拒んだ」ことをはっきり言う。統合の skill は、その言葉のまま人に伝える。

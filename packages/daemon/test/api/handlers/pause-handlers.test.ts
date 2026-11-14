@@ -384,21 +384,21 @@ describe("判断の回答と、フック専用のトークン", () => {
 });
 
 describe("回答で再開しなかった子と理由（notResumed）", () => {
-  it("再開した子だけのときは、結果は今までどおり { accepted: true }（キーが増えない）", async () => {
+  it("再開した子だけのときは、notResumed のキーはない（delivery は、届ける手段がないので skipped）", async () => {
     const r = rig();
     const p = await r.present({ ...Q, pauseNodeIds: ["a"] });
     await r.flush();
     r.ev("a", { type: "confirmStopped" });
     const id = p.value?.decisionId as string;
     const res = await r.answer(id, "B");
-    expect(res).toEqual({ ok: true, value: { accepted: true } });
+    expect(res).toEqual({ ok: true, value: { accepted: true, delivery: "skipped" } });
   });
 
-  it("一時停止のない判断の回答も { accepted: true } のまま", async () => {
+  it("一時停止のない判断の回答も notResumed はない", async () => {
     const r = rig();
     const p = await r.present({ ...Q });
     const res = await r.answer(p.value?.decisionId as string, "B");
-    expect(res).toEqual({ ok: true, value: { accepted: true } });
+    expect(res).toEqual({ ok: true, value: { accepted: true, delivery: "skipped" } });
   });
 
   it("停止未完了のあと止め直した子は stoppedAfterStopIncomplete。判断の停止だけの子は再開する（判定は変えない）", async () => {
@@ -416,6 +416,7 @@ describe("回答で再開しなかった子と理由（notResumed）", () => {
       value: {
         accepted: true,
         notResumed: [{ nodeId: "b", reason: "stoppedAfterStopIncomplete" }],
+        delivery: "skipped",
       },
     });
     expect(r.calls.started.map((x) => x.nodeId)).toEqual(["a"]);
@@ -440,7 +441,11 @@ describe("回答で再開しなかった子と理由（notResumed）", () => {
     const ans = await r.answer(id, "A");
     expect(ans).toEqual({
       ok: true,
-      value: { accepted: true, notResumed: [{ nodeId: "a", reason: "stoppedByOther" }] },
+      value: {
+        accepted: true,
+        notResumed: [{ nodeId: "a", reason: "stoppedByOther" }],
+        delivery: "skipped",
+      },
     });
     expect(r.calls.started).toEqual([]);
     expect(r.s().inbox.at(-1)?.summary).toContain("a（判断のほかに止められたため）");
@@ -462,7 +467,11 @@ describe("回答で再開しなかった子と理由（notResumed）", () => {
     const ans = await r.answer(id, "A");
     expect(ans).toEqual({
       ok: true,
-      value: { accepted: true, notResumed: [{ nodeId: "a", reason: "discarded" }] },
+      value: {
+        accepted: true,
+        notResumed: [{ nodeId: "a", reason: "discarded" }],
+        delivery: "skipped",
+      },
     });
     expect(r.s().inbox.at(-1)?.summary).toContain("a（破棄の判断を経たため）");
   });

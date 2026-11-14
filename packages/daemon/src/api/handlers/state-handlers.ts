@@ -225,6 +225,28 @@ export function createStateHandlers(deps: StateHandlerDeps) {
       const me = req.role === "human" ? "" : callerOf(req);
       const openItems = (nodeId: string): number =>
         unresolvedInbox(v.inbox).filter((i) => i.nodeId === nodeId && i.kind !== "digest").length;
+      // 止まった子の未回答の判断。動いていない（running・waiting・stopping でない）子の判断を数える:
+      // - closed（破棄を決めた子。答えても届かない）→「届かない」
+      // - open（止まった子。回答で再開する道はあるが、いまは止まっている）→「止まった子」
+      const live = new Set(["running", "waiting", "stopping"]);
+      const countPending = (nodeId: string): { undeliverable: number; stopped: number } => {
+        const state = all.find((x) => x.id === nodeId)?.state ?? "";
+        const undeliverable = v.decisions.filter(
+          (d) => d.nodeId === nodeId && d.status === "closed",
+        ).length;
+        const stopped = live.has(state)
+          ? 0
+          : v.decisions.filter((d) => d.nodeId === nodeId && d.status === "open").length;
+        return { undeliverable, stopped };
+      };
+      const pendingOf = (nodeId: string): string => {
+        const { undeliverable: closed, stopped: openStopped } = countPending(nodeId);
+        if (closed === 0 && openStopped === 0) return "-";
+        const parts: string[] = [];
+        if (closed > 0) parts.push(`${closed}（届かない）`);
+        if (openStopped > 0) parts.push(`${openStopped}（止まった子）`);
+        return parts.join("+");
+      };
       const nodes = v.nodes.map((n) => ({
         id: n.id,
         role: n.role,
@@ -233,25 +255,8 @@ export function createStateHandlers(deps: StateHandlerDeps) {
         dependsOn: [...n.dependsOn],
         openItems: openItems(n.id),
         discarded: n.discarded !== undefined,
+        pendingDecisions: countPending(n.id),
       }));
-      // 止まった子の未回答の判断。動いていない（running・waiting・stopping でない）子の判断を数える:
-      // - closed（破棄を決めた子。答えても届かない）→「届かない」
-      // - open（止まった子。回答で再開する道はあるが、いまは止まっている）→「止まった子」
-      const live = new Set(["running", "waiting", "stopping"]);
-      const pendingOf = (nodeId: string): string => {
-        const state = all.find((x) => x.id === nodeId)?.state ?? "";
-        const closed = v.decisions.filter(
-          (d) => d.nodeId === nodeId && d.status === "closed",
-        ).length;
-        const openStopped = live.has(state)
-          ? 0
-          : v.decisions.filter((d) => d.nodeId === nodeId && d.status === "open").length;
-        if (closed === 0 && openStopped === 0) return "-";
-        const parts: string[] = [];
-        if (closed > 0) parts.push(`${closed}（届かない）`);
-        if (openStopped > 0) parts.push(`${openStopped}（止まった子）`);
-        return parts.join("+");
-      };
       const rows = v.nodes.map((n) => [
         n.id,
         n.role,

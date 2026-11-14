@@ -46,7 +46,7 @@ export const RESULT_KEYS: ResultKeys = {
   "report.outOfScope": ["accepted"],
   "report.done": ["accepted"],
   "scope.extend": ["extensionId"],
-  "decision.answer": ["accepted", "notResumed"],
+  "decision.answer": ["accepted", "notResumed", "delivery", "deliveredVia"],
   "node.reclaimInstruct": ["accepted"],
   "node.purge": ["purged"],
   "node.purgePreview": [

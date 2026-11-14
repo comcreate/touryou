@@ -55,6 +55,7 @@ touryou state <nodeId> --json
 ```
 
 - 人間は全ノードを見られる（統合ノードは自分の部分木だけ）。トークン・秘密・作業ツリーの絶対パス・最終コミットは含めない。
+- 止まった子の未回答の判断は、表の `pendingDecision` 列（「N（届かない）」: 破棄を決めて閉じた判断。「N（止まった子）」: 動いていない子の open の判断）に出る。`--json` と `touryou tree <nodeId>` では、各ノードの `pendingDecisions`（`{ undeliverable, stopped }`）として出る。古い daemon はこの欄を返さないので、そのときは 1 ノードの表示に行が出ない。
 
 ## 判断要求の確認と回答 `touryou decisions` / `touryou answer`
 
@@ -72,6 +73,7 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 - `--text` と `--choice` は同時に指定できない。選択肢のある判断で `--choice` を使うときは、表示に出た選択肢の文と一致していないと受け付けない（`--text` で自由に答えることはできる）。
 - 判断の status が `open` でなければ（答え済み・`closed`〔人が破棄を決めて閉じた〕・まだ知らない値）、表示だけで止めて答えない（終了コード 1。理由に status と、あれば閉じた理由を出す）。`touryou decisions` でも、open でない判断は「答えられない」と出る。
 - 表示には、判断を出した子の状態が出る。子が `waiting`・`running` でなければ（止まった子など）、「この子は <状態> なので、答えは子に届かない（記録は残り、回収の片付けにはなる）」と出る。
+- 答えたあとは、daemon が返す `delivery`（回答を子に届けたか）を出す。`delivered` なら「答えを子に届けた」と、`deliveredVia` で届け方（「答えを添えて、子を再開した」か「追加の指示として。子は受信箱で読む」）、`skipped` なら「答えは子に届けていない（届ける手段がないか、子が動いていない。記録は残る）」。古い daemon は `delivery` を返さないので、そのときは今までどおり子の状態から見込みを出す。
 
 ## 入れるもの
 

@@ -350,6 +350,19 @@ const isPurged = (v: unknown): v is { purged: readonly string[] } =>
   isRecord(v) && isStringArray(v.purged);
 const isAccepted = (v: unknown): v is { accepted: true } => isRecord(v) && v.accepted === true;
 
+/** `decision.answer` の結果。`delivery` は古い daemon にはない（知らない値も、ないものとして扱う）。 */
+const isAnswerResult = (
+  v: unknown,
+): v is { accepted: true; delivery?: unknown; deliveredVia?: unknown } => isAccepted(v);
+
+/** 止まった子の未回答の判断の数の表示（表の pendingDecision 列と同じ言葉）。 */
+function pendingText(p: { readonly undeliverable: number; readonly stopped: number }): string {
+  const parts: string[] = [];
+  if (p.undeliverable > 0) parts.push(`${p.undeliverable}（届かない）`);
+  if (p.stopped > 0) parts.push(`${p.stopped}（止まった子）`);
+  return parts.length === 0 ? "なし" : parts.join("+");
+}
+
 /** `tree.list` の結果（人間版。表 + 構造）。 */
 interface TreeNodeView {
   readonly id: string;
@@ -359,7 +372,12 @@ interface TreeNodeView {
   readonly dependsOn: readonly string[];
   readonly openItems: number;
   readonly discarded: boolean;
+  /** 止まった子の未回答の判断の数（古い daemon にはない）。 */
+  readonly pendingDecisions?: { readonly undeliverable: number; readonly stopped: number };
 }
+const isCount = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0;
+const isPendingDecisions = (v: unknown): boolean =>
+  v === undefined || (isRecord(v) && isCount(v.undeliverable) && isCount(v.stopped));
 const isTreeNodeView = (v: unknown): v is TreeNodeView =>
   isRecord(v) &&
   typeof v.id === "string" &&
@@ -369,7 +387,8 @@ const isTreeNodeView = (v: unknown): v is TreeNodeView =>
   isStringArray(v.dependsOn) &&
   typeof v.openItems === "number" &&
   Number.isInteger(v.openItems) &&
-  typeof v.discarded === "boolean";
+  typeof v.discarded === "boolean" &&
+  isPendingDecisions(v.pendingDecisions);
 const isTreeList = (v: unknown): v is { table: string; nodes: readonly TreeNodeView[] } =>
   isRecord(v) &&
   typeof v.table === "string" &&
@@ -604,6 +623,9 @@ function describeNode(n: TreeNodeView): string {
     `  依存: ${n.dependsOn.length === 0 ? "なし" : n.dependsOn.map((d) => terminalSafe(d, 128)).join("、")}`,
     `  未解決の受信箱: ${n.openItems}`,
     `  破棄の判断: ${n.discarded ? "済み" : "なし"}`,
+    ...(n.pendingDecisions === undefined
+      ? []
+      : [`  止まった子の未回答の判断: ${pendingText(n.pendingDecisions)}`]),
   ].join("\n");
 }
 
@@ -845,7 +867,7 @@ async function runAnswer(
   const id = requestId ?? deps.newRequestId();
   const params =
     choice !== undefined ? { decisionId, choice } : { decisionId, text: text as string };
-  const res = await invoke(deps.client, id, "decision.answer", params, isAccepted);
+  const res = await invoke(deps.client, id, "decision.answer", params, isAnswerResult);
   if (res.kind === "failure") return failed(res.failure);
   if (res.kind === "unconfirmed") {
     return unconfirmed(
@@ -854,10 +876,20 @@ async function runAnswer(
       id,
     );
   }
+  // daemon が届けたかを返すなら、それを出す。返さない（古い daemon）なら、子の状態から見込みを出す。
+  const delivery = res.value.delivery;
   const undelivered =
-    state !== undefined && !isDeliverableState(state)
-      ? `注意: この子は ${terminalSafe(state, 40)} なので、答えは子に届かない（記録は残る）\n`
-      : "";
+    delivery === "delivered"
+      ? res.value.deliveredVia === "resumed"
+        ? "答えを子に届けた（答えを添えて、子を再開した）\n"
+        : res.value.deliveredVia === "instructed"
+          ? "答えを子に届けた（追加の指示として。子は受信箱で読む）\n"
+          : "答えを子に届けた\n"
+      : delivery === "skipped"
+        ? "注意: 答えは子に届けていない（届ける手段がないか、子が動いていない。記録は残る）\n"
+        : state !== undefined && !isDeliverableState(state)
+          ? `注意: この子は ${terminalSafe(state, 40)} なので、答えは子に届かない（記録は残る）\n`
+          : "";
   return {
     exitCode: 0,
     stdout: `答えた: ${terminalSafe(decisionId, 128)}\nrequestId: ${id}\n${undelivered}`,

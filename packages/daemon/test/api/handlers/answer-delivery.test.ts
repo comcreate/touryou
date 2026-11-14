@@ -463,3 +463,31 @@ describe("判断の回答の配送: 重なり・再送・回復", () => {
     expect(text.startsWith("【人間からの回答】判断 decision-x")).toBe(true);
   });
 });
+
+describe("decision.answer の結果の delivery（回答を子に届けたか）", () => {
+  it("届けたら delivered", async () => {
+    const r = rig();
+    const id = await r.decide();
+    const res = await r.answer(id, { choice: "YAML" });
+    expect(res).toEqual({
+      ok: true,
+      value: { accepted: true, delivery: "delivered", deliveredVia: "instructed" },
+    });
+  });
+
+  it("届ける手段がなければ skipped（回答は記録済み）", async () => {
+    const r = rig({ live: false });
+    const id = await r.decide();
+    const res = await r.answer(id, { choice: "YAML" });
+    expect(res).toEqual({ ok: true, value: { accepted: true, delivery: "skipped" } });
+    expect(r.sent).toHaveLength(0);
+    expect(r.log.state().decisions.find((d) => d.decisionId === id)?.answer).toBe("YAML");
+  });
+
+  it("canDeliver がない（届ける手段を確かめられない）ときも skipped", async () => {
+    const r = rig({ withCanDeliver: false });
+    const id = await r.decide();
+    const res = await r.answer(id, { choice: "YAML" });
+    expect(res.value).toMatchObject({ accepted: true, delivery: "skipped" });
+  });
+});
