@@ -18,6 +18,7 @@ const { foldEvents } = await import(`${R}/core/dist/index.js`);
 const { createCredentialStore } = await import(`${R}/daemon/dist/api/credentials.js`);
 const { createApiServer } = await import(`${R}/daemon/dist/api/server.js`);
 const { stopDelegatedOf } = await import(`${R}/daemon/dist/compose.js`);
+const { EXTERNAL_CHECK_SUMMARY } = await import(`${R}/daemon/dist/external-check.js`);
 const { DesktopRuntimeAdapter } = await import(`${R}/daemon/dist/sdk/desktop-adapter.js`);
 const { createConfirmationGate } = await import(`${R}/daemon/dist/api/confirmation-gate.js`);
 const HUMAN = "human-token-human-token-human-token-1234";
@@ -1340,6 +1341,8 @@ out.throttleWindowMs = Date.now() - tt;
       item(201, "u1", "stopIncomplete", "c1", "停止未完了（代行）"),
       item(202, "u2", "stopIncomplete", "c2", "停止未完了（直接）"),
       item(203, "u3", "info", "s2", "止まったノードの情報"),
+      item(204, "u4", "info", "arch2", "アーカイブ済みノードの情報"),
+      item(205, "u5", "stopIncomplete", "root", `${EXTERNAL_CHECK_SUMMARY}（1 件: c1）`),
     ],
     lastSeq: state.lastSeq + 1,
   };
@@ -1361,7 +1364,18 @@ out.throttleWindowMs = Date.now() - tt;
     !(await card("停止未完了（代行）").innerText()).includes("失敗");
   ux.directStillFailed = (await card("停止未完了（直接）").innerText()).includes("失敗");
   const row = (id, st) => pageU.locator("#tree .node", { hasText: id }).filter({ hasText: st });
-  ux.stoppedNoCount = !(await row("s2", "停止").innerText()).includes("要対応");
+  ux.stoppedHasCount = (await row("s2", "停止").innerText()).includes("要対応");
+  ux.externalCheckNotFailed = (await card("daemon 再起動後").getAttribute("class")).includes(
+    "request",
+  );
+  ux.archivedNoCount = await pageU.evaluate(() =>
+    [...document.querySelectorAll("#tree .node")].every(
+      (r) => !(r.firstChild.textContent === "arch2" && r.textContent.includes("要対応")),
+    ),
+  );
+  ux.archivedRowShown = await pageU.evaluate(() =>
+    [...document.querySelectorAll("#tree .node")].some((r) => r.firstChild.textContent === "arch2"),
+  );
   ux.runningHasCount = await pageU.evaluate(() =>
     [...document.querySelectorAll("#tree .node")].some(
       (r) => r.firstChild.textContent === "a" && r.textContent.includes("要対応"),

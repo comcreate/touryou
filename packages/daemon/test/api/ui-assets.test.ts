@@ -1,6 +1,7 @@
 import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import { UI_CSS, UI_HEADERS, UI_HTML, UI_HTML_HEADERS, UI_JS } from "../../src/api/ui-assets.js";
+import { EXTERNAL_CHECK_SUMMARY, externalCheckSummaries } from "../../src/external-check.js";
 
 /** 画面の資産の走査。XSS・トークンの漏れにつながる書き方を禁じる。 */
 describe("画面の資産（走査）", () => {
@@ -1016,6 +1017,7 @@ describe("画面の使い勝手（#13）", () => {
     [
       lineOf("var PRIORITY_NAMES ="),
       lineOf("var SETTLED_STATES ="),
+      lineOf("var EXTERNAL_CHECK_PREFIXES ="),
       lineOf("var UNREACHABLE_TEXT ="),
       lineOf("function name("),
       fnOf("isStopRequest"),
@@ -1048,10 +1050,46 @@ describe("画面の使い勝手（#13）", () => {
     });
   });
 
-  it("(6) 止まった・終わったノード（停止・受理・回収可・アーカイブ）には、要対応の数を出さない。動いているノードには出す", () => {
-    for (const s of ["stopped", "verified", "reclaimable", "archived"])
+  it("(4) 根に出る、Desktop の子を人が確かめる依頼（今の版・前の版の文面）も、「停止の代行依頼」。ほかの根の停止未完了は失敗", () => {
+    const none = new Set<string>();
+    for (const summary of externalCheckSummaries())
+      expect(
+        api.inboxBand(
+          {
+            kind: "stopIncomplete",
+            nodeId: "root",
+            priority: "failed",
+            summary: `${summary}（1 件: c1）`,
+          },
+          none,
+        ),
+      ).toEqual({ cls: "request", label: "停止の代行依頼" });
+    expect(
+      api.inboxBand(
+        { kind: "stopIncomplete", nodeId: "root", priority: "failed", summary: "別の停止未完了" },
+        none,
+      ).cls,
+    ).toBe("failed");
+    expect(
+      api.inboxBand(
+        { kind: "failure", nodeId: "root", priority: "failed", summary: EXTERNAL_CHECK_SUMMARY },
+        none,
+      ).cls,
+    ).toBe("failed");
+  });
+
+  it("(6) 終わったノード（受理・回収可・アーカイブ）には、要対応の数を出さない。停止（人が決めることが残りうる）・完了報告・動いているノードには出す", () => {
+    for (const s of ["verified", "reclaimable", "archived"])
       expect(Object.hasOwn(api.SETTLED_STATES, s), s).toBe(true);
-    for (const s of ["running", "waiting", "pending", "done", "stopping", "stopIncomplete"])
+    for (const s of [
+      "stopped",
+      "running",
+      "waiting",
+      "pending",
+      "done",
+      "stopping",
+      "stopIncomplete",
+    ])
       expect(Object.hasOwn(api.SETTLED_STATES, s), s).toBe(false);
     expect(UI_JS).toContain("n.openItems > 0 && !Object.hasOwn(SETTLED_STATES, n.state)");
   });

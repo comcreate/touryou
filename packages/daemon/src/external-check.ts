@@ -36,6 +36,12 @@ const LEGACY_EXTERNAL_CHECK_SUMMARIES: readonly string[] = [
   "daemon の再起動のあと、Desktop の子の状態は daemon から確かめられない。Desktop で確かめ、止まっていれば停止して止めたと宣言する（仮置き）",
 ];
 
+/** 依頼の文面（今の版と前の版）。画面が、依頼を見分けるのに使う（ui-assets.ts）。 */
+export const externalCheckSummaries = (): readonly string[] => [
+  EXTERNAL_CHECK_SUMMARY,
+  ...LEGACY_EXTERNAL_CHECK_SUMMARIES,
+];
+
 export const isExternalCheck = (summary: string | undefined): boolean =>
   summary !== undefined &&
   [EXTERNAL_CHECK_SUMMARY, ...LEGACY_EXTERNAL_CHECK_SUMMARIES].some((s) => summary.startsWith(s));

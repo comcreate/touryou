@@ -12,6 +12,8 @@
  * - 人間のトークンは、読み込んだらすぐ `history.replaceState` でフラグメントを消し、メモリにだけ持つ（storage・cookie には置かない）。
  */
 
+import { externalCheckSummaries } from "../external-check.js";
+
 export const UI_HTML = `<!doctype html>
 <html lang="ja">
 <head>
@@ -72,6 +74,9 @@ input,button{font:inherit;padding:6px 10px;border:1px solid var(--line);border-r
 form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 `;
 
+// 根に出る、Desktop の子を人が確かめる依頼（daemon の再起動のあとの整合。external-check.ts）の文面の先頭。画面は、これを「停止の代行依頼」と同じ扱いにする
+const EXTERNAL_CHECK_PREFIXES = JSON.stringify(externalCheckSummaries());
+
 export const UI_JS = `'use strict';
 (function () {
   // 最初に、フラグメントのトークンを取り出して、アドレスから消す（履歴に残さない）。
@@ -89,8 +94,9 @@ export const UI_JS = `'use strict';
   var TEXT_MAX = 4000;
   var FORBIDDEN = /[\\p{Cc}\\p{Cf}]/u;
   var STATE_NAMES = { pending: '未起動', running: '実行', waiting: '待機', done: '完了報告', verified: '受理', stopping: '停止中', stopIncomplete: '停止未完了', stopped: '停止', reclaimable: '回収可', archived: 'アーカイブ' };
-  // 対応が終わった状態（停止・受理・回収可・アーカイブ）。要対応の数を出さない
-  var SETTLED_STATES = { stopped: true, verified: true, reclaimable: true, archived: true };
+  // 対応が終わった状態（受理・回収可・アーカイブ）。要対応の数を出さない。停止（stopped）は、回答して再開・破棄して回収など、人が決めることが残りうるので含めない
+  var SETTLED_STATES = { verified: true, reclaimable: true, archived: true };
+  var EXTERNAL_CHECK_PREFIXES = ${EXTERNAL_CHECK_PREFIXES};
   var PRIORITY_NAMES = { blocking: '要判断', failed: '失敗', completed: '完了', progress: '進捗', info: '情報' };
   var POLL_MS = 2000;
   var SAFETY_MS = 30000;
@@ -426,8 +432,12 @@ export const UI_JS = `'use strict';
   }
 
   // 停止を親に代行してもらうノード（stopDelegated。Desktop の子・CLI の子）の停止未完了は、失敗ではなく、決まった手順の依頼（親が止めて、「止めたと宣言」する）。
+  // 根に出る、Desktop の子を人が確かめる依頼（daemon の再起動のあとの整合）も、同じ扱い（文面の先頭で見分ける）。
   function isStopRequest(i, delegated) {
-    return i.kind === 'stopIncomplete' && delegated.has(i.nodeId);
+    if (i.kind !== 'stopIncomplete') return false;
+    if (delegated.has(i.nodeId)) return true;
+    var summary = typeof i.summary === 'string' ? i.summary : '';
+    return EXTERNAL_CHECK_PREFIXES.some(function (p) { return summary.indexOf(p) === 0; });
   }
   // 受信箱の帯（色）と名前。停止の代行依頼は、赤の「失敗」でなく「停止の代行依頼」。
   function inboxBand(i, delegated) {
@@ -449,7 +459,7 @@ export const UI_JS = `'use strict';
       card.appendChild(el('span', 'tag', i.nodeId));
       card.appendChild(el('span', 'tag', i.at));
       if (i.summary) card.appendChild(el('div', '', i.summary));
-      if (isStopRequest(i, delegated)) card.appendChild(el('div', '', 'daemon は、このノードを直接止められません。親（または人）が止めてから、木の「止めたと宣言…」で知らせてください。'));
+      if (isStopRequest(i, delegated)) card.appendChild(el('div', '', delegated.has(i.nodeId) ? 'daemon は、このノードを直接止められません。親（または人）が止めてから、木の「止めたと宣言…」で知らせてください。' : 'daemon は、Desktop の子の状態を確かめられません。Desktop で子ごとに確かめ、止まっていれば、木の「止めたと宣言…」で知らせてください（docs/desktop-runtime.md）。'));
       box.appendChild(card);
     });
   }
