@@ -4,7 +4,7 @@
     "name": "comcreate"
   },
   "metadata": {
-    "description": "統合セッション 1 対 作業セッション n の木構造で Claude セッションを束ねるオーケストレーター touryou の marketplace"
+    "description": "統合セッション 1 対 作業セッション n の木構造で Claude セッションを束ねるオーケストレーター TouRyou の marketplace"
   },
   "plugins": [
     {
