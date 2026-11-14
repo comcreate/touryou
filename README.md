@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/icon/icon.svg" width="112" alt="touryou">
+  <img src="assets/icon/icon.svg" width="112" alt="TouRyou">
 </p>
 
-# touryou
+# TouRyou
 
 複数の Claude セッションを「統合セッション 1 対 作業セッション n」の木構造（Composite パターン）で束ね、
 人間が最上位の統合セッションとだけ対話すれば、並列に進む実装・レビュー・調査を依頼・把握・判断できるようにするシステム。
