@@ -865,12 +865,19 @@ describe("tree.list の pendingDecision 列", () => {
         payload: { nodeId: "b", event: { type: "confirmStopped" } },
       },
     });
-    const table = (await r.call("tree.list", r.req("tree.list", {}, ROOT))).value.table as string;
+    const listed = (await r.call("tree.list", r.req("tree.list", {}, ROOT))).value;
+    const table = listed.table as string;
     const rowOf = (id: string) =>
       table.split("\n").find((l) => l.split("|")[1]?.trim() === id) ?? "";
     expect(table.split("\n")[0]).toContain("pendingDecision");
     expect(rowOf("a")).toContain("届かない");
     expect(rowOf("b")).toContain("止まった子");
+    // nodes にも同じ数を出す（touryou tree --json・touryou state 用）。
+    const nodes = listed.nodes as { id: string; pendingDecisions?: unknown }[];
+    const pending = (id: string) => nodes.find((x) => x.id === id)?.pendingDecisions;
+    expect(pending("a")).toEqual({ undeliverable: 1, stopped: 0 });
+    expect(pending("b")).toEqual({ undeliverable: 0, stopped: 1 });
+    expect(pending("root")).toEqual({ undeliverable: 0, stopped: 0 });
   });
 });
 

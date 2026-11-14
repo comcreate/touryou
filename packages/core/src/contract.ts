@@ -97,6 +97,9 @@ export interface NodeLoss {
  * `tree.list` が返す、木の 1 ノードの構造（`touryou tree --json`・`touryou state <nodeId>` 用）。
  * トークン・秘密・パス（作業ツリーの絶対パス・最終コミットなど）は含めない（`ui-view` と同じ方針）。
  */
+/** `decision.answer` の結果の、回答を子に届けたか。 */
+export type AnswerDelivery = "delivered" | "skipped";
+
 export interface TreeListNode {
   readonly id: string;
   readonly role: NodeRole;
@@ -109,6 +112,12 @@ export interface TreeListNode {
   readonly openItems: number;
   /** 破棄の判断（`node.reclaimInstruct`）が記録済みか。 */
   readonly discarded: boolean;
+  /**
+   * 止まった子の未回答の判断の数（表の pendingDecision 列と同じ数え方）。`undeliverable`: 閉じた判断（破棄を決めた子。答えても届かない）。
+   * `stopped`: 動いていない（running・waiting・stopping でない）子の open の判断（回答で再開する道はあるが、いまは止まっている）。
+   * この版以降の daemon が付ける（古い daemon にはない。ないときは、表の列を見る）。
+   */
+  readonly pendingDecisions?: { readonly undeliverable: number; readonly stopped: number };
 }
 
 export interface OperationMap {
@@ -309,7 +318,15 @@ export interface OperationMap {
      * `notResumed`: 判断で止めた子のうち、回答で再開しなかった子と理由。再開しなかった子がいるときだけ入る
      * （いなければ、今までどおり `{ accepted: true }`）。
      */
-    result: { accepted: true; notResumed?: readonly NotResumed[] };
+    /**
+     * `delivery`: 回答を、判断を出した子に届けたか。`delivered`（追加の指示として届けた・回答を添えて再開した）、`skipped`（届ける手段がない・
+     * 子が動いていないので届けなかった。回答は記録済み）。この版以降の daemon が付ける（古い daemon と、回答の配送を持たない構成にはない）。
+     */
+    result: {
+      accepted: true;
+      notResumed?: readonly NotResumed[];
+      delivery?: AnswerDelivery;
+    };
   };
   /**
    * 破棄の判断（人間。停止したノードの成果を捨ててよいという判断）。**`expectTips`（必須。空でもよい）**: プレビュー（`node.reclaimPreview` の `tips`）で

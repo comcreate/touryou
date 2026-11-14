@@ -66,6 +66,37 @@ describe("touryou tree / state", () => {
     expect(r.stdout).toContain("破棄の判断: 済み");
   });
 
+  it("nodes に pendingDecisions があれば、1 ノードの表示に止まった子の未回答の判断を出す", async () => {
+    const tree = {
+      ...TREE,
+      nodes: TREE.nodes.map((n) =>
+        n.id === "n2" ? { ...n, pendingDecisions: { undeliverable: 1, stopped: 2 } } : n,
+      ),
+    };
+    const { client } = fakeClient({ "tree.list": ok(tree) });
+    const r = await runCommand(["tree", "n2"], deps(client));
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("止まった子の未回答の判断: 1（届かない）+2（止まった子）");
+    const none = await runCommand(
+      ["tree", "n1"],
+      deps(fakeClient({ "tree.list": ok(TREE) }).client),
+    );
+    // 古い daemon（pendingDecisions なし）では、行を出さない
+    expect(none.stdout).not.toContain("未回答の判断");
+  });
+
+  it("pendingDecisions の形が違えば、応答の形が違うとして扱う", async () => {
+    const tree = {
+      ...TREE,
+      nodes: TREE.nodes.map((n) =>
+        n.id === "n2" ? { ...n, pendingDecisions: { stopped: -1 } } : n,
+      ),
+    };
+    const { client } = fakeClient({ "tree.list": ok(tree) });
+    const r = await runCommand(["tree", "n2"], deps(client));
+    expect(r.exitCode).not.toBe(0);
+  });
+
   it("touryou state <nodeId> は JSON も出せる", async () => {
     const { client } = fakeClient({ "tree.list": ok(TREE) });
     const r = await runCommand(["state", "n1", "--json"], deps(client));
@@ -227,6 +258,45 @@ describe("touryou answer", () => {
     expect(r.exitCode, r.stderr).toBe(0);
     expect(ops(sent)).toEqual(["decision.get", "tree.list", "decision.answer"]);
     expect(sent[2]?.params).toMatchObject({ decisionId: "dec-1", choice: "A" });
+  });
+
+  it.each([
+    ["delivered", "答えを子に届けた"],
+    ["skipped", "答えは子に届けていない"],
+  ] as const)(
+    "daemon が delivery=%s を返せば、それを出す（子の状態の見込みより優先）",
+    async (delivery, text) => {
+      const dg = await digestOf(DECISION_OPEN);
+      const { client } = fakeClient({
+        "decision.get": ok(DECISION_OPEN),
+        "tree.list": ok(TREE),
+        "decision.answer": ok({ accepted: true, delivery }),
+      });
+      const r = await runCommand(
+        ["answer", "dec-1", "--choice", "A", "--yes", "--expect", dg],
+        deps(client),
+      );
+      expect(r.exitCode, r.stderr).toBe(0);
+      expect(r.stdout).toContain(text);
+    },
+  );
+
+  it("古い daemon（delivery なし）や知らない delivery の値では、今までどおり子の状態から出す", async () => {
+    const dg = await digestOf(DECISION_OPEN);
+    for (const result of [{ accepted: true }, { accepted: true, delivery: "later" }]) {
+      const { client } = fakeClient({
+        "decision.get": ok(DECISION_OPEN),
+        "tree.list": ok(TREE),
+        "decision.answer": ok(result),
+      });
+      const r = await runCommand(
+        ["answer", "dec-1", "--choice", "A", "--yes", "--expect", dg],
+        deps(client),
+      );
+      expect(r.exitCode, r.stderr).toBe(0);
+      expect(r.stdout).not.toContain("届けた");
+      expect(r.stdout).not.toContain("届けていない");
+    }
   });
 
   it("止まった子への答えは、届かないと注意する", async () => {

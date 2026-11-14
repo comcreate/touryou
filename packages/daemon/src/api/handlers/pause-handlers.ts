@@ -15,6 +15,7 @@
  */
 
 import {
+  type AnswerDelivery,
   COMPLETED_STATES,
   effectiveScope,
   type Failure,
@@ -371,8 +372,11 @@ export function createPauseHandlers(deps: PauseHandlerDeps) {
       const answer = d.answer ?? params.choice ?? params.text ?? "";
       const failed: string[] = [];
       const skipped: NotResumed[] = [];
+      // 判断を出した子に、回答を届けたか（結果の delivery）。再開は、回答を指示に添えるので届けたことになる。
+      let delivery: AnswerDelivery = "skipped";
       for (const t of targets) {
         const o = await resumeOne(d, t, answer);
+        if (o.kind === "resumed" && t === d.nodeId) delivery = "delivered";
         if (o.kind === "failed") {
           failed.push(o.message ?? t);
           if (t === d.nodeId && deps.deliver !== undefined) {
@@ -397,6 +401,7 @@ export function createPauseHandlers(deps: PauseHandlerDeps) {
             answer,
           );
           if (sent.kind === "failed") failed.push(sent.message);
+          else delivery = sent.kind;
         }
       }
       // 再開しなかった子（人間などが止めた子）は、判断を出した統合ノードの受信箱に載せる。
@@ -423,9 +428,15 @@ export function createPauseHandlers(deps: PauseHandlerDeps) {
         if (!listed.ok) note(d.nodeId, `再開しなかった子を記録できない: ${listed.error.code}`);
       }
       if (failed.length === 0) {
-        return skipped.length === 0
-          ? r
-          : { ok: true, value: { accepted: true, notResumed: skipped } };
+        return {
+          ok: true,
+          value: {
+            ...r.value,
+            accepted: true,
+            ...(skipped.length === 0 ? {} : { notResumed: skipped }),
+            delivery,
+          },
+        };
       }
       return fail(
         "resumePending",

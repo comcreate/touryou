@@ -132,6 +132,9 @@ interface Capabilities {
 - daemon は依頼を記録して、親の mcp へ出来事として出す。親の skill が依頼を読み、Bash で実行して、結果（子のセッションの参照など）を mcp で報告する。
 - 停止したかどうかは、親の報告だけでは決めない。作業ツリーを使うプロセスがないこと（`lsof-probe.ts`）を確かめてから `stopped` にする。
 - 不可能な操作は、理由と代替手段を含む失敗を返す（FR_034, NFR_010）。
+- 木の一覧（`tree.list`）の `nodes` の各ノードに、止まった子の未回答の判断の数 `pendingDecisions: { undeliverable, stopped }` を付ける（表の `pendingDecision` 列と同じ数え方。`undeliverable` は閉じた判断、`stopped` は running・waiting・stopping でない子の open の判断）。`touryou tree --json`・`touryou tree <nodeId>` がこれを出す。
+- 判断への回答（`decision.answer`）の結果に `delivery: "delivered" | "skipped"` を付ける。`delivered` は、判断を出した子に追加の指示として届けた、または回答を添えて再開したとき。`skipped` は、届ける手段がない（`canDeliver`）・子が動いていない・再開しなかったとき。届けるのに失敗したときは、今までどおり `resumePending` の失敗を返す。`touryou answer` がこれを出す。
+- 互換: どちらも任意の欄として足す（既存の欄は変えない）。古い cli・mcp・画面は知らない欄を読まない（cli の結果の検査は既存の欄だけを見る。daemon の `RESULT_KEYS` が欄を応答に通す）。新しい cli は、欄がない（古い daemon）・知らない値なら、今までどおり子の状態から見込みを出す。
 - 子の受信箱: 子のロールの操作 `child.inbox`（mcp の子の道具は `inbox_fetch`）。自分のノードの分だけを返す。最初にブリーフ（目的・受け入れ基準・作業範囲・依存。未読には数えず、いつも返す）、続けて、まだ受け取っていない追加の指示（`node.send`・差し戻しの理由・判断の回答。どれも `node.instructed`）を古い順に、知らせの番号（seq）を付けて返す。本文は引用の形（各行に `> `）。`all: true` で受け取ったものも含めて読み直せる（印は変えない）。session_id で引いた要求（トークンなし）からは呼べない。
 
 ## 6.2. CLI の子の起動（親のセッションによる）
