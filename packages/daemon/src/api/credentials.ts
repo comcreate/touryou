@@ -50,6 +50,11 @@ export interface CredentialStore {
   authenticate(token: unknown): Principal | undefined;
   /** 直近に期限切れ・役目の終わりで失効させたトークンか（応答の失敗の記号を tokenExpired にするため。メモリだけ）。 */
   wasExpired?(token: unknown): boolean;
+  /**
+   * 役目の終わり（`retired`）で失効させたトークンか（記録の `apiAuthFailed` を `retiredExpired` と分けるため。メモリだけ。
+   * 起動し直しのあとは分からず、`false`）。
+   */
+  wasRetired?(token: unknown): boolean;
   /** 期限・役目の終わりを見回り、失効させる（定期の見回り）。失効させたノードの ID。 */
   sweepExpired?(): string[];
   /**
@@ -154,6 +159,8 @@ export function createCredentialStore(options: {
    */
   const expiredHashes = new Map<string, number>();
   const EXPIRED_MAX = 1000;
+  /** 役目の終わりで失効させたトークンのハッシュ（メモリだけ。`expiredHashes` から落ちたら、こちらも落とす）。 */
+  const retiredHashes = new Set<string>();
   const revokedStore = options.revokedStore;
   const repository = options.repository;
   const clock = options.clock ?? (() => new Date().toISOString());
@@ -234,8 +241,13 @@ export function createCredentialStore(options: {
           earliest = hash;
         }
       }
-      if (earliest !== undefined) expiredHashes.delete(earliest);
+      if (earliest !== undefined) {
+        expiredHashes.delete(earliest);
+        retiredHashes.delete(earliest);
+      }
     }
+    if (reason === "retired") retiredHashes.add(h);
+    else retiredHashes.delete(h);
     try {
       revokedStore?.add(h, expiresMs);
     } catch {
@@ -289,9 +301,15 @@ export function createCredentialStore(options: {
       // 最長の期限を過ぎた印は落とす（時間だけで expired になるので、残す必要がない）。
       if (exp <= nowMs()) {
         expiredHashes.delete(sha256(token).toString("hex"));
+        retiredHashes.delete(sha256(token).toString("hex"));
         return false;
       }
       return true;
+    },
+    wasRetired(token) {
+      if (typeof token !== "string" || token === "") return false;
+      const hex = sha256(token).toString("hex");
+      return retiredHashes.has(hex) && expiredHashes.has(hex);
     },
     expireNode(nodeId) {
       if (nodeId === options.exemptNodeId || !byNode.has(nodeId)) return false;

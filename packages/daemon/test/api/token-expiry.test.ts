@@ -78,6 +78,7 @@ describe("トークンの期限", () => {
     advance(DEFAULT_TOKEN_EXPIRY.sdkIdleMs);
     expect(s.authenticate(t)).toBeUndefined();
     expect(s.wasExpired?.(t)).toBe(true);
+    expect(s.wasRetired?.(t)).toBe(false); // 使わなかった期限切れは、退役の印を付けない（記録は expired のまま）
     expect(s.wasExpired?.("x".repeat(43))).toBe(false);
     expect(expired).toEqual([["a", "idle", "sdk"]]);
   });
@@ -436,6 +437,7 @@ describe("トークンの期限の境界と、状態の扱い", () => {
     expect(s.expireNode?.("root")).toBe(false);
     expect(s.authenticate(a)).toBeUndefined();
     expect(s.wasExpired?.(a)).toBe(true);
+    expect(s.wasRetired?.(a)).toBe(true);
     expect(s.authenticate(r)).toBeDefined();
     expect(expired).toEqual([["a", "retired", "bind"]]);
   });
