@@ -6,6 +6,8 @@
  * - **寿命**: 接続は、`maxLifetimeMs` で閉じる（画面は、再接続する）。
  * - **失効の確認**: トークンが使えるかを、通知とは独立に、`heartbeatMs` ごとに確かめる（使えなければ閉じる）。
  * - **heartbeat**: `heartbeatMs` の間、何も書かなければ、コメント行を書く。
+ * - **退役**: ノードのトークンが役目の終わり（受理など）で失効したら、閉じる前に `event: retired` を 1 件送る（`retire()`。
+ *   heartbeat の確かめで見つけたときも同じ）。購読する側（mcp）は、これを受けたら張り直さない。中身は理由の種類だけ。
  */
 
 import type { ServerResponse } from "node:http";
@@ -144,7 +146,12 @@ export interface SseHubDeps {
    * heartbeat ごとに確かめ、`false` なら切る。省略すると `isTokenValid` だけで見る。
    */
   readonly isNodeTokenValid?: (token: string, nodeId: string) => boolean;
+  /** 使えないトークンが、役目の終わり（退役）で失効したものか（heartbeat の確かめで閉じるとき、`retired` を送るかを決める）。 */
+  readonly isTokenRetired?: (token: string) => boolean;
 }
+
+/** 退役の出来事（設計 6.3）。中身は理由の種類だけ（トークン・nodeId は載せない）。 */
+export const RETIRED_SSE_EVENT = `event: retired\ndata: ${JSON.stringify({ reason: "retired" })}\n\n`;
 
 export interface SseHub {
   readonly size: number;
@@ -164,6 +171,8 @@ export interface SseHub {
    * 差し戻し（reject）のとき、購読がなければ、指示がすぐには届かないことを親の受信箱に知らせる。
    */
   hasSubscription(nodeId: string): boolean;
+  /** そのノードの購読に `retired` を送ってから閉じる（退役の場から呼ぶ。heartbeat を待たない）。閉じた本数を返す。 */
+  retire(nodeId: string): number;
   tick(): void;
 }
 
@@ -292,10 +301,23 @@ export function createSseHub(deps: SseHubDeps): SseHub {
     }
   };
 
+  /** `retired` を送ってから閉じる（詰まっていても、1 件だけ書いてから閉じる）。 */
+  const closeRetired = (c: Conn): void => {
+    drop(c);
+    if (c.sink.destroyed) return;
+    try {
+      c.sink.write(RETIRED_SSE_EVENT);
+    } catch {
+      // 書けなくても閉じる
+    }
+    c.sink.end();
+  };
+
   function tick(): void {
     const seq = deps.getSeq();
     const now = deps.nowMs();
     for (const c of [...conns]) {
+      if (!conns.has(c)) continue; // この周期の中で、ほかの場（退役）で閉じた
       if (c.sink.destroyed) {
         drop(c);
         continue;
@@ -312,7 +334,12 @@ export function createSseHub(deps: SseHubDeps): SseHub {
           c.nodeId !== undefined && deps.isNodeTokenValid !== undefined
             ? deps.isNodeTokenValid(c.token, c.nodeId)
             : deps.isTokenValid(c.token);
+        if (!conns.has(c)) continue; // 確かめの中で失効し、退役の場で閉じた
         if (!valid) {
+          if (c.nodeId !== undefined && deps.isTokenRetired?.(c.token) === true) {
+            closeRetired(c);
+            continue;
+          }
           c.sink.end();
           drop(c);
           continue;
@@ -349,6 +376,15 @@ export function createSseHub(deps: SseHubDeps): SseHub {
     hasSubscription(nodeId) {
       for (const c of conns) if (c.nodeId === nodeId && !c.sink.destroyed) return true;
       return false;
+    },
+    retire(nodeId) {
+      let n = 0;
+      for (const c of [...conns]) {
+        if (c.nodeId !== nodeId) continue;
+        closeRetired(c);
+        n += 1;
+      }
+      return n;
     },
     addNode(sink, token, nodeId, afterSeq, sessionId) {
       if (countNodes() >= (deps.maxNodeConnections ?? 64)) return false;

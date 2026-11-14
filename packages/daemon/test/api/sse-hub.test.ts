@@ -202,3 +202,66 @@ describe("SSE の接続の管理（sse-hub）", () => {
     expect(r.hub.hasSubscription("n1")).toBe(false);
   });
 });
+
+describe("退役（retired。#32）", () => {
+  const mk = (retired: boolean) => {
+    let now = 0;
+    let valid = true;
+    const hub = createSseHub({
+      spec: SPEC,
+      getSeq: () => 1,
+      isTokenValid: () => valid,
+      isNodeTokenValid: () => valid,
+      isTokenRetired: () => retired,
+      nowMs: () => now,
+      autoStart: false,
+      nodeFeed: () => [],
+    });
+    return {
+      hub,
+      revoke: () => {
+        valid = false;
+      },
+      advance: (ms: number) => {
+        now += ms;
+        hub.tick();
+      },
+    };
+  };
+  it("retire(nodeId): そのノードの購読だけに retired を送って閉じる。画面の接続には送らない", () => {
+    const r = mk(true);
+    const a = new FakeSink();
+    const b = new FakeSink();
+    const ui = new FakeSink();
+    r.hub.addNode(a, "t", "n1", 0);
+    r.hub.addNode(b, "u", "n2", 0);
+    r.hub.add(ui, "h");
+    expect(r.hub.retire("n1")).toBe(1);
+    expect(a.text).toContain('event: retired\ndata: {"reason":"retired"}\n\n');
+    expect(a.ended).toBe(true);
+    expect(b.text).not.toContain("retired");
+    expect(ui.text).not.toContain("retired");
+    expect(r.hub.hasSubscription("n1")).toBe(false);
+    expect(r.hub.nodeSize).toBe(1);
+    r.advance(SPEC.heartbeatMs);
+    expect(a.text.match(/event: retired/g)).toHaveLength(1); // 送り直さない
+  });
+  it("heartbeat の確かめで、退役で失効したトークンと分かれば、retired を送ってから閉じる", () => {
+    const r = mk(true);
+    const a = new FakeSink();
+    r.hub.addNode(a, "t", "n1", 0);
+    r.revoke();
+    r.advance(SPEC.heartbeatMs);
+    expect(a.text).toContain("event: retired");
+    expect(a.ended).toBe(true);
+  });
+  it("退役でない失効は、今までどおり閉じるだけ（retired を送らない）", () => {
+    const r = mk(false);
+    const a = new FakeSink();
+    r.hub.addNode(a, "t", "n1", 0);
+    r.revoke();
+    r.advance(SPEC.heartbeatMs);
+    expect(a.text).not.toContain("retired");
+    expect(a.ended).toBe(true);
+  });
+});

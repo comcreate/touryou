@@ -289,7 +289,11 @@ export interface ApiDeps {
    * SSE のハブを作ったあとに、1 回呼ぶ。ハンドラは server より先に作られるので、「ノードの購読があるか」は
    * あとから結ぶ。省略すると結ばない（ハンドラ側は購読不明として扱い、知らせない）。
    */
-  readonly onSseHub?: (hub: { hasSubscription(nodeId: string): boolean }) => void;
+  readonly onSseHub?: (hub: {
+    hasSubscription(nodeId: string): boolean;
+    /** 退役したノードの購読に `retired` を送って閉じる（設計 6.3）。 */
+    retire(nodeId: string): number;
+  }) => void;
   /** 接続の上限と、遅い要求への対策（slowloris）。既定は、要求 30 秒・ヘッダ 10 秒・keep-alive 5 秒・接続 256。試験で小さくする。 */
   readonly connection?: {
     readonly requestTimeoutMs?: number;
@@ -1339,12 +1343,16 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       const p = verifyNodeToken(deps, `Bearer ${token}`);
       return p !== undefined && p.role !== "human" && p.nodeId === nodeId;
     },
+    isTokenRetired: (token) => deps.credentials.wasRetired?.(token) === true,
     ...(deps.sse?.maxNodeConnections === undefined
       ? {}
       : { maxNodeConnections: deps.sse.maxNodeConnections }),
   });
   // ハンドラへ「ノードの購読があるか」を結ぶ。
-  deps.onSseHub?.({ hasSubscription: (nodeId) => sseHub.hasSubscription(nodeId) });
+  deps.onSseHub?.({
+    hasSubscription: (nodeId) => sseHub.hasSubscription(nodeId),
+    retire: (nodeId) => sseHub.retire(nodeId),
+  });
 
   /**
    * ノードの購読（設計 6.3）: `GET /v1/events?node=<id>&after=<seq>`（`Last-Event-ID` も可。大きい方。どちらもなければ、今より後）。
