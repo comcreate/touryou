@@ -8,6 +8,8 @@
  * - トークンつきの要求の前に、daemon の身元を確かめる（ほかの要求と同じ）。トークンは、ログに出さない。
  * - daemon がトークンを拒んだら（whoami・購読の 401。`unauthenticated`）、張り直しをやめる（記録は 1 回だけ。`onAuthFailed` を呼ぶ）。
  *   同じトークンで張り直しても通らない（daemon の記録を詰まらせるだけ）。つながらない・daemon が落ちているときは、いままでどおり張り直す。
+ * - daemon が `event: retired`（トークンが役目の終わりで失効した）を送ってきたら、401 を待たずに、同じく張り直しをやめる
+ *   （記録は `subscribeRetired` を 1 回。`onAuthFailed` を呼ぶ）。古い daemon（`retired` を送らない）とは、今までどおり。
  */
 import type { Result } from "@touryou/core";
 
@@ -167,8 +169,11 @@ export function startNodeSubscriber(deps: NodeSubscriberDeps): NodeSubscriber {
     }
   };
 
-  /** 1 回の試みの結果。`true`: 健全につながっていた。`false`: 張り直す。`"auth"`: トークンを拒まれた（張り直さない）。 */
-  async function once(): Promise<boolean | "auth"> {
+  /**
+   * 1 回の試みの結果。`true`: 健全につながっていた。`false`: 張り直す。`"auth"`: トークンを拒まれた（張り直さない）。
+   * `"retired"`: daemon が退役を知らせた（張り直さない）。
+   */
+  async function once(): Promise<boolean | "auth" | "retired"> {
     const t = await deps.target();
     if (stopped) return false;
     if (!t.ok) {
@@ -241,6 +246,11 @@ export function startNodeSubscriber(deps: NodeSubscriberDeps): NodeSubscriber {
           }
           continue;
         }
+        if (m.event === "retired") {
+          // トークンが役目の終わりで失効した。張り直しても 401 になるだけなので、ここで止める。
+          await reader.cancel().catch(() => undefined);
+          return "retired";
+        }
         if (m.event !== "node") continue;
         let seq: unknown;
         let childId: unknown;
@@ -275,7 +285,9 @@ export function startNodeSubscriber(deps: NodeSubscriberDeps): NodeSubscriber {
     while (!stopped) {
       let healthy = false;
       try {
-        const r = await once();
+        let r = await once();
+        // 根（authRetryMs あり）は、退役しない（期限を付けない）。届いても、401 と同じ扱い（待って張り直す）。
+        if (r === "retired" && deps.authRetryMs !== undefined) r = "auth";
         if (r === "auth" && deps.authRetryMs !== undefined) {
           if (stopped) break;
           const t = now();
@@ -288,10 +300,10 @@ export function startNodeSubscriber(deps: NodeSubscriberDeps): NodeSubscriber {
           await sleep(deps.authRetryMs);
           continue;
         }
-        if (r === "auth") {
+        if (r === "auth" || r === "retired") {
           if (!stopped) {
             stopped = true;
-            log({ event: "subscribeAuthStopped" });
+            log({ event: r === "retired" ? "subscribeRetired" : "subscribeAuthStopped" });
             try {
               deps.onAuthFailed?.();
             } catch {

@@ -6,7 +6,7 @@ import { request as httpRequest } from "node:http";
 import { foldEvents, type OrchEvent, type OrchState } from "@touryou/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { createCredentialStore } from "../../src/api/credentials.js";
-import { type ApiServer, createApiServer } from "../../src/api/server.js";
+import { type ApiLogEvent, type ApiServer, createApiServer } from "../../src/api/server.js";
 import { createSseHub, nodeFeedOf, type SseSink } from "../../src/api/sse-hub.js";
 
 const HUMAN = "human-token-human-token-human-token-1234";
@@ -263,5 +263,122 @@ describe("購読中の失効・フックのトークン", () => {
     });
     const { port } = await server.listen(0);
     expect((await get(port, "/v1/events?node=a", "hook-token-hook-token-1234")).status).toBe(403);
+  });
+});
+
+describe("退役の出来事（retired。#32）", () => {
+  const bootRetire = async (heartbeatMs: number) => {
+    const logs: ApiLogEvent[] = [];
+    let retire: ((id: string) => void) | undefined;
+    let idleExpire = false;
+    const credentials = createCredentialStore({
+      humanToken: HUMAN,
+      // compose と同じ結び: 退役で失効したら、購読へ知らせる
+      onExpired: (nodeId, reason) => {
+        if (reason === "retired") retire?.(nodeId);
+      },
+      isRetired: () => false,
+      expiry: { sdkIdleMs: 1e9, sdkAbsoluteMs: 1e9, bindAbsoluteMs: 1e9, bindIdleMs: 1 },
+      isIdlePaused: () => !idleExpire,
+    });
+    const current = fold([...BASE, instructed(7, "a")]);
+    server = createApiServer({
+      credentials,
+      getState: () => current,
+      handlers: {},
+      logger: (ev) => logs.push(ev),
+      sse: { coalesceMs: 20, heartbeatMs },
+      onSseHub: (hub) => {
+        retire = (id) => {
+          hub.retire(id);
+        };
+      },
+    });
+    const { port } = await server.listen(0);
+    const a = credentials.issueNodeToken("a", "child", "bind");
+    return {
+      port,
+      a,
+      credentials,
+      logs,
+      expireIdle: () => {
+        idleExpire = true;
+      },
+    };
+  };
+
+  it("退役（受理など）したら、heartbeat を待たずに retired を 1 件送って閉じる。中身は理由だけ。退役のあとの 401 の記録はない", async () => {
+    const r = await bootRetire(60_000);
+    let closed = false;
+    const c = await new Promise<{ text(): string }>((resolve, reject) => {
+      const req = httpRequest(
+        {
+          host: "127.0.0.1",
+          port: r.port,
+          path: "/v1/events?node=a&after=0",
+          headers: { authorization: `Bearer ${r.a}` },
+        },
+        (res) => {
+          let buf = "";
+          res.setEncoding("utf8");
+          res.on("data", (x: string) => {
+            buf += x;
+          });
+          res.on("end", () => {
+            closed = true;
+          });
+          res.on("error", () => {});
+          resolve({ text: () => buf });
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+    await until(() => c.text().includes("event: ready"));
+    expect(r.credentials.expireNode?.("a")).toBe(true);
+    await until(() => closed, 2000);
+    const text = c.text();
+    expect(text.match(/event: retired/g)).toHaveLength(1);
+    expect(text).toContain('event: retired\ndata: {"reason":"retired"}\n\n');
+    const retiredBlock = text.slice(text.indexOf("event: retired"));
+    expect(retiredBlock).not.toContain(r.a);
+    expect(retiredBlock).not.toContain('"a"');
+    // 張り直さない（mcp）ので、退役のあとの 401（apiAuthFailed の retiredExpired）は 0 件
+    expect(
+      r.logs.filter((x) => x.event === "apiAuthFailed" && x.reason === "retiredExpired"),
+    ).toHaveLength(0);
+  });
+
+  it("退役でない失効（使わなかった時間の期限切れ）は、今までどおり heartbeat で閉じるだけ（retired は送らない）", async () => {
+    const r = await bootRetire(60);
+    let closed = false;
+    let buf = "";
+    await new Promise<void>((resolve, reject) => {
+      const req = httpRequest(
+        {
+          host: "127.0.0.1",
+          port: r.port,
+          path: "/v1/events?node=a&after=0",
+          headers: { authorization: `Bearer ${r.a}` },
+        },
+        (res) => {
+          res.setEncoding("utf8");
+          res.on("data", (x: string) => {
+            buf += x;
+          });
+          res.on("end", () => {
+            closed = true;
+          });
+          res.on("error", () => {});
+          resolve();
+        },
+      );
+      req.on("error", reject);
+      req.end();
+    });
+    await until(() => buf.includes("event: ready"));
+    r.expireIdle();
+    await until(() => closed);
+    expect(buf).not.toContain("event: retired");
   });
 });
