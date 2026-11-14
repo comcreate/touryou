@@ -18,7 +18,9 @@ const summary = (
   at,
 });
 
-const rig = (over: { threshold?: number; minIntervalMs?: number } = {}) => {
+const rig = (
+  over: { threshold?: number; retiredThreshold?: number; minIntervalMs?: number } = {},
+) => {
   let mono = 0;
   const records: { requestId: string; body: { type: string; payload: Record<string, unknown> } }[] =
     [];
@@ -29,6 +31,7 @@ const rig = (over: { threshold?: number; minIntervalMs?: number } = {}) => {
   const open = new Set<string>();
   const alert = createApiAlert({
     threshold: over.threshold ?? 30,
+    ...(over.retiredThreshold === undefined ? {} : { retiredThreshold: over.retiredThreshold }),
     minIntervalMs: over.minIntervalMs ?? 600_000,
     rootNodeId: "root",
     monoMs: () => mono,
@@ -277,5 +280,81 @@ describe("createApiAlert（窓口の 429・401 の件数の見える化）", () 
     expect(text).not.toContain("neg");
     expect(text).not.toContain("nan");
     expect(text).not.toContain("str ");
+  });
+
+  describe("退役したトークンでの失敗（retiredExpired）のくり返し", () => {
+    it("既定の閾値は 3: 2 件は出さず、ちょうど 3 件で 1 件出す。文面は件数と理由の名前だけ", () => {
+      const r = rig();
+      r.alert(summary({ retiredExpired: 1 }));
+      r.alert(summary({ retiredExpired: 2 }, {}, "2026-10-23T12:01:00.000Z"));
+      expect(r.added()).toEqual([]);
+      r.alert(summary({ retiredExpired: 3 }, {}, "2026-10-23T12:02:00.000Z"));
+      expect(r.added()).toHaveLength(1);
+      const p = r.added()[0]?.body.payload;
+      expect(p).toMatchObject({ kind: "info", nodeId: "root" });
+      expect(String(p?.id)).toMatch(/^api-alert-x-/);
+      const text = String(p?.summary);
+      expect(text).toContain("退役したトークンでの認証の失敗 3 件（retiredExpired 3）");
+      expect(text).toContain("mcp の不具合・トークンの使い回し");
+      expect(text).not.toContain("）: 認証の失敗"); // authFailed としては書かない
+      expect(text).not.toContain("総当たり");
+    });
+
+    it("閾値を超えても 1 件。閾値は設定で変えられる", () => {
+      const r = rig();
+      r.alert(summary({ retiredExpired: 50 }));
+      expect(r.added()).toHaveLength(1);
+      expect(String(r.added()[0]?.body.payload.summary)).toContain("retiredExpired 50");
+      const r2 = rig({ retiredThreshold: 10 });
+      r2.alert(summary({ retiredExpired: 9 }));
+      expect(r2.added()).toEqual([]);
+      r2.alert(summary({ retiredExpired: 10 }, {}, "2026-10-23T12:01:00.000Z"));
+      expect(r2.added()).toHaveLength(1);
+    });
+
+    it("間隔の内のくり返しは出さない。間隔のあとは出し、前の警告を解決済みにする", () => {
+      const r = rig();
+      r.alert(summary({ retiredExpired: 5 }, {}, "2026-10-23T12:00:00.000Z"));
+      r.advance(60_000);
+      r.alert(summary({ retiredExpired: 5 }, {}, "2026-10-23T12:01:00.000Z"));
+      expect(r.added()).toHaveLength(1);
+      const first = r.added()[0]?.body.payload.id;
+      r.advance(600_000);
+      r.alert(summary({ retiredExpired: 5 }, {}, "2026-10-23T12:11:00.000Z"));
+      expect(r.added()).toHaveLength(2);
+      expect(r.resolved).toEqual([first]);
+      expect([...r.open]).toHaveLength(1);
+    });
+
+    it("ほかの理由の警告と混ざらない: 認証の失敗の閾値に数えず、間隔・解決は種類ごと", () => {
+      const r = rig({ threshold: 5 });
+      // retiredExpired は認証の失敗の件数に入らない（invalid 4 + retiredExpired 10 でも authFailed は出ない）
+      r.alert(summary({ invalid: 4, retiredExpired: 10 }));
+      expect(r.added()).toHaveLength(1);
+      const t1 = String(r.added()[0]?.body.payload.summary);
+      expect(t1).not.toContain("invalid");
+      expect(String(r.added()[0]?.body.payload.id)).toMatch(/^api-alert-x-/);
+      // 認証の失敗の警告は、退役の警告の間隔に関係なく出て、退役の警告を解決済みにしない
+      r.alert(summary({ invalid: 5 }, {}, "2026-10-23T12:01:00.000Z"));
+      expect(r.added()).toHaveLength(2);
+      const t2 = String(r.added()[1]?.body.payload.summary);
+      expect(t2).toContain("認証の失敗 5 件（invalid 5）");
+      expect(t2).not.toContain("retiredExpired");
+      expect(r.resolved).toEqual([]);
+      expect([...r.open].map((x) => x.slice(0, 12)).sort()).toEqual([
+        "api-alert-a-",
+        "api-alert-x-",
+      ]);
+      // 両方が同時に出す条件を満たすと、1 件にまとめ、両方の前の警告を解決済みにする
+      r.advance(600_000);
+      r.alert(summary({ invalid: 6, retiredExpired: 3 }, {}, "2026-10-23T12:11:00.000Z"));
+      expect(r.added()).toHaveLength(3);
+      const p3 = r.added()[2]?.body.payload;
+      expect(String(p3?.id)).toMatch(/^api-alert-ax-/);
+      expect(String(p3?.summary)).toContain(
+        "認証の失敗 6 件（invalid 6）・退役したトークンでの認証の失敗 3 件",
+      );
+      expect([...r.open]).toEqual([p3?.id]);
+    });
   });
 });
