@@ -422,11 +422,11 @@ describe("launchd の操作の回帰", () => {
     expect(r.stdout).toMatch(/restart は、読み込まれていないので使えない/);
   });
 
-  it("status: 常駐にしていない（LaunchAgents に plist がない）ときは、/setup の手順 9-A を案内する", async () => {
+  it("status: 常駐にしていない（LaunchAgents に plist がない）ときは、/setup の手順 3-A を案内する", async () => {
     const { home, f } = await initHome();
     const r = await bin(home, f, ["status", "--org", ORG]);
     expect(r.stdout).toMatch(/常駐にしていない/);
-    expect(r.stdout).toMatch(/\/setup の手順 9-A/);
+    expect(r.stdout).toMatch(/\/setup の手順 3-A/);
     expect(r.stdout).not.toMatch(/stop で止めた後/);
   });
 

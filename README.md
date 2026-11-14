@@ -25,11 +25,11 @@ claude plugin marketplace add comcreate/touryou
 
 1. **marketplace を足す**: このリポジトリの `.claude-plugin/marketplace.json` を、marketplace として足します（Terminal で `claude plugin marketplace add comcreate/touryou`。Claude Code の中なら `/plugin marketplace add comcreate/touryou`）。
 2. **plugin を入れる**: `/plugin install touryou@touryou`（Terminal なら `claude plugin install touryou@touryou`）。
-3. **本体を入れる**: `/touryou:setup` が、daemon・`touryou-mcp`・`touryou` の配布物（Node を同梱した tar.gz）を GitHub Release から取り、plugin に入っている sha256 と照合してから `$HOME/.touryou` に入れ、設定を作ります。最後に、ログイン時に自動で動かす（常駐。`docs/launchd.md`）かを聞きます。
+3. **本体を入れる**: `/touryou:setup` が、plugin の中の script（`scripts/install-runtime.sh`）を 1 回走らせて、daemon・`touryou-mcp`・`touryou` の配布物（Node を同梱した tar.gz）を GitHub Release から取り、plugin に入っている sha256 と照合してから `$HOME/.touryou` に入れ、続けて設定を作ります（承認の確認は約 3 回）。最後に、ログイン時に自動で動かす（常駐。`docs/launchd.md`）かを聞きます。
 
 そのあと、統合セッションで `/touryou:start` を実行して、接続を確かめます。くわしくは [`docs/plugin.md`](docs/plugin.md)。
 
-新しい版が出たら、`claude plugin marketplace update touryou` と `claude plugin update touryou@touryou` のあとに、もう一度 `/touryou:setup` を実行します。
+新しい版が出たら、`claude plugin marketplace update touryou` と `claude plugin update touryou@touryou` のあとに、もう一度 `/touryou:setup` を実行します（本体と plugin の版が違うと、セッションの始まりに知らせが出ます。知らせるだけで、取得や daemon の起動し直しはしません。常駐にしているときは、`/setup` の中で「はい」と答えたときだけ、daemon を止めて新しい版で起動し直します）。
 
 ## 手元でビルドして使う（開発する人向け）
 
@@ -37,7 +37,7 @@ daemon・`touryou-mcp`・`touryou` は、plugin とは**別に**入れます（p
 
 ### 1. daemon・touryou-mcp・touryou を入れる
 
-`git`（Xcode の Command Line Tools）が要ります（daemon が、子の作業ツリーを `git worktree` で作るため。Xcode か Command Line Tools のどちらかがあればよい）。入っていなければ、Terminal で `xcode-select --install` を実行します（`/setup` は、最初に `xcode-select -p` で確かめ、なければ止まります）。
+`git`（Xcode の Command Line Tools）が要ります（daemon が、子の作業ツリーを `git worktree` で作るため。Xcode か Command Line Tools のどちらかがあればよい）。入っていなければ、Terminal で `xcode-select --install` を実行します（`/setup` の導入の script は、最初に `xcode-select -p` で確かめ、なければ止まります）。
 
 Node 22 以上と pnpm 10.28.0 が要ります。
 
@@ -82,7 +82,7 @@ touryou-daemon --config <設定ファイル>   # 窓口の URL が出る
 
 流れ: **起動**（親が `cd <作業ツリー> && claude --bg '<指示>' --name <名前> --settings '{"crossSessionInbound":"accept"}'` を実行。`--model`・`--effort`・フォークの `--resume <id> --fork-session` が入ることがある）→ **紐付け**（子が `child_bind` を引数なしで呼ぶ）→ **知らせ**（受信箱を読めという 1 行が届き、`inbox_fetch` で読む）→ **停止**（子へ知らせ → 猶予 → 親が `claude stop`）→ **削除**（親が `claude rm`）。詳しくは [`docs/plugin.md`](docs/plugin.md) の「親から子を起動する流れ」と「注意（CLI の子）」。Desktop の子（`childRuntime: "desktop"`）は、これまでどおりです。
 
-ログイン時に自動で動かすときは、`/touryou:setup` の手順 9 で「常駐にする」を選びます（同意の問いに「はい」と答えたときだけ登録します。以後の確認・止める・外すは `/touryou:service`）。手作業の手順は [`docs/launchd.md`](docs/launchd.md)（`touryou launchd init`）。読み込むと、macOS の「ログイン項目」に `run-daemon.sh` が「開発元を識別できない項目」として出ます（起動スクリプトと配布物には署名をしない方針で、想定どおりです）。
+ログイン時に自動で動かすときは、`/touryou:setup` の手順 3 で「常駐にする」を選びます（同意の問いに「はい」と答えたときだけ登録します。以後の確認・止める・外すは `/touryou:service`）。手作業の手順は [`docs/launchd.md`](docs/launchd.md)（`touryou launchd init`）。読み込むと、macOS の「ログイン項目」に `run-daemon.sh` が「開発元を識別できない項目」として出ます（起動スクリプトと配布物には署名をしない方針で、想定どおりです）。
 
 ### 4. plugin を付ける
 

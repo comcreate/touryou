@@ -211,7 +211,7 @@ test("hooks.json の形の誤りを検出する", () => {
   const bad = [
     [{ "hooks/hooks.json": "[]" }, /オブジェクト/],
     [{ "hooks/hooks.json": JSON.stringify({ hooks: [] }) }, /hooks/],
-    [withScript({ SessionStart: [entry()] }), /SessionStart/],
+    [withScript({ UserPromptSubmit: [entry()] }), /UserPromptSubmit/],
     [withScript({ PreToolUse: entry() }), /配列/],
     [withScript({ PreToolUse: [{ matcher: 1, hooks: [] }] }), /matcher/],
     [withScript({ PreToolUse: [{ hooks: [] }] }), /1 つ以上/],

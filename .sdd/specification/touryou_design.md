@@ -223,6 +223,15 @@ interface Capabilities {
 - 線引き: Bash の検査はコマンドの字面の解析で、`python -c` の中の文字列や変数で組み立てたパスは見ない。印と禁じる場所は誤りと事故を防ぐためのもので、モデルが意図して外そうとすることに対する境界ではない。バックグラウンド起動（`run_in_background`、`&`、`nohup`、`setsid` など）は既定で拒否する。
 - Stop のフックの「未読」は、`deliveredSeq` がまだない、そのノードあての指示の数で数える。
 
+## 6.5. 配布・導入
+
+- plugin（marketplace の zip）は本体を同梱しない。本体（daemon・`touryou-mcp`・`touryou`。Node 同梱の tar.gz）は GitHub Release に置き、その sha256 を zip の中の `checksums.json` に入れる。zip は marketplace の sha256 で Claude Code が確かめる。
+- `/touryou:setup` は、plugin の中の `scripts/install-runtime.sh` を 1 回の承認で走らせる。script は、版・名前・sha256 を plugin の中の `checksums.json`・`plugin.json` からだけ読み（引数・環境変数では変えない。受け付ける引数は `--restart-daemon` だけ）、取得（https だけ）→ sha256 の照合 → quarantine の確かめ → `tar -t` の検査 → 一時ディレクトリへの展開とシンボリックリンクの検査 → `$HOME/.touryou/v<版>` → 新しい版の `--help` → `current` の付け替え（rename で入れ替え）の順に進む。照合が通るまで展開も実行もしない。どこで失敗しても `current` は古いまま。同じ版が入って動けば何もしない。
+- 常駐（launchd の plist がある）で版が変わるときは、同意（`--restart-daemon`。チャットの「はい」のあと）がなければ何も変えずに終了コード 3。同意があれば、古い版で `launchd init`（生成物が同じかの確かめ）と `stop` → 付け替え → 新しい版で `apply --yes`。stop のあとのどこで失敗しても（付け替え・新しい版の apply）、前の版に戻して起動し直してから、そのときの状態（current の版・daemon が動いているか・次にすること）を出して止まる（NFR_015）。呼び出しは `env -u BASH_ENV -u ENV bash` で、script の頭で取り込まれた関数を消し PATH を OS の既定にする。tar の中身は、通常のファイル・ディレクトリ・中を指すシンボリックリンクだけを通す。初めての常駐の登録（`init` と `apply --yes`）は、/setup が「はい」を取ってから行う。
+- 設定（`config.json`）は、/setup が 1 つのコマンドで書く（ホームの下・git のリポジトリ・未作成を確かめ、600 で書く）。承認は、導入・設定・常駐の登録で約 3 回（前は約 12 回）。
+- SessionStart のフック（`scripts/runtime-version-notice.sh`）は、`current` の版と plugin の版が違えば知らせるだけ。取得・daemon の起動し直しはしない。本体がない・読めないときは何も出さず、セッションを止めない。
+- daemon の寿命（統合セッション・子のセッションと別の寿命で動き、版上げの起動し直しは同意のあとだけ、失敗したら前の版に戻す）は NFR_015。IR_002 はフックの記録と拒否で、寿命の要求ではない。
+
 # 7. 非機能要件実現方針
 
 | 要件 | 実現方針 |
@@ -241,6 +250,7 @@ interface Capabilities {
 | NFR_012 | 特定のリポジトリ構成を前提にしない。plugin の設定にリポジトリのパスを埋め込まず、起動時に渡す |
 | NFR_013 | Anthropic の認証を扱わない。子は起動する Claude Code・Claude Desktop の利用者の認証で動く |
 | NFR_014 | daemon はセッションを呼ばず、出来事を SSE に出すだけ |
+| NFR_015 | daemon は launchd（または手）で、セッションと別に動かす。版上げは導入の script が、同意（`--restart-daemon`）のあとだけ止めて起動し直し、新しい版の起動に失敗したら `current` を前の版に戻して起動し直す（6.5 節） |
 
 # 8. テスト戦略
 
@@ -283,9 +293,14 @@ interface Capabilities {
 | 子の許可の一覧（dontAsk）の誤り | 中 | 一覧を誤ると子が何もできない。範囲の中の操作が一覧に入ることを試験で確かめる |
 | `--effort` が子に効くか | 低 | 害はないので付けたまま。子の記録で確かめられたら直す |
 | 見張りの時間の既定値 | 低 | 使われ方を見て見直す |
+| plugin の script を 1 回の承認で走らせる守り | 中 | 人が見るのは個々のコマンドでなく「plugin の中の script を引数なしで」になる。script の中身は zip の sha256 と試験で守る。macOS の実機での quarantine・承認の回数は手動の確かめ |
 | resume・fork・compact で `CLAUDE_CODE_SESSION_ID` が変わるか | 中 | 変わる場合は、合う購読がないときの扱いのとおり受信箱に落ちる |
 
 # 10. 変更履歴
+
+## v1.2
+
+- 配布・導入（6.5 節）と NFR_015 の実現方針を足した。本体の導入を plugin の中の 1 本の script にまとめ、SessionStart で版の食い違いを知らせる（Issue #12）。
 
 ## v1.1
 
