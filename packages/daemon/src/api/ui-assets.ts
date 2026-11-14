@@ -75,7 +75,8 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 `;
 
 // 根に出る、Desktop の子を人が確かめる依頼（daemon の再起動のあとの整合。external-check.ts）の文面の先頭。画面は、これを「停止の代行依頼」と同じ扱いにする
-const EXTERNAL_CHECK_PREFIXES = JSON.stringify(externalCheckSummaries());
+// 先頭の 40 文字だけを埋め込む（見分けるには足りる。文面の末尾の文書名などを、画面の資産に入れない）
+const EXTERNAL_CHECK_PREFIXES = JSON.stringify(externalCheckSummaries().map((x) => x.slice(0, 40)));
 
 export const UI_JS = `'use strict';
 (function () {
@@ -459,7 +460,7 @@ export const UI_JS = `'use strict';
       card.appendChild(el('span', 'tag', i.nodeId));
       card.appendChild(el('span', 'tag', i.at));
       if (i.summary) card.appendChild(el('div', '', i.summary));
-      if (isStopRequest(i, delegated)) card.appendChild(el('div', '', delegated.has(i.nodeId) ? 'daemon は、このノードを直接止められません。親（または人）が止めてから、木の「止めたと宣言…」で知らせてください。' : 'daemon は、Desktop の子の状態を確かめられません。Desktop で子ごとに確かめ、止まっていれば、木の「止めたと宣言…」で知らせてください（docs/desktop-runtime.md）。'));
+      if (isStopRequest(i, delegated)) card.appendChild(el('div', '', delegated.has(i.nodeId) ? 'daemon は、このノードを直接止められません。親（または人）が止めてから、木の「止めたと宣言…」で知らせてください。' : 'daemon は、Desktop の子の状態を確かめられません。Desktop で子ごとに確かめ、止まっていれば、木の「止めたと宣言…」で知らせてください（手順は、docs の「Desktop の子」の説明）。'));
       box.appendChild(card);
     });
   }
