@@ -1,24 +1,16 @@
 name: CI
 
 # ubuntu（node 22・24）。macOS は ci-macos.yml（コードが変わったときだけ。macOS の runner の費用のため）。
-# docs・.sdd・CHANGELOG・README・LICENSE だけの変更では動かさない（コードに関わらない変更で runner を使わないため。docs/release.md の「CI の実行時間と費用」）。
+# 必須の check（check (ubuntu-latest, node 22)・check (ubuntu-latest, node 24)）が必ず報告されるよう、paths-ignore は使わない。
+# コミットのメール（author・committer・Co-authored-by）が noreply の形かを、いつも確かめる（scripts/ci-commit-emails.sh）。
+# docs・.sdd・CHANGELOG・README・LICENSE だけの変更では、ジョブの中で重い段を飛ばして成功で終える（scripts/ci-code-changed.sh。docs/release.md の「CI のワークフロー」）。
+# workflow_dispatch: release.yml の marketplace-self が、GITHUB_TOKEN で出した PR のブランチに CI を走らせるため（GITHUB_TOKEN の PR では pull_request が動かない）。
 on:
   push:
     branches: [main]
-    paths-ignore:
-      - "docs/**"
-      - ".sdd/**"
-      - "CHANGELOG.md"
-      - "README.md"
-      - "LICENSE"
   pull_request:
     branches: [main]
-    paths-ignore:
-      - "docs/**"
-      - ".sdd/**"
-      - "CHANGELOG.md"
-      - "README.md"
-      - "LICENSE"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -40,10 +32,84 @@ jobs:
           - { os: ubuntu-latest, node: 24 }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          # すべての履歴（コミットのメールの確かめで base..head・before..after を見るため。
+          # pull_request は merge のコミット〔親 2 つ〕で、HEAD^1 との差分が、PR の変更）
+          fetch-depth: 0
+          persist-credentials: false
+      - name: コミットのメール（author・committer・Co-authored-by）が noreply の形かを確かめる（docs だけの変更でも必ず動く）
+        # matrix で 2 回走らせないよう、node 22 の job だけで確かめる（node 24 の job では飛ばし、check は success のまま）
+        if: matrix.node == 22
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: |
+          zero=0000000000000000000000000000000000000000
+          case "${EVENT}" in
+            pull_request)
+              # base と head の間（PR のすべてのコミット）
+              bash scripts/ci-commit-emails.sh "${PR_BASE}..${PR_HEAD}"
+              ;;
+            push)
+              if [ -n "${BEFORE}" ] && [ "${BEFORE}" != "${zero}" ] && git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+                # before と after の間（force push で before が after の祖先でなくても、after にだけあるコミットを見る）
+                bash scripts/ci-commit-emails.sh "${BEFORE}..${AFTER}"
+              else
+                # 新しいブランチの push・before が取れない（force push で消えた）とき: ほかの origin のブランチにない after のコミット。なければ after だけ
+                # （既にほかのブランチにあるコミットは、そのブランチの push・PR のときに確かめ済み）
+                others="$(git for-each-ref --format='%(objectname)' refs/remotes/origin | grep -vx "${AFTER}" || true)"
+                # shellcheck disable=SC2086 # others は sha の並び（語に分ける）
+                if [ -n "$(git rev-list "${AFTER}" --not ${others} | head -n 1)" ]; then
+                  bash scripts/ci-commit-emails.sh "${AFTER}" --not ${others}
+                else
+                  bash scripts/ci-commit-emails.sh -1 "${AFTER}"
+                fi
+              fi
+              ;;
+            *)
+              # workflow_dispatch など: main にないこの ref のコミット。なければ HEAD だけ
+              if [ -n "$(git rev-list origin/main..HEAD | head -n 1)" ]; then
+                bash scripts/ci-commit-emails.sh origin/main..HEAD
+              else
+                bash scripts/ci-commit-emails.sh -1 HEAD
+              fi
+              ;;
+          esac
+      - name: コードに関わる変更があるかを見る（docs などだけなら、重い段を飛ばす）
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # workflow_dispatch・差分を取れないときは、すべて走らせる（fetch-depth: 0 なので before はたいてい手元にある）
+          files=""
+          case "${EVENT}" in
+            pull_request)
+              files="$(git diff --name-only HEAD^1 HEAD || true)"
+              ;;
+            push)
+              if [ -n "${BEFORE}" ] && [ "${BEFORE}" != "0000000000000000000000000000000000000000" ] &&
+                git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+                files="$(git diff --name-only "${BEFORE}" HEAD || true)"
+              fi
+              ;;
+          esac
+          code="$(printf '%s\n' "${files}" | bash scripts/ci-code-changed.sh)"
+          echo "code=${code}" >> "$GITHUB_OUTPUT"
+          if [ "${code}" = false ]; then
+            echo "docs などだけの変更なので、check.sh を飛ばしました" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - if: steps.changes.outputs.code == 'true'
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+      - if: steps.changes.outputs.code == 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: bash scripts/check.sh
+      - if: steps.changes.outputs.code == 'true'
+        run: pnpm install --frozen-lockfile
+      - if: steps.changes.outputs.code == 'true'
+        run: bash scripts/check.sh

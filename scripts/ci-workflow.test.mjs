@@ -1,7 +1,10 @@
-// .github/workflows の ci.yml・ci-macos.yml・dist-smoke.yml の形を確かめる（macOS の runner の費用を抑える決めごと）。
+// .github/workflows の ci.yml・ci-macos.yml・dist-smoke.yml の形を確かめる（macOS の runner の費用を抑える決めごと・必須の check が必ず報告されること）。
 // `node --test scripts/*.test.mjs`
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 
 const read = (f) => readFileSync(new URL(`../.github/workflows/${f}`, import.meta.url), "utf8");
@@ -65,12 +68,47 @@ test("ci-macos.yml: push・pull_request とも paths があり、同じ一覧。
   for (const f of DOCS_ONLY) assert.ok(!matches(pr, f), `${f} だけでは動かないこと`);
 });
 
-test("ci.yml: push・pull_request とも paths-ignore で docs・.sdd・CHANGELOG・README・LICENSE だけの変更を外す。コードの変更では動く", () => {
-  const push = list(ci, "push", "paths-ignore");
-  const pr = list(ci, "pull_request", "paths-ignore");
-  assert.deepEqual(push, pr);
-  for (const f of DOCS_ONLY) assert.ok(matches(pr, f), `${f} は外すこと`);
-  for (const f of CODE) assert.ok(!matches(pr, f), `${f} では動くこと`);
+test("ci.yml: paths・paths-ignore を使わない（必須の check が必ず報告される）。push（main）・pull_request・workflow_dispatch で動く", () => {
+  const on = ci.slice(ci.indexOf("\non:\n"), ci.indexOf("\npermissions:"));
+  assert.doesNotMatch(on, /paths/);
+  assert.match(on, /\n {2}push:\n {4}branches: \[main\]\n/);
+  assert.match(on, /\n {2}pull_request:\n {4}branches: \[main\]\n/);
+  assert.match(on, /\n {2}workflow_dispatch:\n/);
+});
+
+test("ci.yml: 必須の check の名前（check (<os>, node <node>)）と、ubuntu の node 22・24 を保つ", () => {
+  assert.match(ci, /\n {4}name: check \(\$\{\{ matrix\.os \}\}, node \$\{\{ matrix\.node \}\}\)\n/);
+  assert.match(ci, /- \{ os: ubuntu-latest, node: 22 \}/);
+  assert.match(ci, /- \{ os: ubuntu-latest, node: 24 \}/);
+});
+
+test("ci.yml: docs などだけの変更では、checkout と判定のあとの段（install・check.sh など）をすべて飛ばす", () => {
+  const steps = ci
+    .slice(ci.indexOf("\n    steps:\n"))
+    .split(/\n(?= {6}- )/)
+    .slice(1);
+  const at = steps.findIndex((s) => /id: changes/.test(s));
+  assert.ok(at > 0, "変更を見る段がない");
+  assert.match(steps[at], /bash scripts\/ci-code-changed\.sh/);
+  const rest = steps.slice(at + 1);
+  assert.ok(rest.some((s) => /bash scripts\/check\.sh/.test(s)));
+  for (const s of rest) assert.match(s, /if: steps\.changes\.outputs\.code == 'true'/, s);
+});
+
+const codeChanged = (files) =>
+  spawnSync("bash", [new URL("./ci-code-changed.sh", import.meta.url).pathname], {
+    input: files.map((f) => `${f}\n`).join(""),
+    encoding: "utf8",
+  }).stdout.trim();
+
+test("ci-code-changed.sh: docs・.sdd・CHANGELOG・README・LICENSE だけなら false。コードを含めば true。空なら true", () => {
+  assert.equal(codeChanged(DOCS_ONLY), "false");
+  for (const f of DOCS_ONLY) assert.equal(codeChanged([f]), "false", f);
+  for (const f of CODE) assert.equal(codeChanged([f]), "true", f);
+  assert.equal(codeChanged([...DOCS_ONLY, "packages/cli/src/launchd.ts"]), "true");
+  assert.equal(codeChanged([".github/workflows/ci.yml"]), "true");
+  assert.equal(codeChanged([]), "true");
+  assert.equal(codeChanged(["docs.ts", "README.md.bak"]), "true");
 });
 
 test("ci.yml・ci-macos.yml・dist-smoke.yml は、同じ ref の前の実行を止める（concurrency・cancel-in-progress）", () => {
@@ -87,4 +125,100 @@ test("ci.yml・ci-macos.yml・dist-smoke.yml は、同じ ref の前の実行を
   }
   const groups = [ci, mac, dist].map((s) => /\n {2}group: (.*)\n/.exec(s)?.[1]);
   assert.equal(new Set(groups).size, 3, "concurrency の group が、ワークフローごとに違うこと");
+});
+
+// コミットのメールの確かめ（scripts/ci-commit-emails.sh）。一時の git のリポジトリで、許す形・外れる形を確かめる。
+const EMAILS_SH = new URL("./ci-commit-emails.sh", import.meta.url).pathname;
+
+function tempRepo() {
+  const dir = mkdtempSync(join(tmpdir(), "ci-emails-"));
+  const git = (args, env = {}) => {
+    const r = spawnSync("git", args, {
+      cwd: dir,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: "/dev/null",
+        GIT_CONFIG_SYSTEM: "/dev/null",
+        ...env,
+      },
+    });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout.trim();
+  };
+  git(["init", "-q", "-b", "main"]);
+  /** author・committer のメールと本文でコミットを作り、sha を返す。 */
+  const commit = (author, committer, message) => {
+    git(["commit", "-q", "--allow-empty", "-m", message], {
+      GIT_AUTHOR_NAME: "a",
+      GIT_AUTHOR_EMAIL: author,
+      GIT_COMMITTER_NAME: "c",
+      GIT_COMMITTER_EMAIL: committer,
+    });
+    return git(["rev-parse", "HEAD"]);
+  };
+  const check = (...args) =>
+    spawnSync("bash", [EMAILS_SH, ...args], { cwd: dir, encoding: "utf8" });
+  return { dir, commit, check };
+}
+
+const OK_GH = "12345+someone@users.noreply.github.com";
+const BOT = "41898282+github-actions[bot]@users.noreply.github.com";
+const BAD = "someone@example.com";
+
+test("ci-commit-emails.sh: 許す形（users.noreply.github.com・noreply@github.com・noreply@anthropic.com・ボット）だけなら成功", () => {
+  const { dir, commit, check } = tempRepo();
+  try {
+    const base = commit(OK_GH, "noreply@github.com", "base");
+    commit(OK_GH, "noreply@github.com", "x\n\nCo-authored-by: A <NoReply@Anthropic.com>");
+    commit(BOT, BOT, `y\n\nCo-Authored-By: B <${OK_GH}>\nco-authored-by: C <noreply@github.com>`);
+    const r = check(`${base}..HEAD`);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /2 件/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("ci-commit-emails.sh: author・committer・Co-authored-by のどれかが外れたら失敗。どのコミットのどの欄かを出し、アドレスは出さない。直し方を出す", () => {
+  const { dir, commit, check } = tempRepo();
+  try {
+    const base = commit(OK_GH, OK_GH, "base");
+    const a = commit(BAD, OK_GH, "author が外れる");
+    const c = commit(OK_GH, BAD, "committer が外れる");
+    const co = commit(OK_GH, OK_GH, `本文\n\nCo-authored-by: X <${BAD}>`);
+    const lookalike = commit("noreply@github.com.evil.example", OK_GH, "似た形");
+    const r = check(`${base}..HEAD`);
+    assert.equal(r.status, 1);
+    const out = r.stdout + r.stderr;
+    assert.match(out, new RegExp(`${a.slice(0, 7)}[0-9a-f]*: author`));
+    assert.match(out, new RegExp(`${c.slice(0, 7)}[0-9a-f]*: committer`));
+    assert.match(out, new RegExp(`${co.slice(0, 7)}[0-9a-f]*: 本文の Co-authored-by`));
+    assert.match(out, new RegExp(`${lookalike.slice(0, 7)}[0-9a-f]*: author`));
+    assert.doesNotMatch(out, /example/);
+    assert.match(out, /git config user\.email/);
+    assert.match(out, /Settings → Emails/);
+    // 範囲の外（base）は見ない
+    assert.equal(check("-1", base).status, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("ci.yml: コミットのメールの確かめは、変更の判定より前で、node 22 の job だけで（docs だけの変更でも）動く。fetch-depth: 0。pull_request は base..head、push は before..after", () => {
+  const steps = ci
+    .slice(ci.indexOf("\n    steps:\n"))
+    .split(/\n(?= {6}- )/)
+    .slice(1);
+  const at = steps.findIndex((s) => /bash scripts\/ci-commit-emails\.sh/.test(s));
+  const changes = steps.findIndex((s) => /id: changes/.test(s));
+  assert.ok(at > 0 && at < changes);
+  // 条件は node 22 の job だけ（変更の判定には依らない。docs だけでも動く）
+  assert.match(steps[at], /\n {8}if: matrix\.node == 22\n/);
+  assert.doesNotMatch(steps[at], /steps\.changes/);
+  assert.match(steps[0], /fetch-depth: 0/);
+  assert.match(steps[at], /ci-commit-emails\.sh "\$\{PR_BASE\}\.\.\$\{PR_HEAD\}"/);
+  assert.match(steps[at], /ci-commit-emails\.sh "\$\{BEFORE\}\.\.\$\{AFTER\}"/);
+  const body = steps[at].slice(steps[at].indexOf("run: |") + 6).replace(/^ {10}/gm, "");
+  assert.equal(spawnSync("bash", ["-n"], { input: body, encoding: "utf8" }).status, 0);
 });

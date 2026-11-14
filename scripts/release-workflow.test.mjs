@@ -161,6 +161,13 @@ test("marketplace-self: 同じリポジトリの marketplace.json への PR は 
   );
   assert.match(body, /gh pr create --repo "\$\{GITHUB_REPOSITORY\}" --head "\$\{branch\}"/);
   assert.doesNotMatch(body, /headersHelper"?\s*:/, "headersHelper を書かない");
+  // GITHUB_TOKEN の PR では pull_request の CI が動かないので、PR を出したあとに ci.yml を workflow_dispatch で起こす
+  assert.match(job, /actions: write/);
+  const dispatch = body.indexOf(
+    `gh api -X POST "repos/${REPO}/actions/workflows/ci.yml/dispatches" -f ref="${["$", "{branch}"].join("")}"`,
+  );
+  assert.ok(dispatch > 0, "ci.yml を PR のブランチで workflow_dispatch すること");
+  assert.ok(dispatch > body.indexOf("gh pr create"), "PR を出したあとに起こすこと");
   assert.match(body, /del\(\.headersHelper, \.strict\)/);
 });
 
