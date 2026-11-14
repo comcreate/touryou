@@ -144,6 +144,13 @@ export interface DiscardedItem {
   readonly subject?: string;
 }
 
+/** 統合の結果。`target` は親のブランチの名前、`tip` は統合した子の先端。 */
+export interface IntegrateValue {
+  readonly alreadyIntegrated: boolean;
+  readonly target: string;
+  readonly tip: string;
+}
+
 export const DEFAULT_REGENERABLE_IGNORED: readonly string[] = ["node_modules", "dist", ".turbo"];
 
 /** 強制の回収で失われるもの（生の事実。件名は信頼できない入力で、呼び出し側が整える）。 */
@@ -179,6 +186,12 @@ export interface GitPorts {
       onTip?: (tip: string, ref?: string) => void;
     },
   ): Promise<Result<undefined, Failure>>;
+  /**
+   * 子のブランチを、上流（親のブランチ）へ fast-forward だけで統合する（Issue #4）。すでに統合済みなら何もしない。
+   * 親のブランチがどこかの作業ツリーでチェックアウトされていれば、その作業ツリーで `git merge --ff-only`（未保存の変更があれば拒む）。
+   * されていなければ `git update-ref`（古い値の検査つき）。fast-forward できなければ何も変えずに `notFastForward`。
+   */
+  integrate(nodeId: string): Promise<Result<IntegrateValue, Failure>>;
   /** 保管している、破棄した成果の一覧（上限まで）と、保管の数の上限。 */
   discardedList(): Promise<Result<{ items: readonly DiscardedItem[]; max: number }, Failure>>;
   /** ノード ID から導く、保管の鍵（`<名前>`）。 */
@@ -593,6 +606,88 @@ export function createGitPorts(
         return { deleted, failed };
       }),
     lossFor: (nodeId) => serial(() => lossOf(nodeId)),
+    integrate: (nodeId) =>
+      serial(async (): Promise<Result<IntegrateValue, Failure>> => {
+        const branch = branchOf(nodeId);
+        if (!(await branchExists(branch))) {
+          return fail(
+            "branchMissing",
+            `子のブランチ ${branch} がない`,
+            "ノードの作業ツリーの状態を確認する",
+          );
+        }
+        const up = await git(["rev-parse", "--abbrev-ref", `${branch}@{upstream}`]);
+        const target = up.stdout.trim();
+        if (up.code !== 0 || target === "" || !(await branchExists(target))) {
+          return fail(
+            "upstreamMissing",
+            `子のブランチ ${branch} の上流（親のブランチ）が分からない`,
+            "人間が、統合先を確かめて手で統合する",
+          );
+        }
+        const tipR = await git(["rev-parse", "--verify", "-q", `${branch}^{commit}`]);
+        const oldR = await git(["rev-parse", "--verify", "-q", `refs/heads/${target}^{commit}`]);
+        const tip = tipR.stdout.trim();
+        const old = oldR.stdout.trim();
+        if (tipR.code !== 0 || oldR.code !== 0 || tip === "" || old === "") {
+          return fail("gitFailed", "ブランチの先端を読めなかった", "git の状態を確認する");
+        }
+        if ((await git(["merge-base", "--is-ancestor", tip, old])).code === 0) {
+          return { ok: true, value: { alreadyIntegrated: true, target, tip } };
+        }
+        if ((await git(["merge-base", "--is-ancestor", old, tip])).code !== 0) {
+          return fail(
+            "notFastForward",
+            `親のブランチ ${target} が、子のブランチ ${branch} の分かれたあとに進んでいて、fast-forward で統合できない`,
+            "人間に、統合のしかた（親のブランチでの merge か、子のブランチの rebase）を判断してもらう",
+          );
+        }
+        const list = await registeredWorktrees();
+        if (!(list instanceof Map)) {
+          return fail(
+            "gitFailed",
+            gitCause("作業ツリーの一覧を取得できなかった", list.missing),
+            "git の状態を確認する",
+          );
+        }
+        const checkedOut = [...list].find(([, b]) => b === target)?.[0];
+        if (checkedOut !== undefined) {
+          const st = await git(
+            ["-c", "core.fsmonitor=false", "status", "--porcelain", "--untracked-files=no"],
+            checkedOut,
+          );
+          if (st.code !== 0 || st.stdout.trim() !== "") {
+            return fail(
+              "targetDirty",
+              `親のブランチ ${target} の作業ツリーに、未保存の変更がある（または調べられない）`,
+              "親の作業ツリーの変更をコミットするか片付けてから、もう一度統合する",
+            );
+          }
+          const m = await git(
+            ["-c", "core.hooksPath=/dev/null", "merge", "--ff-only", "--no-edit", tip],
+            checkedOut,
+          );
+          if (m.code !== 0) {
+            // 未追跡のファイルが上書きされる、で止まったときは、親の作業ツリーの側の問題（targetDirty）
+            const untracked = /untracked working tree files? would be overwritten/i.test(m.stderr);
+            return fail(
+              untracked ? "targetDirty" : "notFastForward",
+              `親の作業ツリーで fast-forward できなかった: ${m.stderr.trim().slice(0, 200)}`,
+              "人間に、統合のしかたを判断してもらう",
+            );
+          }
+        } else {
+          const u = await git(["update-ref", `refs/heads/${target}`, tip, old]);
+          if (u.code !== 0) {
+            return fail(
+              "gitFailed",
+              "親のブランチを進められなかった",
+              "git の状態を確認して、やり直す",
+            );
+          }
+        }
+        return { ok: true, value: { alreadyIntegrated: false, target, tip } };
+      }),
     provisionWorktree: ({ parentId, nodeId }) =>
       serial(async () => {
         const path = pathOf(nodeId);

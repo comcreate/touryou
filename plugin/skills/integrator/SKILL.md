@@ -46,8 +46,10 @@ ID は、短縮せずに、そのまま渡します（作業ツリーのディ�
 - `mcp__node__scope_decide`: 子の範囲の拡張の要求（`extensionId`）を、承認（`approve`）・却下（`reject`）・切り出し（`split`）のどれかにする。必要な分だけを承認する。
 - `mcp__node__decision_present`: 人間の判断が要るときに、選択肢を添えて提示する。判断を待つ間、止める子は `pauseNodeIds` で指定できる。回答は受信箱に届く。
 
-回収:
+統合と回収（作る → 受理 → 統合 → 回収）:
 
+- `mcp__node__node_integrate`: 受理した直接の子（`verified`）のブランチを、あなたのブランチへ **fast-forward だけで**統合する。統合済みなら何もしない（`alreadyIntegrated: true`）。`notFastForward`（あなたのブランチが先に進んでいる）・`targetDirty`（あなたの作業ツリーに未保存の変更がある）のときは何も変わらないので、自分で `git merge`・`git rebase` をせず、`decision_present` で人間に統合のしかたを判断してもらう。
+- 受理（`node_review` の `accept`）すると、CLI の子の裏のセッションの停止（`claude stop`）の依頼が受信箱に来る。下の「CLI の子」の手順で実行し、続けて来る削除（`claude rm`）の依頼も実行する。子の状態は `verified` のまま変わらない。作業ツリーのプロセスが残っていると言われたら、`node_stop` で依頼を出し直してもらえる。
 - `mcp__node__node_reclaimPreview`: 回収の事前確認。`unmet`（満たしていない条件）と `blockers`（原因のノード・プロセス）を読み、残っているものを先に片付ける。
 - `mcp__node__node_reclaim`: 事前確認で示した対象を回収する。条件は実行時に再判定され、失うものがあるときは拒否される。
 
@@ -55,7 +57,7 @@ ID は、短縮せずに、そのまま渡します（作業ツリーのディ�
 
 CLI の子（設定 `childRuntime` が `cli` の木）は、touryou が起動しません。起動・停止・削除は、あなた（親のセッション）が Bash で `claude` のコマンドを実行します。touryou は、依頼を受信箱に書き、「touryou の受信箱（inbox_fetch）を読んで…（番号）」という 1 行の知らせをあなたのセッションに届けます（知らせが来ないときも、`inbox_fetch` で確かめる）。
 
-流れ: 起動（`claude --bg`）→ 子が紐付け（`child_bind`）→ 知らせと受信箱でやりとり → 停止（子へ知らせ → 猶予 → `claude stop`）→ 削除（`claude rm`）。
+流れ: 起動（`claude --bg`）→ 子が紐付け（`child_bind`）→ 知らせと受信箱でやりとり → 停止（子へ知らせ → 猶予 → `claude stop`）→ 削除（`claude rm`）。受理した子は、受理のときに停止（`claude stop`）→ 削除（`claude rm`）の依頼が来る。
 
 依頼の知らせを受けたら:
 

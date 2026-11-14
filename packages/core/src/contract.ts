@@ -264,6 +264,15 @@ export interface OperationMap {
     };
   };
   "node.reclaim": { params: { nodeId: string }; result: { reclaimed: readonly string[] } };
+  /**
+   * 受理した直接の子（verified）のブランチを、親のブランチへ fast-forward だけで統合する（Issue #4）。
+   * `alreadyIntegrated`: すでに統合済みで、何も変えなかった。`target`: 親のブランチ。`tip`: 統合した子の先端。
+   * fast-forward できなければ何も変えずに失敗（`notFastForward`）を返す（人間が統合のしかたを決める）。
+   */
+  "node.integrate": {
+    params: { nodeId: string };
+    result: { alreadyIntegrated: boolean; target: string; tip: string };
+  };
   "node.capabilities": {
     params: { nodeId: string };
     result: { operations: readonly DaemonOperation[] };
@@ -530,6 +539,7 @@ export const ROLE_OPERATIONS = {
     "node.split",
     "scope.decide",
     "node.review",
+    "node.integrate",
     "node.reclaimPreview",
     "node.reclaim",
     "node.capabilities",
@@ -605,6 +615,7 @@ export const SUBTREE_RULES: Readonly<Record<SubtreeOperation, SubtreeRule>> = {
   "node.hookUnbind": "strictDescendant",
   "node.split": "strictDescendant",
   "node.review": "directChild",
+  "node.integrate": "directChild",
   "node.reclaimPreview": "strictDescendant",
   "node.reclaim": "strictDescendant",
   "node.capabilities": "strictDescendant",
@@ -638,6 +649,7 @@ export const INTEGRATOR_OPERATION_CLASS: Readonly<
   "node.split": "subtree",
   "scope.decide": "subtree",
   "node.review": "subtree",
+  "node.integrate": "subtree",
   "node.reclaimPreview": "subtree",
   "node.reclaim": "subtree",
   "node.capabilities": "subtree",

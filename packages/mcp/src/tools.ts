@@ -58,6 +58,8 @@ const DESCRIPTIONS: Readonly<Record<McpOperation, string>> = {
     "子の完了報告を受理（accept）するか差し戻す（reject）。reject には feedback（理由）が必須で、accept では任意",
   "node.reclaimPreview":
     "回収の事前確認。結果は { reclaimable, unmet（満たしていない条件）, blockers（原因のノード・プロセス）}",
+  "node.integrate":
+    "受理した直接の子（verified）のブランチを、親のブランチへ fast-forward だけで統合する。統合済みなら何もしない。fast-forward できない（notFastForward）・親の作業ツリーに未保存の変更がある（targetDirty）ときは何も変えずに失敗を返すので、人間に統合のしかたを判断してもらう",
   "node.reclaim": "事前確認で示した対象を回収する。実行時に条件を再判定する",
   "node.capabilities": "ノードごとに可能な操作を参照する",
   "decision.get": "受信箱の項目（ref）の判断要求の内容を読む。自分の部分木のものだけ",

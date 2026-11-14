@@ -178,6 +178,8 @@ export interface WorktreePorts {
   }): Promise<Result<{ worktreePath: string }, Failure>>;
   /** 根以外のノードの作業ツリー（実パス）。 */
   cwdOf(nodeId: string): Promise<string | undefined>;
+  /** 子のブランチを親のブランチへ fast-forward で統合する。省略すると `node.integrate` は `notSupported`。 */
+  integrate?: GitPorts["integrate"];
 }
 
 export interface DaemonDeps {
@@ -1660,6 +1662,12 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       if (st !== undefined) await setUchg(join(st.worktree, ".claude", "settings.json"), false);
       return deps.worktree.removeWorktree(id, opts);
     },
+    ...(deps.worktree.integrate === undefined
+      ? {}
+      : {
+          integrate: (id: string) =>
+            (deps.worktree.integrate as NonNullable<WorktreePorts["integrate"]>)(id),
+        }),
     worktreeRoot: config.worktreeRoot,
     onForced: (nodeId, tip, ref) =>
       note("reclaimForced", { nodeId, tip, ...(ref === undefined ? {} : { ref }) }),

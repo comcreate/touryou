@@ -33,6 +33,7 @@ import {
 } from "./context.js";
 import { createExclusive } from "./inflight.js";
 import { type InstructionDelivery, wasNotified } from "./instruction-delivery.js";
+import { sessionStopBodies, sessionStopDeferredBodies } from "./parent-request-handlers.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;
 
@@ -166,6 +167,15 @@ export function createStateHandlers(deps: StateHandlerDeps) {
     }
     if (req.params.verdict === "reject") {
       bodies.push({ type: "node.instructed", payload: { nodeId, text: req.params.feedback } });
+    }
+    // 受理した子の裏のセッション（CLI の claude --bg）は、成果が受理済みなので止める。止めるのは親（受信箱の依頼。設計 6.2・Issue #3）。
+    if (req.params.verdict === "accept") {
+      const now = log.state();
+      const stop = sessionStopBodies(now, nodeId, req.requestId);
+      // まだ報告のない依頼があって出せないときは、あとで node_stop で出すよう受信箱に知らせる（セッションを残したままにしない）
+      bodies.push(
+        ...(stop.length > 0 ? stop : sessionStopDeferredBodies(now, nodeId, req.requestId)),
+      );
     }
     const r = appendAtomically(
       log,

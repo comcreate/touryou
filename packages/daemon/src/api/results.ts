@@ -29,6 +29,7 @@ export const RESULT_KEYS: ResultKeys = {
   "node.review": ["state"],
   "node.reclaimPreview": ["reclaimable", "unmet", "blockers", "loss", "tips"],
   "node.reclaim": ["reclaimed"],
+  "node.integrate": ["alreadyIntegrated", "target", "tip"],
   "node.capabilities": ["operations"],
   "decision.get": [
     "decisionId",

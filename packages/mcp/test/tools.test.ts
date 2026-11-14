@@ -19,6 +19,7 @@ const EXPECTED: Record<McpRole, readonly string[]> = {
     "node_split",
     "scope_decide",
     "node_review",
+    "node_integrate",
     "node_reclaimPreview",
     "node_reclaim",
     "node_capabilities",

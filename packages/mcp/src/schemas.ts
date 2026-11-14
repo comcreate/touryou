@@ -127,6 +127,7 @@ const SCHEMAS: Readonly<Record<McpOperation, z.ZodType>> = {
   ]),
   "node.reclaimPreview": nodeIdOnly,
   "node.reclaim": nodeIdOnly,
+  "node.integrate": nodeIdOnly,
   "node.capabilities": nodeIdOnly,
   "decision.get": z.strictObject({ decisionId: id }),
   "report.get": z.strictObject({ reportId: id }),
