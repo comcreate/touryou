@@ -186,3 +186,49 @@ test(".claude-plugin/marketplace.json: name・owner・plugins（配列）があ�
   assert.ok(Array.isArray(m.plugins));
   assert.doesNotMatch(JSON.stringify(m), /headersHelper/);
 });
+
+const hasJq = spawnSync("jq", ["--version"]).status === 0;
+
+test("marketplace-self: release.yml の jq は上の階層（metadata.description など）を保ち、出力の形（2 空白の字下げ）は今のファイルと同じ", {
+  skip: hasJq ? false : "jq が無いので飛ばす",
+}, () => {
+  const body = runBlock(SELF_STEP);
+  const prog = /jq --arg n [^']*'([\s\S]*?)' "\$\{file\}" > "\$\{file\}\.new"/.exec(body)?.[1];
+  assert.ok(prog, "jq の式が見つからない");
+  const path = new URL("../.claude-plugin/marketplace.json", import.meta.url);
+  const src = readFileSync(path, "utf8");
+  const m = JSON.parse(src);
+  assert.equal(typeof m.metadata?.description, "string", "metadata.description がない");
+  const p = m.plugins[0];
+  const run = (ver) =>
+    spawnSync(
+      "jq",
+      [
+        "--arg",
+        "n",
+        p.name,
+        "--arg",
+        "d",
+        p.description,
+        "--arg",
+        "url",
+        p.source.url,
+        "--arg",
+        "sha",
+        p.source.sha256,
+        "--arg",
+        "ver",
+        ver,
+        prog,
+      ],
+      { input: src, encoding: "utf8" },
+    );
+  const same = run(p.version);
+  assert.equal(same.status, 0, same.stderr);
+  assert.equal(same.stdout, src, "同じ値で jq を通すと、ファイルと一字一句同じになる");
+  const next = JSON.parse(run("9.9.9").stdout);
+  assert.deepEqual(next.metadata, m.metadata);
+  assert.equal(next.name, m.name);
+  assert.deepEqual(next.owner, m.owner);
+  assert.equal(next.plugins[0].version, "9.9.9");
+});
