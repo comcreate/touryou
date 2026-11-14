@@ -225,7 +225,7 @@ interface Capabilities {
 - 常駐（launchd の plist がある）で版が変わるときは、同意（`--restart-daemon`。チャットの「はい」のあと）がなければ何も変えずに終了コード 3。同意があれば、古い版で `launchd init`（生成物が同じかの確かめ）と `stop` → 付け替え → 新しい版で `apply --yes`。失敗したら前の版に戻して起動し直す。初めての常駐の登録（`init` と `apply --yes`）は、/setup が「はい」を取ってから行う。
 - 設定（`config.json`）は、/setup が 1 つのコマンドで書く（ホームの下・git のリポジトリ・未作成を確かめ、600 で書く）。承認は、導入・設定・常駐の登録で約 3 回（前は約 12 回）。
 - SessionStart のフック（`scripts/runtime-version-notice.sh`）は、`current` の版と plugin の版が違えば知らせるだけ。取得・daemon の起動し直しはしない。本体がない・読めないときは何も出さず、セッションを止めない。
-- daemon の寿命（統合セッションより長く動く常駐部）を決めた要求の ID は、いまはない（利用者の判断待ち）。IR_002 はフックの記録と拒否で、寿命の要求ではない。
+- daemon の寿命（統合セッション・子のセッションと別の寿命で動き、版上げの起動し直しは同意のあとだけ、失敗したら前の版に戻す）は NFR_015。IR_002 はフックの記録と拒否で、寿命の要求ではない。
 
 # 7. 非機能要件実現方針
 
@@ -245,6 +245,7 @@ interface Capabilities {
 | NFR_012 | 特定のリポジトリ構成を前提にしない。plugin の設定にリポジトリのパスを埋め込まず、起動時に渡す |
 | NFR_013 | Anthropic の認証を扱わない。子は起動する Claude Code・Claude Desktop の利用者の認証で動く |
 | NFR_014 | daemon はセッションを呼ばず、出来事を SSE に出すだけ |
+| NFR_015 | daemon は launchd（または手）で、セッションと別に動かす。版上げは導入の script が、同意（`--restart-daemon`）のあとだけ止めて起動し直し、新しい版の起動に失敗したら `current` を前の版に戻して起動し直す（6.5 節） |
 
 # 8. テスト戦略
 
@@ -294,7 +295,7 @@ interface Capabilities {
 
 ## v1.2
 
-- 配布・導入（6.5 節）を足した。本体の導入を plugin の中の 1 本の script にまとめ、SessionStart で版の食い違いを知らせる（Issue #12）。
+- 配布・導入（6.5 節）と NFR_015 の実現方針を足した。本体の導入を plugin の中の 1 本の script にまとめ、SessionStart で版の食い違いを知らせる（Issue #12）。
 
 ## v1.1
 

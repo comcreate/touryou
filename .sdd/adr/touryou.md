@@ -167,6 +167,6 @@ category: "developer-tooling"
 
 ## 2026-11-14 本体は plugin と別に配り、導入を plugin の中の 1 本の script にまとめる
 
-- **Decision**: 案 B を採る。plugin は本体を同梱しないまま、/setup の取得・照合・展開・付け替え・動作の確かめと、版が変わったときの常駐の daemon の起動し直しを、plugin の中の `scripts/install-runtime.sh` にまとめ、1 回の承認で走らせる。取得元・版・sha256 は plugin の中の `checksums.json`・`plugin.json` からだけ読み、照合が通るまで展開も実行もしない。常駐の起動し直しは、チャットの「はい」のあとの `--restart-daemon` があるときだけ。版の食い違いは SessionStart のフックが知らせるだけで、取得も起動し直しもしない。
+- **Decision**: 案 B を採る。plugin は本体を同梱しないまま、/setup の取得・照合・展開・付け替え・動作の確かめと、版が変わったときの常駐の daemon の起動し直しを、plugin の中の `scripts/install-runtime.sh` にまとめ、1 回の承認で走らせる。取得元・版・sha256 は plugin の中の `checksums.json`・`plugin.json` からだけ読み、照合が通るまで展開も実行もしない。常駐の起動し直しは、チャットの「はい」のあとの `--restart-daemon` があるときだけで、失敗したら前の版に戻す（NFR_015）。版の食い違いは SessionStart のフックが知らせるだけで、取得も起動し直しもしない。
 - **Rationale**: いまの /setup は約 12 回の承認で、人が 1 つずつ読むのは重く、読み飛ばしやすい。script は plugin の zip の一部で、marketplace の sha256 で zip ごと確かめられるので、中身を変えずに 1 回の承認に寄せられる。守りの変化: 人の目が見るのは「plugin の中の script を引数なしで走らせる」ことになり、個々のコマンドの確かめは、zip の照合と script の試験（照合の失敗・壊れた tar・外を指すリンク・同じ版・版の変化）に移る。tar.gz の sha256 の照合は変わらない。
-- **Rejected alternatives**: 案 A（本体を plugin に同梱する）— zip が約 150MB になり、marketplace の配り方と更新の重さが変わる。plugin の update だけで本体が入れ替わり、常駐の daemon の起動し直しの同意を取る所がなくなる。案 C（今のまま、コマンドを 1 つずつ人が承認する）— 承認が約 12 回のまま。SessionStart のフックで自動で取得・起動し直す — 同意なしに子のセッションを止め、ネットワークの取得がセッションの始まりを遅らせる。
+- **Rejected alternatives**: 案 A（本体を plugin に同梱する）— zip が約 150MB になり、marketplace の配り方と更新の重さが変わる。plugin の update だけで本体が入れ替わり、常駐の daemon の起動し直しの同意を取る所がなくなる。案 C（今のまま、コマンドを 1 つずつ人が承認する）— 承認が約 12 回のまま。SessionStart のフックで自動で取得・起動し直す — 同意なしに子のセッションを止め（NFR_015 に反する）、ネットワークの取得がセッションの始まりを遅らせる。
