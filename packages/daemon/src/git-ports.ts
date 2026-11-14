@@ -668,8 +668,10 @@ export function createGitPorts(
             checkedOut,
           );
           if (m.code !== 0) {
+            // 未追跡のファイルが上書きされる、で止まったときは、親の作業ツリーの側の問題（targetDirty）
+            const untracked = /untracked working tree files? would be overwritten/i.test(m.stderr);
             return fail(
-              "notFastForward",
+              untracked ? "targetDirty" : "notFastForward",
               `親の作業ツリーで fast-forward できなかった: ${m.stderr.trim().slice(0, 200)}`,
               "人間に、統合のしかたを判断してもらう",
             );

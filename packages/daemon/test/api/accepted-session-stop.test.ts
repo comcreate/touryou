@@ -60,21 +60,21 @@ const rig = (opts: { launched: boolean }) => {
   const parent = createParentRequestHandlers({ log, clock: () => T0, probe });
   const state = createStateHandlers({ log, clock: () => T0 });
   const runtime = createRuntimeHandlers({ log, clock: () => T0, adapterFor: () => undefined });
-  const req = <Op extends string>(operation: Op, params: unknown) =>
+  const req = <Op extends string>(operation: Op, params: unknown, requestId?: string) =>
     ({
-      requestId: `q-${++n}`,
+      requestId: requestId ?? `q-${++n}`,
       operation,
       role: "integrator",
       caller: { nodeId: "root" },
       params,
     }) as unknown as HandlerRequest<never>;
   type Res = { ok: boolean; value?: Record<string, unknown>; error?: { code: string } };
-  const call = async (operation: string, params: unknown): Promise<Res> => {
+  const call = async (operation: string, params: unknown, requestId?: string): Promise<Res> => {
     const all = { ...parent, ...state, ...runtime } as unknown as Record<
       string,
       (r: unknown) => unknown
     >;
-    return (await all[operation]?.(req(operation, params))) as Res;
+    return (await all[operation]?.(req(operation, params, requestId))) as Res;
   };
   const open = () => [...log.state().parentRequests].reverse().find((r) => r.report === undefined);
   const stateOfA = () => log.state().nodes.find((x) => x.id === "a")?.state;
@@ -138,5 +138,55 @@ describe("受理した子の裏のセッションの停止（Issue #3）", () =>
     expect(sessionStopBodies(r.log.state(), "a", "x")).toEqual([]);
     const res = await r.call("node.stop", { nodeId: "a", mode: "immediate" });
     expect(res.error?.code).toBe("alreadyFinished");
+  });
+
+  it("verified の子への node_stop を同じ requestId で 2 回呼んでも、依頼は 1 つ（冪等）", async () => {
+    const r = rig({ launched: true });
+    await r.call("node.review", { nodeId: "a", verdict: "accept" });
+    r.setProcs(busy);
+    await r.call("parent.report", {
+      nodeId: "a",
+      requestRef: r.open()?.requestRef,
+      outcome: "done",
+    });
+    const count = () => r.log.state().parentRequests.filter((x) => x.kind === "stop").length;
+    const first = await r.call("node.stop", { nodeId: "a", mode: "immediate" }, "same-id");
+    const second = await r.call("node.stop", { nodeId: "a", mode: "immediate" }, "same-id");
+    expect(first).toMatchObject({ ok: true, value: { state: "verified" } });
+    expect(second).toMatchObject({ ok: true, value: { state: "verified" } });
+    expect(count()).toBe(2);
+  });
+
+  it("受理のときに、まだ報告のない依頼があれば、停止の依頼は出さず、あとで node_stop で出すよう受信箱に知らせる", async () => {
+    const r = rig({ launched: true });
+    r.log.append({
+      requestId: "seed-open",
+      actor: { system: true },
+      body: {
+        type: "node.parentRequested",
+        payload: { nodeId: "a", requestRef: "preq-open", kind: "stop", worktree: "/w/a" },
+      },
+    });
+    await r.call("node.review", { nodeId: "a", verdict: "accept" });
+    expect(r.stateOfA()).toBe("verified");
+    expect(r.log.state().parentRequests.filter((x) => x.kind === "stop")).toHaveLength(1);
+    expect(
+      r.log
+        .state()
+        .inbox.some((i) => i.kind === "info" && i.summary?.includes("node_stop") === true),
+    ).toBe(true);
+    // 開いている依頼があるうちは、出し直しも作れない（alreadyFinished）
+    const res = await r.call("node.stop", { nodeId: "a", mode: "immediate" });
+    expect(res.error?.code).toBe("alreadyFinished");
+    // 片付けたあとは出せる
+    await r.call("parent.report", {
+      nodeId: "a",
+      requestRef: "preq-open",
+      outcome: "failed",
+      reason: "x",
+    });
+    const again = await r.call("node.stop", { nodeId: "a", mode: "immediate" });
+    expect(again).toMatchObject({ ok: true, value: { state: "verified" } });
+    expect(r.open()?.kind).toBe("stop");
   });
 });

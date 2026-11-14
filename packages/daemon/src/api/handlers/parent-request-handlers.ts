@@ -137,6 +137,31 @@ export function discardRemoveBodies(state: OrchState, nodeId: string): EventBody
  * 確かめてから受信箱に出し、続けて削除（`claude rm`）を依頼する。まだ報告のない依頼があるとき・同じ依頼を作ったことがあるとき・
  * 起動の報告がない子（Desktop・紐付けだけの子）は空を返す。`seed` は依頼の参照を導く種（受理の要求 ID など）。
  */
+export function sessionStopDeferredBodies(
+  state: OrchState,
+  nodeId: string,
+  seed: string,
+): EventBody[] {
+  const launched = state.parentRequests.some(
+    (r) => r.nodeId === nodeId && r.kind === "launch" && r.report?.outcome === "done",
+  );
+  if (!launched || openRequestOf(state.parentRequests, nodeId) === undefined) return [];
+  return [
+    {
+      type: "inbox.added",
+      payload: {
+        id: deriveId("inbox", "system", seed, "session-stop-deferred"),
+        kind: "info",
+        nodeId,
+        summary: summarize(
+          `子 ${nodeId} は受理したが、まだ報告のない親への依頼があるので、裏のセッションの停止の依頼をまだ出していない。その依頼を片付けたあとに node_stop（nodeId: ${nodeId}）を呼ぶと、停止の依頼が出る`,
+        ),
+      },
+    },
+  ];
+}
+
+/** 受理した子のセッションの停止の依頼（下の説明）。`sessionStopDeferredBodies` は、まだ報告のない依頼があって出せなかったときの知らせ。 */
 export function sessionStopBodies(state: OrchState, nodeId: string, seed: string): EventBody[] {
   const launch = [...state.parentRequests]
     .reverse()

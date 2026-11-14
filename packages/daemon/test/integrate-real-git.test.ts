@@ -80,7 +80,11 @@ const setup = async () => {
       worktreeRoot,
     },
   });
-  const call = async (operation: "node.integrate" | "node.reclaim", nodeId: string) =>
+  const call = async (
+    operation: "node.integrate" | "node.reclaim",
+    nodeId: string,
+    caller = "root",
+  ) =>
     (
       h[operation] as unknown as (r: unknown) => Promise<{
         ok: boolean;
@@ -91,7 +95,7 @@ const setup = async () => {
       requestId: `q-${++n}`,
       operation,
       role: "integrator",
-      caller: { nodeId: "root" },
+      caller: { nodeId: caller },
       params: { nodeId },
     } as unknown as HandlerRequest<typeof operation>);
   return { repoRoot, wt, log, st, call };
@@ -159,5 +163,24 @@ describe("統合（node.integrate。Issue #4）", () => {
     const res = await r.call("node.integrate", "c1");
     expect(res).toMatchObject({ ok: true, value: { alreadyIntegrated: false, target: "main" } });
     expect(git(r.repoRoot, "rev-parse", "refs/heads/main")).toBe(tip);
+  });
+
+  it("直接の親でない統合ノードは統合できない（forbidden）", async () => {
+    const r = await setup();
+    r.st("c1", "reportDone");
+    r.st("c1", "accept");
+    const res = await r.call("node.integrate", "c1", "other");
+    expect(res.error?.code).toBe("forbidden");
+  });
+
+  it("未追跡のファイルが上書きされるときは、何も変えずに targetDirty を返す", async () => {
+    const r = await setup();
+    r.st("c1", "reportDone");
+    r.st("c1", "accept");
+    writeFileSync(join(r.repoRoot, "w.txt"), "邪魔\n");
+    const before = git(r.repoRoot, "rev-parse", "HEAD");
+    const res = await r.call("node.integrate", "c1");
+    expect(res.error?.code).toBe("targetDirty");
+    expect(git(r.repoRoot, "rev-parse", "HEAD")).toBe(before);
   });
 });
