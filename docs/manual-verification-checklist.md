@@ -53,6 +53,7 @@
 | Q5 | daemon が動く前に配布物だけあるとき | 3-B（手で起動）を選び、daemon を起動する前に会話を始めて `/start` を試す。そのあと daemon を起動して 10〜20 秒待ち、もう一度 `/start` | 1 回目は node の道具がない（failed にはならない。中継の bash だけが動く）。2 回目は Reconnect なしで通る。中継の子として `@touryou/mcp/dist/bin.js --stdio` が 1 つ |
 | Q6 | `/touryou:service uninstall-all` | 常駐にした状態で実行し、定型文に「はい」。出たターミナルのブロックを `/exit` のあとに貼る | 常駐が外れ、`pgrep -fl '\.touryou/'` が何も出さず、plugin・marketplace・`$HOME/.touryou` が消える。その会話の `touryou-mcp --stdio` は `/exit` で終わる |
 | Q7 | auto モードでの承認 | Claude Code の auto モード（権限の自動判定）で `/touryou:setup`・`/touryou:service`・`/touryou:desktop` を実行する | 止められた・確認が出たコマンドと、その文面を記録する。チャットの「はい」の定型文は、auto モードでも尋ねられる |
+| Q8 | plugin を update した直後のセッション | `claude plugin update touryou@touryou` のあと、`/reload-plugins` をせずに統合セッションを開き（または続け）、`/touryou:start` | node の MCP が動く（古い版の置き場の中継が残っていて、つながる）。動かなければ、表示を記録する |
 
 ## S. /setup からの常駐（launchd）
 
