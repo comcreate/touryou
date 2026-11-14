@@ -70,7 +70,7 @@
 | S6 | 起動し直す・止める | `/touryou:service restart`、続けて `stop` | restart は終了コード 0。stop のあとは「読み込まれていない」で、戻し方（次のログイン、または同意のあとの `apply --yes`）が案内される（restart は案内しない） |
 | S7 | 外す | `/touryou:service uninstall`（同意に「はい」） | plist（LaunchAgents と `<H>/.touryou/launchd`）と `<H>/.touryou/bin` の起動スクリプトが消え、`logs`・`state` は残る。ログイン項目からも消える |
 | S8 | 版を上げる | 常駐中に、新しい版の plugin で `/setup`（「版が変わり、常駐しているとき」） | 同意のあと script が stop → 入れ替え → `apply --yes` で、新しい版で動く（`ps -axo command \| grep "/.touryou/" \| grep -v grep` のパスが `current` 経由） |
-| S10 | 導入の script の承認の回数 | `$HOME/.touryou` がない状態で `/touryou:setup` を最後まで（3-A）。承認の確認の回数を数える | 約 3 回（導入・設定・常駐の登録）。導入の承認の画面は `bash "<plugin の場所>/scripts/install-runtime.sh"`（引数なし） |
+| S10 | 導入の script の承認の回数 | `$HOME/.touryou` がない状態で `/touryou:setup` を最後まで（3-A）。承認の確認の回数を数える | 約 3 回（導入・設定・常駐の登録）。導入の承認の画面は `env -u BASH_ENV -u ENV bash "<plugin の場所>/scripts/install-runtime.sh"`（引数なし） |
 | S11 | 導入の script と quarantine | S10 の直後に `ls -l@ "$HOME/.touryou/work"` と `ls -lR@ "$HOME/.touryou/current/" \| grep -c com.apple.quarantine` | quarantine が付かない（0）。付いたときは、script が止まる（外さない）ことを記録する |
 | S12 | 版が変わり、常駐しているとき | 常駐中に、plugin を新しい版にして新しいセッションを開き、`/touryou:setup` | 始まりに版の違いの知らせが出る（知らせだけ）。script は終了コード 3 で何も変えず、「はい」のあと `--restart-daemon` で、止める → 付け替え → `apply --yes`。`/touryou:service status` が新しい版で running。承認は 2 回 |
 | S13 | 同じ版の再実行 | S10 のあとに、もう一度 `/touryou:setup` | 取得せずに `RESULT: already` |

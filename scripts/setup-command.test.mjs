@@ -68,7 +68,10 @@ test("手順は 1〜3 が、この順で、すべてある（導入の script < 
 
 test("手順 1: plugin の中の script を、引数なしの 1 コマンドで走らせる（取得・照合・展開・付け替えは script の中）。長めのタイムアウト", () => {
   // biome-ignore lint/suspicious/noTemplateCurlyInString: command の本文で Claude Code が展開する変数の参照
-  assert.equal(command(1, "bash "), 'bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-runtime.sh"');
+  assert.equal(
+    command(1, "env "),
+    'env -u BASH_ENV -u ENV bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-runtime.sh"',
+  );
   const s = step(1);
   assert.match(s, /タイムアウトを長め（最大 10 分）にして実行する/);
   assert.match(s, /置き換わっていない（`\$\{CLAUDE_PLUGIN_ROOT\}` の文字のまま）ときは、止まる/);
@@ -166,7 +169,7 @@ test("限界の明記と承認の回数: 安全は人の確認と script の sha
   // 承認の要る Bash は、手順 1・2・3-A の 1 つずつ（と、常駐の版上げの 1 つ）
   const cmds = [
     ...body.matchAll(
-      /`((?:bash "\$\{CLAUDE_PLUGIN_ROOT\}|R="<repoRoot>"|"\$HOME\/\.touryou\/current\/bin\/touryou" launchd init &&)[^`]*)`/g,
+      /`((?:env -u BASH_ENV -u ENV bash "\$\{CLAUDE_PLUGIN_ROOT\}|R="<repoRoot>"|"\$HOME\/\.touryou\/current\/bin\/touryou" launchd init &&)[^`]*)`/g,
     ),
   ];
   assert.equal(cmds.length, 4, cmds.map((m) => m[1]).join("\n"));
@@ -275,7 +278,7 @@ test("版が変わり、常駐しているとき: はっきり「はい」のと
   assert.match(up, /`RESULT: need-restart-consent`（終了コード 3）/);
   assert.match(
     up,
-    /\*\*はっきり「はい」のときだけ\*\* `bash "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/install-runtime\.sh" --restart-daemon`/,
+    /\*\*はっきり「はい」のときだけ\*\* `env -u BASH_ENV -u ENV bash "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/install-runtime\.sh" --restart-daemon`/,
   );
   assert.match(up, /それ以外（「いいえ」・あいまい・質問）は、何もせずに、版を上げずに終わる/);
   assert.match(up, /動いている子のセッションは止まります/);

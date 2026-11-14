@@ -27,8 +27,8 @@ Claude Code の auto モード（権限の自動判定）で実行している�
 
 ## 手順
 
-1. **本体の導入（script。1 コマンド）**: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-runtime.sh"`。`${CLAUDE_PLUGIN_ROOT}` は、この文書の中で、plugin のディレクトリの絶対パスに置き換わっている（Bash の環境変数には入らないので、置き換わった文字列のまま実行する）。置き換わっていない（`${CLAUDE_PLUGIN_ROOT}` の文字のまま）ときは、止まる。**このコマンドは、タイムアウトを長め（最大 10 分）にして実行する**（約 150MB の取得を含む）。
-   承認の画面では、`bash` と、plugin の中の `scripts/install-runtime.sh` だけで、引数がない（`--restart-daemon` は、下の「版が変わり、常駐しているとき」だけ）ことを確かめてもらう。
+1. **本体の導入（script。1 コマンド）**: `env -u BASH_ENV -u ENV bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-runtime.sh"`。`${CLAUDE_PLUGIN_ROOT}` は、この文書の中で、plugin のディレクトリの絶対パスに置き換わっている（Bash の環境変数には入らないので、置き換わった文字列のまま実行する）。置き換わっていない（`${CLAUDE_PLUGIN_ROOT}` の文字のまま）ときは、止まる。**このコマンドは、タイムアウトを長め（最大 10 分）にして実行する**（約 150MB の取得を含む）。
+   `env -u BASH_ENV -u ENV` は、非対話の bash が script の前に読むファイル（環境変数 `BASH_ENV`・`ENV` が指すもの）を読ませないため（script の頭では、環境から取り込まれた関数を消し、`PATH` を OS の既定にする）。承認の画面では、`env -u BASH_ENV -u ENV bash` と、plugin の中の `scripts/install-runtime.sh` だけで、引数がない（`--restart-daemon` は、下の「版が変わり、常駐しているとき」だけ）ことを確かめてもらう。
    script がすること（順に。どこで失敗しても、`current` は古いまま。理由と次にすることを出して、0 以外で終わる）: 対象の確認（`Darwin arm64`・`git`〔Xcode の Command Line Tools〕）→ plugin の中の `checksums.json`・`plugin.json` から版・名前・sha256 を読み、版の一致・`repository` の固定値・形を確かめる → 同じ版が入って動くなら、何もせずに終わる → `curl`（https だけ）で `$HOME/.touryou/work` に取得 → sha256 を `checksums.json` と照合（**通るまで、展開も実行もしない**。合わなければ、取得したものを消す）→ quarantine の確かめ → `tar -t` の検査（先頭が `touryou-darwin-arm64/` だけ・絶対パス・`..` を断る）→ 一時ディレクトリに展開し、外を指すシンボリックリンク・quarantine を断る → `$HOME/.touryou/v<版>` に移す → 新しい版の `touryou-daemon --help` が動くことを確かめる → `current` を付け替える（新しいリンクを作ってから入れ替える）。
    出力の最後の行（`RESULT: …`）で分ける。その前の `CONFIG:`・`LAUNCHD:` の行は、設定・常駐の有無（成功のときだけ出る）:
    - `RESULT: installed`（初めて）: 手順 2 へ。
@@ -135,7 +135,7 @@ plugin を新しい版にしたあと（セッションの始まりに「本体�
 
 定型文: 「常駐している daemon を、いったん止めて、新しい版に入れ替えます。入れ替えたあと、常駐の設定のまま（ログイン時に自動で動くまま）起動し直します。動いている子のセッションは止まります。よいですか（はい／いいえ）」
 
-**はっきり「はい」のときだけ** `bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-runtime.sh" --restart-daemon` を実行する（タイムアウトは最大 10 分）。それ以外（「いいえ」・あいまい・質問）は、何もせずに、版を上げずに終わる（今の版のまま動き続ける）。
+**はっきり「はい」のときだけ** `env -u BASH_ENV -u ENV bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-runtime.sh" --restart-daemon` を実行する（タイムアウトは最大 10 分）。それ以外（「いいえ」・あいまい・質問）は、何もせずに、版を上げずに終わる（今の版のまま動き続ける）。
 
 script は、新しい版を置いて `--help` を確かめたあとで、今の版の `touryou launchd init`（今の生成物が、引数なしの init と同じかの確かめ。違えば、止めずに終わる）→ `touryou launchd stop` → `current` の付け替え → 新しい版の `touryou launchd apply --yes` の順に行う。新しい版の `apply` が失敗したら、`current` を前の版に戻して、前の版で `apply --yes` をやり直す。組織の名前つき（`--org`）の常駐は、起動し直さずに止まる（`docs/launchd.md` の手作業の手順で上げる）。
 

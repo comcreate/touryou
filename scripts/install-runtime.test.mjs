@@ -10,6 +10,7 @@ import {
   chmodSync,
   copyFileSync,
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -49,7 +50,7 @@ const makeTarball = (ver, { extra, failApply = false, daemonOk = true } = {}) =>
   );
   writeFileSync(
     join(bin, "touryou"),
-    `#!/bin/sh\necho "v${ver} $*" >> "$HOME/calls.log"\n[ "$1 $2" = "launchd apply" ] && exit ${failApply ? 1 : 0}\nexit 0\n`,
+    `#!/bin/sh\necho "v${ver} $*" >> "$HOME/calls.log"\n[ "$1 $2" = "launchd stop" ] && [ -n "\${STUB_FAIL_STOP:-}" ] && exit 1\n[ "$1 $2" = "launchd apply" ] && [ -n "\${STUB_FAIL_APPLY_ALL:-}" ] && exit 1\n[ "$1 $2" = "launchd apply" ] && exit ${failApply ? 1 : 0}\nexit 0\n`,
   );
   chmodSync(join(bin, "touryou-daemon"), 0o755);
   chmodSync(join(bin, "touryou"), 0o755);
@@ -88,16 +89,17 @@ const newHome = () => {
 };
 
 /** script を source して、platform・has_git・fetch を差し替えて main を呼ぶ。fetch は、tarball を写し、URL を記録する。 */
-const install = (P, home, tarball, args = []) => {
+const install = (P, home, tarball, args = [], { env = {}, extra = "" } = {}) => {
   const body = [
     'source "$1"; shift',
     'platform() { echo "Darwin arm64"; }',
     "has_git() { :; }",
     'fetch() { echo "$1" >> "$HOME/fetch.log"; cp "$SRC" "$2"; }',
+    extra,
     'main "$@"',
   ].join("\n");
   return spawnSync("bash", ["-c", body, "_", join(P, "scripts", "install-runtime.sh"), ...args], {
-    env: { PATH: process.env.PATH, HOME: home, SRC: tarball },
+    env: { PATH: process.env.PATH, HOME: home, SRC: tarball, ...env },
     encoding: "utf8",
   });
 };
@@ -404,4 +406,125 @@ test("SessionStart: 版が違えば /touryou:setup を知らせる JSON を出�
   const nopj = runNotice(h, P);
   assert.equal(nopj.status, 0);
   assert.equal(nopj.stdout, "");
+});
+
+// --- 常駐の版上げで、stop のあとに失敗したとき（NFR_015: 前の版で動く状態に戻す） ---
+
+const OLD = (h) => join(h, ".touryou", "v0.9.0", "touryou-darwin-arm64");
+
+test("常駐の版上げ・stop が失敗: current は前の版のまま、前の版で apply --yes してから止まり、本当の状態を出す", () => {
+  const h = managedHome();
+  const tb = makeTarball("1.0.0");
+  const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"], {
+    env: { STUB_FAIL_STOP: "1" },
+  });
+  assert.equal(r.status, 1, out(r));
+  assert.match(r.stdout, /RESULT: failed/);
+  assert.equal(cur(h), OLD(h));
+  assert.deepEqual(lines(join(h, "calls.log")), [
+    "v0.9.0 launchd init",
+    "v0.9.0 launchd stop",
+    "v0.9.0 launchd apply --yes",
+  ]);
+  assert.match(
+    r.stdout,
+    /いまの状態: current は v0\.9\.0 に戻し、常駐の daemon は v0\.9\.0 で動いている/,
+  );
+  assert.doesNotMatch(r.stdout, /current は変えていません/);
+});
+
+test("常駐の版上げ・stop のあとの付け替えが失敗: 前の版で apply --yes してから止まる（set -e で黙って落ちない）", () => {
+  const h = managedHome();
+  const tb = makeTarball("1.0.0");
+  const extra =
+    'swap_link() { case "$1" in *v1.0.0*) return 1 ;; esac; rm -f "$2"; ln -s "$1" "$2"; }';
+  const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"], { extra });
+  assert.equal(r.status, 1, out(r));
+  assert.match(r.stdout, /RESULT: failed/);
+  assert.equal(cur(h), OLD(h));
+  assert.deepEqual(lines(join(h, "calls.log")), [
+    "v0.9.0 launchd init",
+    "v0.9.0 launchd stop",
+    "v0.9.0 launchd apply --yes",
+  ]);
+  assert.match(r.stdout, /付け替えられなかった/);
+  assert.match(r.stdout, /v0\.9\.0 で動いている/);
+});
+
+test("常駐の版上げ・新しい版も前の版も apply が失敗: current は前の版、daemon は止まっている、と出す", () => {
+  const h = managedHome();
+  const tb = makeTarball("1.0.0");
+  const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"], {
+    env: { STUB_FAIL_APPLY_ALL: "1" },
+  });
+  assert.equal(r.status, 1, out(r));
+  assert.match(r.stdout, /RESULT: failed/);
+  assert.equal(cur(h), OLD(h));
+  assert.match(
+    r.stdout,
+    /いまの状態: current は v0\.9\.0 に戻したが、常駐の daemon は止まっている/,
+  );
+  assert.match(r.stdout, /次にすること: \/touryou:service status/);
+});
+
+test("常駐の版上げ・init の違いで止まる: daemon は止めていない、と出す", () => {
+  const h = managedHome();
+  const tb = makeTarball("1.0.0");
+  const extra = 'run_masked() { case "$*" in *"launchd init"*) return 1 ;; esac; "$@"; }';
+  const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"], { extra });
+  assert.equal(r.status, 1, out(r));
+  assert.equal(cur(h), OLD(h));
+  assert.match(r.stdout, /daemon は止めていない（v0\.9\.0 のまま動いている）/);
+});
+
+test("特殊なファイル（FIFO・ハードリンク）・名前に制御文字を含むもの: 止まり、v<版> を作らない", () => {
+  const cases = [
+    ["FIFO", (d) => spawnSync("mkfifo", [join(d, "touryou-darwin-arm64", "bin", "pipe")])],
+    [
+      "ハードリンク",
+      (d) =>
+        linkSync(
+          join(d, "touryou-darwin-arm64", "bin", "touryou"),
+          join(d, "touryou-darwin-arm64", "bin", "hard"),
+        ),
+    ],
+    ["制御文字（タブ）", (d) => writeFileSync(join(d, "touryou-darwin-arm64", "bin", "a\tb"), "x")],
+    ["制御文字（改行）", (d) => writeFileSync(join(d, "touryou-darwin-arm64", "bin", "a\nb"), "x")],
+  ];
+  for (const [label, make] of cases) {
+    const tb = makeTarball("1.0.0", { extra: make });
+    const h = newHome();
+    const r = install(makePlugin("1.0.0", tb), h, tb);
+    assert.equal(r.status, 1, `${label}: ${out(r)}`);
+    assert.match(r.stdout, /RESULT: failed/, label);
+    assert.ok(!existsSync(join(h, ".touryou", "v1.0.0")), label);
+    assert.ok(!existsSync(join(h, ".touryou", "current")), label);
+  }
+});
+
+test("setup.md の呼び出し（env -u BASH_ENV -u ENV bash）では、BASH_ENV のファイルが読まれない。環境から取り込んだ関数（uname の上書き）は、script の頭で消える", {
+  skip: process.platform === "darwin",
+}, () => {
+  const tb = makeTarball("1.0.0");
+  const P = makePlugin("1.0.0", tb);
+  const h = newHome();
+  const rc = join(tmp(), "rc.sh");
+  writeFileSync(rc, `echo planted > "${join(h, "planted")}"\n`);
+  const r = spawnSync(
+    "env",
+    ["-u", "BASH_ENV", "-u", "ENV", "bash", join(P, "scripts", "install-runtime.sh")],
+    {
+      env: {
+        PATH: process.env.PATH,
+        HOME: h,
+        BASH_ENV: rc,
+        // export -f uname 相当（bash が取り込む形）。消えなければ Darwin arm64 と偽って先に進む
+        "BASH_FUNC_uname%%": '() { echo "Darwin arm64"; }',
+      },
+      encoding: "utf8",
+    },
+  );
+  assert.equal(r.status, 1, out(r));
+  assert.match(r.stdout, /Apple Silicon/);
+  assert.ok(!existsSync(join(h, "planted")), "BASH_ENV のファイルが読まれた");
 });

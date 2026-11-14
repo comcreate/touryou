@@ -19,6 +19,12 @@
 # macOS 付属の bash（3.2）と BSD の道具で動く。試験は、この file を source して、取得などの関数を差し替える（本番の `bash <file>` の道筋では、差し替えられない）。
 set -eu
 umask 022
+# 環境から取り込まれた関数（export -f。curl・tar などを上書きしうる）を消し、PATH を OS の既定にする（利用者の PATH の前の方の同名のコマンドを使わない）。
+# BASH_ENV・ENV は、この file より先に読まれるので、ここでは防げない。/setup は `env -u BASH_ENV -u ENV bash <file>` で呼ぶ。
+for _f in $(compgen -A function); do unset -f "$_f"; done
+unset _f
+PATH="$(command -p getconf PATH)"
+export PATH
 
 REPO_URL="https://github.com/comcreate/touryou"
 DIST_DIR="touryou-darwin-arm64"
@@ -51,10 +57,10 @@ finish() {
   exit "$1"
 }
 die() {
-  # $1: 理由, $2: 次にすること
+  # $1: 理由, $2: 次にすること, $3: いまの状態（省略すると「current は変えていない」）
   say "止めました: $1"
+  say "いまの状態: ${3:-current は変えていません（いま動いているものは、そのまま）}"
   [ -z "${2:-}" ] || say "次にすること: $2"
-  say "current は変えていません（いま動いているものは、そのまま）"
   finish 1 failed
 }
 run_masked() {
@@ -129,6 +135,33 @@ check_list() {
   grep -q -v -E "^$DIST_DIR(/|\$)" "$1" && return 1
   grep -q -E '(^|/)\.\.(/|$)' "$1" && return 1
   [ -s "$1" ]
+}
+restore_old() {
+  # 常駐の daemon を止めたあと（または止めようとしたあと）の失敗。current を前の版（prev）に戻し、前の版で apply --yes してから止まる。
+  # main の local（prev・old・ver・BASE・CONTACT）を、bash の動的スコープで読む。
+  local why="$1" state
+  if [ -n "$prev" ] && { [ "$(readlink "$BASE/current" 2>/dev/null)" = "$prev" ] || swap_link "$prev" "$BASE/current"; }; then
+    say "$why。current を v$old に戻して、v$old で起動し直します"
+    if run_masked "$BASE/current/bin/touryou" launchd apply --yes; then
+      state="current は v$old に戻し、常駐の daemon は v$old で動いている。v$ver は \$HOME/.touryou/v$ver に置いたまま"
+      die "$why（v$old に戻した）" "出力を確かめ、$CONTACT に相談する" "$state"
+    fi
+    state="current は v$old に戻したが、常駐の daemon は止まっている（v$old での起動にも失敗した）"
+    die "$why（v$old での起動し直しにも失敗した）" "/touryou:service status で確かめる。直したら touryou launchd apply --yes で起動し直す（次のログインでも、v$old で動き出す）" "$state"
+  fi
+  die "$why（current を v$old に戻せなかった）" "/touryou:service status と \$HOME/.touryou/current を確かめ、$CONTACT に相談する" "current が v$old を指しているか分からない。常駐の daemon は止まっている"
+}
+check_kinds() {
+  # $1: 展開した一時ディレクトリ。通常のファイル・ディレクトリ・シンボリックリンクだけで、ハードリンク（リンク数 2 以上のファイル）と、
+  # 名前に制御文字（改行・タブなど）を含むものがないこと
+  [ -z "$(find "$1" ! -type f ! -type d ! -type l -print 2>/dev/null | head -n 1)" ] || return 1
+  [ -z "$(find "$1" -type f -links +1 -print 2>/dev/null | head -n 1)" ] || return 1
+  [ -z "$(LC_ALL=C find "$1" -name '*[[:cntrl:]]*' -print 2>/dev/null | head -n 1)" ] || return 1
+  return 0
+}
+check_types() {
+  # $1: tar -tv の一覧のファイル。種類が、通常のファイル（-）・ディレクトリ（d）・シンボリックリンク（l）だけであること
+  ! LC_ALL=C grep -q -v -E '^[-dl]' "$1"
 }
 check_links() {
   # $1: 展開した一時ディレクトリ。中のシンボリックリンクが、すべて $1 の中を指すこと（絶対パス・外・行き先なしを断る）
@@ -251,12 +284,17 @@ main() {
   local list="$WORK/list.txt"
   if ! tar -tzf "$file" >"$list" 2>/dev/null; then die "配布物を読めない（壊れている）" "もう一度 /touryou:setup"; fi
   check_list "$list" || die "配布物の中身が、想定と違う（$DIST_DIR/ の外・絶対パス・.. がある）" "$CONTACT に知らせる"
+  if LC_ALL=C grep -q '[[:cntrl:]]' "$list"; then die "配布物の中身が、想定と違う（名前に制御文字がある）" "$CONTACT に知らせる"; fi
+  local vlist="$WORK/list-v.txt"
+  if ! tar -tvzf "$file" >"$vlist" 2>/dev/null; then die "配布物を読めない（壊れている）" "もう一度 /touryou:setup"; fi
+  check_types "$vlist" || die "配布物の中身が、想定と違う（デバイス・FIFO・ハードリンクなど、特殊なファイルがある）" "$CONTACT に知らせる"
 
   # 7. 一時ディレクトリに展開して確かめ、v<版> に移す
   local stage="$BASE/.stage-v$ver.$$"
   rm -rf "$stage"
   mkdir -p "$stage"
   if ! tar -xzf "$file" -C "$stage" 2>/dev/null; then rm -rf "$stage"; die "配布物を展開できない" "もう一度 /touryou:setup"; fi
+  if ! check_kinds "$stage"; then rm -rf "$stage"; die "配布物の中に、特殊なファイル（デバイス・FIFO・ハードリンクなど）か、名前に制御文字を含むものがある" "$CONTACT に知らせる"; fi
   if ! check_links "$stage"; then rm -rf "$stage"; die "配布物の中に、外を指すシンボリックリンクがある" "$CONTACT に知らせる"; fi
   if has_quarantine "$stage"; then rm -rf "$stage"; die "展開したファイルに quarantine が付いている。外していない" "$CONTACT に相談する"; fi
   if ! [ -x "$stage/$DIST_DIR/bin/touryou-daemon" ] || ! "$stage/$DIST_DIR/bin/touryou-daemon" --help >/dev/null 2>&1; then
@@ -271,31 +309,34 @@ main() {
   say "v$ver を \$HOME/.touryou/v$ver に置きました（touryou-daemon --help が動くことを確かめました）"
 
   # 9・10. 付け替え（常駐なら、止めて → 付け替え → 起動し直す）
+  local prev=""
+  [ -L "$BASE/current" ] && prev="$(readlink "$BASE/current")"
   if [ "$managed" = 1 ]; then
     say "常駐の daemon（v$old）を止めます"
     if ! run_masked "$BASE/current/bin/touryou" launchd init; then
-      die "常駐の生成物が、引数なしの launchd init と違う（--org・--path-prefix を手で付けた、など）。止めていない。v$ver は置いたが、current は v$old のまま" "docs/launchd.md の手作業の手順で版を上げる"
+      die "常駐の生成物が、引数なしの launchd init と違う（--org・--path-prefix を手で付けた、など）" "docs/launchd.md の手作業の手順で版を上げる" "daemon は止めていない（v$old のまま動いている）。v$ver は \$HOME/.touryou/v$ver に置いたが、current は v$old のまま"
     fi
     if ! run_masked "$BASE/current/bin/touryou" launchd stop; then
-      die "常駐の daemon を止められなかった。v$ver は置いたが、current は v$old のまま" "/touryou:service で状態を確かめる"
+      restore_old "常駐の daemon を止められなかった"
     fi
-  fi
-  local prev=""
-  [ -L "$BASE/current" ] && prev="$(readlink "$BASE/current")"
-  swap_link "$VDIR/$DIST_DIR" "$BASE/current"
-  say "current を v$ver に付け替えました${old:+（前は v$old）}"
-  rm -rf "$BASE/.old-v$ver.$$"
-  if [ "$managed" = 1 ]; then
+    # ここから先は、daemon が止まっている。どこで失敗しても、current を前の版に戻して起動し直してから止まる（NFR_015）
+    if ! swap_link "$VDIR/$DIST_DIR" "$BASE/current"; then
+      restore_old "current を v$ver に付け替えられなかった"
+    fi
+    say "current を v$ver に付け替えました（前は v$old）"
+    rm -rf "$BASE/.old-v$ver.$$" || true
     say "常駐の daemon を、v$ver で起動し直します"
     if ! run_masked "$BASE/current/bin/touryou" launchd apply --yes; then
-      say "v$ver での起動に失敗しました。current を v$old に戻して、起動し直します"
-      swap_link "$prev" "$BASE/current"
-      run_masked "$BASE/current/bin/touryou" launchd apply --yes || true
-      die "v$ver の daemon が起動しなかった（v$old に戻した）" "出力を確かめ、$CONTACT に相談する"
+      restore_old "v$ver の daemon が起動しなかった"
     fi
     say "常駐の daemon を v$ver で起動し直しました。開いている統合セッションは、/mcp で plugin:touryou:node を Reconnect してください"
     finish 0 upgraded-restarted
   fi
+  if ! swap_link "$VDIR/$DIST_DIR" "$BASE/current"; then
+    die "current を v$ver に付け替えられなかった" "もう一度 /touryou:setup" "current は ${old:+v$old のまま}${old:-まだない}。v$ver は \$HOME/.touryou/v$ver に置いた"
+  fi
+  say "current を v$ver に付け替えました${old:+（前は v$old）}"
+  rm -rf "$BASE/.old-v$ver.$$" || true
   if [ -n "$old" ]; then
     say "v$old から v$ver に上げました。daemon を手で動かしているなら、止めてから起動し直してください"
     finish 0 upgraded
