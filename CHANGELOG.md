@@ -3,6 +3,7 @@
 ## 未公開
 
 - **使わない .gitkeep を消し、actions の版をそろえる**（#18）: `packages/core/test/.gitkeep` と `plugin/agents/.gitkeep` を消した（`plugin/agents/` は任意にした）。workflow の `actions/checkout`・`actions/setup-node`・`pnpm/action-setup` を、それぞれ v7.0.1・v7.0.0・v6.0.10 にそろえた。
+- **plugin の一番上の bin/ をなくす**（#36）: 中継を `plugin/bin/touryou-mcp-shim.sh` から `plugin/scripts/touryou-mcp-shim.sh` に移し、claude.ai・Cowork・組織の設定からも plugin を入れられるようにした（一番上に `bin/` がある plugin は、そこから入れられない）。`pnpm validate:plugin` が、`plugin/bin/` があれば（空でも）拒む。update の直後のセッションは、`/reload-plugins` までは古い版の置き場の中継を使い続ける（古い置き場は残るので動く）。
 - **止まった子の未回答の判断を tree に出す**（#8）: `touryou tree --json`・`touryou tree <nodeId>` に、止まった子の未回答の判断（`pendingDecisions`）が出る。
 - **回答を子に届けたかを answer に出す**（#9）: `touryou answer` が、回答を子に届けたか（daemon の `decision.answer` の結果の `delivery`）を出す。
 - **依存の脆弱性の修正**（#15）: 配布物に入る依存を、既知の脆弱性を直した版に上げた（zod 4.6.7〔high〕・body-parser 2.4.0〔high〕・qs 6.16.2・fast-uri 3.1.9・ip-address 10.7.5）。

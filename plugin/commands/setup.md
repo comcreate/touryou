@@ -79,11 +79,11 @@ Claude Code の auto モード（権限の自動判定）で実行している�
    2. **生成**: `"$HOME/.touryou/current/bin/touryou" launchd init`。起動スクリプトと plist を `$HOME/.touryou` の下に作る（`launchctl` は実行しない）。既存と違う内容のファイルがあると、何も書かずに終了コード 1 で止まる（上書きしない）。そのときは、出力を利用者に伝えて止まる。
    3. **登録と起動**: `"$HOME/.touryou/current/bin/touryou" launchd apply --yes`（**1 の「はい」のあとだけ**。`--yes` は同意を取ったことの印）。plist を LaunchAgents に置き、daemon を読み込み、窓口の応答（未認証の whoami が 401）を待って、最後に状態を出す。終了コードが 0 なら成功。0 でなければ、出力（状態・`daemon.log` の起動スクリプトの文）をそのまま伝えて止まる。
       定型文（成功）: 「常駐にしました。macOS から「ログイン項目が追加された」という通知が出て、システム設定のログイン項目に run-daemon.sh の 1 項目が「開発元を識別できない項目」として出ます。これは正常です（署名していない起動スクリプトのため）。」
-   4. **つながるのを待つ**: この会話の node は、配布物と daemon を見つけると、10 秒ほどで自動でつながる（Reconnect は要らない。plugin の中継〔`bin/touryou-mcp-shim.sh`〕が、道具の一覧が変わったことを Claude Code に知らせる）。そのあと `/touryou:start` で、接続を確かめる。`/start` で node の道具がまだ使えなければ、`/mcp` で `plugin:touryou:node` を選んで Reconnect する（Reconnect がない画面〔デスクトップ版など〕なら、Claude Code を起動し直す）。以後の確認・起動し直し・止める・外すは、`/touryou:service`。
+   4. **つながるのを待つ**: この会話の node は、配布物と daemon を見つけると、10 秒ほどで自動でつながる（Reconnect は要らない。plugin の中継〔`scripts/touryou-mcp-shim.sh`〕が、道具の一覧が変わったことを Claude Code に知らせる）。そのあと `/touryou:start` で、接続を確かめる。`/start` で node の道具がまだ使えなければ、`/mcp` で `plugin:touryou:node` を選んで Reconnect する（Reconnect がない画面〔デスクトップ版など〕なら、Claude Code を起動し直す）。以後の確認・起動し直し・止める・外すは、`/touryou:service`。
    **9-B. 手で起動する**（別の端末で行う。起動の順序は daemon → 統合セッション）:
    - `"$HOME/.touryou/current/bin/touryou-daemon" --config "$HOME/.touryou/config.json"`（窓口の URL が出る）
    - 統合セッションの MCP は、plugin の `.mcp.json` が stdio で `touryou-mcp --stdio` を起動し、`touryou-mcp` が `state` の `root-token`・`port` を自分で読む（手で起動しない・環境変数は要らない）。`TOURYOU_DAEMON_URL` は、統合セッションの環境には設定しない。
-   - 続けて、**つながるのを待つ**: daemon を起動したあと、この会話の node は、配布物と daemon を見つけると、10 秒ほどで自動でつながる（Reconnect は要らない。plugin の中継〔`bin/touryou-mcp-shim.sh`〕が、道具の一覧が変わったことを Claude Code に知らせる）。そのあと `/touryou:start` で、接続を確かめる。`/start` で node の道具がまだ使えなければ、`/mcp` で `plugin:touryou:node` を選んで Reconnect する（Reconnect がない画面〔デスクトップ版など〕なら、Claude Code を起動し直す）。
+   - 続けて、**つながるのを待つ**: daemon を起動したあと、この会話の node は、配布物と daemon を見つけると、10 秒ほどで自動でつながる（Reconnect は要らない。plugin の中継〔`scripts/touryou-mcp-shim.sh`〕が、道具の一覧が変わったことを Claude Code に知らせる）。そのあと `/touryou:start` で、接続を確かめる。`/start` で node の道具がまだ使えなければ、`/mcp` で `plugin:touryou:node` を選んで Reconnect する（Reconnect がない画面〔デスクトップ版など〕なら、Claude Code を起動し直す）。
    定型文: 「次のコマンドを、別のターミナルで実行してください。」
    定型文（つながるのを待つ。9-A・9-B のどちらでも）: 「この会話の node は、10 秒ほどで自動でつながります。つながらなければ、/mcp で node を選んで Reconnect してください（または Claude Code を起動し直してください）。」
    デスクトップアプリ（普通のチャット・Cowork〔このコンピュータ〕）でも使うなら、続けて `/touryou:desktop` で拡張機能を入れられる、と 1 行だけ伝える（このコマンドでは入れない）。

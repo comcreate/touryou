@@ -24,7 +24,7 @@
 
 ## N. 統合セッションの MCP（stdio 型）
 
-**ねらい**: plugin の `.mcp.json`（stdio 型。中継 `bin/touryou-mcp-shim.sh` が `$HOME/.touryou/current/bin/touryou-mcp --stdio` を `exec`）が、CLI とデスクトップ版の両方で、統合セッションの MCP として動くこと。
+**ねらい**: plugin の `.mcp.json`（stdio 型。中継 `scripts/touryou-mcp-shim.sh` が `$HOME/.touryou/current/bin/touryou-mcp --stdio` を `exec`）が、CLI とデスクトップ版の両方で、統合セッションの MCP として動くこと。
 
 - 前提: daemon を起動済み（launchd か手で）。統合セッションを起動する端末に、`TOURYOU_ROOT_TOKEN`・`TOURYOU_DAEMON_URL` を設定しない（`env | grep -c '^TOURYOU_'` が `0`）。
 - プロセスの探し方: 配布物の `touryou-mcp` は、同梱の node に置き換わって動く（`scripts/dist-build.sh`）ので、コマンド行に `touryou-mcp` の文字は出ない。`@touryou/mcp/dist/bin.js --stdio` で探す。コマンド行は `current` を経由したパス（`<H>/.touryou/current/bin/node …`）で出るので、版のフォルダの名前では見つからない。
@@ -40,7 +40,7 @@
 | N7 | セッションを閉じたら止まる | N1 のセッションを `/exit` し、`ps -axo command \| grep "@touryou/mcp/dist/bin.js --stdio" \| grep -vc grep` | `0`（daemon は動いたまま）。デスクトップ版では、アプリを ⌘Q で終了すると消える |
 | N8 | daemon の再起動に追従する | N1 のセッションを開いたまま、daemon を止めて、起動し直す（launchd なら `launchctl kickstart -k`、手で起動したなら、その端末で Ctrl+C のあと起動し直す。手で起動したものに `kickstart` を使うと `Could not find service`）。そのあと、統合セッションで `mcp__…node__whoami` を呼ぶ | Reconnect なしで、integrator・root が返る（`touryou-mcp --stdio` が置き場を読み直して、1 回だけ送り直す）。戻らなければ、失敗の文面を記録する |
 
-## Q. 落ちない中継（`bin/touryou-mcp-shim.sh`）と、まとめて外す
+## Q. 落ちない中継（`scripts/touryou-mcp-shim.sh`）と、まとめて外す
 
 前提: 確かめる版の plugin を入れる。`$HOME/.touryou` がない状態（Q1〜Q4）と、ある状態（Q5）で行う。
 
@@ -48,7 +48,7 @@
 |:--|:--|:--|:--|
 | Q1 | 対話の CLI で、`/setup` のあと自動でつながる | `$HOME/.touryou` がない状態で `claude` を起動し、`/mcp` で node の状態を見る。続けて同じ会話で `/touryou:setup`（9-A）。終わって 10〜20 秒待ち、`/touryou:start` | 起動直後の node は connected（failed にならない）・道具 0 個。Reconnect なしで `/start` の whoami が通る |
 | Q2 | デスクトップ版で、`/setup` のあと自動でつながる | Q1 と同じことを、デスクトップ版の Claude Code で行う（確認は `/touryou:status`。plugin は marketplace から入れる） | Reconnect も起動し直しもなしで `/status` が通る。通らなければ、起動し直しで通るかを記録する |
-| Q3 | macOS の `/bin/bash`（3.2）と BSD sed で動く | `/bin/bash --version` の 1 行目を見る。`$HOME/.touryou` がない状態で `/bin/bash <plugin のディレクトリ>/bin/touryou-mcp-shim.sh` を実行し、`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}` を貼って Enter、Ctrl-D | 3.2 の版で、`"id":1` と `"listChanged":true` を含む 1 行が返り、Ctrl-D で終わる |
+| Q3 | macOS の `/bin/bash`（3.2）と BSD sed で動く | `/bin/bash --version` の 1 行目を見る。`$HOME/.touryou` がない状態で `/bin/bash <plugin のディレクトリ>/scripts/touryou-mcp-shim.sh` を実行し、`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}` を貼って Enter、Ctrl-D | 3.2 の版で、`"id":1` と `"listChanged":true` を含む 1 行が返り、Ctrl-D で終わる |
 | Q4 | 待ちのあいだの CPU | Q1 の起動直後（`/setup` の前）に、別のターミナルで `top -l 2 -stats pid,cpu,command \| grep -i bash` | 中継の bash の CPU がほぼ 0%。続けて、配布物を置いて daemon を起動しないまま 1 分おき、同じコマンドと `top -l 2 -stats pid,cpu,command \| grep -i node` で、10 秒ごとの試しの起動（Node）の CPU を見る（電池への影響の目安） |
 | Q5 | daemon が動く前に配布物だけあるとき | 9-B（手で起動）を選び、daemon を起動する前に会話を始めて `/start` を試す。そのあと daemon を起動して 10〜20 秒待ち、もう一度 `/start` | 1 回目は node の道具がない（failed にはならない。中継の bash だけが動く）。2 回目は Reconnect なしで通る。中継の子として `@touryou/mcp/dist/bin.js --stdio` が 1 つ |
 | Q6 | `/touryou:service uninstall-all` | 常駐にした状態で実行し、定型文に「はい」。出たターミナルのブロックを `/exit` のあとに貼る | 常駐が外れ、`pgrep -fl '\.touryou/'` が何も出さず、plugin・marketplace・`$HOME/.touryou` が消える。その会話の `touryou-mcp --stdio` は `/exit` で終わる |

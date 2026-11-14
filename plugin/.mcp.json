@@ -4,7 +4,7 @@
       "type": "stdio",
       "command": "/bin/bash",
       "args": [
-        "${CLAUDE_PLUGIN_ROOT}/bin/touryou-mcp-shim.sh"
+        "${CLAUDE_PLUGIN_ROOT}/scripts/touryou-mcp-shim.sh"
       ]
     }
   }
