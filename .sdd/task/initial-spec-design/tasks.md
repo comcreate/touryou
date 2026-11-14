@@ -33,7 +33,7 @@ depends-on: ["design-touryou"]
 | T10b-r | daemon: 回収の実ポート（git） | 済み |
 | T10b-w | daemon: 根の用意のあとに待ち受けを始める | 済み |
 | T10b-a | daemon: 起動の順番の直し | 済み |
-| T10b-d | daemon: Desktop の子を起動時の整合から外す方針 | 済み |
+| T10b-d | daemon: Desktop の子を起動時の整合から外す方針（ADR「2026-11-14 Desktop の子は起動時の整合でプロセスと照合しない」） | 済み |
 | T10c | core/daemon: 記録専用のイベント | 済み |
 | T10s | daemon: スケジューラ（依存がそろった子の起動） | 済み |
 | T10m | mcp: MCP サーバーの起動口 | 済み |

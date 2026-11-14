@@ -145,6 +145,8 @@ describe("reconcileOnStartup（再起動の後、記録と実際のプロセス�
 });
 
 describe("daemon の外で動く子（Desktop）", () => {
+  // 設定（childRuntime）では木の中で混在しないが、判定は子ごとなので、混ざっても正しく扱う
+  // （たとえば childRuntime を切り替えて再起動したあとに、前の子が残る場合）。
   it("Desktop の子と daemon の子が混ざるとき: Desktop の子はプロセスで調べず状態も変えず、ほかの子だけを照合する（FR_036）", async () => {
     const r = rig({ external: ["a", "w"] });
     const out = await r.run();
