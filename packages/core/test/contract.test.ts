@@ -139,6 +139,7 @@ describe("操作の契約（NFR_004, DC_003）", () => {
       "node.hookUnbind": "strictDescendant", // フックの結び付けを外すのは、祖先の統合ノードか人間だけ（本人の子は不可）
       "node.split": "strictDescendant",
       "node.review": "directChild", // 完了の判定は親だけ
+      "node.integrate": "directChild", // 統合は、受理した親だけ
       "node.reclaimPreview": "strictDescendant",
       "node.reclaim": "strictDescendant",
       "node.capabilities": "strictDescendant",

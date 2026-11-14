@@ -281,6 +281,7 @@ const VALIDATORS: Validators = {
   },
   "node.reclaimPreview": nodeIdOnly,
   "node.reclaim": nodeIdOnly,
+  "node.integrate": nodeIdOnly,
   "node.capabilities": nodeIdOnly,
   "decision.get": (p) => {
     const o = strict(p, ["decisionId"]);

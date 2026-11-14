@@ -39,7 +39,7 @@ import {
 import type { LossFacts } from "../../git-ports.js";
 import type { ProcessProbe } from "../../sdk/lsof-probe.js";
 import type { HandlerRequest } from "../server.js";
-import { appendAtomically, fail, type LogPort } from "./context.js";
+import { appendAtomically, deriveId, fail, type LogPort, summarize } from "./context.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;
 
@@ -78,6 +78,10 @@ export interface ReclaimPorts {
   ): Promise<Result<undefined, Failure>>;
   /** 強制の回収で失われるもの。なければ、事前確認に `loss` を出さない。 */
   lossFor?(nodeId: string): Promise<LossFacts | undefined>;
+  /** 子のブランチを、親のブランチへ fast-forward で統合する（`node.integrate`）。省略すると `notSupported`。 */
+  integrate?(
+    nodeId: string,
+  ): Promise<Result<{ alreadyIntegrated: boolean; target: string; tip: string }, Failure>>;
   /** daemon の作業ツリー置き場（作業ツリーのパスがこの配下であることを検査する）。 */
   readonly worktreeRoot: string;
   /** 強制で消す直前の、ブランチの先端（捨てる成果の最後のコミット）の記録先。 */
@@ -485,6 +489,61 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
           ...(tips === undefined || Object.keys(tips).length === 0 ? {} : { tips }),
         },
       };
+    },
+
+    /**
+     * 統合（Issue #4）。受理した直接の子（verified）のブランチを、親のブランチへ fast-forward だけで進める。できなければ何も変えずに
+     * 失敗を返し、人間に判断を求める（既定で merge・rebase はしない）。統合したら、受信箱に info を残す（記録。NFR_011）。
+     */
+    "node.integrate": async (
+      req: HandlerRequest<"node.integrate">,
+    ): Promise<R<"node.integrate">> => {
+      const { nodeId } = req.params;
+      const caller = req.caller?.nodeId ?? "";
+      const node = log.state().nodes.find((n) => n.id === nodeId);
+      if (node === undefined) return fail("notFound", "ノードが見つからない", "ID を確認する");
+      if (node.parentId !== caller) {
+        return fail(
+          "forbidden",
+          "統合は、そのノードの親（統合ノード）だけができる",
+          "親の統合ノードに依頼する",
+        );
+      }
+      if (node.state !== "verified") {
+        return fail(
+          "notVerified",
+          `ノード ${nodeId} は ${node.state} で、受理（verified）されていない`,
+          "完了の報告を確かめて、node_review で受理してから統合する",
+        );
+      }
+      if (ports.integrate === undefined) {
+        return fail("notSupported", "この daemon には統合の手段がない", "人間が手で統合する");
+      }
+      let r: Result<{ alreadyIntegrated: boolean; target: string; tip: string }, Failure>;
+      try {
+        r = await ports.integrate(nodeId);
+      } catch (e) {
+        deps.onFailure?.(nodeId, `integrate: ${String(e)}`);
+        return fail("gitFailed", "統合の処理が例外で止まった", "git の状態を確認する");
+      }
+      if (!r.ok) return r;
+      if (!r.value.alreadyIntegrated) {
+        const appended = appendAtomically(log, deps.clock, req.requestId, { nodeId: caller }, [
+          {
+            type: "inbox.added",
+            payload: {
+              id: deriveId("inbox", caller, req.requestId, "integrated"),
+              kind: "info",
+              nodeId,
+              summary: summarize(
+                `子 ${nodeId} のブランチを、親のブランチ ${r.value.target} へ fast-forward で統合した（先端 ${r.value.tip.slice(0, 12)}）`,
+              ),
+            },
+          },
+        ]);
+        if (!appended.ok) return appended;
+      }
+      return { ok: true, value: r.value };
     },
 
     "node.reclaim": async (

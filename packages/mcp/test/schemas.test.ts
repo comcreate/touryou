@@ -31,6 +31,7 @@ const VALID: Record<string, unknown> = {
   node_review: { nodeId: "n1", verdict: "accept" },
   node_reclaimPreview: { nodeId: "n1" },
   node_reclaim: { nodeId: "n1" },
+  node_integrate: { nodeId: "n1" },
   node_capabilities: { nodeId: "n1" },
   decision_get: { decisionId: "d1" },
   report_get: { reportId: "r1" },

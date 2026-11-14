@@ -49,6 +49,7 @@ import {
   type InstructionDelivery,
   wasNotified,
 } from "./instruction-delivery.js";
+import { sessionStopBodies } from "./parent-request-handlers.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;
 
@@ -126,6 +127,7 @@ export function operationsFor(
       candidates.push("node.spawn");
   }
   if (s === "done") candidates.push("node.review");
+  if (s === "verified") candidates.push("node.integrate");
   if (s === "verified" || s === "stopped") candidates.push("node.reclaimPreview", "node.reclaim");
   return candidates.filter((op) => {
     const rule = SUBTREE_RULES[op as SubtreeOperation];
@@ -296,6 +298,26 @@ export function createRuntimeHandlers(deps: RuntimeHandlerDeps) {
       const before = log.state();
       const node = nodeOf(before, nodeId);
       if (node === undefined) return fail("notFound", "ノードが見つからない", "ID を確認する");
+      // 受理した子（verified）は、状態を変えずに、裏のセッションの停止を親に依頼し直す（受理のときの依頼の再試行。Issue #3）。
+      if (node.state === "verified") {
+        const bodies = sessionStopBodies(before, nodeId, req.requestId);
+        if (
+          bodies.length === 0 &&
+          !alreadyApplied(before, { nodeId: callerOf(req) }, req.requestId)
+        ) {
+          return fail(
+            "alreadyFinished",
+            `ノード ${nodeId} は受理済みで、止める裏のセッションの依頼を作れない（起動の報告がない・まだ報告のない依頼がある）`,
+            "受信箱（inbox_fetch）で、親への依頼の項目を確かめる",
+            "状態を確認する",
+          );
+        }
+        if (bodies.length > 0) {
+          const r = appendAtomically(log, clock, req.requestId, { nodeId: callerOf(req) }, bodies);
+          if (!r.ok) return r;
+        }
+        return { ok: true, value: { state: "verified" } };
+      }
       // 停止未完了からの要求は、再試行（即時停止）として記録する。
       const event: NodeEvent =
         node.state === "stopIncomplete"

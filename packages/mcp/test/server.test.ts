@@ -216,7 +216,7 @@ describe("whoami ツール", () => {
     };
   };
 
-  it("ツール一覧に、統合は 20 個・子は 7 個（whoami を含む）。名前は whoami、入力はなし", async () => {
+  it("ツール一覧に、統合は 21 個・子は 7 個（whoami を含む）。名前は whoami、入力はなし", async () => {
     const counts: Record<string, number> = {};
     for (const role of MCP_ROLES) {
       const { tools } = await (await connect(role, fakeRelay())).listTools();
@@ -228,7 +228,7 @@ describe("whoami ツール", () => {
       expect(who?.description).toContain("起動の指示の先頭に書かれた ID の確認に使える");
       expect(who?.description?.includes("tree_list")).toBe(role === "integrator");
     }
-    expect(counts).toEqual({ integrator: 20, child: 7 });
+    expect(counts).toEqual({ integrator: 21, child: 7 });
   });
 
   it.each(MCP_ROLES)(

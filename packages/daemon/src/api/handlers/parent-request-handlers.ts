@@ -131,6 +131,38 @@ export function discardRemoveBodies(state: OrchState, nodeId: string): EventBody
   ];
 }
 
+/**
+ * 受理した子（verified）の、裏のセッションの停止の依頼（設計 6.2。Issue #3）。親が起動を報告した子（CLI の `claude --bg`）だけが対象。
+ * 状態は変えない（成果は受理済みで、止めるのはセッションだけ）。止めたことは `parent.report` で作業ツリーのプロセスがないことを
+ * 確かめてから受信箱に出し、続けて削除（`claude rm`）を依頼する。まだ報告のない依頼があるとき・同じ依頼を作ったことがあるとき・
+ * 起動の報告がない子（Desktop・紐付けだけの子）は空を返す。`seed` は依頼の参照を導く種（受理の要求 ID など）。
+ */
+export function sessionStopBodies(state: OrchState, nodeId: string, seed: string): EventBody[] {
+  const launch = [...state.parentRequests]
+    .reverse()
+    .find((r) => r.nodeId === nodeId && r.kind === "launch" && r.report?.outcome === "done");
+  if (launch === undefined || openRequestOf(state.parentRequests, nodeId) !== undefined) return [];
+  const requestRef = deriveId("preq", nodeId, seed, "session-stop");
+  if (state.parentRequests.some((r) => r.requestRef === requestRef)) return [];
+  return [
+    {
+      type: "node.parentRequested",
+      payload: { nodeId, requestRef, kind: "stop", worktree: launch.worktree },
+    },
+    {
+      type: "inbox.added",
+      payload: {
+        id: requestInboxId(requestRef),
+        kind: "info",
+        nodeId,
+        summary: summarize(
+          `子 ${nodeId} は受理した。裏のセッションの停止の依頼。parent_request（nodeId: ${nodeId}）で文を受け取り、Bash でそのまま実行して、parent_report で報告する（止めたのを確かめたら、続けて削除を依頼する）`,
+        ),
+      },
+    },
+  ];
+}
+
 export function createParentRequestHandlers(deps: ParentRequestHandlerDeps) {
   /** 停止の「止めた」の報告を確かめる: 作業ツリーを使うプロセスがない（`[]`）・残っている（pid）・確かめられない（null）。 */
   const remaining = async (worktree: string): Promise<number[] | null> => {
@@ -357,7 +389,9 @@ export function createParentRequestHandlers(deps: ParentRequestHandlerDeps) {
               `子 ${nodeId} の停止を確かめた（作業ツリーのプロセスはない）`,
             ),
           );
-          // 続けて、セッションの削除（claude rm）を依頼する
+        }
+        // 停止を確かめた（停止未完了から stopped にした・受理した子のセッションを止めた）ら、続けてセッションの削除（claude rm）を依頼する
+        if (confirmed || (nodeState === "verified" && left !== null && left.length === 0)) {
           const removeRef = deriveId("preq", nodeId, requestRef, "remove");
           bodies.push(
             {
@@ -376,17 +410,24 @@ export function createParentRequestHandlers(deps: ParentRequestHandlerDeps) {
               },
             },
           );
-        } else {
+        }
+        if (!confirmed) {
           bodies.push(
-            add(
-              "stop-unconfirmed",
-              "stopIncomplete",
-              left === null
-                ? `子 ${nodeId} は親が止めたと報告したが、作業ツリーのプロセスを確かめられない。確かめてから node_confirmStopped で宣言する`
-                : left.length > 0
-                  ? `子 ${nodeId} は親が止めたと報告したが、作業ツリーを使うプロセスが残っている（pid ${left.join(", ")}）。止めてから node_stop で再試行する`
-                  : `子 ${nodeId} は親が止めたと報告した（状態 ${nodeState ?? "不明"} のため、記録は変えない）`,
-            ),
+            nodeState === "verified" && left !== null && left.length === 0
+              ? add(
+                  "session-stopped",
+                  "info",
+                  `受理した子 ${nodeId} の裏のセッションを止めた（作業ツリーのプロセスはない）`,
+                )
+              : add(
+                  "stop-unconfirmed",
+                  "stopIncomplete",
+                  left === null
+                    ? `子 ${nodeId} は親が止めたと報告したが、作業ツリーのプロセスを確かめられない。確かめてから node_confirmStopped で宣言する`
+                    : left.length > 0
+                      ? `子 ${nodeId} は親が止めたと報告したが、作業ツリーを使うプロセスが残っている（pid ${left.join(", ")}）。止めてから node_stop で再試行する`
+                      : `子 ${nodeId} は親が止めたと報告した（状態 ${nodeState ?? "不明"} のため、記録は変えない）`,
+                ),
           );
         }
       } else if (r.kind === "remove") {

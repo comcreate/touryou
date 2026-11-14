@@ -158,3 +158,9 @@ category: "developer-tooling"
 - **Decision**: `tree.list` の `nodes` に `pendingDecisions`、`decision.answer` の結果に `delivery`（`delivered`・`skipped`）を、任意の欄として足す。既存の欄と、表の文面は変えない。cli は欄がなければ、今までの表示（子の状態からの見込み）に戻る。
 - **Rationale**: 人が CLI で、止まった子の判断と、回答が子に届いたかを確かめられるようにする（FR_009）。任意の欄なら、古い cli・mcp・画面と新しい daemon、新しい cli と古い daemon のどの組み合わせでも壊れない。
 - **Rejected alternatives**: 表の文面だけを cli で読み取る — 表は人向けで、形を約束していない。`notResumed` のように、届けなかったときだけ欄を出す — 古い daemon の「欄なし」と区別できない。
+
+## 2026-11-14 受理した子のセッションは受理のときに親へ停止を依頼し、統合は fast-forward だけの道具で行う
+
+- **Decision**: (1) 受理（accept）のとき、親が起動した CLI の子に、親への依頼として `claude stop` → `claude rm` を出す。状態は verified のまま変えず、状態遷移の表（verified への停止は `alreadyFinished`）も変えない。依頼の出し直しだけは `node_stop` が verified で受ける。(2) 統合ロールに `node.integrate` を足し、受理した直接の子のブランチを親のブランチへ fast-forward だけで進める。できなければ何も変えずに理由を返し、人間に判断を求める。
+- **Rationale**: touryou はセッションを起動・停止しない（親が行う）ので、停止も起動と同じ親への依頼の形にそろえる。受理済みの成果に「停止」の状態を重ねると、verified → stopped の遷移が要り、停止したノードの回収に破棄の判断を求める規則（条件 1）とぶつかる。統合の事実は git の上流への到達で決まるので、回収の判定は変えずに、統合する手段だけを足せば流れが閉じる。fast-forward だけなら成果を書き換えず、コンフリクトの解消を自動で決めない。
+- **Rejected alternatives**: `node_stop` を verified でも状態遷移として受ける（Issue #3 の案 2）— 受理のたびに親が別の操作を思い出す必要があり、状態の意味が二重になる。受理と同時に統合する設定（Issue #4 の案 2）— 受理と統合の失敗が混ざり、fast-forward できないときの扱いが受理の結果に入り込む。daemon が `claude stop` を自分で実行する — セッションを起動・停止しない原則（NFR_013）に反する。
