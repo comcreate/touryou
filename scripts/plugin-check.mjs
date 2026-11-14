@@ -84,10 +84,10 @@ const pathViolation = (line) => {
   return PATH_RES.some((re) => re.test(rest));
 };
 
-const HOOK_EVENTS = new Set(["PreToolUse", "PostToolUse", "Stop", "Notification"]);
+const HOOK_EVENTS = new Set(["PreToolUse", "PostToolUse", "Stop", "Notification", "SessionStart"]);
 const isObj = (x) => typeof x === "object" && x !== null && !Array.isArray(x);
 
-/** hooks.json の形。イベントは PreToolUse・PostToolUse・Stop・Notification だけ。command は、`scripts/hook-commands.mjs` の定数と**完全一致**（イベントごと）。 */
+/** hooks.json の形。イベントは PreToolUse・PostToolUse・Stop・Notification・SessionStart だけ。command は、`scripts/hook-commands.mjs` の定数と**完全一致**（イベントごと）。 */
 const checkHooks = (json, pluginDir) => {
   const errors = [];
   const at = "plugin/hooks/hooks.json";
@@ -96,7 +96,7 @@ const checkHooks = (json, pluginDir) => {
   for (const [event, entries] of Object.entries(json.hooks)) {
     if (!HOOK_EVENTS.has(event)) {
       errors.push(
-        `${at}: 未知のイベント ${event}（PreToolUse・PostToolUse・Stop・Notification だけ）`,
+        `${at}: 未知のイベント ${event}（PreToolUse・PostToolUse・Stop・Notification・SessionStart だけ）`,
       );
       continue;
     }

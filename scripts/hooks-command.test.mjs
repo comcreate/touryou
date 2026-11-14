@@ -52,12 +52,12 @@ const run = (command, env, input = '{"hook_event_name":"PreToolUse"}', shell = S
 const CHILD = { TOURYOU_NODE_TOKEN: "t".repeat(16), TOURYOU_DAEMON_URL: "http://127.0.0.1:1" };
 const isGuard = (c) => c === HOOK_COMMAND_GUARD;
 
-test("hooks.json は、定数と完全一致（PreToolUse は拒否版、PostToolUse・Stop・Notification は止めない版）", () => {
+test("hooks.json は、定数と完全一致（PreToolUse は拒否版、PostToolUse・Stop・Notification は止めない版、SessionStart は版の知らせ）", () => {
   const j = JSON.parse(readFileSync(join(root, "plugin", "hooks", "hooks.json"), "utf8"));
   for (const [event, command] of Object.entries(HOOK_COMMANDS)) {
     assert.equal(j.hooks[event][0].hooks[0].command, command, event);
   }
-  assert.equal(Object.keys(j.hooks).length, 4);
+  assert.equal(Object.keys(j.hooks).length, 5);
 });
 
 test("command に、単一引用符・バッククォートが入らない。`exec` を使わない（壊れた touryou で、シェルごと終了するため）", () => {

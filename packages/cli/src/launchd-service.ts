@@ -176,7 +176,7 @@ async function statusLines(ctx: Ctx): Promise<{ lines: string[]; ok: boolean }> 
     lines.push(
       ctx.units.every((u) => lstatOr(u.plistDest) !== undefined)
         ? "読み込まれていない（stop で止めた後）。次のログインで、また動く。すぐ動かすなら touryou launchd apply --yes（利用者の同意のあとだけ）。restart は、読み込まれていないので使えない"
-        : "読み込まれていない（常駐にしていない）。常駐にするなら /setup の手順 9-A。restart は、読み込まれていないので使えない",
+        : "読み込まれていない（常駐にしていない）。常駐にするなら /setup の手順 3-A。restart は、読み込まれていないので使えない",
     );
   }
   const code = await whoami(ctx);

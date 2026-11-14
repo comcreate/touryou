@@ -40,7 +40,7 @@ claude plugin marketplace add comcreate/touryou
    push が拒否されても、手元にタグが残る。やり直しは、権限を直してから、もう一度実行する（手元のタグが origin/main を指していれば、そのまま push に進む。`-f` は使わない）。
 
 4. `.github/workflows/release.yml` が、`plugin/` の中身を根にした zip（`touryou-<版>.zip`）と、その `.sha256` を Release に付ける。sha256 と URL は、実行の Summary に出る。Release は不変に扱う（付け直し〔`--clobber`〕はしない。Release がすでにあれば、ワークフローは失敗する。やり直し方は、下の「やり直す」）。
-   同じ実行で、macOS（**arm64 のみ**）の配布物（Node 同梱の `touryou-<版>-darwin-arm64.tar.gz` と `.sha256`）を作り、展開して daemon が起動する確認（smoke。`scripts/dist-smoke.sh`）を通したものだけを、同じ Release に付ける（失敗すると、Release は作られない）。あわせて、Claude デスクトップアプリの拡張機能 `touryou-mcp-<版>.mcpb` と `.sha256` も作る（`scripts/mcpb-build.sh`。JS だけ・未署名。`docs/desktop-extension.md`）。Release の asset は、zip・tar.gz・.mcpb と、それぞれの `.sha256` の 6 ファイル。配布物の sha256 は `checksums.json`（`scripts/make-checksums.mjs` が、リリースの実行の中で `plugin/` に書く。リポジトリにはない）に入れ、zip に入れる。利用者の `/setup` が、これと照合する。
+   同じ実行で、macOS（**arm64 のみ**）の配布物（Node 同梱の `touryou-<版>-darwin-arm64.tar.gz` と `.sha256`）を作り、展開して daemon が起動する確認（smoke。`scripts/dist-smoke.sh`）を通したものだけを、同じ Release に付ける（失敗すると、Release は作られない）。あわせて、Claude デスクトップアプリの拡張機能 `touryou-mcp-<版>.mcpb` と `.sha256` も作る（`scripts/mcpb-build.sh`。JS だけ・未署名。`docs/desktop-extension.md`）。Release の asset は、zip・tar.gz・.mcpb と、それぞれの `.sha256` の 6 ファイル。配布物の sha256 は `checksums.json`（`scripts/make-checksums.mjs` が、リリースの実行の中で `plugin/` に書く。リポジトリにはない）に入れ、zip に入れる。利用者の `/setup` が、plugin の中の `scripts/install-runtime.sh` で、これと照合する（script も zip に入り、許可リストで `scripts/install-runtime.sh`・`scripts/runtime-version-notice.sh` だけを通す）。
 5. `marketplace-self` のジョブが、`.claude-plugin/marketplace.json` を新しい版に書き換える PR を出す。中身（3 つの値）を確かめてマージする。PR が出なければ、Summary の値で手で直して PR を出す（Release はそのままでよい）。
 
 ## 配布物では効かない、開発用の抜け道
@@ -56,7 +56,7 @@ claude plugin marketplace add comcreate/touryou
 **Windows（x64）を扱うときに、作り直す範囲**（実装はしていない。見積もりの手がかり）:
 
 - 配布物: Windows 用のビルド（Node の公式の Windows 版、`better-sqlite3` の Windows 用バイナリ。zip 形式が自然）、`dist-build.sh` の置き換え（bash 前提）、署名（SmartScreen への影響）
-- `/setup`: `gh`・`shasum`・`chmod`・`tar` は、macOS・POSIX 前提。PowerShell などへの置き換え
+- `/setup`: 導入の script（`plugin/scripts/install-runtime.sh`）と `shasum`・`chmod`・`tar` は、macOS・POSIX 前提。PowerShell などへの置き換え
 - hook・起動スクリプト: POSIX シェル（`#!/bin/sh`）前提の起動スクリプトと、hook の呼び出し（`hooks.json` の command）の Windows 対応
 - 常駐化: launchd の代わり（タスクスケジューラ・Windows サービス）
 - パスの扱い（`realpath` の検査・作業ツリー）・シェル・プロセスの終了処理・`git worktree` の検証

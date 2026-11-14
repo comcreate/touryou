@@ -25,6 +25,13 @@ export const HOOK_COMMAND_GUARD = `${C}if [ -n "${H}" ] && [ -x "$c" ]; then "$c
 /** PostToolUse・Stop: 止めない版。`touryou hook` を実行して、どの終了コードでも 0 を返す（Stop の終了コード 2 は、Claude が止まるのを妨げる）。 */
 export const HOOK_COMMAND_PASSIVE = `${C}if [ -n "${H}" ] && [ -x "$c" ]; then "$c" hook; exit 0; fi; echo "[touryou hook] touryou が未配置のため、フックは働いていない（touryou の子でなければ、問題ない）" >&2; exit 0`;
 
+/**
+ * SessionStart: 本体（current の版）と plugin の版が食い違えば、知らせるだけ（plugin/scripts/runtime-version-notice.sh）。
+ * 取得・daemon の起動し直しはしない。`CLAUDE_PLUGIN_ROOT` がない・script がない・失敗したときも、終了コード 0（セッションを止めない）。
+ */
+export const HOOK_COMMAND_SESSION_START =
+  's="${CLAUDE_PLUGIN_ROOT:-}/scripts/runtime-version-notice.sh"; if [ -n "${CLAUDE_PLUGIN_ROOT:-}" ] && [ -f "$s" ]; then sh "$s" 2>/dev/null; fi; exit 0';
+
 /** イベントごとの command。 */
 export const HOOK_COMMANDS = {
   PreToolUse: HOOK_COMMAND_GUARD,
@@ -32,4 +39,6 @@ export const HOOK_COMMANDS = {
   Stop: HOOK_COMMAND_PASSIVE,
   // 入力待ちの報告。止められないフックなので、止めない版
   Notification: HOOK_COMMAND_PASSIVE,
+  // 版の食い違いを知らせるだけ（仮の登録などはしない）
+  SessionStart: HOOK_COMMAND_SESSION_START,
 };

@@ -43,5 +43,5 @@ Claude デスクトップアプリの拡張機能（`touryou-mcp-<版>.mcpb`。�
 ## 失敗したとき
 
 - `open` が失敗した（終了コードが 0 でない）・導入の画面が出ない: 手順 6 の定型文の予備（Finder・設定の画面から選ぶ）を案内する。`open` を繰り返さない。
-- デスクトップアプリで道具が失敗する（`daemon_unreachable` など）: daemon が動いていない。Claude Code で `/touryou:setup` の手順 9（常駐か手で起動）か、`/touryou:service status`。
+- デスクトップアプリで道具が失敗する（`daemon_unreachable` など）: daemon が動いていない。Claude Code で `/touryou:setup` の手順 3（常駐か手で起動）か、`/touryou:service status`。
 - 詳しくは `docs/desktop-extension.md`。

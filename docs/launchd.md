@@ -2,7 +2,7 @@
 
 macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動かす手順です。常駐させるのは **daemon だけ**です（統合セッション用の `touryou-mcp` は、plugin が stdio で起動するので、常駐は要りません）。
 
-- **起動スクリプトと plist は、`touryou launchd init` が生成します**。読み込み・止める・外すは、`touryou launchd apply|status|restart|stop|uninstall`（`docs/cli.md`）か、plugin の `/touryou:setup`（手順 9）・`/touryou:service` で行います。
+- **起動スクリプトと plist は、`touryou launchd init` が生成します**。読み込み・止める・外すは、`touryou launchd apply|status|restart|stop|uninstall`（`docs/cli.md`）か、plugin の `/touryou:setup`（手順 3）・`/touryou:service` で行います。
 - 生成物にも plist にも、秘密は入りません（touryou は Anthropic の認証を扱いません。daemon が作るトークンは `state` の中だけにあります）。
 - 文書では、パスを記号で書きます: `<H>` は、自分の `$HOME` の絶対パス（`printf %s "$HOME"` で得る）。
 - 事実（docs の記載・コードで確認）と、推測・未確認は、分けて書きます。

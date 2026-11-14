@@ -121,7 +121,7 @@ test("release: cleanup のジョブは、release が成功したときだけ動�
   assert.doesNotMatch(c, /contents: write/);
 });
 
-test("release: zip の許可リストは、plugin/ に置いた配るファイル（中継の scripts/touryou-mcp-shim.sh を含む）をすべて通し、ほかは通さない", () => {
+test("release: zip の許可リストは、plugin/ に置いた配るファイル（中継の scripts/touryou-mcp-shim.sh・本体の導入の scripts/install-runtime.sh・版の知らせの scripts/runtime-version-notice.sh を含む）をすべて通し、ほかは通さない", () => {
   const src = readFileSync(new URL("../.github/workflows/release.yml", import.meta.url), "utf8");
   const m = src.match(/grep -Ev '(\^\(.*\)\$)'/);
   assert.ok(m, "許可リストの grep -Ev が見つからない");
@@ -131,12 +131,17 @@ test("release: zip の許可リストは、plugin/ に置いた配るファイ�
     .filter((f) => f && !f.endsWith(".gitkeep"))
     .map((f) => f.slice("plugin/".length));
   assert.ok(files.includes("scripts/touryou-mcp-shim.sh"));
+  assert.ok(files.includes("scripts/install-runtime.sh"));
+  assert.ok(files.includes("scripts/runtime-version-notice.sh"));
   for (const f of files) assert.match(f, allow, f);
   for (const f of [
     "bin/other.sh",
     ".env",
     "node_modules/x/index.js",
     "scripts/touryou-mcp-shim.sh.bak",
+    "scripts/other.sh",
+    "scripts/install-runtime.sh.bak",
+    "scripts/sub/install-runtime.sh",
   ]) {
     assert.doesNotMatch(f, allow, f);
   }

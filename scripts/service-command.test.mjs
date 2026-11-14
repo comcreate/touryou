@@ -68,7 +68,7 @@ test("status・restart: 読み込まれていないときは restart を案内�
     item("status"),
     /定型文（再開）: 「止めている daemon を、いま読み込み直して動かします（常駐の設定はそのまま）。/,
   );
-  assert.doesNotMatch(item("status"), /手順 9-A の 1 と同じく/);
+  assert.doesNotMatch(item("status"), /手順 3-A の 1 と同じく/);
   assert.match(item("status"), /出力のその行の括弧の中で分ける[^\n]*両方を並べて利用者に尋ねない/);
   assert.match(item("status"), /「（常駐にしていない）」: [^\n]*ここで `apply` を尋ねない/);
   assert.match(

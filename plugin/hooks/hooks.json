@@ -1,5 +1,5 @@
 {
-  "description": "touryou のフック（PreToolUse・PostToolUse・Notification〔入力待ちの報告〕・Stop〔未読の確かめ〕）。touryou（$HOME 基準の固定の場所）の hook サブコマンドを呼ぶ。touryou が未配置のときは、素通し（子の環境変数 TOURYOU_NODE_TOKEN と TOURYOU_DAEMON_URL の両方があるときだけ、PreToolUse は拒否）。command の正本は scripts/hook-commands.mjs",
+  "description": "touryou のフック（PreToolUse・PostToolUse・Notification〔入力待ちの報告〕・Stop〔未読の確かめ〕・SessionStart〔本体と plugin の版の食い違いを知らせるだけ〕）。touryou（$HOME 基準の固定の場所）の hook サブコマンドを呼ぶ。touryou が未配置のときは、素通し（子の環境変数 TOURYOU_NODE_TOKEN と TOURYOU_DAEMON_URL の両方があるときだけ、PreToolUse は拒否）。command の正本は scripts/hook-commands.mjs",
   "hooks": {
     "PreToolUse": [
       {
@@ -43,6 +43,18 @@
           {
             "type": "command",
             "command": "c=\"${HOME:-}/.touryou/current/bin/touryou\"; if [ -n \"${HOME:-}\" ] && [ -x \"$c\" ]; then \"$c\" hook; exit 0; fi; echo \"[touryou hook] touryou が未配置のため、フックは働いていない（touryou の子でなければ、問題ない）\" >&2; exit 0",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "s=\"${CLAUDE_PLUGIN_ROOT:-}/scripts/runtime-version-notice.sh\"; if [ -n \"${CLAUDE_PLUGIN_ROOT:-}\" ] && [ -f \"$s\" ]; then sh \"$s\" 2>/dev/null; fi; exit 0",
             "timeout": 10
           }
         ]
