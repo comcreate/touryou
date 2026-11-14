@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/icon/icon.svg" width="112" alt="touryou">
+  <img src="assets/icon/icon.svg" width="112" alt="TouRyou">
 </p>
 
-# touryou
+# TouRyou
 
 複数の Claude セッションを「統合セッション 1 対 作業セッション n」の木構造（Composite パターン）で束ね、
 人間が最上位の統合セッションとだけ対話すれば、並列に進む実装・レビュー・調査を依頼・把握・判断できるようにするシステム。
@@ -78,7 +78,7 @@ for p in daemon mcp cli; do (cd packages/$p && pnpm link --global); done
 touryou-daemon --config <設定ファイル>   # 窓口の URL が出る
 ```
 
-**touryou は、セッションを起動しません。Anthropic の認証も扱いません**。CLI の子は、親のセッション（Claude Code）が、受信箱に書かれたコマンドを Bash で実行して起動します。
+**TouRyou は、セッションを起動しません。Anthropic の認証も扱いません**。CLI の子は、親のセッション（Claude Code）が、受信箱に書かれたコマンドを Bash で実行して起動します。
 
 流れ: **起動**（親が `cd <作業ツリー> && claude --bg '<指示>' --name <名前> --settings '{"crossSessionInbound":"accept"}'` を実行。`--model`・`--effort`・フォークの `--resume <id> --fork-session` が入ることがある）→ **紐付け**（子が `child_bind` を引数なしで呼ぶ）→ **知らせ**（受信箱を読めという 1 行が届き、`inbox_fetch` で読む）→ **停止**（子へ知らせ → 猶予 → 親が `claude stop`）→ **削除**（親が `claude rm`）。詳しくは [`docs/plugin.md`](docs/plugin.md) の「親から子を起動する流れ」と「注意（CLI の子）」。Desktop の子（`childRuntime: "desktop"`）は、これまでどおりです。
 

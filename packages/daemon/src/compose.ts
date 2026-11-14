@@ -667,6 +667,9 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     if (!r.ok) note("tokenExpiredNoticeFailure", { nodeId, cause: r.error.code });
   };
   let credentials: ReturnType<typeof createCredentialStore>;
+  // 退役（役目の終わりでの失効）を、ノードの購読へ知らせる（`retired` を送って閉じる。sse-hub は server の中で作られるので、
+  // `onSseHub` であとから結ぶ）。
+  let sseRetire: ((nodeId: string) => void) | undefined;
   const rootTokenPath = join(config.stateDir, "root-token");
   const humanTokenPath = join(config.stateDir, "human-token");
   try {
@@ -707,6 +710,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       },
       onExpired: (nodeId, reason, kind, issuedAt) => {
         note("tokenExpired", { nodeId, reason, kind });
+        // 退役なら、購読に `retired` を送って閉じる（heartbeat を待たない。子の mcp は張り直さない）。退役でない失効は、今のまま。
+        if (reason === "retired") sseRetire?.(nodeId);
         // 知らせは、まだ役目のある子（running・waiting・done）についてだけ（役目の終わり・止まった子は、知らせても次の操作がない）
         const st = tokenStateOf(nodeId);
         if (reason !== "retired" && (st === "running" || st === "waiting" || st === "done")) {
@@ -1870,6 +1875,9 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     // ハンドラへ「ノードの購読があるか」を結ぶ。
     onSseHub: (hub) => {
       nodeSubscription = (id) => hub.hasSubscription(id);
+      sseRetire = (id) => {
+        hub.retire(id);
+      };
     },
     // ファイルで設定するフック（plugin の hooks.json）。SDK のコールバックと同じ判定・同じ記録。
     // Desktop の子のフックの継承は、ファイルで設定するフックの経路では未確認。確認までは、受け口では許可しない（仮置き）。

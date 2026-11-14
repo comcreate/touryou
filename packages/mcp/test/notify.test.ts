@@ -506,6 +506,63 @@ describe("購読の 401 で止まる（張り直しの詰まり）", () => {
     expect(authFailed).toBe(1);
     expect(logs.filter((e) => e.event === "subscribeAuthStopped")).toHaveLength(1);
   });
+  it("daemon が event: retired を送ったら、張り直さない。onAuthFailed・記録は 1 回だけ。401 を受けに行かない（#32）", async () => {
+    let urls = 0;
+    let authFailed = 0;
+    let sleeps = 0;
+    const logs: Record<string, unknown>[] = [];
+    const sub = startNodeSubscriber({
+      ...base,
+      healthyAfterMs: 0,
+      fetch: (async () => {
+        urls += 1;
+        return urls === 1
+          ? new Response(
+              'event: ready\ndata: {"from":1}\n\nevent: retired\ndata: {"reason":"retired"}\n\n',
+              { status: 200 },
+            )
+          : new Response("", { status: 401 });
+      }) as unknown as typeof fetch,
+      sleep: async () => {
+        sleeps += 1;
+        if (sleeps > 5) sub.stop();
+      },
+      onAuthFailed: () => {
+        authFailed += 1;
+      },
+      log: (e) => logs.push(e),
+    });
+    await sub.done;
+    expect(urls).toBe(1);
+    expect(sleeps).toBe(0);
+    expect(authFailed).toBe(1);
+    expect(logs.filter((e) => e.event === "subscribeRetired")).toHaveLength(1);
+    expect(logs.some((e) => e.event === "subscribeAuthStopped")).toBe(false);
+  });
+  it("根（authRetryMs あり）は、retired を受けても 401 と同じに待って張り直す（onAuthFailed は呼ばない）", async () => {
+    let urls = 0;
+    let authFailed = 0;
+    const waits: number[] = [];
+    const sub = startNodeSubscriber({
+      ...base,
+      authRetryMs: 60_000,
+      fetch: (async () => {
+        urls += 1;
+        return new Response('event: retired\ndata: {"reason":"retired"}\n\n', { status: 200 });
+      }) as unknown as typeof fetch,
+      sleep: async (ms) => {
+        waits.push(ms);
+        if (urls >= 2) sub.stop();
+      },
+      onAuthFailed: () => {
+        authFailed += 1;
+      },
+    });
+    await sub.done;
+    expect(urls).toBe(2);
+    expect(waits[0]).toBe(60_000);
+    expect(authFailed).toBe(0);
+  });
   it("つながらない（fetch が投げる・daemon_unreachable）ときは、張り直す", async () => {
     let urls = 0;
     let resolves = 0;
