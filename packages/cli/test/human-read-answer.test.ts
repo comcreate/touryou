@@ -281,6 +281,23 @@ describe("touryou answer", () => {
     },
   );
 
+  it.each([
+    ["resumed", "答えを添えて、子を再開した"],
+    ["instructed", "追加の指示として"],
+  ] as const)("deliveredVia=%s なら、届け方を分けて出す", async (deliveredVia, text) => {
+    const dg = await digestOf(DECISION_OPEN);
+    const { client } = fakeClient({
+      "decision.get": ok(DECISION_OPEN),
+      "tree.list": ok(TREE),
+      "decision.answer": ok({ accepted: true, delivery: "delivered", deliveredVia }),
+    });
+    const r = await runCommand(
+      ["answer", "dec-1", "--choice", "A", "--yes", "--expect", dg],
+      deps(client),
+    );
+    expect(r.stdout).toContain(text);
+  });
+
   it("古い daemon（delivery なし）や知らない delivery の値では、今までどおり子の状態から出す", async () => {
     const dg = await digestOf(DECISION_OPEN);
     for (const result of [{ accepted: true }, { accepted: true, delivery: "later" }]) {

@@ -469,7 +469,10 @@ describe("decision.answer の結果の delivery（回答を子に届けたか）
     const r = rig();
     const id = await r.decide();
     const res = await r.answer(id, { choice: "YAML" });
-    expect(res).toEqual({ ok: true, value: { accepted: true, delivery: "delivered" } });
+    expect(res).toEqual({
+      ok: true,
+      value: { accepted: true, delivery: "delivered", deliveredVia: "instructed" },
+    });
   });
 
   it("届ける手段がなければ skipped（回答は記録済み）", async () => {

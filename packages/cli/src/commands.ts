@@ -351,7 +351,9 @@ const isPurged = (v: unknown): v is { purged: readonly string[] } =>
 const isAccepted = (v: unknown): v is { accepted: true } => isRecord(v) && v.accepted === true;
 
 /** `decision.answer` の結果。`delivery` は古い daemon にはない（知らない値も、ないものとして扱う）。 */
-const isAnswerResult = (v: unknown): v is { accepted: true; delivery?: unknown } => isAccepted(v);
+const isAnswerResult = (
+  v: unknown,
+): v is { accepted: true; delivery?: unknown; deliveredVia?: unknown } => isAccepted(v);
 
 /** 止まった子の未回答の判断の数の表示（表の pendingDecision 列と同じ言葉）。 */
 function pendingText(p: { readonly undeliverable: number; readonly stopped: number }): string {
@@ -878,7 +880,11 @@ async function runAnswer(
   const delivery = res.value.delivery;
   const undelivered =
     delivery === "delivered"
-      ? "答えを子に届けた\n"
+      ? res.value.deliveredVia === "resumed"
+        ? "答えを子に届けた（答えを添えて、子を再開した）\n"
+        : res.value.deliveredVia === "instructed"
+          ? "答えを子に届けた（追加の指示として。子は受信箱で読む）\n"
+          : "答えを子に届けた\n"
       : delivery === "skipped"
         ? "注意: 答えは子に届けていない（届ける手段がないか、子が動いていない。記録は残る）\n"
         : state !== undefined && !isDeliverableState(state)

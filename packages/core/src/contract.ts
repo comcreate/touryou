@@ -326,6 +326,8 @@ export interface OperationMap {
       accepted: true;
       notResumed?: readonly NotResumed[];
       delivery?: AnswerDelivery;
+      /** `delivered` のときの届け方。`resumed`: 回答を指示に添えて再開した。`instructed`: 動いている子に追加の指示として届けた（子は受信箱で読む）。 */
+      deliveredVia?: "resumed" | "instructed";
     };
   };
   /**
