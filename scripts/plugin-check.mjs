@@ -1,6 +1,6 @@
 // plugin/ の検証（`validate-plugin.mjs` から使う。試験は plugin-check.test.mjs）。依存なし。
 // - plugin.json の構文と必須項目・name・version
-// - agents・hooks・skills のディレクトリ、skills・commands の frontmatter、hooks/hooks.json（あれば JSON として正しく、形が正しいこと）
+// - hooks・skills のディレクトリ、skills・commands の frontmatter、hooks/hooks.json（あれば JSON として正しく、形が正しいこと）
 // - skill・command に書いた MCP のツール名（mcp__node__*）が実在すること。skill は、そのロールの全ツールを書いていること
 // - NFR_012: plugin に、リポジトリ・利用者の場所（絶対パス）を埋め込まないこと
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -210,7 +210,7 @@ export function checkPlugin({ pluginDir, tools, forbidden = [] }) {
     }
   }
 
-  for (const dir of ["agents", "hooks", "skills"]) {
+  for (const dir of ["hooks", "skills"]) {
     if (!isDir(join(pluginDir, dir))) errors.push(`plugin/${dir}/ ディレクトリがありません`);
   }
 

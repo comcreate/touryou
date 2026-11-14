@@ -41,7 +41,6 @@ const build = (files = {}) => {
       version: "0.0.0",
       description: "d",
     }),
-    "agents/.gitkeep": "",
     "hooks/.gitkeep": "",
     "skills/integrator/SKILL.md": GOOD_INTEGRATOR,
     "skills/child/SKILL.md": GOOD_CHILD,
@@ -238,10 +237,9 @@ test("hooks.json の形の誤りを検出する", () => {
   for (const [files, re] of bad) assert.match(text(files), re, JSON.stringify(files));
 });
 
-test("agents・hooks・skills のディレクトリがない、を検出する", () => {
-  const e = text({ "hooks/.gitkeep": null, "agents/.gitkeep": null });
+test("hooks・skills のディレクトリがない、を検出する", () => {
+  const e = text({ "hooks/.gitkeep": null });
   assert.match(e, /plugin\/hooks/);
-  assert.match(e, /plugin\/agents/);
 });
 
 test("frontmatter: 複数行の値（> | と、字下げの続き）は、検出できないので、エラーにする", () => {

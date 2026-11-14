@@ -207,7 +207,7 @@ Desktop の子へのフックの継承と、接続設定の引き継ぎは、`do
 
 `node scripts/validate-plugin.mjs`（`pnpm validate:plugin`。先に `pnpm build` が要る）が、次を検査する。検査の中身は `scripts/plugin-check.mjs`、試験は `scripts/plugin-check.test.mjs`（`node --test scripts/*.test.mjs`）。
 
-- plugin.json の必須項目・name（kebab-case）・version（semver）。`agents/`・`hooks/`・`skills/` がある。
+- plugin.json の必須項目・name（kebab-case）・version（semver）。`hooks/`・`skills/` がある（`agents/` は任意。中身ができたら置く）。
 - skill（`SKILL.md`）と command の frontmatter（`name` は、skill ではディレクトリ名と同じ。`description` は必須）。`hooks/hooks.json` があれば、JSON として正しく、形が正しい（イベントは PreToolUse・PostToolUse・Stop だけ、Stop に matcher を書かない、`type: "command"`、command は、`scripts/hook-commands.mjs` の定数と**完全一致**〔PreToolUse＝拒否版、PostToolUse・Stop＝止めない版〕、timeout は 1〜60 秒）。command の試験は `scripts/hooks-command.test.mjs`（`sh -c` と `bash --posix -c` で、実際に走らせる）。
 - skill・command に書いた `mcp__node__<ツール名>` が、実際に公開されているツール（`packages/mcp` の `toolsFor`・`whoami`）にある。skill は、そのロールのツールだけを書き、**そのロールの全ツールを説明している**（ツールが増えたのに skill が古い、を防ぐ）。「説明している」とみなすのは、**行頭の箇条書きで、ツール名のあとに `:` と 10 文字以上の説明が続く行**（`- ` `` `mcp__node__<名前>` `` `: 説明…`）がある場合だけ。「使わない」と書いただけの言及は、説明にならない。
 - NFR_012: plugin/ の中に、絶対パスがない。行頭・空白・引用符・`(`・`=` の直後の `/<英数字>/…` は、すべて拒否する（`/home/`・`/workspace/`・`/app/`・`/Volumes/`・`/c/Users/` など。`~/`・Windows のパス・`file://`・このリポジトリの絶対パスも）。**例外は、URL のパス（`://host` の後。例: `http://127.0.0.1:7777/v1/whoami`）と `${CLAUDE_PLUGIN_ROOT}`（とそれに続く plugin の中のパス）だけ**。
