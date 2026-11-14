@@ -19,7 +19,12 @@ jobs:
   auto-merge:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'comcreate/touryou'
+    # github.actor も見る: fetch-metadata は PR の最初のコミットの作者しか見ないので、人が Dependabot のブランチに足したコミット
+    # （synchronize の actor が人）では、auto-merge を付けない
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.actor == 'dependabot[bot]' &&
+      github.repository == 'comcreate/touryou'
     steps:
       - name: Dependabot の PR の中身を見る
         id: metadata
@@ -32,7 +37,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          files="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" --paginate --jq '.[].filename')"
+          # 名前の変更は、前の名前（previous_filename）も見る
+          files="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" --paginate --jq '.[] | .filename, (.previous_filename // empty)')"
           outside="$(printf '%s\n' "${files}" | grep -v '^\.github/workflows/[^/]*\.ya\?ml$' | grep -v '^$' || true)"
           if [ -z "${files}" ] || [ -n "${outside}" ]; then
             echo "only_workflows=false" >> "$GITHUB_OUTPUT"

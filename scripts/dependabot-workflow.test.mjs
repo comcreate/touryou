@@ -85,9 +85,10 @@ test("自動マージの workflow: permissions は contents: write・pull-reques
 });
 
 test("自動マージの workflow: 出したのが dependabot[bot] で、このリポジトリのときだけ。github_actions の patch・minor で、.github/workflows/ の中だけのときに --auto --squash", () => {
-  assert.match(
-    merge,
-    /\n {4}if: github\.event\.pull_request\.user\.login == 'dependabot\[bot\]' && github\.repository == 'comcreate\/touryou'\n/,
+  const jobIf = /\n {4}if: >-\n((?: {6}.*\n)+)/.exec(merge)?.[1].replace(/\s+/g, " ").trim();
+  assert.equal(
+    jobIf,
+    "github.event.pull_request.user.login == 'dependabot[bot]' && github.actor == 'dependabot[bot]' && github.repository == 'comcreate/touryou'",
   );
   const steps = merge
     .slice(merge.indexOf("\n    steps:\n"))
@@ -110,6 +111,8 @@ test("自動マージの workflow: .github/workflows/ の外のファイル（�
   const files = merge.slice(merge.indexOf("id: files"));
   assert.match(files, /grep -v '\^\\\.github\/workflows\/\[\^\/\]\*\\\.ya\\\?ml\$'/);
   assert.match(files, /\[ -z "\$\{files\}" \] \|\| \[ -n "\$\{outside\}" \]/);
+  // 名前の変更は、前の名前も見る
+  assert.match(files, /--jq '\.\[\] \| \.filename, \(\.previous_filename \/\/ empty\)'/);
 });
 
 test("main の CI: ci.yml（name: CI）の pull_request の成功のあと、dependabot[bot] の同じリポジトリの PR がマージされたら、main で ci.yml を workflow_dispatch する", () => {
@@ -121,6 +124,7 @@ test("main の CI: ci.yml（name: CI）の pull_request の成功のあと、dep
     "github.event.workflow_run.event == 'pull_request'",
     "github.event.workflow_run.conclusion == 'success'",
     "github.event.workflow_run.actor.login == 'dependabot[bot]'",
+    "github.event.workflow_run.triggering_actor.login == 'dependabot[bot]'",
     "github.event.workflow_run.head_repository.full_name == github.repository",
   ])
     assert.ok(mainCi.includes(c), c);
@@ -135,4 +139,7 @@ test("main の CI: ci.yml（name: CI）の pull_request の成功のあと、dep
   );
   assert.match(mainCi, /actions\/workflows\/ci\.yml\/dispatches" -f ref=main/);
   assert.match(mainCi, /select\(\.user\.login == "dependabot\[bot\]"/);
+  // 10 分待ってもマージされなければ、黙って終わらず失敗にする
+  const tail = mainCi.slice(mainCi.lastIndexOf("done\n"));
+  assert.match(tail, /\n {10}exit 1\n/);
 });
