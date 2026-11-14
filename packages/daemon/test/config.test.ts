@@ -308,11 +308,13 @@ describe("parseConfig（設定は厳密に検査し、不正なら起動を失�
     const ok1 = parseConfig(
       JSON.stringify({
         ...base,
-        rateLimit: { alert: { enabled: false, threshold: 5, minIntervalMinutes: 1 } },
+        rateLimit: {
+          alert: { enabled: false, threshold: 5, retiredThreshold: 2, minIntervalMinutes: 1 },
+        },
       }),
     );
     expect(ok1.ok && ok1.value.rateLimit).toEqual({
-      alert: { enabled: false, threshold: 5, minIntervalMinutes: 1 },
+      alert: { enabled: false, threshold: 5, retiredThreshold: 2, minIntervalMinutes: 1 },
     });
     const max = parseConfig(
       JSON.stringify({
@@ -331,6 +333,9 @@ describe("parseConfig（設定は厳密に検査し、不正なら起動を失�
       { threshold: 4 },
       { threshold: 100001 },
       { threshold: 5.5 },
+      { retiredThreshold: 1 },
+      { retiredThreshold: 100001 },
+      { retiredThreshold: 2.5 },
       { minIntervalMinutes: 0 },
       { minIntervalMinutes: 1441 },
     ]) {

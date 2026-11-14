@@ -77,11 +77,13 @@ export interface DaemonConfig {
     /**
      * 運用の見える化。**既定で有効**: 窓（1 分）の、認証の失敗・制限の発動の件数が `threshold`（5〜100000。既定 30）以上のとき、
      * 根の受信箱に `info` の項目を 1 件出す（同じ種類は、最短 `minIntervalMinutes` 分〔1〜1440。既定 10〕あける）。`enabled: false` で出さない
-     * （件数のまとめは、daemon の記録に、いつも出る）。
+     * （件数のまとめは、daemon の記録に、いつも出る）。退役したトークンでの失敗（`retiredExpired`）は `threshold` に数えず、
+     * 別の閾値 `retiredThreshold`（2〜100000。既定 3）で、別の種類として数える。
      */
     readonly alert?: {
       readonly enabled?: boolean;
       readonly threshold?: number;
+      readonly retiredThreshold?: number;
       readonly minIntervalMinutes?: number;
     };
   };
@@ -380,9 +382,10 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
         "alert",
       ]) ||
       (v.alert !== undefined &&
-        (!onlyKeys(v.alert, ["enabled", "threshold", "minIntervalMinutes"]) ||
+        (!onlyKeys(v.alert, ["enabled", "threshold", "retiredThreshold", "minIntervalMinutes"]) ||
           (v.alert.enabled !== undefined && typeof v.alert.enabled !== "boolean") ||
           !inRange(v.alert.threshold, RATE_LIMIT_BOUNDS.alertThreshold) ||
+          !inRange(v.alert.retiredThreshold, RATE_LIMIT_BOUNDS.alertRetiredThreshold) ||
           !inRange(v.alert.minIntervalMinutes, RATE_LIMIT_BOUNDS.alertIntervalMinutes))) ||
       !inRange(v.maxInFlightPerPrincipal, RATE_LIMIT_BOUNDS.maxInFlightPerPrincipal) ||
       (pp !== undefined && !onlyKeys(pp, ["burst", "perSecond"])) ||
@@ -396,7 +399,7 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
           !inRange(af.perMinute, RATE_LIMIT_BOUNDS.authFailurePerMinute)))
     ) {
       return bad(
-        `rateLimit は、perPrincipal（burst ${RATE_LIMIT_BOUNDS.principalBurst.min}〜${RATE_LIMIT_BOUNDS.principalBurst.max}・perSecond ${RATE_LIMIT_BOUNDS.principalPerSecond.min}〜${RATE_LIMIT_BOUNDS.principalPerSecond.max}）・authFailures（burst ${RATE_LIMIT_BOUNDS.authFailureBurst.min}〜${RATE_LIMIT_BOUNDS.authFailureBurst.max}・perMinute ${RATE_LIMIT_BOUNDS.authFailurePerMinute.min}〜${RATE_LIMIT_BOUNDS.authFailurePerMinute.max}）・maxKeys（${RATE_LIMIT_BOUNDS.maxKeys.min}〜${RATE_LIMIT_BOUNDS.maxKeys.max}）・maxInFlightPerPrincipal（${RATE_LIMIT_BOUNDS.maxInFlightPerPrincipal.min}〜${RATE_LIMIT_BOUNDS.maxInFlightPerPrincipal.max}）・alert（enabled・threshold ${RATE_LIMIT_BOUNDS.alertThreshold.min}〜${RATE_LIMIT_BOUNDS.alertThreshold.max}・minIntervalMinutes ${RATE_LIMIT_BOUNDS.alertIntervalMinutes.min}〜${RATE_LIMIT_BOUNDS.alertIntervalMinutes.max}）だけを持つオブジェクト（整数。制限は無効にできない）`,
+        `rateLimit は、perPrincipal（burst ${RATE_LIMIT_BOUNDS.principalBurst.min}〜${RATE_LIMIT_BOUNDS.principalBurst.max}・perSecond ${RATE_LIMIT_BOUNDS.principalPerSecond.min}〜${RATE_LIMIT_BOUNDS.principalPerSecond.max}）・authFailures（burst ${RATE_LIMIT_BOUNDS.authFailureBurst.min}〜${RATE_LIMIT_BOUNDS.authFailureBurst.max}・perMinute ${RATE_LIMIT_BOUNDS.authFailurePerMinute.min}〜${RATE_LIMIT_BOUNDS.authFailurePerMinute.max}）・maxKeys（${RATE_LIMIT_BOUNDS.maxKeys.min}〜${RATE_LIMIT_BOUNDS.maxKeys.max}）・maxInFlightPerPrincipal（${RATE_LIMIT_BOUNDS.maxInFlightPerPrincipal.min}〜${RATE_LIMIT_BOUNDS.maxInFlightPerPrincipal.max}）・alert（enabled・threshold ${RATE_LIMIT_BOUNDS.alertThreshold.min}〜${RATE_LIMIT_BOUNDS.alertThreshold.max}・retiredThreshold ${RATE_LIMIT_BOUNDS.alertRetiredThreshold.min}〜${RATE_LIMIT_BOUNDS.alertRetiredThreshold.max}・minIntervalMinutes ${RATE_LIMIT_BOUNDS.alertIntervalMinutes.min}〜${RATE_LIMIT_BOUNDS.alertIntervalMinutes.max}）だけを持つオブジェクト（整数。制限は無効にできない）`,
       );
     }
     const num = (o: unknown, k: string): number | undefined =>

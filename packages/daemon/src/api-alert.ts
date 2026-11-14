@@ -8,6 +8,9 @@
  * - 積み上げない: 新しい警告を出すとき、**同じ種類の、前の未解決の警告を system が解決済みにする**（項目の ID に、種類の記号〔`a`・`r`〕を持つ）。
  *   未解決の警告は、種類ごとに高々 1 件（人間が先に解決したものは、そのまま）。
  * - 窓口の処理から切り離す: 記録は、`defer`（既定 `setImmediate`）で、要求の処理のあとに行う。
+ * - 退役したトークンでの失敗（`retiredExpired`）は、認証の失敗の閾値に数えない代わりに、**別の小さい閾値**（`retiredThreshold`。既定 3）で
+ *   別の種類（`retiredExpired`。記号 `x`）として数える。退役の直後の 1 件（購読の張り直し）は設計どおりだが、同じ窓でくり返すのは、
+ *   mcp の不具合やトークンの使い回しの兆し。
  * - 失敗（記録できない）は、daemon の記録（`note`）に出すだけで、窓口の動作を変えない。
  */
 
@@ -16,12 +19,19 @@ import type { ApiLogEvent } from "./api/server.js";
 
 /** 閾値の既定（1 つの窓の、種類ごとの件数）。認証の失敗の bucket の毎分の補充（30）と同じ。 */
 export const DEFAULT_ALERT_THRESHOLD = 30;
+/**
+ * 退役したトークンでの失敗（`retiredExpired`）の閾値の既定（1 つの窓の件数）。退役の直後の 1 件（mcp の購読の張り直し）は設計どおりなので、
+ * 2 件までは出さず、同じ窓で 3 件以上のくり返しを知らせる。
+ */
+export const DEFAULT_RETIRED_ALERT_THRESHOLD = 3;
 /** 同じ種類の項目を出す最短の間隔（分）の既定。 */
 export const DEFAULT_ALERT_INTERVAL_MINUTES = 10;
 
 export interface ApiAlertDeps {
   /** 閾値（種類ごとの、1 つの窓の件数）。 */
   readonly threshold: number;
+  /** 退役したトークンでの失敗（`retiredExpired`）の閾値（1 つの窓の件数）。省略すると既定（3）。 */
+  readonly retiredThreshold?: number;
   /** 同じ種類の項目を出す最短の間隔（ミリ秒。単調時計）。 */
   readonly minIntervalMs: number;
   /** 項目の持ち主（根のノード）。 */
@@ -35,16 +45,19 @@ export interface ApiAlertDeps {
   readonly defer?: (fn: () => void) => void;
 }
 
-/** 警告の項目の ID: `api-alert-<種類の記号>-<窓の時刻の数字>`。種類の記号は、`a`（認証の失敗）・`r`（制限の発動）。 */
+/** 警告の項目の ID: `api-alert-<種類の記号>-<窓の時刻の数字>`。種類の記号は、`a`（認証の失敗）・`r`（制限の発動）・`x`（退役したトークンでの失敗）。 */
 export const ALERT_ID_PREFIX = "api-alert-";
-const ALERT_ID = /^api-alert-([ar]{1,2})-/;
+const ALERT_ID = /^api-alert-([arx]{1,3})-/;
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
 
 const KINDS = [
   { key: "authFailed", label: "認証の失敗", code: "a" },
   { key: "rateLimited", label: "制限の発動", code: "r" },
+  { key: "retiredExpired", label: "退役したトークンでの認証の失敗", code: "x" },
 ] as const;
 type KindKey = (typeof KINDS)[number]["key"];
+
+const RETIRED = "retiredExpired";
 
 const SAFE_NAME = /^[A-Za-z][A-Za-z0-9]{0,31}$/;
 const MAX_NAMES = 8;
@@ -73,6 +86,25 @@ function summarize(counts: Readonly<Record<string, number>>): { total: number; d
   return { total, detail };
 }
 
+/** 退役したトークンでの失敗の件数（認証の失敗の表の `retiredExpired` だけ）。 */
+function summarizeRetired(counts: Readonly<Record<string, number>> | undefined): {
+  total: number;
+  detail: string;
+} {
+  const n = counts?.[RETIRED];
+  if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) return { total: 0, detail: "" };
+  return { total: n, detail: `${RETIRED} ${n}` };
+}
+
+/** 文面の結び（出した種類に応じた、考えられる理由）。 */
+function hint(fired: readonly (typeof KINDS)[number][]): string {
+  const out: string[] = [];
+  if (fired.some((k) => k.key !== RETIRED)) out.push("トークンの総当たりや、暴走した呼び出し");
+  if (fired.some((k) => k.key === RETIRED))
+    out.push("退役した紐付けのトークンを使い続ける呼び出し（mcp の不具合・トークンの使い回し）");
+  return `${out.join("、")}の可能性がある`;
+}
+
 const seconds = (iso: string): string => iso.slice(0, 19);
 
 /** 窓の時刻の文（UTC。秒まで）。時刻がなければ（壁時計がない）、窓の長さだけ。 */
@@ -99,8 +131,12 @@ export function createApiAlert(deps: ApiAlertDeps): (event: ApiLogEvent) => void
       const parts: string[] = [];
       const fired: (typeof KINDS)[number][] = [];
       for (const k of KINDS) {
-        const s = summarize(event[k.key]);
-        if (s.total < deps.threshold) continue;
+        const s = k.key === RETIRED ? summarizeRetired(event.authFailed) : summarize(event[k.key]);
+        const threshold =
+          k.key === RETIRED
+            ? (deps.retiredThreshold ?? DEFAULT_RETIRED_ALERT_THRESHOLD)
+            : deps.threshold;
+        if (s.total < threshold) continue;
         const prev = last.get(k.key);
         if (prev !== undefined && now - prev < deps.minIntervalMs) continue; // 出しすぎない
         parts.push(`${k.label} ${s.total} 件${s.detail === "" ? "" : `（${s.detail}）`}`);
@@ -118,7 +154,7 @@ export function createApiAlert(deps: ApiAlertDeps): (event: ApiLogEvent) => void
           id,
           kind: "info",
           nodeId: deps.rootNodeId,
-          summary: `窓口の警告（${windowText(event)}）: ${parts.join("・")}。トークンの総当たりや、暴走した呼び出しの可能性がある（daemon の記録の apiSummary に、内訳がある）`,
+          summary: `窓口の警告（${windowText(event)}）: ${parts.join("・")}。${hint(fired)}（daemon の記録の apiSummary に、内訳がある）`,
         },
       } as EventBody);
       if (!r.ok) {
