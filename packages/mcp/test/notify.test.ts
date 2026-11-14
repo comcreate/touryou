@@ -476,6 +476,36 @@ describe("購読の 401 で止まる（張り直しの詰まり）", () => {
     await sub.done;
     expect(urls).toBe(1);
   });
+  it("退役で購読を切られたあと: 張り直しの 1 回目が 401 なら、それ以上は張り直さない。onAuthFailed・記録は 1 回だけ（#7）", async () => {
+    let urls = 0;
+    let authFailed = 0;
+    let sleeps = 0;
+    const logs: Record<string, unknown>[] = [];
+    const sub = startNodeSubscriber({
+      ...base,
+      healthyAfterMs: 0,
+      fetch: (async () => {
+        urls += 1;
+        // 1 回目: つながってから daemon が切る（heartbeat で失効を見つけた）。2 回目以降: 401
+        return urls === 1
+          ? new Response('event: ready\ndata: {"from":1}\n\n', { status: 200 })
+          : new Response("", { status: 401 });
+      }) as unknown as typeof fetch,
+      sleep: async () => {
+        sleeps += 1;
+        if (sleeps > 5) sub.stop(); // 止まらない不具合のときに、試験が終わるように
+      },
+      onAuthFailed: () => {
+        authFailed += 1;
+      },
+      log: (e) => logs.push(e),
+    });
+    await sub.done;
+    expect(urls).toBe(2);
+    expect(sleeps).toBe(1);
+    expect(authFailed).toBe(1);
+    expect(logs.filter((e) => e.event === "subscribeAuthStopped")).toHaveLength(1);
+  });
   it("つながらない（fetch が投げる・daemon_unreachable）ときは、張り直す", async () => {
     let urls = 0;
     let resolves = 0;
