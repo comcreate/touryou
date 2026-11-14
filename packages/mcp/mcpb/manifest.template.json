@@ -1,9 +1,9 @@
 {
   "manifest_version": "0.3",
   "name": "touryou-mcp",
-  "display_name": "touryou (touryou-mcp)",
+  "display_name": "TouRyou (touryou-mcp)",
   "version": "@VERSION@",
-  "description": "touryou の統合セッション用の MCP（touryou-mcp --stdio）。daemon は別に起動しておく（/setup）。",
+  "description": "TouRyou の統合セッション用の MCP（touryou-mcp --stdio）。daemon は別に起動しておく（/setup）。",
   "author": { "name": "comcreate" },
   "repository": {
     "type": "git",
