@@ -125,7 +125,7 @@ export const RATE_LIMIT_BOUNDS = {
   /** 運用の見える化: 閾値（1 つの窓の、種類ごとの件数）と、同じ種類の項目を出す最短の間隔（分）。 */
   alertThreshold: { min: 5, max: 100_000 },
   alertIntervalMinutes: { min: 1, max: 1_440 },
-  /** 退役したトークンでの失敗（`retiredExpired`）の閾値。下限 2: 退役の直後の 1 件（設計どおり）では出さない。 */
+  /** 退役したトークンでの失敗（`retiredExpired`）の閾値。下限 2: 古い mcp か古い daemon との組み合わせで、退役の直後に出うる 1 件（設計どおり）では出さない。 */
   alertRetiredThreshold: { min: 2, max: 100_000 },
 } as const;
 
