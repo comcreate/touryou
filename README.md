@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/icon/icon.svg" width="112" alt="touryou">
+</p>
+
 # touryou
 
 複数の Claude セッションを「統合セッション 1 対 作業セッション n」の木構造（Composite パターン）で束ね、
