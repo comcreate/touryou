@@ -84,7 +84,8 @@ claude plugin marketplace add comcreate/touryou
 
 - `url` は Release の `browser_download_url`（認証なしで取れる）。`headersHelper`・`strict: false` は付けない（ジョブは、書き換えのときに、残っていれば外す）。
 - `marketplace-self` は、項目がなければ足し、あれば `source`・`version` だけを書き換える。`name`・`description` は `plugin/.claude-plugin/plugin.json` から取る。最初の Release のあとに出る PR が、最初の項目を足す（手の作業は要らない）。
-- `GITHUB_TOKEN` で出した PR では、CI（`pull_request`）が動かない（GitHub の仕様）。中身は 3 つの値だけなので、手で確かめてマージする。
+- `GITHUB_TOKEN` で出した PR では、CI（`pull_request`）が動かない（GitHub の仕様）。そのため `marketplace-self` は、PR を出したあとに、そのブランチを ref にして `ci.yml` を `workflow_dispatch` で起こす（`GITHUB_TOKEN` からでも `workflow_dispatch` は新しい run を起こせる。ジョブの権限に `actions: write` を足している）。その run の check（`check (ubuntu-latest, node 22)`・`check (ubuntu-latest, node 24)`）が PR の head のコミットに付くので、CI が通れば、管理者の権限なしでマージできる。
+- check が PR に付かないとき（dispatch が失敗した・run が見えない）は、Actions の画面で `CI` を `release/marketplace-<版>` のブランチで手で実行する（Run workflow）。それでも付かないときだけ、中身（3 つの値）を手で確かめ、管理者の権限でマージする。
 - 項目の `sha256` は、zip（中に `checksums.json` を含む）のもの。
 
 ## 公開のリポジトリの設定（新しいリポジトリを作ったときに、管理者が行う）
@@ -94,14 +95,14 @@ claude plugin marketplace add comcreate/touryou
 | 設定の場所 | 設定 | 理由 |
 |:--|:--|:--|
 | Settings → Actions → General → Actions permissions | Actions を有効にする（「Allow all actions and reusable workflows」か、使っている action〔`actions/checkout`・`actions/setup-node`・`actions/upload-artifact`・`actions/download-artifact`・`pnpm/action-setup` など。ワークフローは SHA で固定〕を許す） | ワークフローが動くため |
-| Settings → Actions → General → Workflow permissions | 「Read repository contents and packages permissions」（既定）か「Read and write permissions」のどちらでもよい（ジョブは要る権限〔`contents: write`・`pull-requests: write`・`actions: write`〕を `permissions:` で明示している。明示が組織の制限で効かないときは「Read and write permissions」にする）。**「Allow GitHub Actions to create and approve pull requests」を有効にする** | `marketplace-self` が `GITHUB_TOKEN` で PR を作るため（無効だと、ブランチの push までは成功し、`gh pr create` が失敗する）。ジョブは必要な権限（`contents: write` など）を自分で明示している。組織の設定で禁じられていると、リポジトリでは有効にできないので、先に組織の Settings → Actions → General で許す |
+| Settings → Actions → General → Workflow permissions | 「Read repository contents and packages permissions」（既定）か「Read and write permissions」のどちらでもよい（ジョブは要る権限〔`contents: write`・`pull-requests: write`・`actions: write`（`cleanup` と、`marketplace-self` の `ci.yml` の dispatch）〕を `permissions:` で明示している。明示が組織の制限で効かないときは「Read and write permissions」にする）。**「Allow GitHub Actions to create and approve pull requests」を有効にする** | `marketplace-self` が `GITHUB_TOKEN` で PR を作るため（無効だと、ブランチの push までは成功し、`gh pr create` が失敗する）。ジョブは必要な権限（`contents: write` など）を自分で明示している。組織の設定で禁じられていると、リポジトリでは有効にできないので、先に組織の Settings → Actions → General で許す |
 | Settings → Actions → General → Fork pull request workflows | 「Require approval for first-time contributors」以上にする | 外の人の PR で、ワークフローが黙って動かないように |
 | Settings → Branches（または Rules → Rulesets）で `main` | PR を必須にする（直接の push を禁じる）・force push と削除を禁じる・必須の check に `ci.yml` の check を入れる（下の注） | 壊れた main からタグを付けないため |
 | Settings → Rules → Rulesets（タグ） | `v*` のタグの作成・更新・削除を、管理者（リリースする人）だけにする | タグの push が Release を作るため。だれでも `v*` を push できると、Release が作られる |
 | Settings → Code security | Private vulnerability reporting を有効にする。Dependabot alerts・Secret scanning・Push protection を有効にする | `SECURITY.md` の窓口のため |
 | Settings → General | Issues を有効にする。Wiki・Projects は任意 | |
 
-- 必須の check の注: `ci.yml` は `docs/**` などだけの変更では動かない（`paths-ignore`）、`ci-macos.yml` はコードが変わったときだけ動く（`paths`）。動かなかった check を必須にすると「待ち」のままになるので、必須にするのは毎回動くものだけにするか、`paths` の代わりに、ジョブの中で変更の有無を見て早く成功で終える形に変える。
+- 必須の check の注: 必須にするのは `ci.yml` の `check (ubuntu-latest, node 22)`・`check (ubuntu-latest, node 24)`（名前を変えると必須の check が「待ち」のままになるので、変えるときは ruleset も合わせる）。`ci.yml` は `paths`・`paths-ignore` を使わず、どの PR でも動く（docs などだけの変更では、ジョブの中で重い段を飛ばして成功で終える）。`ci-macos.yml` はコードが変わったときだけ動く（`paths`）ので、必須にしない（動かなかった check を必須にすると「待ち」のままになる）。
 - secrets・variables は、どれも要らない（`GITHUB_TOKEN` だけを使う）。
 
 ## Actions の artifact の容量
@@ -116,7 +117,7 @@ claude plugin marketplace add comcreate/touryou
 
 | ワークフロー | runner | 動くとき |
 |:--|:--|:--|
-| `ci.yml` | ubuntu（node 22・24） | push（main）・PR。`docs/**`・`.sdd/**`・`CHANGELOG.md`・`README.md`・`LICENSE` だけの変更では動かない（`paths-ignore`） |
+| `ci.yml` | ubuntu（node 22・24） | push（main）・PR・`workflow_dispatch`（`release.yml` の `marketplace-self` が起こす。手でも起こせる）。いつも動く（必須の check のため）。`docs/**`・`.sdd/**`・`CHANGELOG.md`・`README.md`・`LICENSE` だけの変更では、checkout と変更の判定（`scripts/ci-code-changed.sh`）のあとの段を飛ばし、すぐ成功で終える。`workflow_dispatch` と、差分を取れないときは、すべて走らせる |
 | `ci-macos.yml` | macos-15（node 24） | push（main）・PR で、`packages/**`・`scripts/**`・`plugin/**`・`package.json`・`pnpm-lock.yaml`・`pnpm-workspace.yaml`・`biome.json`・`tsconfig*.json`・自分の yml が変わったときだけ（`paths`） |
 | `dist-smoke.yml` | macos-15 | PR で、配布物に関わるファイルが変わったときだけ |
 | `release.yml` | macos-15（dist）・ubuntu | タグの push のとき |

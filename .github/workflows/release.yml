@@ -197,7 +197,8 @@ jobs:
           echo "- zip の URL（認証なしで取れる）: ${download_url}" >> "$GITHUB_STEP_SUMMARY"
 
   # このリポジトリの .claude-plugin/marketplace.json（利用者が marketplace として追加する）に、新しい版の項目を書く PR を出す。
-  # GITHUB_TOKEN で出した PR では、CI（pull_request）が動かない（GitHub の仕様）。中身は jq で書いた 3 つの値だけなので、手で確かめてマージする。
+  # GITHUB_TOKEN で出した PR では、CI（pull_request）が動かない（GitHub の仕様）。そのため PR を出したあと、そのブランチで ci.yml を workflow_dispatch で起こす
+  # （GITHUB_TOKEN からでも workflow_dispatch は新しい run を起こせる。actions: write が要る）。必須の check が PR の head のコミットに付き、通ればマージできる。
   marketplace-self:
     needs: release
     runs-on: ubuntu-latest
@@ -205,6 +206,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -252,7 +254,10 @@ jobs:
           git commit -am "${title}"
           git push -u origin "${branch}"
           gh pr create --repo "${GITHUB_REPOSITORY}" --head "${branch}" --base main --title "${title}" \
-            --body "Release: ${RELEASE_URL}（sha256: ${SHA256}）。release.yml から出した PR です（GITHUB_TOKEN の PR なので、CI は動きません）。"
+            --body "Release: ${RELEASE_URL}（sha256: ${SHA256}）。release.yml から出した PR です（GITHUB_TOKEN の PR なので、CI は release.yml が workflow_dispatch で起こします）。"
+          # 必須の check（ci.yml の check）を、このブランチ（PR の head）で走らせる
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/dispatches" -f ref="${branch}"
+          echo "ci.yml を ${branch} で workflow_dispatch しました（PR の check を確かめる）" >> "$GITHUB_STEP_SUMMARY"
 
   # この run の artifact（dist の配布物。約 150MB）を消す。Actions の artifact の容量を使い切らないため（docs/release.md）。
   # release が成功したときだけ消す（失敗・skipped・cancelled のときは、1 日の保存期限まで残し、release だけを再実行できるようにする）。

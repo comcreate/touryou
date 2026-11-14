@@ -1,6 +1,7 @@
-// .github/workflows の ci.yml・ci-macos.yml・dist-smoke.yml の形を確かめる（macOS の runner の費用を抑える決めごと）。
+// .github/workflows の ci.yml・ci-macos.yml・dist-smoke.yml の形を確かめる（macOS の runner の費用を抑える決めごと・必須の check が必ず報告されること）。
 // `node --test scripts/*.test.mjs`
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
@@ -65,12 +66,47 @@ test("ci-macos.yml: push・pull_request とも paths があり、同じ一覧。
   for (const f of DOCS_ONLY) assert.ok(!matches(pr, f), `${f} だけでは動かないこと`);
 });
 
-test("ci.yml: push・pull_request とも paths-ignore で docs・.sdd・CHANGELOG・README・LICENSE だけの変更を外す。コードの変更では動く", () => {
-  const push = list(ci, "push", "paths-ignore");
-  const pr = list(ci, "pull_request", "paths-ignore");
-  assert.deepEqual(push, pr);
-  for (const f of DOCS_ONLY) assert.ok(matches(pr, f), `${f} は外すこと`);
-  for (const f of CODE) assert.ok(!matches(pr, f), `${f} では動くこと`);
+test("ci.yml: paths・paths-ignore を使わない（必須の check が必ず報告される）。push（main）・pull_request・workflow_dispatch で動く", () => {
+  const on = ci.slice(ci.indexOf("\non:\n"), ci.indexOf("\npermissions:"));
+  assert.doesNotMatch(on, /paths/);
+  assert.match(on, /\n {2}push:\n {4}branches: \[main\]\n/);
+  assert.match(on, /\n {2}pull_request:\n {4}branches: \[main\]\n/);
+  assert.match(on, /\n {2}workflow_dispatch:\n/);
+});
+
+test("ci.yml: 必須の check の名前（check (<os>, node <node>)）と、ubuntu の node 22・24 を保つ", () => {
+  assert.match(ci, /\n {4}name: check \(\$\{\{ matrix\.os \}\}, node \$\{\{ matrix\.node \}\}\)\n/);
+  assert.match(ci, /- \{ os: ubuntu-latest, node: 22 \}/);
+  assert.match(ci, /- \{ os: ubuntu-latest, node: 24 \}/);
+});
+
+test("ci.yml: docs などだけの変更では、checkout と判定のあとの段（install・check.sh など）をすべて飛ばす", () => {
+  const steps = ci
+    .slice(ci.indexOf("\n    steps:\n"))
+    .split(/\n(?= {6}- )/)
+    .slice(1);
+  const at = steps.findIndex((s) => /id: changes/.test(s));
+  assert.ok(at > 0, "変更を見る段がない");
+  assert.match(steps[at], /bash scripts\/ci-code-changed\.sh/);
+  const rest = steps.slice(at + 1);
+  assert.ok(rest.some((s) => /bash scripts\/check\.sh/.test(s)));
+  for (const s of rest) assert.match(s, /if: steps\.changes\.outputs\.code == 'true'/, s);
+});
+
+const codeChanged = (files) =>
+  spawnSync("bash", [new URL("./ci-code-changed.sh", import.meta.url).pathname], {
+    input: files.map((f) => `${f}\n`).join(""),
+    encoding: "utf8",
+  }).stdout.trim();
+
+test("ci-code-changed.sh: docs・.sdd・CHANGELOG・README・LICENSE だけなら false。コードを含めば true。空なら true", () => {
+  assert.equal(codeChanged(DOCS_ONLY), "false");
+  for (const f of DOCS_ONLY) assert.equal(codeChanged([f]), "false", f);
+  for (const f of CODE) assert.equal(codeChanged([f]), "true", f);
+  assert.equal(codeChanged([...DOCS_ONLY, "packages/cli/src/launchd.ts"]), "true");
+  assert.equal(codeChanged([".github/workflows/ci.yml"]), "true");
+  assert.equal(codeChanged([]), "true");
+  assert.equal(codeChanged(["docs.ts", "README.md.bak"]), "true");
 });
 
 test("ci.yml・ci-macos.yml・dist-smoke.yml は、同じ ref の前の実行を止める（concurrency・cancel-in-progress）", () => {
