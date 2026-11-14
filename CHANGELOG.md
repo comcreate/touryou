@@ -6,6 +6,7 @@
 - **plugin の一番上の bin/ をなくす**（#36）: 中継を `plugin/bin/touryou-mcp-shim.sh` から `plugin/scripts/touryou-mcp-shim.sh` に移し、claude.ai・Cowork・組織の設定からも plugin を入れられるようにした（一番上に `bin/` がある plugin は、そこから入れられない）。`pnpm validate:plugin` が、`plugin/bin/` があれば（空でも）拒む。update の直後のセッションは、`/reload-plugins` までは古い版の置き場の中継を使い続ける（古い置き場は残るので動く）。
 - **本体の導入を plugin の中の script にまとめた**（#12）: `/touryou:setup` の取得・照合・展開・付け替え・動作の確かめと、版が変わったときの常駐の daemon の起動し直し（「はい」のあとだけ）を、plugin の中の `scripts/install-runtime.sh` が 1 回で行う。承認の確認は約 12 回から約 3 回になった。本体と plugin の版が違うと、セッションの始まりに知らせる（知らせるだけ）。
 - **退役を SSE で知らせ、mcp が張り直さずに止まる**（#32）: 子のトークンが役目の終わり（受理など）で失効したら、daemon はノードの購読に `event: retired` を 1 件送ってから閉じる（heartbeat を待たない）。子の mcp はこれを受けたら張り直さず、資格情報を空にして止まる。退役のあとの 401（`apiAuthFailed` の `retiredExpired`）が出なくなる。古い daemon・古い mcp との組み合わせは、今までどおり。
+- **退役したトークンでのくり返しの認証の失敗を知らせる**（#31）: 退役した紐付けのトークンでの呼び出し（`retiredExpired`）が、1 つの窓（1 分）で閾値（既定 3。`rateLimit.alert.retiredThreshold` で 2〜100000）以上になったら、根の受信箱に `info` を 1 件出す。ほかの認証の失敗の警告とは、閾値・間隔・解決を別に見る。
 - **止まった子の未回答の判断を tree に出す**（#8）: `touryou tree --json`・`touryou tree <nodeId>` に、止まった子の未回答の判断（`pendingDecisions`）が出る。
 - **回答を子に届けたかを answer に出す**（#9）: `touryou answer` が、回答を子に届けたか（daemon の `decision.answer` の結果の `delivery`）を出す。
 - **依存の脆弱性の修正**（#15）: 配布物に入る依存を、既知の脆弱性を直した版に上げた（zod 4.6.7〔high〕・body-parser 2.4.0〔high〕・qs 6.16.2・fast-uri 3.1.9・ip-address 10.7.5）。

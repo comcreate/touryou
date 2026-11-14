@@ -88,6 +88,7 @@ import {
   createApiAlert,
   DEFAULT_ALERT_INTERVAL_MINUTES,
   DEFAULT_ALERT_THRESHOLD,
+  DEFAULT_RETIRED_ALERT_THRESHOLD,
 } from "./api-alert.js";
 import { createAutoPurger } from "./auto-purge.js";
 import { removeBindCodeFile, writeBindCodeFile } from "./bind-code-file.js";
@@ -1830,6 +1831,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       ? undefined
       : createApiAlert({
           threshold: config.rateLimit?.alert?.threshold ?? DEFAULT_ALERT_THRESHOLD,
+          retiredThreshold:
+            config.rateLimit?.alert?.retiredThreshold ?? DEFAULT_RETIRED_ALERT_THRESHOLD,
           minIntervalMs:
             (config.rateLimit?.alert?.minIntervalMinutes ?? DEFAULT_ALERT_INTERVAL_MINUTES) *
             60_000,
