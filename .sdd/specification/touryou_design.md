@@ -168,6 +168,7 @@ interface Capabilities {
   - 確かめ: 親の `claude stop` の報告（done）のあと、`lsof-probe` で作業ツリーを使うプロセスがないときだけ、`node.stopDeclared`・`confirmStopped` を記録して stopped にする。残っている・確かめられないときは stopIncomplete のまま受信箱に出す（`node_stop` の再試行か、`node_confirmStopped` の宣言）。
   - 削除: 停止を確かめたら `node.parentRequested`（remove）を記録する。文は `claude rm <子のセッション>`。`--discard-unpushed` は、人間が破棄を決めたノード（`node.discardDecided`）のときだけ付ける。拒まれたら消さずに受信箱に failure を出し、あとで破棄が決まれば旗つきで依頼し直す。子のセッションの参照がなければ `noSessionRef` で、`claude agents --json` で調べる手順を返す。
   - 起動時の整合: daemon の起動時に、破棄の判断のあと削除の依頼の前に落ちていた子には旗つきの削除を依頼し、猶予の調べの最中に落ちていた子には `claude stop` を依頼して停止未完了にする。
+  - Desktop の子（daemon の外で動く子。`childRuntime: "desktop"`）は、起動時の整合でプロセスと照合せず、状態も変えない。記録で running・waiting・stopping・stopIncomplete の Desktop の子があれば、根の受信箱に、人に確かめてもらう依頼（stopIncomplete の帯）をまとめて 1 件出す（未解決の古い依頼は置き換える。FR_036。`docs/desktop-runtime.md` の「再起動のあと」）。
 - 止まったことの検出（状態だけでは見ない。承認の画面で止まっても working のままのことがあるため）:
   1. フック: 子の plugin の `Notification` のフックが、入力待ち（`permission_prompt`・`idle_prompt` など）を daemon のフック受付へ報告する。
   2. 見張り: 設定 `cliWatch`（`stallMinutes` 既定 30 分・`unreadMinutes` 既定 30 分・`intervalSec` 既定 60 秒）。親が起動を報告した running の子で、最後の動きから `stallMinutes` を超えたら「止まっているかもしれない」を受信箱に出す（同じ最後の動きには 1 回）。子が受け取らないまま `unreadMinutes` を超えた指示も、指示ごとに 1 回出す（FR_009）。判断待ちの子は出さない。daemon の起動の時刻を「最後の動き」の下限にする。知らせはノードごとに 24 時間で 20 件まで。
