@@ -27,9 +27,17 @@ test("dependabot.yml: github-actions だけ（npm は入れない）。directory
   assert.match(dependabot, /\n {6}timezone: "Asia\/Tokyo"\n/);
 });
 
-test("dependabot.yml: cooldown は 14 日（default-days）。すべての actions を 1 つの group にまとめる。ラベルは既にある chore", () => {
+test("dependabot.yml: cooldown は 14 日（default-days）。patch・minor だけを 1 つの group にまとめる（メジャーは別の PR）。ラベルは既にある chore", () => {
   assert.match(dependabot, /\n {4}cooldown:\n {6}default-days: 14\n/);
-  assert.match(dependabot, /\n {4}groups:\n {6}[a-z][a-z-]*[a-z]:\n {8}patterns:\n {10}- "\*"\n/);
+  assert.match(
+    dependabot,
+    /\n {4}groups:\n {6}[a-z][a-z-]*[a-z]:\n {8}patterns:\n {10}- "\*"\n {8}update-types:\n {10}- "minor"\n {10}- "patch"\n(?! {10}-)/,
+  );
+  assert.equal(
+    [...dependabot.matchAll(/\n {6}[a-z][a-z-]*[a-z]:\n {8}patterns:/g)].length,
+    1,
+    "group は 1 つ",
+  );
   assert.match(dependabot, /\n {4}labels:\n {6}- "chore"\n(?! {6}-)/);
   assert.match(dependabot, /\n {6}prefix: "\[update\] "\n/);
 });

@@ -14,11 +14,14 @@ updates:
     # github-actions は default-days だけが効く（semver-*-days は効かない）。security updates には効かない
     cooldown:
       default-days: 14
-    # すべての actions の上げを 1 本の PR にまとめる
+    # patch・minor の上げを 1 本の PR にまとめる（自動マージの対象）。メジャーは group に入れず、actions ごとの別の PR になる（人がレビューする）
     groups:
       actions:
         patterns:
           - "*"
+        update-types:
+          - "minor"
+          - "patch"
     commit-message:
       # 末尾の空白で、Dependabot がコロンを足さない
       prefix: "[update] "
