@@ -132,10 +132,9 @@ export function discardRemoveBodies(state: OrchState, nodeId: string): EventBody
 }
 
 /**
- * 受理した子（verified）の、裏のセッションの停止の依頼（設計 6.2。Issue #3）。親が起動を報告した子（CLI の `claude --bg`）だけが対象。
- * 状態は変えない（成果は受理済みで、止めるのはセッションだけ）。止めたことは `parent.report` で作業ツリーのプロセスがないことを
- * 確かめてから受信箱に出し、続けて削除（`claude rm`）を依頼する。まだ報告のない依頼があるとき・同じ依頼を作ったことがあるとき・
- * 起動の報告がない子（Desktop・紐付けだけの子）は空を返す。`seed` は依頼の参照を導く種（受理の要求 ID など）。
+ * 受理のときに、まだ報告のない親への依頼が開いていて、停止の依頼（`sessionStopBodies`）を出せなかった子への知らせ（Issue #3）。
+ * 受信箱に info を出し、その依頼を片付けたあとに `node_stop` で停止の依頼を出すよう促す（セッションを残したままにしない）。
+ * 親が起動を報告していない子・開いている依頼がない子は空を返す。
  */
 export function sessionStopDeferredBodies(
   state: OrchState,
@@ -161,7 +160,12 @@ export function sessionStopDeferredBodies(
   ];
 }
 
-/** 受理した子のセッションの停止の依頼（下の説明）。`sessionStopDeferredBodies` は、まだ報告のない依頼があって出せなかったときの知らせ。 */
+/**
+ * 受理した子（verified）の、裏のセッションの停止の依頼（設計 6.2。Issue #3）。親が起動を報告した子（CLI の `claude --bg`）だけが対象。
+ * 状態は変えない（成果は受理済みで、止めるのはセッションだけ）。止めたことは `parent.report` で作業ツリーのプロセスがないことを
+ * 確かめてから受信箱に出し、続けて削除（`claude rm`）を依頼する。まだ報告のない依頼があるとき・同じ依頼を作ったことがあるとき・
+ * 起動の報告がない子（Desktop・紐付けだけの子）は空を返す。`seed` は依頼の参照を導く種（受理の要求 ID など）。
+ */
 export function sessionStopBodies(state: OrchState, nodeId: string, seed: string): EventBody[] {
   const launch = [...state.parentRequests]
     .reverse()
