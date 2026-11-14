@@ -3,6 +3,7 @@
   "owner": {
     "name": "comcreate"
   },
+  "description": "統合セッション 1 対 作業セッション n の木構造で Claude セッションを束ねるオーケストレーター touryou の marketplace",
   "plugins": [
     {
       "name": "touryou",
