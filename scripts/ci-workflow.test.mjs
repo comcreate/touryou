@@ -165,6 +165,7 @@ function tempRepo() {
 const OK_GH = "12345+someone@users.noreply.github.com";
 const BOT = "41898282+github-actions[bot]@users.noreply.github.com";
 const BAD = "someone@example.com";
+const DEPENDABOT = "49699333+dependabot[bot]@users.noreply.github.com";
 
 test("ci-commit-emails.sh: 許す形（users.noreply.github.com・noreply@github.com・noreply@anthropic.com・ボット）だけなら成功", () => {
   const { dir, commit, check } = tempRepo();
@@ -175,6 +176,24 @@ test("ci-commit-emails.sh: 許す形（users.noreply.github.com・noreply@github
     const r = check(`${base}..HEAD`);
     assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.match(r.stdout, /2 件/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("ci-commit-emails.sh: Dependabot のコミット（author は dependabot[bot]・committer は GitHub）と、自動マージの squash のコミットが通る", () => {
+  const { dir, commit, check } = tempRepo();
+  try {
+    const base = commit(OK_GH, OK_GH, "base");
+    commit(
+      DEPENDABOT,
+      "noreply@github.com",
+      "[update] Bump the actions group with 1 update\n\nSigned-off-by: dependabot[bot] <support@github.com>",
+    );
+    // squash: author は PR の作者（dependabot[bot]）、committer は GitHub
+    commit(DEPENDABOT, "noreply@github.com", "[update] Bump the actions group with 1 update (#1)");
+    const r = check(`${base}..HEAD`);
+    assert.equal(r.status, 0, r.stdout + r.stderr);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

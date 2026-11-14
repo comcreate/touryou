@@ -1,6 +1,7 @@
 # 変更履歴
 
 ## 未公開
+- **Dependabot で actions の版を上げ、patch・minor を自動でマージする**: `.github/dependabot.yml` で、workflow の actions の上げを週に 1 回、1 本の PR にまとめる（公開から 14 日たった版だけ）。`dependabot-auto-merge.yml` が、github-actions の patch・minor で `.github/workflows/` の中だけを変える PR に auto-merge を付け、必須の check が通ってからマージされる。メジャーの上げは人がレビューする。マージのあとは `dependabot-main-ci.yml` が main で `ci.yml` を起こす。リポジトリの設定の「Allow auto-merge」が要る（`docs/release.md`）。
 - **文書の地の文の製品名を TouRyou にそろえる**（#42）: docs・README・SECURITY・.sdd・plugin の commands と skills の地の文で、製品として読まれる touryou を TouRyou にした。コマンドを指す素の touryou はバッククォートで囲んだ。バッククォートの中・コードが出す文字列（受信箱の知らせ・フックの文）・ファイル名・URL・ADR の過去の項は変えていない。
 
 - **表示名を TouRyou にする**（#40）: README の見出し・ロゴの代替テキスト・アイコンの `<title>`・marketplace の説明・デスクトップアプリの拡張機能の表示名と説明を TouRyou にした。パッケージ・コマンド・環境変数などの識別子は touryou のまま（変更はない）。

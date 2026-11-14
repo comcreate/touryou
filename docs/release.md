@@ -101,6 +101,7 @@ claude plugin marketplace add comcreate/touryou
 | Settings → Rules → Rulesets（タグ） | `v*` のタグの作成・更新・削除を、管理者（リリースする人）だけにする | タグの push が Release を作るため。だれでも `v*` を push できると、Release が作られる |
 | Settings → Code security | Private vulnerability reporting を有効にする。Dependabot alerts・Secret scanning・Push protection を有効にする | `SECURITY.md` の窓口のため |
 | Settings → General | Issues を有効にする。Wiki・Projects は任意 | |
+| Settings → General → Pull Requests | **「Allow auto-merge」を有効にする** | `dependabot-auto-merge.yml` が Dependabot の PR に auto-merge を付けるため（無効だと `gh pr merge --auto` が失敗し、PR は人のマージを待つ） |
 
 - 必須の check の注: 必須にするのは `ci.yml` の `check (ubuntu-latest, node 22)`・`check (ubuntu-latest, node 24)`（名前を変えると必須の check が「待ち」のままになるので、変えるときは ruleset も合わせる）。`ci.yml` は `paths`・`paths-ignore` を使わず、どの PR でも動く（docs などだけの変更では、ジョブの中で重い段を飛ばして成功で終える）。`ci-macos.yml` はコードが変わったときだけ動く（`paths`）ので、必須にしない（動かなかった check を必須にすると「待ち」のままになる）。
 - secrets・variables は、どれも要らない（`GITHUB_TOKEN` だけを使う）。
@@ -122,12 +123,27 @@ claude plugin marketplace add comcreate/touryou
 | `ci-macos.yml` | macos-15（node 24） | push（main）・PR で、`packages/**`・`scripts/**`・`plugin/**`・`package.json`・`pnpm-lock.yaml`・`pnpm-workspace.yaml`・`biome.json`・`tsconfig*.json`・自分の yml が変わったときだけ（`paths`）。必須の check ではないので、`paths` のまま（毎回は動かさない） |
 | `dist-smoke.yml` | macos-15 | PR で、配布物に関わるファイルが変わったときだけ |
 | `release.yml` | macos-15（dist）・ubuntu | タグの push のとき |
+| `dependabot-auto-merge.yml` | ubuntu | Dependabot の PR（`pull_request`）のとき。下の「Dependabot の actions の更新と自動マージ」 |
+| `dependabot-main-ci.yml` | ubuntu | Dependabot の PR の `ci.yml` が成功で終わったとき（`workflow_run`）。マージを待って、main で `ci.yml` を起こす |
 
 - macOS の runner は、ubuntu より実行の費用が大きい（public のリポジトリの標準の runner は、無料の枠の扱いが違う。GitHub の公式の記載を確かめる）。そのため、macOS は必要なときだけ動かす。
 - コミットのメールの確かめで落ちたら: GitHub の Settings → Emails で「Keep my email addresses private」を有効にし、`git config user.email "<番号>+<名前>@users.noreply.github.com"` を設定して、外れたコミットを直してから push し直す（squash のマージでは、PR のコミットの author が本文の `Co-authored-by` に入るため）。
 - どれも `concurrency` で、同じ ref（PR）の前の実行を止める。
 - 形は `scripts/ci-workflow.test.mjs`・`scripts/release-workflow.test.mjs` で確かめる。
 - runner は `macos-15`（arm64）に固定している（`macos-latest` は使わない）。`macos-15` の runner image の廃止が告知されたら（GitHub の changelog）、3 つのワークフローの runner を、まとめて次の版に移す。配布物の中身（公式の Node・npm の prebuild）は、runner の版に依存しない見込み。
+
+## Dependabot の actions の更新と自動マージ
+
+workflow の actions（SHA で固定し、`# vX.Y.Z` の注釈を付けている）の版の上げは、Dependabot が行う（`.github/dependabot.yml`）。npm の依存は対象にしない（pnpm の `minimumReleaseAge` で守る）。
+
+- **Dependabot がすること**: 週に 1 回（月曜の JST 05:23。日本の朝の作業の前で、毎時 0 分の混む時刻を避ける）、`.github/workflows/` の actions を調べ、すべての上げを 1 本の PR にまとめる（`groups`）。公開から 14 日たった版だけを使う（`cooldown` の `default-days: 14`。github-actions では semver ごとの日数は効かない。security updates には cooldown は効かない）。SHA と `# vX.Y.Z` の注釈を、いっしょに上げる。コミットの文は `[update] ` で始め、ラベルは `chore`。
+- **自動でマージするもの**（`dependabot-auto-merge.yml`）: PR を出したのが `dependabot[bot]` で、このリポジトリで、`dependabot/fetch-metadata` の package-ecosystem が `github_actions`、update-type が semver-patch か semver-minor（まとめた PR では、いちばん大きい上げ）、変わったファイルが `.github/workflows/` の yml だけのとき、auto-merge（squash）を付ける。マージは GitHub が、ruleset の必須の check（`check (ubuntu-latest, node 22)`・`(node 24)`）が通ってから行う（承認は要らない）。
+- **人がレビューするもの**: メジャーの上げを含む PR・`.github/workflows/` の外を変える PR・Dependabot でない PR。auto-merge は付けない（push し直しで対象から外れたら、付いていた auto-merge を外す）。統括がレビューしてマージする。
+- **守り**: `pull_request_target` を使わない。checkout しない（PR のコードを動かさない）。権限は `contents: write`・`pull-requests: write` だけ。actions は SHA で固定する。Dependabot が起こした `pull_request` の `GITHUB_TOKEN` は既定で読み取りだけなので、`permissions:` で明示する。
+- **main の CI**: `GITHUB_TOKEN` で付けた auto-merge のマージは、main への push の workflow を起こさない。そのため `dependabot-main-ci.yml` が、Dependabot の PR の `ci.yml` が成功で終わったら（`workflow_run`）、その PR のマージを最大 10 分待ち、マージされたら main で `ci.yml` を `workflow_dispatch` で起こす（`release.yml` の `marketplace-self` と同じ形。権限は `actions: write`・`pull-requests: read`）。10 分のうちにマージされなければ、run の要約に書くので、手で main の `ci.yml` を起こす。`ci-macos.yml` は main で起こさない（workflow だけの変更では、`ci-macos.yml` の `paths` に当たらないため）。
+- **要る設定**: Settings → General → Pull Requests の「Allow auto-merge」（上の「公開のリポジトリの設定」）。
+- コミットのメール: Dependabot のコミット（author は `dependabot[bot]` の `users.noreply.github.com`、committer は GitHub の `noreply`）と squash のコミットは、`scripts/ci-commit-emails.sh` の許す形に入る（`scripts/ci-workflow.test.mjs`）。
+- 形は `scripts/dependabot-workflow.test.mjs` で確かめる。
 
 ## やり直す
 

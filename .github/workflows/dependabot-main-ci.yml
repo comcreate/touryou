@@ -1,0 +1,56 @@
+name: Dependabot main CI
+
+# 自動マージ（dependabot-auto-merge.yml）は GITHUB_TOKEN で付けるので、そのマージの main への push では ci.yml が動かない（GitHub の仕様）。
+# そのため、Dependabot の PR の CI（ci.yml）が成功で終わったら、その PR がマージされるのを待ち、main で ci.yml を workflow_dispatch で起こす
+# （release.yml の marketplace-self と同じ形。GITHUB_TOKEN からでも workflow_dispatch は新しい run を起こせる。actions: write が要る）。
+# checkout はしない（PR のコードを動かさない）。API の呼び出しだけ。docs/release.md の「Dependabot の actions の更新と自動マージ」。
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  actions: write
+  pull-requests: read
+
+jobs:
+  dispatch-main-ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: >-
+      github.repository == 'comcreate/touryou' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    steps:
+      - name: Dependabot の PR のマージを待ち、main で ci.yml を起こす
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          # head のコミットの PR（Dependabot が出したもの）を探す
+          pr="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${HEAD_SHA}/pulls" \
+            --jq '[.[] | select(.user.login == "dependabot[bot]" and .base.ref == "main")][0].number // empty')"
+          if [ -z "${pr}" ]; then
+            echo "Dependabot の PR が見つかりません。何もしません" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # auto-merge は必須の check が通ったすぐあとに行われる。最大 10 分待つ（auto-merge が付いていない・閉じたなら、待たずに終える）
+          for _ in $(seq 1 30); do
+            state="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${pr}" --jq '[.merged, .state, (.auto_merge != null)] | @tsv')"
+            merged="$(printf '%s' "${state}" | cut -f1)"
+            open="$(printf '%s' "${state}" | cut -f2)"
+            auto="$(printf '%s' "${state}" | cut -f3)"
+            if [ "${merged}" = true ]; then
+              gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/dispatches" -f ref=main
+              echo "PR #${pr} のマージのあとに、main で ci.yml を workflow_dispatch しました" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            if [ "${open}" != open ] || [ "${auto}" != true ]; then
+              echo "PR #${pr} は auto-merge で待っていません（人のレビュー待ち・閉じた）。何もしません" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "PR #${pr} は 10 分のうちにマージされませんでした。マージのあとに、手で main の ci.yml を起こしてください" >> "$GITHUB_STEP_SUMMARY"

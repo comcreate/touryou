@@ -1,0 +1,27 @@
+# Dependabot の版の上げ（GitHub Actions だけ。npm は入れない。npm の依存は pnpm の minimumReleaseAge で守る）。
+# docs/release.md の「Dependabot の actions の更新と自動マージ」。
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      # 週に 1 回。日本の月曜の朝の作業の前（JST 05:23 = UTC の日曜 20:23）。毎時 0 分の混む時刻を避ける
+      interval: "weekly"
+      day: "monday"
+      time: "05:23"
+      timezone: "Asia/Tokyo"
+    # 公開から 14 日たった版だけを使う（npm 側の pnpm の minimumReleaseAge 14 日に合わせた供給網の守り）。
+    # github-actions は default-days だけが効く（semver-*-days は効かない）。security updates には効かない
+    cooldown:
+      default-days: 14
+    # すべての actions の上げを 1 本の PR にまとめる
+    groups:
+      actions:
+        patterns:
+          - "*"
+    commit-message:
+      # 末尾の空白で、Dependabot がコロンを足さない
+      prefix: "[update] "
+    # 既にあるラベルだけ（labels を書くと、Dependabot は既定のラベル〔dependencies など〕を作らない）
+    labels:
+      - "chore"
