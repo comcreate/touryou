@@ -2,6 +2,7 @@
 
 ## 未公開
 
+- **表示名を TouRyou にする**（#40）: README の見出し・ロゴの代替テキスト・アイコンの `<title>`・marketplace の説明・デスクトップアプリの拡張機能の表示名と説明を TouRyou にした。パッケージ・コマンド・環境変数などの識別子は touryou のまま（変更はない）。
 - **使わない .gitkeep を消し、actions の版をそろえる**（#18）: `packages/core/test/.gitkeep` と `plugin/agents/.gitkeep` を消した（`plugin/agents/` は任意にした）。workflow の `actions/checkout`・`actions/setup-node`・`pnpm/action-setup` を、それぞれ v7.0.1・v7.0.0・v6.0.10 にそろえた。
 - **plugin の一番上の bin/ をなくす**（#36）: 中継を `plugin/bin/touryou-mcp-shim.sh` から `plugin/scripts/touryou-mcp-shim.sh` に移し、claude.ai・Cowork・組織の設定からも plugin を入れられるようにした（一番上に `bin/` がある plugin は、そこから入れられない）。`pnpm validate:plugin` が、`plugin/bin/` があれば（空でも）拒む。update の直後のセッションは、`/reload-plugins` までは古い版の置き場の中継を使い続ける（古い置き場は残るので動く）。
 - **本体の導入を plugin の中の script にまとめた**（#12）: `/touryou:setup` の取得・照合・展開・付け替え・動作の確かめと、版が変わったときの常駐の daemon の起動し直し（「はい」のあとだけ）を、plugin の中の `scripts/install-runtime.sh` が 1 回で行う。承認の確認は約 12 回から約 3 回になった。本体と plugin の版が違うと、セッションの始まりに知らせる（知らせるだけ）。
