@@ -67,8 +67,9 @@ Claude Code の auto モード（権限の自動判定）で実行している�
      "rootScope": { "writableLocations": ["src"], "forbiddenLocations": [".git"], "allowedCommands": ["git status"] }
    }
    ```
-   `rootScope` は、子の権限の上限（根〔統合〕のセッション自身は touryou のフックで絞らない。根の操作は、利用者の Claude Code の許可の設定のとおり）。この例は最小で、人に確かめる（既定を、勝手に広げない）。**書く前に、次の定型文で、子に commit させるかを尋ねる**。「はい」なら、`allowedCommands` を `["git status", "git add", "git commit"]` にする。「いいえ」・あいまいなら、例のまま（`["git status"]`）にする。ほかに子に使わせたいコマンド（`pnpm test` など）を言われたら、2 語以上の形で足す（下の「子の範囲のコマンド」の決まり）。
-   定型文（commit）: 「子（作業のセッション）に、自分の作業ツリーで git add・git commit をさせますか（はい／いいえ）。いいえにすると、子に commit を頼んだときに、子の起動が scopeNotSubset で失敗します。あとで変えるときは、config.json の rootScope を直して、daemon を起動し直します。」**トークンの値は、設定ファイルに書かない**（daemon が `state` の下に作る）。
+   `rootScope` は、子の権限の上限（根〔統合〕のセッション自身は touryou のフックで絞らない。根の操作は、利用者の Claude Code の許可の設定のとおり）。この例は最小で、人に確かめる（既定を、勝手に広げない）。**トークンの値は、設定ファイルに書かない**（daemon が `state` の下に作る）。
+   **書く前に、次の定型文で、子に commit させるかを尋ねる**。「はい」なら、`allowedCommands` を `["git status", "git add", "git commit"]` にする。「いいえ」・あいまいなら、例のまま（`["git status"]`）にする。ほかに子に使わせたいコマンド（`pnpm test` など）を言われたら、2 語以上の形で足す（下の「子の範囲のコマンド」の決まり）。
+   定型文（commit）: 「子（作業のセッション）に、自分の作業ツリーで git add・git commit をさせますか（はい／いいえ）。いいえにすると、子の範囲に git add・git commit を入れて起動したときに、子の起動が scopeNotSubset で失敗します。あとで変えるときは、config.json の rootScope を直して、daemon を起動し直します。」
    定型文: 「daemon が作業するフォルダを、教えてください（ホームの下の、フォルダの場所を、最初から最後まで書いてください）。」
 9. **起動のしかたを選ぶ**: 利用者に、次の定型文で尋ねる。答えが「常駐」なら 9-A、「手で」なら 9-B へ進む。分からなければ 9-B。
    定型文: 「daemon の起動のしかたを選んでください。(1) 常駐にする（推奨。ログインしたら自動で動きます。macOS のログイン項目に 1 項目が追加されます） (2) 手で起動する（使うたびに Terminal で起動します）」

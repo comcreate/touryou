@@ -249,6 +249,13 @@ export interface Daemon {
   runCliWatch(): number;
 }
 
+/** 範囲違反の受信箱の要約。違反はフックが拒んだときだけ記録するので、拒んだことをはっきり言う（Issue #6）。 */
+export const violationSummary = (reason: string, subject: string): string =>
+  `範囲違反（フックが拒んだ・${reason}）: ${subject}`;
+/** 受信箱に出す違反の上限を超えたときの要約。 */
+export const VIOLATION_OVERFLOW_SUMMARY =
+  "ほかにも範囲違反がある（どれもフックが拒んだ。受信箱には、これ以上出さない。記録を確認する）";
+
 const fail = (code: string, cause: string, ...next: [string, ...string[]]) => ({
   ok: false as const,
   error: failure(code, cause, ...next),
@@ -1166,7 +1173,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           id: deriveId("inbox", "system", requestId, "violation"),
           kind: "violation",
           nodeId,
-          summary: summarize(`範囲違反（フックが拒んだ・${reason}）: ${subject}`),
+          summary: summarize(violationSummary(reason, subject)),
         },
       });
     } else if (count === 0 && !v.overflow) {
@@ -1177,9 +1184,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           id: deriveId("inbox", "system", requestId, "violation"),
           kind: "violation",
           nodeId,
-          summary: summarize(
-            "ほかにも範囲違反がある（どれもフックが拒んだ。受信箱には、これ以上出さない。記録を確認する）",
-          ),
+          summary: summarize(VIOLATION_OVERFLOW_SUMMARY),
         },
       });
     }

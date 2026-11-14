@@ -29,7 +29,7 @@ const CHILD: Scope = {
 };
 
 /** root ─ m1(範囲 PARENT) ─ a(範囲 CHILD・running)。root ─ m2 ─ b。 */
-const rig = () => {
+const rig = (opts: { rootScope?: Scope } = {}) => {
   const opened = EventLog.open(createMemoryStore().open(), { clock });
   if (!opened.ok) throw new Error(opened.error.code);
   const log = opened.value;
@@ -65,6 +65,8 @@ const rig = () => {
   ev("m2", { type: "start" });
   node("b", "implement", "m2", CHILD);
   ev("b", { type: "start" });
+  node("c", "implement", "root", CHILD);
+  ev("c", { type: "start" });
 
   const calls = {
     updated: [] as [string, Scope][],
@@ -91,6 +93,7 @@ const rig = () => {
     adapterFor: () => adapter,
     cwdOf: async (id) => `/wt/${id}`,
     onFailure: (_id, cause) => calls.failures.push(cause),
+    ...(opts.rootScope === undefined ? {} : { rootScope: opts.rootScope }),
   });
   // biome-ignore lint/suspicious/noExplicitAny: テスト用に緩く扱う
   type Loose = { ok: boolean; value?: any; error?: Failure };
@@ -287,7 +290,22 @@ describe("scope.decide（拡張の判定。承認でアダプタの範囲を更�
     const seq = r.s().lastSeq;
     const res = await r.decide({ extensionId: id, decision: "approve" });
     expect(res.error?.code).toBe("scopeNotSubset");
+    // 親がブリーフを持つ（根の範囲が上限でない）ときは、設定ファイルの話を出さない
+    expect(JSON.stringify(res.error)).not.toContain("config.json");
     expect(r.s().lastSeq).toBe(seq);
+    expect(r.calls.updated).toEqual([]);
+  });
+
+  it("根の子の拡張が根の範囲を超えるときは、直す場所（config.json の rootScope）と daemon の起動し直しを出す（Issue #5）", async () => {
+    const r = rig({ rootScope: PARENT });
+    const id = (
+      await r.extend({ target: { kind: "command", value: "git commit" }, reason: "r" }, "c")
+    ).value.extensionId as string;
+    const res = await r.decide({ extensionId: id, decision: "approve" }, "root");
+    expect(res.error?.code).toBe("scopeNotSubset");
+    expect(res.error?.cause).toContain("config.json");
+    expect(res.error?.cause).toContain("rootScope");
+    expect(res.error?.nextActions.join("\n")).toContain("daemon を起動し直");
     expect(r.calls.updated).toEqual([]);
   });
 

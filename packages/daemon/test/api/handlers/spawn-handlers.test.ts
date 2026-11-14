@@ -245,6 +245,11 @@ describe("node.spawn（子の生成と起動）", () => {
     });
     expect(res.ok).toBe(false);
     expect(res.error?.code).toBe("scopeNotSubset");
+    // 親がブリーフを持つ（根の範囲が上限でない）ときは、従来の文のまま。設定ファイルの話を出さない
+    expect(res.error?.cause).toBe(
+      "子の範囲が、親の範囲に収まらない（コマンド・書き込み可能な場所・禁止の場所）",
+    );
+    expect(JSON.stringify(res.error)).not.toContain("config.json");
     expect(r.s().nodes.map((x) => x.id)).toEqual(["root", "m1", "a", "m2"]);
     expect(r.calls.provisioned).toEqual([]); // 範囲の検査は、作業ツリーを作る前
     expect(r.calls.issued).toEqual([]);
