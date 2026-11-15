@@ -60,6 +60,9 @@ macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動か�
 
 - `apply`・`uninstall` は、`--yes` がないと何もしない（永続化・削除なので、利用者の同意を取ってから付ける。`/setup`・`/touryou:service` は定型文で聞く）。
 - 読み込むと、システム設定の「一般」→「ログイン項目」に、`run-daemon.sh` が「開発元を識別できない項目」として出る（署名しない方針どおり）。
+  - 起動の script（`run-daemon.sh`）は `/bin/sh` で動き、macOS の `/bin/sh` は中で `bash` を使う。そのため、`run-daemon.sh` のほかに、`sh`・`bash` の項目も「開発元を識別できない項目」として出ることがある。
+  - `sh`・`bash` は、Apple が署名した macOS のプログラム。チーム ID（開発者の番号）がないので、開発元の名前が出ない。確かめ方: `codesign -dvv /bin/sh 2>&1 | grep -E '^(Identifier|Authority|TeamIdentifier)'`（`Identifier=com.apple.sh`・`Authority=Software Signing`・`TeamIdentifier=not set`。`/bin/bash` も同じように確かめられる）。
+  - 常駐を外す（`uninstall`）と `run-daemon.sh` の項目は消えるが、`sh`・`bash` は残ることがある。何も動かしていないので害はない。スイッチはオフにしない（あとで常駐を入れ直したときに止まるおそれがある）。
 - 手で行うときは、`init` が出す命令（`cp` と `launchctl bootstrap "gui/$(id -u)" …`・`launchctl bootout "gui/$(id -u)/<Label>"`）を、そのまま使える。
 
 ## 4. 版を上げる

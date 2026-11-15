@@ -36,6 +36,7 @@
 - **Dependabot による actions の上げ**（#45・#46）: `pnpm/action-setup` 6.1.0・`actions/setup-node` 7.1.0・`actions/upload-artifact` 7.0.2（#45。patch・minor の自動マージ）と、`actions/download-artifact` 8.0.2（#46。メジャー。人がレビューしてマージ）。
 - **必須の check を docs だけの PR・marketplace-self の PR でも出し、コミットのメールを確かめる**（#21。#14）: `ci.yml` は `paths-ignore` を使わず、docs などだけの変更ではジョブの中で重い段を飛ばして成功で終える。`marketplace-self` が出した PR のブランチで `ci.yml` を `workflow_dispatch` で起こす。author・committer・`Co-authored-by` のメールが noreply の形でなければ失敗する（`scripts/ci-commit-emails.sh`）。
 - **Desktop の子を起動時の整合でプロセスと照合しない方針**（#24。#11）: 方針を設計書に書き、試験を足した（動きは変えていない）。
+- **ログイン項目の sh・bash の説明**: `docs/launchd.md`・`docs/cli.md` に、ログイン項目に `run-daemon.sh` のほかに `sh`・`bash`（Apple が署名した macOS の `/bin/sh`・`/bin/bash`）も「開発元を識別できない項目」として出ることがあり、害はないこと・確かめ方・スイッチをオフにしないことを足した。
 - **文書の地の文の製品名を TouRyou にそろえる**（#42）: docs・README・SECURITY・.sdd・plugin の commands と skills の地の文で、製品として読まれる touryou を TouRyou にした。コマンドを指す素の touryou はバッククォートで囲んだ。バッククォートの中・コードが出す文字列（受信箱の知らせ・フックの文）・ファイル名・URL・ADR の過去の項は変えていない。
 - **使わない .gitkeep を消し、actions の版をそろえる**（#18）: `packages/core/test/.gitkeep` と `plugin/agents/.gitkeep` を消した（`plugin/agents/` は任意にした）。workflow の `actions/checkout`・`actions/setup-node`・`pnpm/action-setup` を、それぞれ v7.0.1・v7.0.0・v6.0.10 にそろえた。
 

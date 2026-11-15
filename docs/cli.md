@@ -125,6 +125,9 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 - 秘密は扱わない（子の認証を外した（CLI の子は、親のセッションが `claude --bg` で起動する））。常駐は daemon だけ（子用の HTTP の `touryou-mcp` の常駐は外した）。
 - 終了コード: 0 成功 / 1 前提（`/setup`）がない・既存と違う・権限の確認で問題 / 2 引数の誤り。
 - 読み込むと、ログイン項目に `run-daemon.sh` が「開発元を識別できない項目」として出る（署名しない方針どおり）。
+  - 起動の script（`run-daemon.sh`）は `/bin/sh` で動き、macOS の `/bin/sh` は中で `bash` を使う。そのため、`run-daemon.sh` のほかに、`sh`・`bash` の項目も「開発元を識別できない項目」として出ることがある。
+  - `sh`・`bash` は、Apple が署名した macOS のプログラム。チーム ID（開発者の番号）がないので、開発元の名前が出ない。確かめ方: `codesign -dvv /bin/sh 2>&1 | grep -E '^(Identifier|Authority|TeamIdentifier)'`（`Identifier=com.apple.sh`・`Authority=Software Signing`・`TeamIdentifier=not set`。`/bin/bash` も同じように確かめられる）。
+  - 常駐を外す（`uninstall`）と `run-daemon.sh` の項目は消えるが、`sh`・`bash` は残ることがある。何も動かしていないので害はない。スイッチはオフにしない（あとで常駐を入れ直したときに止まるおそれがある）。
 - 手順の全体と、限界（ACL・`ps` で環境が読める点など）は、[`docs/launchd.md`](launchd.md) の「1. 生成する」。
 
 ## 常駐の操作 `touryou launchd apply|status|restart|stop|uninstall`
