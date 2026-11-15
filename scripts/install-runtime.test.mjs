@@ -564,7 +564,9 @@ for (const { label, env } of LOCALES) {
     assert.equal(cur(h), join(h, ".touryou", "v1.0.0", "touryou-darwin-arm64"));
 
     // 版が食い違う（checksums.json と plugin.json）: 版を出して 1 で止まる
-    const bad = install(makePlugin("1.0.0", tb, { pluginVer: "1.0.1" }), newHome(), tb, [], { env });
+    const bad = install(makePlugin("1.0.0", tb, { pluginVer: "1.0.1" }), newHome(), tb, [], {
+      env,
+    });
     assert.equal(bad.status, 1, `${label}: ${out(bad)}`);
     assertUtf8(out(bad), label);
     assert.match(out(bad), /checksums\.json の版（1\.0\.0）と plugin の版（1\.0\.1）が違う/);
