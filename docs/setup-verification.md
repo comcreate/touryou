@@ -191,7 +191,7 @@ mv "${HOME}/.touryou.before-verify" "${HOME}/.touryou"
 readlink "${HOME}/.touryou/current"
 ```
 
-1 で常駐だったときは、1 で確かめた引数と同じ引数で init し直して、戻す（`--org`・`--path-prefix` を付けていたら、`init`・`apply`・`status` に同じものを付ける。付けないと元の常駐にならない）。
+1 で常駐だったときは、1 で確かめた引数と同じ引数で init し直して、戻す（`--org` を付けていたら、`init`・`apply`・`status` の全部に同じものを付ける。`--path-prefix` は `init` にだけ付ける〔`PATH` は `init` が plist に書く。`apply`・`status` は受けず、付けると失敗する〕。付けないと元の常駐にならない）。
 
 ```sh
 "${HOME}/.touryou/current/bin/touryou" launchd init
