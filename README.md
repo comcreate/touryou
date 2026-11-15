@@ -7,7 +7,7 @@
 複数の Claude セッションを「統合セッション 1 対 作業セッション n」の木構造（Composite パターン）で束ね、
 人間が最上位の統合セッションとだけ対話すれば、並列に進む実装・レビュー・調査を依頼・把握・判断できるようにするシステム。
 
-版は 0.1.0（最初の公開）。対象: macOS（Apple Silicon）のみ（[`docs/release.md`](docs/release.md) の「対象の OS・CPU」）。変更は [`CHANGELOG.md`](CHANGELOG.md)。要求は [`.sdd/requirement/touryou.md`](.sdd/requirement/touryou.md) を参照。
+版は 0.1.1。対象: macOS（Apple Silicon）のみ（[`docs/release.md`](docs/release.md) の「対象の OS・CPU」）。変更は [`CHANGELOG.md`](CHANGELOG.md)。要求は [`.sdd/requirement/touryou.md`](.sdd/requirement/touryou.md) を参照。
 
 ## はじめかた
 

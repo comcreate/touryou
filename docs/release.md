@@ -10,7 +10,9 @@ claude plugin marketplace add comcreate/touryou
 
 ## 版の決まり
 
-- 版は semver。`plugin/.claude-plugin/plugin.json`・ルートと `packages/*` の `package.json` の `version`、`CHANGELOG.md` の節を、すべて同じ版にそろえる（`release.yml` の `version` のジョブが、タグと全部が同じでなければ失敗する）。
+- 版は semver。`plugin/.claude-plugin/plugin.json`・ルートと `packages/*` の `package.json` の `version` を、すべて同じ版にそろえる（`release.yml` の `version` のジョブが、タグと plugin.json・ルートと `packages/*` の package.json が同じでなければ失敗する）。
+- `CHANGELOG.md` に、同じ版の節を作る（`release.yml` は CHANGELOG を見ないので、準備の PR のレビューで確かめる）。節は `## <版>（<tag の日 YYYY-MM-DD>）` とし、中を「利用者に見える変更」「内部の変更」「上げ方」に分ける。項は `- **題**（#N）: 説明`。`## 未公開` の項は、この節に移す（`## 未公開` の見出しは残す）。準備の PR では日付を `YYYY-MM-DD` のままにし、tag を付ける日に直す（直す PR を tag の前にマージする。tag は、直したコミットに付ける）。
+- 準備の PR では、前の版の tag からマージされた PR に、項の抜けがないかを `git log v<前の版>..origin/main --oneline` で確かめる。
 - 版に `-` があれば（例: `0.2.0-rc.0`）、Release は pre-release になる。
 - 最初の公開は `0.1.0`（決定）。
 
@@ -174,7 +176,27 @@ marketplace への PR だけが出なかった（Release は正しく作られ�
 
 準備: fork を作り、fork の Actions を有効にする（fork では既定で無効）。手元で fork を clone し、`origin` が fork であることを確かめる（**上流に push しない**。`git push --tags` は使わない）。
 
-検証用の版は、本番で使わない pre-release にする（例: `0.1.1-rc.0`）。上流に同名のタグがないことを、先に確かめる。
+フォークで分かっていること（v0.1.1 の前に試したとき）:
+
+- **作った直後のフォークには、ワークフローが 1 つも登録されていない**（`gh api "repos/<自分のアカウント>/touryou/actions/workflows" --jq .total_count` が `0`）。このままタグを push しても、何も起きない。先に、フォークの main を本番の main に追いつかせる push をすると、登録される（下のコマンド。`origin` は fork）。
+
+  ```sh
+  git fetch https://github.com/comcreate/touryou main && git push origin FETCH_HEAD:main
+  ```
+
+- **コミットのメールが非公開のアドレスだと、push が `GH007` で断られる**。fork の clone の中だけ、noreply にする（値は文書に書かない）。
+
+  ```sh
+  git config user.email "$(gh api user --jq '"\(.id)+\(.login)@users.noreply.github.com"')"
+  ```
+
+- **実行の確かめ**は、`gh run list --workflow release.yml` だと、登録の前は 404 になる。`gh api "repos/<自分のアカウント>/touryou/actions/runs" --jq '.workflow_runs[] | [.name, .event, .status, .conclusion, .head_branch] | @tsv'`（または `--workflow` なしの `gh run list --repo <自分のアカウント>/touryou`）で見る。
+- **登録のあとでも、push で動きが起きないことがある**。v0.1.1 の前に試したときは、フォークへの push が出来事（events API の `PushEvent` など）として記録されず、タグの push で release.yml が起きなかった。同じタグを消して push し直しても、新しい rc のタグでも起きなかった。手で起こした実行（`workflow_dispatch`）は動いた。そのときは、次のようにする（**本番の release.yml には足さない**）。
+  - 検証用の枝（`verify-release`）の `.github/workflows/release.yml` にだけ、`on:` に `workflow_dispatch:` を足してコミットする。
+  - 新しい rc のタグを付けて push し、`gh workflow run release.yml --repo <自分のアカウント>/touryou --ref "v${v}"` で起こす。タグを ref にするので、`GITHUB_REF_NAME` はタグの名前になり、`version` の照合が通る。これで Release の作成・照合・`marketplace-self` まで通った。
+- **同じタグの出し直しは、起きないことがある**。やり直しは、新しい rc の番号（`0.1.1-rc.1`、`0.1.1-rc.2`、…）で行う。
+
+検証用の版は、本番で使わない pre-release にする（例: `0.1.1-rc.0`。やり直すたびに番号を上げる）。上流に同名のタグがないことを、先に確かめる。
 
 ```sh
 acct=<自分のアカウント>

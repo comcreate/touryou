@@ -1,19 +1,21 @@
 # 変更履歴
 
 ## 未公開
-- **出す前の /setup の確かめを、フォークの rc の配布物で行う**（#58。#48・#56）: v0.1.0 の配布物は #56 の壊れたリンクで `/setup` の検査に止められ、`docs/setup-verification.md` の A が通らない。新しい A' は、フォークの試しのリリース（例 `0.1.1-rc.0`）の zip をそのまま写しにし、手元の写しだけ `install-runtime.sh` の `REPO_URL` と `plugin.json` の `repository` をフォークに書き換えて（1 か所ずつを確かめる）、S10〜S13 を通す。配る script・`plugin.json` は変えていない。`docs/release.md` の 2-a・フォークの検証の例の版（`0.1.1-rc.0`）・後始末の時期を直した。`check_links` の注を実際の動き（行き先の親が中にあれば、行き先のないリンクは通す）に合わせた。
+
+## 0.1.1（YYYY-MM-DD）
+
+<!-- 日付は tag の日に直す（docs/release.md の「版の決まり」） -->
+
+### 利用者に見える変更
+
 - **配布物から、ビルドの場所を指す壊れたシンボリックリンクを除く**（#56）: v0.1.0 の tar.gz には、pnpm deploy が残した `lib/node_modules/.pnpm/node_modules/@touryou/daemon`（CI のマシンの元のソースを指す）が入り、新しい `/touryou:setup` が「外を指すシンボリックリンクがある」で止まった。v0.1.1 の配布物から、`scripts/dist-build.sh` が展開先の外を指す・行き先のないリンクを取り除き（取り除いたものをビルドの出力に出す）、`scripts/dist-smoke.sh` が `/setup` と同じ検査（`install-runtime.sh` の関数）を tar.gz に当ててから Release に付ける。`/setup` の検査は緩めていない。
 - **macOS の bash 3.2 で、日本語の表示の直前の変数で導入の script が止まるのを直す**（#47）: `plugin/scripts/` の shell script の変数を、すべて `${名前}` の形にした（UTF-8 のロケールの bash 3.2 は、`$ver）` の全角の文字を名前の一部として読む）。`pnpm validate:plugin` が、`plugin/scripts` の `$名前` と、`$名前` のすぐあとの ASCII でない文字（`scripts/*.sh` も）を拒む。試験を UTF-8 のロケールでも走らせる。
-- **新しい /setup の実機の確かめの手順**（#48）: `docs/setup-verification.md` を足した。tag の前は、手元の plugin の写しに直前の Release の `checksums.json` を置いて `claude --plugin-dir` で `/touryou:setup` を通し（S10〜S13。版上げは複製した版で模造する）、tag の後は zip の `checksums.json` を確かめてから marketplace の PR をマージし、update → `/setup` → Q8 を行う。取得先は本番のまま、script には手を入れていない。`docs/release.md` の手順に 2-a と 6 を足した。
-- **Dependabot で actions の版を上げ、patch・minor を自動でマージする**: `.github/dependabot.yml` で、workflow の actions の上げを週に 1 回、patch・minor は 1 本の PR に、メジャーは actions ごとの別の PR にする（公開から 14 日たった版だけ）。`dependabot-auto-merge.yml` が、github-actions の patch・minor で `.github/workflows/` の中だけを変える PR に auto-merge を付け、必須の check が通ってからマージされる。メジャーの上げは人がレビューする。マージのあとは `dependabot-main-ci.yml` が main で `ci.yml` を起こす。リポジトリの設定の「Allow auto-merge」が要る（`docs/release.md`）。
-- **文書の地の文の製品名を TouRyou にそろえる**（#42）: docs・README・SECURITY・.sdd・plugin の commands と skills の地の文で、製品として読まれる touryou を TouRyou にした。コマンドを指す素の touryou はバッククォートで囲んだ。バッククォートの中・コードが出す文字列（受信箱の知らせ・フックの文）・ファイル名・URL・ADR の過去の項は変えていない。
-
-- **表示名を TouRyou にする**（#40）: README の見出し・ロゴの代替テキスト・アイコンの `<title>`・marketplace の説明・デスクトップアプリの拡張機能の表示名と説明を TouRyou にした。パッケージ・コマンド・環境変数などの識別子は touryou のまま（変更はない）。
-- **使わない .gitkeep を消し、actions の版をそろえる**（#18）: `packages/core/test/.gitkeep` と `plugin/agents/.gitkeep` を消した（`plugin/agents/` は任意にした）。workflow の `actions/checkout`・`actions/setup-node`・`pnpm/action-setup` を、それぞれ v7.0.1・v7.0.0・v6.0.10 にそろえた。
-- **plugin の一番上の bin/ をなくす**（#36）: 中継を `plugin/bin/touryou-mcp-shim.sh` から `plugin/scripts/touryou-mcp-shim.sh` に移し、claude.ai・Cowork・組織の設定からも plugin を入れられるようにした（一番上に `bin/` がある plugin は、そこから入れられない）。`pnpm validate:plugin` が、`plugin/bin/` があれば（空でも）拒む。update の直後のセッションは、`/reload-plugins` までは古い版の置き場の中継を使い続ける（古い置き場は残るので動く）。
 - **本体の導入を plugin の中の script にまとめた**（#12）: `/touryou:setup` の取得・照合・展開・付け替え・動作の確かめと、版が変わったときの常駐の daemon の起動し直し（「はい」のあとだけ）を、plugin の中の `scripts/install-runtime.sh` が 1 回で行う。承認の確認は約 12 回から約 3 回になった。本体と plugin の版が違うと、セッションの始まりに知らせる（知らせるだけ）。
+- **plugin の一番上の bin/ をなくす**（#36）: 中継を `plugin/bin/touryou-mcp-shim.sh` から `plugin/scripts/touryou-mcp-shim.sh` に移し、claude.ai・Cowork・組織の設定からも plugin を入れられるようにした（一番上に `bin/` がある plugin は、そこから入れられない）。`pnpm validate:plugin` が、`plugin/bin/` があれば（空でも）拒む。update の直後のセッションは、`/reload-plugins` までは古い版の置き場の中継を使い続ける（古い置き場は残るので動く）。
 - **退役を SSE で知らせ、mcp が張り直さずに止まる**（#32）: 子のトークンが役目の終わり（受理など）で失効したら、daemon はノードの購読に `event: retired` を 1 件送ってから閉じる（heartbeat を待たない）。子の mcp はこれを受けたら張り直さず、資格情報を空にして止まる。退役のあとの 401（`apiAuthFailed` の `retiredExpired`）が出なくなる。古い daemon・古い mcp との組み合わせは、今までどおり。
 - **退役したトークンでのくり返しの認証の失敗を知らせる**（#31）: 退役した紐付けのトークンでの呼び出し（`retiredExpired`）が、1 つの窓（1 分）で閾値（既定 3。`rateLimit.alert.retiredThreshold` で 2〜100000）以上になったら、根の受信箱に `info` を 1 件出す。ほかの認証の失敗の警告とは、閾値・間隔・解決を別に見る。
+- **退役したトークンでの認証の失敗を retiredExpired と記録する**（#7）: 退役（受理など）で失効させた紐付けのトークンでの認証の失敗を、`apiAuthFailed` の理由 `retiredExpired` として記録し、期限切れ（`expired`）と見分けられるようにした。子の mcp は、退役で購読を切られたあとの 401 で張り直しをやめる。
+- **停止の要求の seq を、追記の結果からとる**（#27。#10）: daemon の `node.stop` が、停止の要求の `stopSeq` を、追記のあとの状態ではなく追記の結果の seq からとる（停止の追記のあとに別の記録が入っても、違う seq を返さない）。seq が取れないときは `internal` で失敗する。
 - **止まった子の未回答の判断を tree に出す**（#8）: `touryou tree --json`・`touryou tree <nodeId>` に、止まった子の未回答の判断（`pendingDecisions`）が出る。
 - **回答を子に届けたかを answer に出す**（#9）: `touryou answer` が、回答を子に届けたか（daemon の `decision.answer` の結果の `delivery`）を出す。
 - **依存の脆弱性の修正**（#15）: 配布物に入る依存を、既知の脆弱性を直した版に上げた（zod 4.6.7〔high〕・body-parser 2.4.0〔high〕・qs 6.16.2・fast-uri 3.1.9・ip-address 10.7.5）。
@@ -22,6 +24,35 @@
 - **画面の使い勝手の直し**（#13）: 確認を開くと、確認の欄まで動いてフォーカスが移る。Desktop・CLI の子の停止未完了と、根に出る Desktop の子を確かめる依頼は、赤の「失敗」でなく「停止の代行依頼」として出す。受理・回収可・アーカイブのノードに「要対応」の数を出さない。打ち込ませる ID は 1 回のクリックで選べる。接続できないときに理由と確かめることを出す。入力欄に id・name を付ける。
 - **受理した子のセッションの片付け**（#3）: 受理（`node_review` の accept）した CLI の子の裏のセッションは、親への依頼（`claude stop` → `claude rm`）で片付くようになった。状態は verified のまま。依頼の出し直しは `node_stop`。
 - **統合の道具 `node_integrate`**（#4）: 受理した子のブランチを親のブランチへ fast-forward だけで統合する。できなければ何も変えずに理由（`notFastForward`・`targetDirty`）を返す。
+- **表示名を TouRyou にする**（#40）: README の見出し・ロゴの代替テキスト・アイコンの `<title>`・marketplace の説明・デスクトップアプリの拡張機能の表示名と説明を TouRyou にした。パッケージ・コマンド・環境変数などの識別子は touryou のまま（変更はない）。
+- **marketplace.json に説明を足す**（#23。#17）: `.claude-plugin/marketplace.json` に `metadata.description` を足した（marketplace の一覧に説明が出る）。`release.yml` の `marketplace-self` の書き換えが、これを保つことを試験で守る。
+- **正式なアイコンとロゴ**（#19・#38）: 仮のアイコン（`assets/icon/`）を正式なものに置き換え、README の先頭にロゴを足した。
+
+### 内部の変更
+
+- **出す前の /setup の確かめを、フォークの rc の配布物で行う**（#58。#48・#56）: v0.1.0 の配布物は #56 の壊れたリンクで `/setup` の検査に止められ、`docs/setup-verification.md` の A が通らない。新しい A' は、フォークの試しのリリース（例 `0.1.1-rc.0`）の zip をそのまま写しにし、手元の写しだけ `install-runtime.sh` の `REPO_URL` と `plugin.json` の `repository` をフォークに書き換えて（1 か所ずつを確かめる）、S10〜S13 を通す。配る script・`plugin.json` は変えていない。`docs/release.md` の 2-a・フォークの検証の例の版（`0.1.1-rc.0`）・後始末の時期を直した。`check_links` の注を実際の動き（行き先の親が中にあれば、行き先のないリンクは通す）に合わせた。
+- **新しい /setup の実機の確かめの手順**（#48）: `docs/setup-verification.md` を足した。tag の前は、手元の plugin の写しに直前の Release の `checksums.json` を置いて `claude --plugin-dir` で `/touryou:setup` を通し（S10〜S13。版上げは複製した版で模造する）、tag の後は zip の `checksums.json` を確かめてから marketplace の PR をマージし、update → `/setup` → Q8 を行う。取得先は本番のまま、script には手を入れていない。`docs/release.md` の手順に 2-a と 6 を足した。
+- **Dependabot で actions の版を上げ、patch・minor を自動でマージする**（#44）: `.github/dependabot.yml` で、workflow の actions の上げを週に 1 回、patch・minor は 1 本の PR に、メジャーは actions ごとの別の PR にする（公開から 14 日たった版だけ）。`dependabot-auto-merge.yml` が、github-actions の patch・minor で `.github/workflows/` の中だけを変える PR に auto-merge を付け、必須の check が通ってからマージされる。メジャーの上げは人がレビューする。マージのあとは `dependabot-main-ci.yml` が main で `ci.yml` を起こす。リポジトリの設定の「Allow auto-merge」が要る（`docs/release.md`）。
+- **Dependabot による actions の上げ**（#45・#46）: `pnpm/action-setup` 6.1.0・`actions/setup-node` 7.1.0・`actions/upload-artifact` 7.0.2（#45。patch・minor の自動マージ）と、`actions/download-artifact` 8.0.2（#46。メジャー。人がレビューしてマージ）。
+- **必須の check を docs だけの PR・marketplace-self の PR でも出し、コミットのメールを確かめる**（#21。#14）: `ci.yml` は `paths-ignore` を使わず、docs などだけの変更ではジョブの中で重い段を飛ばして成功で終える。`marketplace-self` が出した PR のブランチで `ci.yml` を `workflow_dispatch` で起こす。author・committer・`Co-authored-by` のメールが noreply の形でなければ失敗する（`scripts/ci-commit-emails.sh`）。
+- **Desktop の子を起動時の整合でプロセスと照合しない方針**（#24。#11）: 方針を設計書に書き、試験を足した（動きは変えていない）。
+- **文書の地の文の製品名を TouRyou にそろえる**（#42）: docs・README・SECURITY・.sdd・plugin の commands と skills の地の文で、製品として読まれる touryou を TouRyou にした。コマンドを指す素の touryou はバッククォートで囲んだ。バッククォートの中・コードが出す文字列（受信箱の知らせ・フックの文）・ファイル名・URL・ADR の過去の項は変えていない。
+- **使わない .gitkeep を消し、actions の版をそろえる**（#18）: `packages/core/test/.gitkeep` と `plugin/agents/.gitkeep` を消した（`plugin/agents/` は任意にした）。workflow の `actions/checkout`・`actions/setup-node`・`pnpm/action-setup` を、それぞれ v7.0.1・v7.0.0・v6.0.10 にそろえた。
+
+### 上げ方
+
+v0.1.0 を入れている Mac で、次のとおり（細部は `docs/setup-verification.md` の C と、`/touryou:setup` の手順〔`plugin/commands/setup.md`〕）。
+
+1. plugin を上げる。
+
+   ```sh
+   claude plugin marketplace update touryou
+   claude plugin update touryou@touryou
+   ```
+
+2. 新しいセッションの始まりに、本体と plugin の版の違いの知らせが出たら、`/touryou:setup` を実行する（本体が v0.1.1 に入れ替わる）。
+3. 常駐（launchd）させているときは、`/touryou:setup` が daemon の起動し直しの同意を聞くので、「はい」と答える（「いいえ」なら何も変えずに止まる）。
+4. 上げる前から開いている統合セッションは、古い版の `touryou-mcp` のまま動き続ける。`/mcp` で `plugin:touryou:node` を選んで Reconnect する（Reconnect がない画面なら、Claude Code を起動し直す）。そのあと `/touryou:start` で、接続を確かめる。
 
 ## 0.1.0（最初の公開）
 

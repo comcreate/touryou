@@ -48,12 +48,10 @@ ls -l "${HOME}/Library/LaunchAgents/" | grep touryou
 plutil -extract EnvironmentVariables.PATH raw "${HOME}/Library/LaunchAgents/touryou.daemon.plist"
 ```
 
-（`--org` 付きのときは、ファイル名をその名前にする。）plist を写しておき、外す（起動の script〔`bin/run-daemon.sh`〕・`logs`・`state` は、次の `mv` で `~/.touryou` ごと退避される）。`--org` 付きのときは、`uninstall` にも同じ `--org` を付ける。
+（`--org` 付きのときは、ファイル名をその名前にする。）**常駐していない（plist がない）ときは、この先の 3 行（写しと uninstall）を飛ばして、`~/.touryou` の退避に進む**（plist がないと、zsh は `cp` の `*touryou.daemon.plist` を `no matches found` で止める。下の `if` は、plist がなければ何もしない）。plist を写しておき、外す（起動の script〔`bin/run-daemon.sh`〕・`logs`・`state` は、次の `mv` で `~/.touryou` ごと退避される）。`--org` 付きのときは、`uninstall` にも同じ `--org` を付ける。
 
 ```sh
-mkdir -p "${HOME}/touryou-verify-launchd"
-command cp -fp "${HOME}/Library/LaunchAgents/"*touryou.daemon.plist "${HOME}/touryou-verify-launchd/"
-"${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes
+if ls "${HOME}/Library/LaunchAgents/" | grep -q 'touryou\.daemon\.plist$'; then mkdir -p "${HOME}/touryou-verify-launchd" && find "${HOME}/Library/LaunchAgents" -maxdepth 1 -name '*touryou.daemon.plist' -exec cp -fp {} "${HOME}/touryou-verify-launchd/" \; && "${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes; else echo "常駐なし。飛ばします"; fi
 ```
 
 `~/.touryou` を退避する。
@@ -114,6 +112,14 @@ claude --plugin-dir "${W}/plugin"
 
 セッションの中で `/touryou:setup` を最後まで（手順 3 で「常駐」を選び、同意に「はい」）。
 
+設定の問い（`repoRoot`・`worktreeRoot`）には、絶対パスを答える。`$HOME/...` と答えると、`setup.md` の決まり（入力のパスに `$` を含むと止まる）で止まる。先にターミナルで出した値を入れる。
+
+```sh
+echo "${HOME}/touryou-verify/worktrees"
+```
+
+作業ツリーの置き場を `${W}`（`~/touryou-verify`）の下にすると、8 の後片付けの `rm -rf "${W}"` でいっしょに消える。
+
 確かめる:
 
 - **S10**: 承認の確認の回数（約 3 回: 導入・設定・常駐の登録）。導入の承認の画面のコマンドが `env -u BASH_ENV -u ENV bash "<写しの場所>/scripts/install-runtime.sh"`（引数なし）。取得先が `https://github.com/comcreate/touryou/releases/download/v<版>/…`（script の出力）。
@@ -157,7 +163,7 @@ claude --plugin-dir "${W}/plugin"
 
 確かめる:
 
-- セッションの始まりに、版の違いの知らせ（本体 v0.0.0-verify と plugin v`${V}`）が出る。**SessionStart の systemMessage が画面に出るかは未確認**。出なければ、出なかったことと、`/touryou:setup` の中で Claude が知らせを読んでいるか（additionalContext）を記録する。
+- セッションの始まりに、版の違いの知らせ（本体 v0.0.0-verify と plugin v`${V}`）が、画面に `SessionStart:startup says: touryou の本体（v0.0.0-verify）と plugin（v<版>）の版が違います。…` の形で出る（SessionStart の systemMessage。v0.1.1 の前の A' で確かめた）。出なければ、出なかったことと、`/touryou:setup` の中で Claude が知らせを読んでいるか（additionalContext）を記録する。
 - `/touryou:setup` で、script が終了コード 3（`RESULT: need-restart-consent`）で何も変えずに止まり、定型文で起動し直しの同意を聞かれる。
 - 「はい」のあと、`--restart-daemon` 付きで、止める → 付け替え → `apply --yes`。承認は 2 回（引数なしと `--restart-daemon`）。取得済みの tar.gz は照合だけで取り直さない（`~/.touryou/work` に残っているため）。
 - `/touryou:service status` が running。セッションを出てから、
@@ -212,7 +218,7 @@ rm -rf "${W}"
 
 ## A'. tag の前（フォークの rc で行う）
 
-直前の Release が v0.1.0 のとき（#56 のため A が手順 3 で止まる）は、こちらで行う。フォークで試しのリリース（rc。例: `0.1.1-rc.0`）を作り、その Release の zip をそのまま写しにして `/touryou:setup` を通す。
+直前の Release が v0.1.0 のとき（#56 のため A が手順 3 で止まる）は、こちらで行う。フォークで試しのリリース（rc。例: `0.1.1-rc.0`。rc の番号は出し直しで増える）を作り、その Release の zip をそのまま写しにして `/touryou:setup` を通す。
 
 - **前提**: フォークの試しのリリース（`v<rc の版>`）が、`docs/release.md` の「本番の前の検証（フォークで行う）」の手順で通っていること（Release に asset が 6 ファイルある）。
 - **手元の写しだけ**、取得先をフォークに書き換える（`scripts/install-runtime.sh` の `REPO_URL` の 1 行と、`.claude-plugin/plugin.json` の `repository`）。script は取得先を本番に固定し、`plugin.json` の `repository` も照合するため。リポジトリの script・`plugin.json` は変えない（守りを緩めない。試しの抜け道を本番の道筋に作らない）。
