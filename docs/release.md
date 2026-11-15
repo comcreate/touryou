@@ -223,6 +223,28 @@ v=0.1.1-rc.0
 )
 ```
 
+**やり直す（2 回目から）**: 上の箱は `git switch -c verify-release` で始まるので、2 回目は止まる。新しい rc の番号で、次のようにする（`acct`・`v` は上の箱と同じ変数。`v` を新しい番号にする）。`workflow_dispatch:` が要るときは、タグを付ける前に、検証用の枝の release.yml に足してコミットしておく（タグはそのコミットに付ける）。
+
+```sh
+acct=<自分のアカウント>
+v=0.1.1-rc.1
+(
+  set -euo pipefail
+  [ -z "$(git ls-remote --tags origin "v${v}")" ] || { echo "fork にすでに v${v} がある" >&2; exit 1; }
+  [ -z "$(git ls-remote --tags https://github.com/comcreate/touryou "v${v}")" ] || { echo "上流に v${v} がある。別の版にする" >&2; exit 1; }
+  git switch verify-release
+  for f in plugin/.claude-plugin/plugin.json package.json packages/*/package.json; do
+    jq --arg v "${v}" '.version = $v' "${f}" >| "${f}.new" && command mv -f "${f}.new" "${f}"
+  done
+  git commit -am "verify: 検証用の版 ${v}"
+  git push origin verify-release
+  git tag "v${v}"
+  git push origin "v${v}"
+)
+```
+
+push で起きないとき（`workflow_dispatch:` を足したとき）は、続けて `gh workflow run release.yml --repo "${acct}/touryou" --ref "v${v}"` で起こす。
+
 確かめたあと、Release の asset を利用者と同じ形で取り、照合する（`shasum -a 256 -c` が `OK`）。Mac での起動・quarantine の確かめは `docs/dist-manual-verification.md`。照合が通ったら、`docs/setup-verification.md` の A'（この rc の Release で /setup を確かめる）に進む。
 
 ```sh

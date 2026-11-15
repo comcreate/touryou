@@ -50,7 +50,7 @@ v0.1.0 を入れている Mac で、次のとおり（細部は `docs/setup-veri
    claude plugin update touryou@touryou
    ```
 
-2. 新しいセッションの始まりに、本体と plugin の版の違いの知らせが出たら、`/touryou:setup` を実行する（本体が v0.1.1 に入れ替わる）。
+2. 新しいセッションで `/touryou:setup` を実行する（本体が v0.1.1 に入れ替わる）。セッションの始まりに、本体と plugin の版の違いの知らせが出ることもあるが、出なくても実行する。
 3. 常駐（launchd）させているときは、`/touryou:setup` が daemon の起動し直しの同意を聞くので、「はい」と答える（「いいえ」なら何も変えずに止まる）。
 4. 上げる前から開いている統合セッションは、古い版の `touryou-mcp` のまま動き続ける。`/mcp` で `plugin:touryou:node` を選んで Reconnect する（Reconnect がない画面なら、Claude Code を起動し直す）。そのあと `/touryou:start` で、接続を確かめる。
 

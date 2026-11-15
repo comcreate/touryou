@@ -48,7 +48,7 @@ ls -l "${HOME}/Library/LaunchAgents/" | grep touryou
 plutil -extract EnvironmentVariables.PATH raw "${HOME}/Library/LaunchAgents/touryou.daemon.plist"
 ```
 
-（`--org` 付きのときは、ファイル名をその名前にする。）**常駐していない（plist がない）ときは、この先の 3 行（写しと uninstall）を飛ばして、`~/.touryou` の退避に進む**（plist がないと、zsh は `cp` の `*touryou.daemon.plist` を `no matches found` で止める。下の `if` は、plist がなければ何もしない）。plist を写しておき、外す（起動の script〔`bin/run-daemon.sh`〕・`logs`・`state` は、次の `mv` で `~/.touryou` ごと退避される）。`--org` 付きのときは、`uninstall` にも同じ `--org` を付ける。
+（`--org` 付きのときは、ファイル名をその名前にする。）下の 1 行は、常駐していなければ何もしない（そのまま貼ってよい。plist がないとき、`cp` の `*touryou.daemon.plist` は zsh で `no matches found` になるため、`if` で守っている）。plist を写しておき、外す（起動の script〔`bin/run-daemon.sh`〕・`logs`・`state` は、次の `mv` で `~/.touryou` ごと退避される）。`--org` 付きのときは、`uninstall` にも同じ `--org` を付ける。
 
 ```sh
 if ls "${HOME}/Library/LaunchAgents/" | grep -q 'touryou\.daemon\.plist$'; then mkdir -p "${HOME}/touryou-verify-launchd" && find "${HOME}/Library/LaunchAgents" -maxdepth 1 -name '*touryou.daemon.plist' -exec cp -fp {} "${HOME}/touryou-verify-launchd/" \; && "${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes; else echo "常駐なし。飛ばします"; fi
