@@ -3,6 +3,7 @@
 // - hooks・skills のディレクトリ、skills・commands の frontmatter、hooks/hooks.json（あれば JSON として正しく、形が正しいこと）
 // - skill・command に書いた MCP のツール名（mcp__node__*）が実在すること。skill は、そのロールの全ツールを書いていること
 // - NFR_012: plugin に、リポジトリ・利用者の場所（絶対パス）を埋め込まないこと
+// - #47: shell script の `$名前` の書き方（macOS の bash 3.2 の UTF-8 ロケールで、名前のすぐあとの全角の文字が名前に混ざる）
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { HOOK_COMMANDS } from "./hook-commands.mjs";
@@ -82,6 +83,32 @@ const pathViolation = (line) => {
   if (/\$\{CLAUDE_PLUGIN_ROOT\}[^\s"'`]*(?:^|\/)\.\.(?:\/|[\s"'`]|$)/.test(line)) return true;
   const rest = line.replaceAll(URL_RE, " ").replaceAll(/\$\{CLAUDE_PLUGIN_ROOT\}[^\s"'`]*/g, " ");
   return PATH_RES.some((re) => re.test(rest));
+};
+
+/**
+ * #47: shell script の変数の展開の検査（行ごと。コメントの行も検査する。`\$` で文字として出すものは除く）。
+ * - 必ず拒む: `$名前` のすぐあとに ASCII でない文字（macOS の bash 3.2 は UTF-8 のロケールで、0x80〜0xFF を名前の文字として読む）。
+ *   `# plugin-check: allow-dollar` の印でも外せない。
+ * - `strictBraces`（plugin/scripts）: `$名前` をすべて拒み、`${名前}` に揃える（`$1`・`$?`・`$$`・`$#`・`$@` は対象外）。
+ *   perl・awk など、shell でない言語の `$` を書く行だけは、行末の `# plugin-check: allow-dollar` で外す。
+ */
+export const DOLLAR_NON_ASCII_RE = /(?<!\\)\$[A-Za-z_][A-Za-z0-9_]*(?=\P{ASCII})/u;
+export const DOLLAR_BARE_RE = /(?<!\\)\$[A-Za-z_]/;
+export const ALLOW_DOLLAR = "# plugin-check: allow-dollar";
+export const shellDollarErrors = (at, text, { strictBraces }) => {
+  const errors = [];
+  text.split(/\r?\n/).forEach((line, i) => {
+    if (DOLLAR_NON_ASCII_RE.test(line)) {
+      errors.push(
+        `${at}:${i + 1}: #47 \`$名前\` のすぐあとに ASCII でない文字があります（macOS の bash 3.2 で名前に混ざる）。\`\${名前}\` と書きます`,
+      );
+    } else if (strictBraces && !line.includes(ALLOW_DOLLAR) && DOLLAR_BARE_RE.test(line)) {
+      errors.push(
+        `${at}:${i + 1}: #47 plugin/scripts では、変数は \`\${名前}\` の形で書きます（shell でない言語の \`$\` は、行末に「${ALLOW_DOLLAR}」）`,
+      );
+    }
+  });
+  return errors;
 };
 
 const HOOK_EVENTS = new Set(["PreToolUse", "PostToolUse", "Stop", "Notification", "SessionStart"]);
@@ -346,6 +373,8 @@ export function checkPlugin({ pluginDir, tools, forbidden = [] }) {
     for (const m of text.matchAll(TOOL_RE)) {
       if (!known.has(m[1])) errors.push(`${rel(file)}: 存在しないツール名 mcp__node__${m[1]}`);
     }
+    if (file.endsWith(".sh"))
+      errors.push(...shellDollarErrors(rel(file), text, { strictBraces: true }));
     const lines = text.split(/\r?\n/);
     lines.forEach((line, i) => {
       if (pathViolation(line)) {

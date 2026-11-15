@@ -1,9 +1,9 @@
 // plugin/ を検証する（`pnpm check` の最後の段階。`pnpm build` が済んでいること: MCP のツール名を packages/mcp/dist から読む）。
 // 検査の中身は plugin-check.mjs（試験: plugin-check.test.mjs）。
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { checkPlugin } from "./plugin-check.mjs";
+import { checkPlugin, shellDollarErrors } from "./plugin-check.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const toolsModule = join(root, "packages", "mcp", "dist", "tools.js");
@@ -32,6 +32,11 @@ const errors = checkPlugin({
   },
   forbidden: [root],
 });
+// #47: リポジトリの scripts/*.sh も、`$名前` のすぐあとの ASCII でない文字を拒む（`${名前}` に揃えることまでは求めない）
+for (const f of readdirSync(join(root, "scripts")).filter((f) => f.endsWith(".sh"))) {
+  const text = readFileSync(join(root, "scripts", f), "utf8");
+  errors.push(...shellDollarErrors(`scripts/${f}`, text, { strictBraces: false }));
+}
 if (errors.length > 0) {
   for (const e of errors) console.error(`NG: ${e}`);
   process.exit(1);
@@ -39,4 +44,6 @@ if (errors.length > 0) {
 const json = JSON.parse(
   readFileSync(join(root, "plugin", ".claude-plugin", "plugin.json"), "utf8"),
 );
-console.log(`OK: plugin.json (${json.name}@${json.version})・skills・commands・ツール名・NFR_012`);
+console.log(
+  `OK: plugin.json (${json.name}@${json.version})・skills・commands・ツール名・NFR_012・shell script の変数の書き方`,
+);

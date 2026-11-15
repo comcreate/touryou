@@ -5,7 +5,7 @@ type: "adr"
 status: "approved"
 sdd-phase: "implement"
 created: "2026-11-11"
-updated: "2026-11-14"
+updated: "2026-11-15"
 depends-on: ["spec-touryou", "design-touryou"]
 tags: ["claude-code", "mcp", "orchestration"]
 category: "developer-tooling"
@@ -182,3 +182,9 @@ category: "developer-tooling"
 - **Decision**: `.github/dependabot.yml` で github-actions だけを週に 1 回上げ、patch・minor を 1 本の PR にまとめ（メジャーは actions ごとの別の PR）、公開から 14 日たった版だけを使う（`cooldown`）。`dependabot-auto-merge.yml`（`pull_request`。checkout しない）が、`dependabot[bot]` の PR で、github_actions の semver-patch・semver-minor、変わったファイルが `.github/workflows/` の yml だけのときに auto-merge（squash）を付ける。マージは ruleset の必須の check のあと。メジャーの上げと、ほかの変更は人がレビューする。`GITHUB_TOKEN` のマージは main の push の CI を起こさないので、`dependabot-main-ci.yml`（`workflow_run`）がマージを待って main で `ci.yml` を `workflow_dispatch` で起こす。
 - **Rationale**: actions は SHA で固定しており、手で版を上げ続けるのは重い。patch・minor は必須の check で壊れを見つけられ、14 日の cooldown で公開の直後の乗っ取られた版を避けられる（npm 側の `minimumReleaseAge` 14 日と同じ考え）。メジャーは入力や動きが変わり得るので、人が読む。`release.yml` の `marketplace-self` と同じ dispatch の形なら、新しい secret（PAT・App）が要らない。
 - **Rejected alternatives**: `pull_request_target` で動かす — PR のコードを書き込みの権限で扱う恐れがあり、Dependabot の PR では `pull_request` で足りる。PAT・GitHub App のトークンでマージして main の push の CI を起こす — secret を足し、守る物が増える。main の CI を起こさない — main の上での確かめが抜ける。npm も Dependabot で上げる — npm は pnpm の `minimumReleaseAge` と lockfile で扱っており、二重になる。メジャーも自動でマージする — 動きの変わる上げを、人が読まずに入れる。メジャーも同じ group にまとめる — メジャーが 1 つ混じるだけで、patch・minor の自動マージまで止まる。
+
+## 2026-11-15 plugin の shell script の変数は `${名前}` にそろえ、plugin-check で検査する
+
+- **Decision**: `plugin/scripts/*.sh` の変数の展開は、すべて `${名前}` の形で書く（`$1`・`$?`・`$$`・`$#`・`$@` は除く）。`scripts/plugin-check.mjs` が、`plugin/` の中の `.sh` の `$名前` を拒み（shell でない言語の `$` の行だけ `# plugin-check: allow-dollar` で外す）、`$名前` のすぐあとに ASCII でない文字があるものは、`plugin/` とリポジトリの `scripts/*.sh` のどちらでも、印があっても拒む。試験は UTF-8 のロケールの組でも script を走らせる。
+- **Rationale**: macOS の bash 3.2 は UTF-8 のロケールで、`$ver）` の全角の文字の 1 バイト目を名前の一部として読み、`set -u` の script が止まる（#47）。日本語の文を出す script ではほぼどこでも起きうるので、一部だけを直すのでなく、書き方を 1 つにそろえて機械で検査するほうが、見落としがない。
+- **Rejected alternatives**: script の頭で `LC_ALL=C` にする — 出す日本語の文や、呼ぶコマンドのロケールまで変わり、書き方の罠も残ったままで、別の script で同じことが起きる。shellcheck で検査する — この形（名前のすぐあとの ASCII でない文字）を見ないうえ、CI と手元に新しい依存が増える。

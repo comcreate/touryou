@@ -106,7 +106,7 @@ test("手順 1 の script の取得元は、plugin.json の repository と、rel
     readFileSync(join(root, "plugin", ".claude-plugin", "plugin.json"), "utf8"),
   ).repository;
   assert.ok(sh.includes(`REPO_URL="${repo}"`));
-  assert.ok(sh.includes('"$REPO_URL/releases/download/v$ver/$name"'));
+  assert.ok(sh.includes('"${REPO_URL}/releases/download/v${ver}/${name}"'));
   const wf = readFileSync(join(root, ".github", "workflows", "release.yml"), "utf8");
   assert.match(wf, /tags: \["v\*"\]/);
   assert.match(wf, /gh release create "\$\{GITHUB_REF_NAME\}"/);

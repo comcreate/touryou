@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { HOOK_COMMANDS } from "./hook-commands.mjs";
 import { MCP_STDIO_ARGS, MCP_STDIO_COMMAND } from "./mcp-stdio-command.mjs";
-import { checkPlugin, PLUGIN_TOOL_PREFIX } from "./plugin-check.mjs";
+import { checkPlugin, PLUGIN_TOOL_PREFIX, shellDollarErrors } from "./plugin-check.mjs";
 
 const TOOLS = {
   integrator: ["node_spawn", "tree_list"],
@@ -384,4 +384,65 @@ test("#36: 一番上の bin/ を拒む（中にファイルがあっても、空
     /plugin\/bin\//,
   );
   assert.doesNotMatch(text({ "scripts/touryou-mcp-shim.sh": "#!/bin/bash\n" }), /plugin\/bin\//);
+});
+
+test("#47: shell script の `$名前` のすぐあとの ASCII でない文字を拒む（コメントの行も。印でも外せない）。`${名前}`・`\\$名前` は通す", () => {
+  const strict = { strictBraces: true };
+  const loose = { strictBraces: false };
+  // 拒む（どちらの決まりでも）
+  for (const line of [
+    'say "（v$ver）"',
+    'echo "$n（"',
+    "# 版（v$ver）を出す",
+    `echo "$old→$ver" ${"# plugin-check: allow-dollar"}`,
+    'echo "$a_1é"',
+  ]) {
+    for (const opt of [strict, loose]) {
+      assert.match(
+        shellDollarErrors("x.sh", line, opt).join("\n"),
+        /x\.sh:1: #47 .*ASCII でない/,
+        line,
+      );
+    }
+  }
+  // 通す（どちらの決まりでも）
+  for (const line of [
+    'say "（v${ver}）"',
+    'echo "\\$HOME（"',
+    'echo "$1（$?）$$（$#）$@（"',
+    "echo 版（v1）",
+  ]) {
+    for (const opt of [strict, loose])
+      assert.deepEqual(shellDollarErrors("x.sh", line, opt), [], line);
+  }
+});
+
+test("#47: plugin/scripts の決まり: `$名前` をすべて拒み `${名前}` に揃える。`\\$`・位置などの特別な変数・印のある行は通す。scripts/*.sh の決まりでは通す", () => {
+  const strict = { strictBraces: true };
+  assert.match(
+    shellDollarErrors("x.sh", 'echo "$HOME/x"', strict).join(""),
+    /x\.sh:1: .*\$\{名前\}/,
+  );
+  assert.match(shellDollarErrors("x.sh", "ok\n# $HOME を見る", strict).join(""), /x\.sh:2:/);
+  assert.deepEqual(shellDollarErrors("x.sh", 'echo "$HOME/x"', { strictBraces: false }), []);
+  assert.deepEqual(
+    shellDollarErrors("x.sh", 'echo "${HOME}/x" "\\$HOME" "$1" "$?" "$$" "$#" "$@"', strict),
+    [],
+  );
+  assert.deepEqual(
+    shellDollarErrors(
+      "x.sh",
+      "perl -e 'rename($ARGV[0], $ARGV[1])' # plugin-check: allow-dollar (perl)",
+      strict,
+    ),
+    [],
+  );
+  // checkPlugin は、plugin の中の .sh を、この決まりで検査する（.sh でないファイルは対象外）
+  assert.match(text({ "scripts/a.sh": 'echo "$HOME"\n' }), /plugin\/scripts\/a\.sh:1: #47/);
+  assert.match(
+    text({ "scripts/a.sh": 'echo "${HOME}（"\necho "v$x（"\n' }),
+    /plugin\/scripts\/a\.sh:2: #47 .*ASCII/,
+  );
+  assert.doesNotMatch(text({ "scripts/a.sh": 'echo "${HOME}（"\n' }), /#47/);
+  assert.doesNotMatch(text({ "commands/x.md": "---\ndescription: d\n---\n$HOME（\n" }), /#47/);
 });

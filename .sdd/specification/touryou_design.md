@@ -233,6 +233,16 @@ interface Capabilities {
 - 取得先は本番（`plugin.json` の `repository`）に固定し、試しのための差し替えの道（引数・環境変数）は作らない。tag の前の実機の確かめは、直前の Release の配布物を使う（plugin の写しに、その `checksums.json` を置く。手順は `docs/setup-verification.md`。Issue #48）。
 - daemon の寿命（統合セッション・子のセッションと別の寿命で動き、版上げの起動し直しは同意のあとだけ、失敗したら前の版に戻す）は NFR_015。IR_002 はフックの記録と拒否で、寿命の要求ではない。
 
+## 6.6. plugin の shell script の書き方
+
+plugin が利用者の Mac で走らせる shell script（`plugin/scripts/*.sh`。`install-runtime.sh`・`runtime-version-notice.sh`・`touryou-mcp-shim.sh`）は、次の決まりで書く。
+
+- macOS の `/bin/bash`（3.2）と POSIX sh（macOS の sh〔bash の POSIX モード〕・dash）で同じに動く書き方にする。bash 4 以降の機能（連想配列・`${var,,}`・`mapfile`・`|&`・`;&` など）は使わない。
+- 変数の展開は、すべて `${名前}` の形で書く（位置・特別な変数の `$1`・`$?`・`$$`・`$#`・`$@` はそのままでよい）。理由: macOS の bash 3.2 は、変数名の文字を 1 バイトずつ libc の `isalnum` で見る。macOS の libc は UTF-8 のロケールで 0x80〜0xFF を英字として扱うので、`$ver）` の全角の文字の 1 バイト目が名前に混ざり（`ver\xEF`）、`set -u` では unbound variable で止まる（#47）。C・POSIX のロケールでは起きないので、ロケールなしの試験では見つからない。
+- 文字として `$` を出すときは `\$` と書く。shell でない言語（perl など）の `$` を引用符の中に書く行は、行末に `# plugin-check: allow-dollar` を付ける。
+- `pnpm validate:plugin`（`scripts/plugin-check.mjs`）が検査する。`plugin/` の中の `.sh` では `$名前` をすべて拒み（印の行は除く）、`$名前` のすぐあとに ASCII でない文字があるものは、印があっても拒む。リポジトリの `scripts/*.sh` には、後者だけを当てる。コメントの行も検査する。
+- 試験（`scripts/install-runtime.test.mjs`）は、ロケールなし・`ja_JP.UTF-8`・`en_US.UTF-8` の組で script を走らせる。仕組みの裏づけは macOS の CI（`ci-macos.yml`）。
+
 # 7. 非機能要件実現方針
 
 | 要件 | 実現方針 |
@@ -298,6 +308,10 @@ interface Capabilities {
 | resume・fork・compact で `CLAUDE_CODE_SESSION_ID` が変わるか | 中 | 変わる場合は、合う購読がないときの扱いのとおり受信箱に落ちる |
 
 # 10. 変更履歴
+
+## v1.4
+
+- plugin の shell script の書き方（6.6 節）を足した。bash 3.2 の UTF-8 ロケールで、`$名前` のすぐあとの全角の文字が名前に混ざるのを避けるため、`${名前}` にそろえ、plugin-check で検査する（Issue #47）。
 
 ## v1.3
 
