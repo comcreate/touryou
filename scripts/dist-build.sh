@@ -29,7 +29,9 @@ tar -C "${work}" -xzf "${work}/${tarball}" "node-v${node_version}-${os}-${narch}
 cp "${work}/node-v${node_version}-${os}-${narch}/bin/node" "${stage}/bin/node"
 
 cd "$root"
-# daemon の依存（better-sqlite3・MCP SDK など。@touryou/core を含む）を lib/ に 1 度だけ置く。mcp・cli は、その依存で足りる（重複を避ける）
+# daemon の依存（better-sqlite3 など。@touryou/core・@touryou/mcp を含む）を lib/ に 1 度だけ置く。mcp・cli は、その依存で足りる（重複を避ける）。
+# mcp の依存（MCP SDK）は daemon の直下には入らず、daemon が依存する @touryou/mcp の .pnpm 側の実体の隣に入る。
+# lib/node_modules/@touryou/mcp はその実体へのリンクで、Node は実体のパスから SDK を見つける。下の cp -R は、そのリンクの先に mcp の dist を写す
 # package-import-method=copy: 置き場（store）からのハードリンクにしない（Linux の既定はハードリンクで、tar にハードリンクとして入り、
 # install-runtime.sh の check_types・check_kinds に当たる。macOS の既定〔clone〕は、もともとハードリンクにならない）
 pnpm --config.package-import-method=copy --filter=@touryou/daemon --prod --legacy deploy "${stage}/lib"
