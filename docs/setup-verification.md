@@ -29,7 +29,7 @@ mkdir -p "${W}/dl"
 
 確かめる: `git status` がきれい。`${W}` は作業の場所（終わったら消す）。
 
-marketplace から touryou の plugin を入れているときは、同じ名前の plugin が 2 つ読まれないように、A の間は無効にしておく（`/plugin` で touryou を無効にする。終わったら 8 で戻す）。
+marketplace から touryou の plugin を入れていても、`--plugin-dir` の写しが、そのセッションの間だけ同じ名前の plugin を置き換える（公式の文書の plugins/loading）。無効にするのは任意。`/plugin` で無効にしたときは、8 の後片付けで必ず有効に戻す（戻し忘れると、ふだんのセッションで touryou が動かない）。
 
 ### 1. いまの ~/.touryou と常駐を退避する
 
@@ -38,12 +38,20 @@ marketplace から touryou の plugin を入れているときは、同じ名前
 ```sh
 ls -ld "${HOME}/.touryou" "${HOME}/.touryou/current"
 readlink "${HOME}/.touryou/current"
-ls -l "${HOME}/Library/LaunchAgents/touryou.daemon.plist"
+ls -l "${HOME}/Library/LaunchAgents/" | grep touryou
 ```
 
-常駐（plist がある）なら、外す（`logs`・`state` は `~/.touryou` の中に残る）。
+常駐（plist がある）なら、自分の引数を確かめる。plist の名前が `touryou.daemon.plist` なら `--org` なし、`<逆ドメイン>.touryou.daemon.plist` なら `--org <逆ドメイン>`。`PATH` の先頭が `/usr/bin:/bin:/usr/sbin:/sbin` より前に足されていれば、その部分が `--path-prefix`。
 
 ```sh
+plutil -extract EnvironmentVariables.PATH raw "${HOME}/Library/LaunchAgents/touryou.daemon.plist"
+```
+
+（`--org` 付きのときは、ファイル名をその名前にする。）plist を写しておき、外す（起動の script〔`bin/run-daemon.sh`〕・`logs`・`state` は、次の `mv` で `~/.touryou` ごと退避される）。`--org` 付きのときは、`uninstall` にも同じ `--org` を付ける。
+
+```sh
+mkdir -p "${HOME}/touryou-verify-launchd"
+cp -p "${HOME}/Library/LaunchAgents/"*touryou.daemon.plist "${HOME}/touryou-verify-launchd/"
 "${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes
 ```
 
@@ -172,6 +180,8 @@ claude --plugin-dir "${W}/plugin"
 
 ### 8. 後片付け
 
+**2〜7 のどこで失敗・中断しても、ここを上から通せば元に戻る**（試しのものは消し、1 で退避したものを戻すだけ）。最初の `uninstall` は、試しの常駐がない・`~/.touryou` がないなどで失敗してもよい。失敗しても、次の行に進む。
+
 試しの `~/.touryou` と常駐を外し、1 で退避したものを戻す。
 
 ```sh
@@ -181,7 +191,7 @@ mv "${HOME}/.touryou.before-verify" "${HOME}/.touryou"
 readlink "${HOME}/.touryou/current"
 ```
 
-1 で常駐だったときは、戻す。
+1 で常駐だったときは、1 で確かめた引数と同じ引数で init し直して、戻す（`--org`・`--path-prefix` を付けていたら、`init`・`apply`・`status` に同じものを付ける。付けないと元の常駐にならない）。
 
 ```sh
 "${HOME}/.touryou/current/bin/touryou" launchd init
@@ -189,13 +199,13 @@ readlink "${HOME}/.touryou/current"
 "${HOME}/.touryou/current/bin/touryou" launchd status
 ```
 
-作業の場所を消す。0 で無効にした marketplace の touryou を、`/plugin` で有効に戻す。
+作業の場所を消す。0 で marketplace の touryou を無効にしていたら、`/plugin` で有効に戻す。
 
 ```sh
 rm -rf "${W}"
 ```
 
-確かめる: `current` が 1 で記録したものと同じ。常駐だったときは status が running。結果（S10〜S13 の可・不可と、出た表示）を、リリースの準備の PR か Issue に書く。
+確かめる: `current` が 1 で記録したものと同じ。常駐だったときは `"${HOME}/Library/LaunchAgents/"` の plist と `"${HOME}/touryou-verify-launchd/"` の写しを `diff` で比べ、同じなら写しを消す（`rm -rf "${HOME}/touryou-verify-launchd"`）。常駐だったときは status が running。結果（S10〜S13 の可・不可と、出た表示）を、リリースの準備の PR か Issue に書く。
 
 ## C. tag の後
 
