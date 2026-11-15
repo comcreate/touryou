@@ -53,7 +53,7 @@
 | Q5 | daemon が動く前に配布物だけあるとき | 3-B（手で起動）を選び、daemon を起動する前に会話を始めて `/start` を試す。そのあと daemon を起動して 10〜20 秒待ち、もう一度 `/start` | 1 回目は node の道具がない（failed にはならない。中継の bash だけが動く）。2 回目は Reconnect なしで通る。中継の子として `@touryou/mcp/dist/bin.js --stdio` が 1 つ |
 | Q6 | `/touryou:service uninstall-all` | 常駐にした状態で実行し、定型文に「はい」。出たターミナルのブロックを `/exit` のあとに貼る | 常駐が外れ、`pgrep -fl '\.touryou/'` が何も出さず、plugin・marketplace・`$HOME/.touryou` が消える。その会話の `touryou-mcp --stdio` は `/exit` で終わる |
 | Q7 | auto モードでの承認 | Claude Code の auto モード（権限の自動判定）で `/touryou:setup`・`/touryou:service`・`/touryou:desktop` を実行する | 止められた・確認が出たコマンドと、その文面を記録する。チャットの「はい」の定型文は、auto モードでも尋ねられる |
-| Q8 | plugin を update した直後のセッション | `claude plugin update touryou@touryou` のあと、`/reload-plugins` をせずに統合セッションを開き（または続け）、`/touryou:start` | node の MCP が動く（古い版の置き場の中継が残っていて、つながる）。動かなければ、表示を記録する |
+| Q8 | plugin を update した直後のセッション | tag の後（`docs/release.md` の 6）。`claude plugin update touryou@touryou` のあと、`/reload-plugins` をせずに統合セッションを開き（または続け）、`/touryou:start` | node の MCP が動く（古い版の置き場の中継が残っていて、つながる）。動かなければ、表示を記録する |
 
 ## S. /setup からの常駐（launchd）
 
@@ -70,10 +70,10 @@
 | S6 | 起動し直す・止める | `/touryou:service restart`、続けて `stop` | restart は終了コード 0。stop のあとは「読み込まれていない」で、戻し方（次のログイン、または同意のあとの `apply --yes`）が案内される（restart は案内しない） |
 | S7 | 外す | `/touryou:service uninstall`（同意に「はい」） | plist（LaunchAgents と `<H>/.touryou/launchd`）と `<H>/.touryou/bin` の起動スクリプトが消え、`logs`・`state` は残る。ログイン項目からも消える |
 | S8 | 版を上げる | 常駐中に、新しい版の plugin で `/setup`（「版が変わり、常駐しているとき」） | 同意のあと script が stop → 入れ替え → `apply --yes` で、新しい版で動く（`ps -axo command \| grep "/.touryou/" \| grep -v grep` のパスが `current` 経由） |
-| S10 | 導入の script の承認の回数 | `$HOME/.touryou` がない状態で `/touryou:setup` を最後まで（3-A）。承認の確認の回数を数える | 約 3 回（導入・設定・常駐の登録）。導入の承認の画面は `env -u BASH_ENV -u ENV bash "<plugin の場所>/scripts/install-runtime.sh"`（引数なし） |
-| S11 | 導入の script と quarantine | S10 の直後に `ls -l@ "$HOME/.touryou/work"` と `ls -lR@ "$HOME/.touryou/current/" \| grep -c com.apple.quarantine` | quarantine が付かない（0）。付いたときは、script が止まる（外さない）ことを記録する |
-| S12 | 版が変わり、常駐しているとき | 常駐中に、plugin を新しい版にして新しいセッションを開き、`/touryou:setup` | 始まりに版の違いの知らせが出る（知らせだけ）。script は終了コード 3 で何も変えず、「はい」のあと `--restart-daemon` で、止める → 付け替え → `apply --yes`。`/touryou:service status` が新しい版で running。承認は 2 回 |
-| S13 | 同じ版の再実行 | S10 のあとに、もう一度 `/touryou:setup` | 取得せずに `RESULT: already` |
+| S10 | 導入の script の承認の回数 | tag の前は `docs/setup-verification.md` の写しで行う。`$HOME/.touryou` がない状態で `/touryou:setup` を最後まで（3-A）。承認の確認の回数を数える | 約 3 回（導入・設定・常駐の登録）。導入の承認の画面は `env -u BASH_ENV -u ENV bash "<plugin の場所>/scripts/install-runtime.sh"`（引数なし） |
+| S11 | 導入の script と quarantine | tag の前は `docs/setup-verification.md` の写しで行う。S10 の直後に `ls -l@ "$HOME/.touryou/work"` と `ls -lR@ "$HOME/.touryou/current/" \| grep -c com.apple.quarantine` | quarantine が付かない（0）。付いたときは、script が止まる（外さない）ことを記録する |
+| S12 | 版が変わり、常駐しているとき | tag の前は `docs/setup-verification.md` の写しで行う。常駐中に、plugin を新しい版にして新しいセッションを開き、`/touryou:setup` | 始まりに版の違いの知らせが出る（知らせだけ）。script は終了コード 3 で何も変えず、「はい」のあと `--restart-daemon` で、止める → 付け替え → `apply --yes`。`/touryou:service status` が新しい版で running。承認は 2 回 |
+| S13 | 同じ版の再実行 | tag の前は `docs/setup-verification.md` の写しで行う。S10 のあとに、もう一度 `/touryou:setup` | 取得せずに `RESULT: already` |
 | S9 | 常駐にしていないときの status | 常駐にしていない状態で `/touryou:service status` | 「（常駐にしていない）」で `/setup` の手順 3-A だけを案内し、止めた後の案内を並べず、再開も尋ねない |
 
 `/setup` を実行した会話では、会話の始まり（`$HOME/.touryou` がまだない）の node が道具 0 個のままのことがある。手順 3-A・3-B の最後の案内（つなぎ直し）のとおりに `/start` で通ることを確かめる。

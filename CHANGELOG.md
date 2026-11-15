@@ -1,6 +1,7 @@
 # 変更履歴
 
 ## 未公開
+- **新しい /setup の実機の確かめの手順**（#48）: `docs/setup-verification.md` を足した。tag の前は、手元の plugin の写しに直前の Release の `checksums.json` を置いて `claude --plugin-dir` で `/touryou:setup` を通し（S10〜S13。版上げは複製した版で模造する）、tag の後は zip の `checksums.json` を確かめてから marketplace の PR をマージし、update → `/setup` → Q8 を行う。取得先は本番のまま、script には手を入れていない。`docs/release.md` の手順に 2-a と 6 を足した。
 - **Dependabot で actions の版を上げ、patch・minor を自動でマージする**: `.github/dependabot.yml` で、workflow の actions の上げを週に 1 回、patch・minor は 1 本の PR に、メジャーは actions ごとの別の PR にする（公開から 14 日たった版だけ）。`dependabot-auto-merge.yml` が、github-actions の patch・minor で `.github/workflows/` の中だけを変える PR に auto-merge を付け、必須の check が通ってからマージされる。メジャーの上げは人がレビューする。マージのあとは `dependabot-main-ci.yml` が main で `ci.yml` を起こす。リポジトリの設定の「Allow auto-merge」が要る（`docs/release.md`）。
 - **文書の地の文の製品名を TouRyou にそろえる**（#42）: docs・README・SECURITY・.sdd・plugin の commands と skills の地の文で、製品として読まれる touryou を TouRyou にした。コマンドを指す素の touryou はバッククォートで囲んだ。バッククォートの中・コードが出す文字列（受信箱の知らせ・フックの文）・ファイル名・URL・ADR の過去の項は変えていない。
 

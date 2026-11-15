@@ -7,7 +7,7 @@ sdd-phase: "implement"
 sdd-version: "5.1.0"
 impl-status: "implemented"
 created: "2026-11-14"
-updated: "2026-11-14"
+updated: "2026-11-15"
 depends-on: ["spec-touryou"]
 tags: ["claude-code", "mcp", "orchestration"]
 category: "developer-tooling"
@@ -230,6 +230,7 @@ interface Capabilities {
 - 常駐（launchd の plist がある）で版が変わるときは、同意（`--restart-daemon`。チャットの「はい」のあと）がなければ何も変えずに終了コード 3。同意があれば、古い版で `launchd init`（生成物が同じかの確かめ）と `stop` → 付け替え → 新しい版で `apply --yes`。stop のあとのどこで失敗しても（付け替え・新しい版の apply）、前の版に戻して起動し直してから、そのときの状態（current の版・daemon が動いているか・次にすること）を出して止まる（NFR_015）。呼び出しは `env -u BASH_ENV -u ENV bash` で、script の頭で取り込まれた関数を消し PATH を OS の既定にする。tar の中身は、通常のファイル・ディレクトリ・中を指すシンボリックリンクだけを通す。初めての常駐の登録（`init` と `apply --yes`）は、/setup が「はい」を取ってから行う。
 - 設定（`config.json`）は、/setup が 1 つのコマンドで書く（ホームの下・git のリポジトリ・未作成を確かめ、600 で書く）。承認は、導入・設定・常駐の登録で約 3 回（前は約 12 回）。
 - SessionStart のフック（`scripts/runtime-version-notice.sh`）は、`current` の版と plugin の版が違えば知らせるだけ。取得・daemon の起動し直しはしない。本体がない・読めないときは何も出さず、セッションを止めない。
+- 取得先は本番（`plugin.json` の `repository`）に固定し、試しのための差し替えの道（引数・環境変数）は作らない。tag の前の実機の確かめは、直前の Release の配布物を使う（plugin の写しに、その `checksums.json` を置く。手順は `docs/setup-verification.md`。Issue #48）。
 - daemon の寿命（統合セッション・子のセッションと別の寿命で動き、版上げの起動し直しは同意のあとだけ、失敗したら前の版に戻す）は NFR_015。IR_002 はフックの記録と拒否で、寿命の要求ではない。
 
 # 7. 非機能要件実現方針
@@ -297,6 +298,10 @@ interface Capabilities {
 | resume・fork・compact で `CLAUDE_CODE_SESSION_ID` が変わるか | 中 | 変わる場合は、合う購読がないときの扱いのとおり受信箱に落ちる |
 
 # 10. 変更履歴
+
+## v1.3
+
+- 配布・導入（6.5 節）に、取得先を本番に固定し、tag の前の実機の確かめは直前の Release の配布物で行う決まりを足した（Issue #48）。
 
 ## v1.2
 

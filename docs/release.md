@@ -18,6 +18,7 @@ claude plugin marketplace add comcreate/touryou
 
 1. 版をそろえる（上の「版の決まり」）。準備の PR（`release: <版> の準備`）を出し、マージする。
 2. `bash scripts/check.sh` と `claude plugin validate plugin` が通ることを確かめる。
+   - **2-a 新しい /setup の実機の確かめ**（tag の前。導入の script・`setup.md`・hooks を変えたときは必ず行う）: `docs/setup-verification.md` の A。手元の `plugin/` の写しに、直前の Release の `.sha256` から作った `checksums.json` を置き、`claude --plugin-dir <写し>` で `/touryou:setup` を通す（S10〜S13）。取得先は本番のまま、script には手を入れない。
 3. main にマージしたあと、タグを付けて push する（タグは `v` + plugin.json の `version`。違うと失敗する）。書き込みの権限のあるアカウントで、clone のディレクトリで実行する（`gh api repos/comcreate/touryou --jq .permissions.push` が `true` であること）。zsh の対話に貼れるように、コメント行（`#`）は入れていない。
 
    ```sh
@@ -42,6 +43,7 @@ claude plugin marketplace add comcreate/touryou
 4. `.github/workflows/release.yml` が、`plugin/` の中身を根にした zip（`touryou-<版>.zip`）と、その `.sha256` を Release に付ける。sha256 と URL は、実行の Summary に出る。Release は不変に扱う（付け直し〔`--clobber`〕はしない。Release がすでにあれば、ワークフローは失敗する。やり直し方は、下の「やり直す」）。
    同じ実行で、macOS（**arm64 のみ**）の配布物（Node 同梱の `touryou-<版>-darwin-arm64.tar.gz` と `.sha256`）を作り、展開して daemon が起動する確認（smoke。`scripts/dist-smoke.sh`）を通したものだけを、同じ Release に付ける（失敗すると、Release は作られない）。あわせて、Claude デスクトップアプリの拡張機能 `touryou-mcp-<版>.mcpb` と `.sha256` も作る（`scripts/mcpb-build.sh`。JS だけ・未署名。`docs/desktop-extension.md`）。Release の asset は、zip・tar.gz・.mcpb と、それぞれの `.sha256` の 6 ファイル。配布物の sha256 は `checksums.json`（`scripts/make-checksums.mjs` が、リリースの実行の中で `plugin/` に書く。リポジトリにはない）に入れ、zip に入れる。利用者の `/setup` が、plugin の中の `scripts/install-runtime.sh` で、これと照合する（script も zip に入り、許可リストで `scripts/install-runtime.sh`・`scripts/runtime-version-notice.sh` だけを通す）。
 5. `marketplace-self` のジョブが、`.claude-plugin/marketplace.json` を新しい版に書き換える PR を出す。中身（3 つの値）を確かめてマージする。PR が出なければ、Summary の値で手で直して PR を出す（Release はそのままでよい）。
+6. **tag の後の確かめ**（marketplace の PR のマージの前と後）: マージの前に、Release の zip の `checksums.json` を確かめる（`unzip -p touryou-<版>.zip checksums.json`）。マージのあとに、前の版を入れた Mac で update → `/touryou:setup`（S12）→ Q8。手順は `docs/setup-verification.md` の C。不具合が出たら、版を上げて直す（Release は付け直さない）。
 
 ## 配布物では効かない、開発用の抜け道
 
@@ -157,6 +159,8 @@ tar.gz は、ビルドし直すと sha256 が変わり得ます。zip の中の 
 marketplace への PR だけが出なかった（Release は正しく作られた）場合は、Release を消さず、手で PR を出します。`dist` の artifact だけが消えた（保存は 1 日）場合は、`release` だけの再実行ではなく、全体をやり直します。
 
 ## 本番の前の検証（フォークで行う）
+
+この検証は release.yml のためのもので、/setup は通せない。/setup の確かめは 2-a で行う（`docs/setup-verification.md`）。
 
 目的: release.yml を、本番のリポジトリに触れずに、タグの push から Release の作成・照合まで通して確かめる。フォークの名前・アカウント名は、`<自分のアカウント>` と書く（値を文書に残さない）。
 
