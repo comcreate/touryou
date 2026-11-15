@@ -1,6 +1,7 @@
 # 変更履歴
 
 ## 未公開
+- **hono・@hono/node-server を、弱点を直した版に上げる**（#51）: MCP SDK の推移的な依存の hono を 4.13.13 から 4.13.16 に、@hono/node-server を 2.1.3 から 2.1.6 に上げた（`pnpm-workspace.yaml` の overrides。公開から 14 日たった版）。hono の 5 件（moderate 4・low 1）と @hono/node-server の 2 件（moderate）が直る。どちらも SDK の HTTP の道筋（streamableHttp）だけが使い、TouRyou の mcp（`Server` と `StdioServerTransport`）と daemon（自前の HTTP）からは届かない。tar.gz には入るが読み込まれず、.mcpb（esbuild で 1 ファイル）には入らない。
 - **出す前の /setup の確かめを、フォークの rc の配布物で行う**（#58。#48・#56）: v0.1.0 の配布物は #56 の壊れたリンクで `/setup` の検査に止められ、`docs/setup-verification.md` の A が通らない。新しい A' は、フォークの試しのリリース（例 `0.1.1-rc.0`）の zip をそのまま写しにし、手元の写しだけ `install-runtime.sh` の `REPO_URL` と `plugin.json` の `repository` をフォークに書き換えて（1 か所ずつを確かめる）、S10〜S13 を通す。配る script・`plugin.json` は変えていない。`docs/release.md` の 2-a・フォークの検証の例の版（`0.1.1-rc.0`）・後始末の時期を直した。`check_links` の注を実際の動き（行き先の親が中にあれば、行き先のないリンクは通す）に合わせた。
 - **配布物から、ビルドの場所を指す壊れたシンボリックリンクを除く**（#56）: v0.1.0 の tar.gz には、pnpm deploy が残した `lib/node_modules/.pnpm/node_modules/@touryou/daemon`（CI のマシンの元のソースを指す）が入り、新しい `/touryou:setup` が「外を指すシンボリックリンクがある」で止まった。v0.1.1 の配布物から、`scripts/dist-build.sh` が展開先の外を指す・行き先のないリンクを取り除き（取り除いたものをビルドの出力に出す）、`scripts/dist-smoke.sh` が `/setup` と同じ検査（`install-runtime.sh` の関数）を tar.gz に当ててから Release に付ける。`/setup` の検査は緩めていない。
 - **macOS の bash 3.2 で、日本語の表示の直前の変数で導入の script が止まるのを直す**（#47）: `plugin/scripts/` の shell script の変数を、すべて `${名前}` の形にした（UTF-8 のロケールの bash 3.2 は、`$ver）` の全角の文字を名前の一部として読む）。`pnpm validate:plugin` が、`plugin/scripts` の `$名前` と、`$名前` のすぐあとの ASCII でない文字（`scripts/*.sh` も）を拒む。試験を UTF-8 のロケールでも走らせる。
