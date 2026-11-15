@@ -66,6 +66,8 @@ ls -ld "${HOME}/.touryou"
 
 ### 2. plugin の写しと checksums.json
 
+> **注意（#56）**: 直前の Release が **v0.1.0** のときは、その配布物に、ビルドしたマシンを指す壊れたシンボリックリンク（`lib/node_modules/.pnpm/node_modules/@touryou/daemon`）があるため、`install-runtime.sh` の検査（外を指すシンボリックリンク）で止まり、この手順 2 の先（手順 3 の導入）へ進めない。v0.1.1 からの配布物は、`scripts/dist-build.sh` がこのリンクを取り除き、`scripts/dist-smoke.sh` が同じ検査を当ててから Release に付ける。
+
 直前の Release の版を取る（`V` に入る。例: `0.1.0`）。
 
 ```sh

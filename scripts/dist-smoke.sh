@@ -6,6 +6,8 @@ tgz="${1:?tar.gz の絶対パス}"
 work="$(cd "$(mktemp -d)" && pwd -P)"   # macOS の /var は /private/var へのリンク。設定は実パスで書く
 # pid が空のとき kill 0 にしない（kill 0 は、自分のプロセスのグループ全体（runner の段のシェルも）に SIGTERM を送り、143 で落ちる）
 trap 'if [ -n "${pid:-}" ]; then kill "$pid" 2>/dev/null || true; fi; rm -rf "$work"' EXIT
+echo "== 配布物の中身を、/touryou:setup（install-runtime.sh）と同じ検査で確かめる（#56）"
+bash "$(dirname "$0")/dist-check.sh" "$tgz"
 tar -C "$work" -xzf "$tgz"
 dir="$(ls -d "$work"/touryou-*)"
 # repo と設定（stateDir は 0700、設定は 0600）

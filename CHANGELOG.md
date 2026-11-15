@@ -1,6 +1,7 @@
 # 変更履歴
 
 ## 未公開
+- **配布物から、ビルドの場所を指す壊れたシンボリックリンクを除く**（#56）: v0.1.0 の tar.gz には、pnpm deploy が残した `lib/node_modules/.pnpm/node_modules/@touryou/daemon`（CI のマシンの元のソースを指す）が入り、新しい `/touryou:setup` が「外を指すシンボリックリンクがある」で止まった。v0.1.1 の配布物から、`scripts/dist-build.sh` が展開先の外を指す・行き先のないリンクを取り除き（取り除いたものをビルドの出力に出す）、`scripts/dist-smoke.sh` が `/setup` と同じ検査（`install-runtime.sh` の関数）を tar.gz に当ててから Release に付ける。`/setup` の検査は緩めていない。
 - **macOS の bash 3.2 で、日本語の表示の直前の変数で導入の script が止まるのを直す**（#47）: `plugin/scripts/` の shell script の変数を、すべて `${名前}` の形にした（UTF-8 のロケールの bash 3.2 は、`$ver）` の全角の文字を名前の一部として読む）。`pnpm validate:plugin` が、`plugin/scripts` の `$名前` と、`$名前` のすぐあとの ASCII でない文字（`scripts/*.sh` も）を拒む。試験を UTF-8 のロケールでも走らせる。
 - **新しい /setup の実機の確かめの手順**（#48）: `docs/setup-verification.md` を足した。tag の前は、手元の plugin の写しに直前の Release の `checksums.json` を置いて `claude --plugin-dir` で `/touryou:setup` を通し（S10〜S13。版上げは複製した版で模造する）、tag の後は zip の `checksums.json` を確かめてから marketplace の PR をマージし、update → `/setup` → Q8 を行う。取得先は本番のまま、script には手を入れていない。`docs/release.md` の手順に 2-a と 6 を足した。
 - **Dependabot で actions の版を上げ、patch・minor を自動でマージする**: `.github/dependabot.yml` で、workflow の actions の上げを週に 1 回、patch・minor は 1 本の PR に、メジャーは actions ごとの別の PR にする（公開から 14 日たった版だけ）。`dependabot-auto-merge.yml` が、github-actions の patch・minor で `.github/workflows/` の中だけを変える PR に auto-merge を付け、必須の check が通ってからマージされる。メジャーの上げは人がレビューする。マージのあとは `dependabot-main-ci.yml` が main で `ci.yml` を起こす。リポジトリの設定の「Allow auto-merge」が要る（`docs/release.md`）。

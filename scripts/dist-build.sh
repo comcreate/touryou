@@ -30,10 +30,12 @@ cp "${work}/node-v${node_version}-${os}-${narch}/bin/node" "${stage}/bin/node"
 
 cd "$root"
 # daemon の依存（better-sqlite3・MCP SDK など。@touryou/core を含む）を lib/ に 1 度だけ置く。mcp・cli は、その依存で足りる（重複を避ける）
-pnpm --filter=@touryou/daemon --prod --legacy deploy "${stage}/lib"
+# package-import-method=copy: 置き場（store）からのハードリンクにしない（Linux の既定はハードリンクで、tar にハードリンクとして入り、
+# install-runtime.sh の check_types・check_kinds に当たる。macOS の既定〔clone〕は、もともとハードリンクにならない）
+pnpm --config.package-import-method=copy --filter=@touryou/daemon --prod --legacy deploy "${stage}/lib"
 for p in mcp cli; do
   tmp="$(mktemp -d "${work}/deploy.XXXXXX")"
-  pnpm --filter="@touryou/${p}" --prod --legacy deploy "${tmp}"
+  pnpm --config.package-import-method=copy --filter="@touryou/${p}" --prod --legacy deploy "${tmp}"
   mkdir -p "${stage}/lib/node_modules/@touryou/${p}"
   cp -R "${tmp}/dist" "${tmp}/package.json" "${stage}/lib/node_modules/@touryou/${p}/"
 done
@@ -58,6 +60,26 @@ for bs in "${stage}"/lib/node_modules/.pnpm/better-sqlite3@*/node_modules/better
   rm -rf "${bs}/deps" "${bs}/src"
   find "${bs}/prebuilds" -name '*.node' ! -name "${os}-${narch}.node" -delete
 done
+
+echo "== 展開先（lib の外）を指す・行き先のないシンボリックリンクを取り除く（#56）"
+# pnpm deploy は、deploy したパッケージ自身（@touryou/daemon）への隠れた hoist のリンク（.pnpm/node_modules/@touryou/daemon）を、
+# ビルドしたマシンの workspace のソース（packages/daemon）を指す相対パスで残す。利用者のマシンには行き先がなく、/touryou:setup の check_links が断る。
+# lib の中では、だれもこの名前で読まない（lib そのものが daemon）。取り除いたものは、ここに出す
+stage_real="$(cd -P "${stage}" && pwd -P)"
+nremoved=0
+while IFS= read -r l; do
+  [ -n "$l" ] || continue
+  t="$(readlink "$l")"
+  real="$(realpath "$l" 2>/dev/null || true)"
+  case "$t" in /*) real="" ;; esac
+  case "${real}/" in
+    "${stage_real}"/*) [ -e "$l" ] && continue ;;
+  esac
+  echo "取り除く: ${l#"${stage}"/} -> ${t}"
+  rm -f "$l"
+  nremoved=$((nremoved + 1))
+done <<< "$(find "${stage}" -type l)"
+echo "取り除いたリンク: ${nremoved} 本"
 
 echo "== 検査: ネイティブのバイナリが、想定の OS・CPU か"
 case "${os}-${narch}" in

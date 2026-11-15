@@ -14,6 +14,8 @@ on:
       - "packages/mcp/src/mcpb-entry.ts"
       - "scripts/dist-smoke.sh"
       - "scripts/dist-smoke-hook.sh"
+      - "scripts/dist-check.sh"
+      - "plugin/scripts/install-runtime.sh"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"

@@ -3,6 +3,7 @@
 目的: Node 同梱の配布物（`touryou-darwin-arm64.tar.gz`。**対象は macOS の arm64 のみ**。x64〔Intel〕は対象外）が、**Node のない Mac** で、取得して展開するだけで動くかを確かめる。確かめるのは、(1) Node なしで daemon が起動する (2) Gatekeeper・署名の影響 (3) フック（`touryou hook`）が Node なしで動く (4) `touryou-mcp --stdio` が動く。
 
 - 配布物は、Release の asset か、Actions（`Dist smoke (experiment)`）の artifact から取る。
+- 配布物の中身（tar の一覧・特殊なファイル・シンボリックリンクが展開先の外や行き先のない所を指さないこと）は、CI の `scripts/dist-smoke.sh` が、利用者の `/setup` と同じ検査（`scripts/dist-check.sh`。`install-runtime.sh` の関数をそのまま使う）で確かめる。手元で確かめるなら `bash scripts/dist-check.sh <tar.gz の絶対パス>`（#56）。
 - **トークン・パスの値は、どこにも書き写さない**。
 - 作業用のディレクトリは、各自の一時の場所の下を使う。
 - 各手順の「CI の確認」欄: **CI で確認できる** = CI の macOS runner（arm64）で同じ操作を通している。**実機だけ** = 実機でしか確かめられない。
