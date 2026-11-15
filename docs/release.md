@@ -182,16 +182,16 @@ v=0.1.1-rc.0
 (
   set -euo pipefail
   url="$(git remote get-url origin)"
-  case "$url" in
-    *"comcreate/"*) echo "origin が上流です。止めます: $url" >&2; exit 1 ;;
+  case "${url}" in
+    *"comcreate/"*) echo "origin が上流です。止めます: ${url}" >&2; exit 1 ;;
     *"/${acct}/"*|*":${acct}/"*) ;;
-    *) echo "origin が fork（${acct}）ではありません。止めます: $url" >&2; exit 1 ;;
+    *) echo "origin が fork（${acct}）ではありません。止めます: ${url}" >&2; exit 1 ;;
   esac
   [ -z "$(git ls-remote --tags origin "v${v}")" ] || { echo "fork にすでに v${v} がある" >&2; exit 1; }
   [ -z "$(git ls-remote --tags https://github.com/comcreate/touryou "v${v}")" ] || { echo "上流に v${v} がある。別の版にする" >&2; exit 1; }
   git switch -c verify-release origin/main
   for f in plugin/.claude-plugin/plugin.json package.json packages/*/package.json; do
-    jq --arg v "$v" '.version = $v' "$f" > "$f.new" && mv "$f.new" "$f"
+    jq --arg v "${v}" '.version = $v' "${f}" >| "${f}.new" && command mv -f "${f}.new" "${f}"
   done
   git --no-pager diff --stat
   git commit -am "verify: 検証用の版 ${v}"
@@ -204,7 +204,7 @@ v=0.1.1-rc.0
 確かめたあと、Release の asset を利用者と同じ形で取り、照合する（`shasum -a 256 -c` が `OK`）。Mac での起動・quarantine の確かめは `docs/dist-manual-verification.md`。照合が通ったら、`docs/setup-verification.md` の A'（この rc の Release で /setup を確かめる）に進む。
 
 ```sh
-d="$(mktemp -d)" && cd "$d"
+d="$(mktemp -d)" && cd "${d}"
 gh release download "v${v}" --repo <自分のアカウント>/touryou
 shasum -a 256 -c ./*.sha256
 unzip -p touryou-*.zip checksums.json | jq .

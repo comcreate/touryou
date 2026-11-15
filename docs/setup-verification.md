@@ -52,14 +52,14 @@ plutil -extract EnvironmentVariables.PATH raw "${HOME}/Library/LaunchAgents/tour
 
 ```sh
 mkdir -p "${HOME}/touryou-verify-launchd"
-cp -p "${HOME}/Library/LaunchAgents/"*touryou.daemon.plist "${HOME}/touryou-verify-launchd/"
+command cp -fp "${HOME}/Library/LaunchAgents/"*touryou.daemon.plist "${HOME}/touryou-verify-launchd/"
 "${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes
 ```
 
 `~/.touryou` を退避する。
 
 ```sh
-mv "${HOME}/.touryou" "${HOME}/.touryou.before-verify"
+command mv -f "${HOME}/.touryou" "${HOME}/.touryou.before-verify"
 ls -ld "${HOME}/.touryou"
 ```
 
@@ -88,7 +88,7 @@ plugin の写しを作り、`checksums.json` を作って置き、写しの `plu
 
 ```sh
 rm -rf "${W}/plugin"
-cp -R plugin "${W}/plugin"
+command cp -R plugin "${W}/plugin"
 node scripts/make-checksums.mjs "${W}/dl" "${V}" "${W}/plugin/checksums.json"
 node -e 'const f=process.argv[1];const fs=require("fs");const j=JSON.parse(fs.readFileSync(f,"utf8"));j.version=process.argv[2];fs.writeFileSync(f,JSON.stringify(j,null,2)+"\n")' "${W}/plugin/.claude-plugin/plugin.json" "${V}"
 ```
@@ -139,7 +139,7 @@ readlink "${HOME}/.touryou/current"
 
 ```sh
 "${HOME}/.touryou/current/bin/touryou" launchd stop
-cp -Rp "${HOME}/.touryou/v${V}" "${HOME}/.touryou/v0.0.0-verify"
+command cp -Rp "${HOME}/.touryou/v${V}" "${HOME}/.touryou/v0.0.0-verify"
 ln -sfn "${HOME}/.touryou/v0.0.0-verify/touryou-darwin-arm64" "${HOME}/.touryou/current"
 readlink "${HOME}/.touryou/current"
 "${HOME}/.touryou/current/bin/touryou" launchd init
@@ -190,7 +190,7 @@ claude --plugin-dir "${W}/plugin"
 ```sh
 "${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes
 rm -rf "${HOME}/.touryou"
-mv "${HOME}/.touryou.before-verify" "${HOME}/.touryou"
+command mv -f "${HOME}/.touryou.before-verify" "${HOME}/.touryou"
 readlink "${HOME}/.touryou/current"
 ```
 
@@ -218,6 +218,7 @@ rm -rf "${W}"
 - **手元の写しだけ**、取得先をフォークに書き換える（`scripts/install-runtime.sh` の `REPO_URL` の 1 行と、`.claude-plugin/plugin.json` の `repository`）。script は取得先を本番に固定し、`plugin.json` の `repository` も照合するため。リポジトリの script・`plugin.json` は変えない（守りを緩めない。試しの抜け道を本番の道筋に作らない）。
 - 手元の main の `plugin/` ではなく、フォークの Release の zip を使う: `release.yml` が作ったもの（zip の中の `checksums.json`・script・`plugin.json` の版）そのものを確かめるため。書き換えるのは上の 2 か所だけ。
 - フォークのアカウント名は、文書に書かない（`gh api user` で変数 `ACCT` に入れる）。`gh` はアカウント名を取る 1 か所だけで使い、ほかは curl で取る（フォークは公開なので、curl で取れる）。
+- `mv`・`cp` は `command mv`・`command cp` の形にしている（zsh の `mv -i` などの alias で、上書きのたびに聞かれないように）。
 - コマンドは zsh（noclobber）に 1 行ずつ貼れる形。上書きは `>|`、変数は `${V}` の形、`!` は使わない。変数が空のときは `STOP` を出して何もしない。
 
 ### 0'. main を最新にする・作業の場所
