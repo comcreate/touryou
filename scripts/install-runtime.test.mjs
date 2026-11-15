@@ -528,3 +528,61 @@ test("setup.md の呼び出し（env -u BASH_ENV -u ENV bash）では、BASH_ENV
   assert.match(r.stdout, /Apple Silicon/);
   assert.ok(!existsSync(join(h, "planted")), "BASH_ENV のファイルが読まれた");
 });
+
+// --- ロケール（#47） ---
+// macOS の bash 3.2 は、UTF-8 のロケールで、`$name` のすぐあとの全角の文字（の 1 バイト目）を名前の一部として読む（`$ver）` が `ver\xEF`）。
+// ロケールなし（C）の組だけでは見つからないので、利用者の Mac と同じ UTF-8 の組でも走らせる。
+const LOCALES = [
+  { label: "ロケールなし", env: {} },
+  { label: "ja_JP.UTF-8", env: { LANG: "ja_JP.UTF-8", LC_ALL: "ja_JP.UTF-8" } },
+  { label: "en_US.UTF-8", env: { LANG: "en_US.UTF-8", LC_ALL: "en_US.UTF-8" } },
+];
+/** 出力が正しい UTF-8 であること（壊れた文字〔U+FFFD〕がない） */
+const assertUtf8 = (s, label) => {
+  assert.ok(!s.includes("�"), `${label}: 正しい UTF-8 でない: ${s}`);
+};
+
+for (const { label, env } of LOCALES) {
+  test(`ロケール ${label}: 初めて・上げる（全角の文字の直前の版の表示）が、版をそのまま出して 0 で終わる`, () => {
+    const old = makeTarball("0.9.0");
+    const h = newHome();
+    const first = install(makePlugin("0.9.0", old), h, old, [], { env });
+    assert.equal(first.status, 0, `${label}: ${out(first)}`);
+    assertUtf8(out(first), label);
+    assert.match(first.stdout, /配布物を取得します（v0\.9\.0。/);
+    assert.match(first.stdout, /インストールできました（v0\.9\.0）/);
+    assert.match(first.stdout, /RESULT: installed/);
+    assert.doesNotMatch(out(first), /unbound variable/);
+
+    const tb = makeTarball("1.0.0");
+    const up = install(makePlugin("1.0.0", tb), h, tb, [], { env });
+    assert.equal(up.status, 0, `${label}: ${out(up)}`);
+    assertUtf8(out(up), label);
+    assert.match(up.stdout, /current を v1\.0\.0 に付け替えました（前は v0\.9\.0）/);
+    assert.match(up.stdout, /v0\.9\.0 から v1\.0\.0 に上げました/);
+    assert.match(up.stdout, /RESULT: upgraded/);
+    assert.equal(cur(h), join(h, ".touryou", "v1.0.0", "touryou-darwin-arm64"));
+
+    // 版が食い違う（checksums.json と plugin.json）: 版を出して 1 で止まる
+    const bad = install(makePlugin("1.0.0", tb, { pluginVer: "1.0.1" }), newHome(), tb, [], { env });
+    assert.equal(bad.status, 1, `${label}: ${out(bad)}`);
+    assertUtf8(out(bad), label);
+    assert.match(out(bad), /checksums\.json の版（1\.0\.0）と plugin の版（1\.0\.1）が違う/);
+    assert.doesNotMatch(out(bad), /unbound variable/);
+  });
+
+  test(`ロケール ${label}: SessionStart の知らせが、版をそのまま出した正しい UTF-8 の JSON で、0 で終わる`, () => {
+    const tb = makeTarball("0.9.0");
+    const h = newHome();
+    assert.equal(install(makePlugin("0.9.0", tb), h, tb).status, 0);
+    const r = spawnSync("sh", ["-c", HOOK_COMMAND_SESSION_START], {
+      env: { PATH: "/usr/bin:/bin", HOME: h, CLAUDE_PLUGIN_ROOT: makePlugin("1.0.0", tb), ...env },
+      encoding: "utf8",
+    });
+    assert.equal(r.status, 0, `${label}: ${out(r)}`);
+    assertUtf8(r.stdout, label);
+    const j = JSON.parse(r.stdout);
+    assert.match(j.systemMessage, /本体（v0\.9\.0）と plugin（v1\.0\.0）の版が違います/);
+    assert.equal(j.hookSpecificOutput.additionalContext, j.systemMessage);
+  });
+}
