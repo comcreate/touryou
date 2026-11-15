@@ -3,6 +3,7 @@
 `/touryou:setup`（`plugin/scripts/install-runtime.sh`・`plugin/commands/setup.md`・`plugin/hooks/`）を、Mac（Apple Silicon）の実機で通して確かめる手順。確かめの項目は `docs/manual-verification-checklist.md` の S10〜S13・Q8。
 
 - **A. tag の前**: 手元の clone の `plugin/` の写しに、**直前の Release** の配布物の `checksums.json` を置き、`claude --plugin-dir <写し>` で `/touryou:setup` を通す（`docs/release.md` の「リリースの手順」の 2-a）。
+- **A'. tag の前（フォークの rc）**: 直前の Release が v0.1.0 のとき（#56）は、A は通らない。フォークの試しのリリース（rc）の zip を写しにし、手元の写しだけ取得先をフォークに書き換えて、同じ確かめを行う。
 - **C. tag の後**: Release の zip の `checksums.json` を確かめてから marketplace の PR をマージし、前の版を入れた Mac で update する（`docs/release.md` の 6）。
 
 決まり:
@@ -10,7 +11,7 @@
 - **取得先は本番（`https://github.com/comcreate/touryou`）に固定のまま**。script には手を入れず、試しのための差し替えの道（引数・環境変数）も使わない。写しが取るのは、直前の Release の本物の tar.gz。
 - 本番に pre-release を出して確かめる案は採らない（`docs/release.md` の「採用しない案」）。
 - 版や sha256 の値は、この文書に書かない。その場で取った `.sha256` から使い、手順の中で確かめる。
-- コマンドは、zsh（noclobber が有効）に 1 行ずつ貼れる形にしている。上書きは `>|`、変数は `${V}` の形。`gh` は使わない（curl だけで取れる）。
+- コマンドは、zsh（noclobber が有効）に 1 行ずつ貼れる形にしている。上書きは `>|`、変数は `${V}` の形。`gh` は使わない（curl だけで取れる。A' のフォークのアカウント名を取る 1 か所だけ例外）。
 
 ## A. tag の前
 
@@ -66,7 +67,7 @@ ls -ld "${HOME}/.touryou"
 
 ### 2. plugin の写しと checksums.json
 
-> **注意（#56）**: 直前の Release が **v0.1.0** のときは、その配布物に、ビルドしたマシンを指す壊れたシンボリックリンク（`lib/node_modules/.pnpm/node_modules/@touryou/daemon`）があるため、`install-runtime.sh` の検査（外を指すシンボリックリンク）で止まり、この手順 2 の先（手順 3 の導入）へ進めない。v0.1.1 からの配布物は、`scripts/dist-build.sh` がこのリンクを取り除き、`scripts/dist-smoke.sh` が同じ検査を当ててから Release に付ける。
+> **注意（#56）**: 直前の Release が **v0.1.0** のときは、その配布物に、ビルドしたマシンを指す壊れたシンボリックリンク（`lib/node_modules/.pnpm/node_modules/@touryou/daemon`）があるため、`install-runtime.sh` の検査（外を指すシンボリックリンク）で止まり、この手順 2 の先（手順 3 の導入）へ進めない。v0.1.0 の配布物は変えられないので、**A' を使う**。v0.1.1 からの配布物は、`scripts/dist-build.sh` がこのリンクを取り除き、`scripts/dist-smoke.sh` が同じ検査を当ててから Release に付ける。
 
 直前の Release の版を取る（`V` に入る。例: `0.1.0`）。
 
@@ -208,6 +209,90 @@ rm -rf "${W}"
 ```
 
 確かめる: `current` が 1 で記録したものと同じ。常駐だったときは `"${HOME}/Library/LaunchAgents/"` の plist と `"${HOME}/touryou-verify-launchd/"` の写しを `diff` で比べ、同じなら写しを消す（`rm -rf "${HOME}/touryou-verify-launchd"`）。常駐だったときは status が running。結果（S10〜S13 の可・不可と、出た表示）を、リリースの準備の PR か Issue に書く。
+
+## A'. tag の前（フォークの rc で行う）
+
+直前の Release が v0.1.0 のとき（#56 のため A が手順 3 で止まる）は、こちらで行う。フォークで試しのリリース（rc。例: `0.1.1-rc.0`）を作り、その Release の zip をそのまま写しにして `/touryou:setup` を通す。
+
+- **前提**: フォークの試しのリリース（`v<rc の版>`）が、`docs/release.md` の「本番の前の検証（フォークで行う）」の手順で通っていること（Release に asset が 6 ファイルある）。
+- **手元の写しだけ**、取得先をフォークに書き換える（`scripts/install-runtime.sh` の `REPO_URL` の 1 行と、`.claude-plugin/plugin.json` の `repository`）。script は取得先を本番に固定し、`plugin.json` の `repository` も照合するため。リポジトリの script・`plugin.json` は変えない（守りを緩めない。試しの抜け道を本番の道筋に作らない）。
+- 手元の main の `plugin/` ではなく、フォークの Release の zip を使う: `release.yml` が作ったもの（zip の中の `checksums.json`・script・`plugin.json` の版）そのものを確かめるため。書き換えるのは上の 2 か所だけ。
+- フォークのアカウント名は、文書に書かない（`gh` で変数 `ACCT` に入れる）。`gh` はアカウント名を取る 1 か所だけで使い、ほかは curl で取る（フォークは公開なので、curl で取れる）。
+- コマンドは zsh（noclobber）に 1 行ずつ貼れる形。上書きは `>|`、変数は `${V}` の形、`!` は使わない。変数が空のときは `STOP` を出して何もしない。
+
+### 0'. main を最新にする・作業の場所
+
+A の 0 と同じ（`W="${HOME}/touryou-verify"`、`mkdir -p "${W}/dl"`）。あわせて、フォークのアカウント名と rc の版を変数に入れる。
+
+```sh
+gh auth switch --hostname github.com --user ToshikiImagawa && ACCT="$(gh api user --jq .login)"
+R=0.1.1-rc.0
+echo "${ACCT} ${R} ${W}"
+```
+
+確かめる: 3 つとも空でない。`R` は、フォークに push した tag（`v${R}`）の版。
+
+### 1'. いまの ~/.touryou と常駐を退避する
+
+A の 1 と同じ（常駐の有無・`--org`・`--path-prefix` の扱いも同じ）。
+
+### 2'. 写し: フォークの Release の zip
+
+フォークの Release の zip と、tar.gz・`.mcpb` の `.sha256` を取る。
+
+```sh
+if [ -n "${W}" ] && [ -n "${ACCT}" ] && [ -n "${R}" ]; then for f in "touryou-${R}.zip" "touryou-${R}-darwin-arm64.tar.gz.sha256" "touryou-mcp-${R}.mcpb.sha256"; do curl -fsSL -o "${W}/dl/${f}" "https://github.com/${ACCT}/touryou/releases/download/v${R}/${f}" || echo "STOP: ${f}"; done; else echo STOP; fi
+ls -l "${W}/dl/"
+```
+
+zip を展開して写しにする（`checksums.json` は zip の中のもの〔`release.yml` が作った本物〕をそのまま使う。作り直さない）。
+
+```sh
+if [ -n "${W}" ] && [ -n "${R}" ]; then rm -rf "${W:?}/plugin" && mkdir -p "${W}/plugin" && unzip -q "${W}/dl/touryou-${R}.zip" -d "${W}/plugin"; else echo STOP; fi
+ls -A "${W}/plugin" "${W}/plugin/scripts"
+```
+
+zip の中の `checksums.json` の sha が、フォークの Release の `.sha256` と同じことを確かめる（値を手で書き写さない）。
+
+```sh
+grep '"version"' "${W}/plugin/.claude-plugin/plugin.json" "${W}/plugin/checksums.json"
+cat "${W}/dl/touryou-${R}-darwin-arm64.tar.gz.sha256" "${W}/dl/touryou-mcp-${R}.mcpb.sha256"
+for f in "${W}/dl/"*.sha256; do s="$(awk '{print $1}' "${f}")"; if [ -n "${s}" ] && grep -q "\"${s}\"" "${W}/plugin/checksums.json"; then echo "same: ${f##*/}"; else echo "DIFF: ${f##*/}"; fi; done
+```
+
+確かめる: 2 つの `"version"` が `${R}`。`same:` が 2 行（tar.gz と `.mcpb`）で、`DIFF:` が出ない。`scripts/` に `install-runtime.sh` と `runtime-version-notice.sh` がある。
+
+写しの 2 か所を、フォークの URL に書き換える。書き換える前の 1 行を表示し、`sed` で別のファイルに書き出してから、変わった行が 1 か所だけであることを確かめて置き換える（macOS の `sed -i` は GNU と違うので使わない）。
+
+```sh
+grep -n '^REPO_URL=' "${W}/plugin/scripts/install-runtime.sh"
+grep -n '"repository"' "${W}/plugin/.claude-plugin/plugin.json"
+if [ -n "${W}" ] && [ -n "${ACCT}" ]; then sed "s|^REPO_URL=\"https://github.com/comcreate/touryou\"\$|REPO_URL=\"https://github.com/${ACCT}/touryou\"|" "${W}/plugin/scripts/install-runtime.sh" >| "${W}/install-runtime.sh.new" && sed "s|\"repository\": \"https://github.com/comcreate/touryou\"|\"repository\": \"https://github.com/${ACCT}/touryou\"|" "${W}/plugin/.claude-plugin/plugin.json" >| "${W}/plugin.json.new"; else echo STOP; fi
+diff "${W}/plugin/scripts/install-runtime.sh" "${W}/install-runtime.sh.new" | grep -c '^[<>]'
+diff "${W}/plugin/.claude-plugin/plugin.json" "${W}/plugin.json.new" | grep -c '^[<>]'
+```
+
+確かめる: 2 つの `grep -c` が、どちらも `2`（消える 1 行と足す 1 行）。`0` なら書き換わっていない（元の行が違う。止める）。`2` のときだけ、置き換えて、後の 1 行を表示する。
+
+```sh
+if [ -s "${W}/install-runtime.sh.new" ] && [ -s "${W}/plugin.json.new" ]; then cat "${W}/install-runtime.sh.new" >| "${W}/plugin/scripts/install-runtime.sh" && cat "${W}/plugin.json.new" >| "${W}/plugin/.claude-plugin/plugin.json" && rm -f "${W:?}/install-runtime.sh.new" "${W:?}/plugin.json.new"; else echo STOP; fi
+grep -n '^REPO_URL=' "${W}/plugin/scripts/install-runtime.sh"
+grep -n '"repository"' "${W}/plugin/.claude-plugin/plugin.json"
+grep -rn 'comcreate/touryou' "${W}/plugin/scripts" "${W}/plugin/.claude-plugin"
+```
+
+確かめる: `REPO_URL` と `repository` が `https://github.com/${ACCT}/touryou`。最後の `grep` が何も出さない（`cat >|` で置き換えるので、ファイルの実行の権限は zip のまま）。
+
+### 3'〜8'. A の 3〜8 と同じ
+
+A の 3〜8（S10・S11・S13・S12 の模造・後片付け）を、`V` を `${R}` にして行う（`V="${R}"` としてから、A のコマンドをそのまま貼ってよい）。違う所だけ:
+
+- **3（S10）**: 取得先は `https://github.com/${ACCT}/touryou/releases/download/v${R}/…`（script の出力）。本番（`comcreate`）を指していたら、2' の書き換えが効いていない。止めて 8 に進む。
+- **3（S11）**: `current` が `…/v${R}/touryou-darwin-arm64`。
+- **6（S12）**: 版の違いの知らせは、本体 v0.0.0-verify と plugin v`${R}`。
+- **8（後片付け）**: A の 8 と同じ。`rm -rf "${W}"` で、書き換えた写しも消える（リポジトリの `plugin/` は変えていない。`git status` がきれいなことを確かめる）。フォークの Release・tag・枝は、A' が済んでから消す（`docs/release.md` の「本番の前の検証」の後始末）。
+
+結果は、A と同じに、リリースの準備の PR か Issue に書く（rc の版でフォークの Release を使ったこと、を添える）。
 
 ## C. tag の後
 

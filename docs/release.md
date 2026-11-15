@@ -18,7 +18,7 @@ claude plugin marketplace add comcreate/touryou
 
 1. 版をそろえる（上の「版の決まり」）。準備の PR（`release: <版> の準備`）を出し、マージする。
 2. `bash scripts/check.sh` と `claude plugin validate plugin` が通ることを確かめる。
-   - **2-a 新しい /setup の実機の確かめ**（tag の前。導入の script・`setup.md`・hooks を変えたときは必ず行う）: `docs/setup-verification.md` の A。手元の `plugin/` の写しに、直前の Release の `.sha256` から作った `checksums.json` を置き、`claude --plugin-dir <写し>` で `/touryou:setup` を通す（S10〜S13）。取得先は本番のまま、script には手を入れない。
+   - **2-a 新しい /setup の実機の確かめ**（tag の前。導入の script・`setup.md`・hooks を変えたときは必ず行う）: `docs/setup-verification.md` の A。手元の `plugin/` の写しに、直前の Release の `.sha256` から作った `checksums.json` を置き、`claude --plugin-dir <写し>` で `/touryou:setup` を通す（S10〜S13）。取得先は本番のまま、script には手を入れない。直前の Release に #56 の壊れたリンクがあるとき（v0.1.0）は、フォークの rc で A' を行う（下の「本番の前の検証」で rc の Release を作り、その zip を写しにして、手元の写しだけ取得先をフォークに書き換える）。
 3. main にマージしたあと、タグを付けて push する（タグは `v` + plugin.json の `version`。違うと失敗する）。書き込みの権限のあるアカウントで、clone のディレクトリで実行する（`gh api repos/comcreate/touryou --jq .permissions.push` が `true` であること）。zsh の対話に貼れるように、コメント行（`#`）は入れていない。
 
    ```sh
@@ -160,7 +160,7 @@ marketplace への PR だけが出なかった（Release は正しく作られ�
 
 ## 本番の前の検証（フォークで行う）
 
-この検証は release.yml のためのもので、/setup は通せない。/setup の確かめは 2-a で行う（`docs/setup-verification.md`）。
+この検証は release.yml のためのもの。本番の取得先に固定された /setup は、そのままでは通せない。/setup の確かめは 2-a で行う（`docs/setup-verification.md`。直前の Release が v0.1.0 のときは、ここで作った rc の Release で A' を行う）。
 
 目的: release.yml を、本番のリポジトリに触れずに、タグの push から Release の作成・照合まで通して確かめる。フォークの名前・アカウント名は、`<自分のアカウント>` と書く（値を文書に残さない）。
 
@@ -174,11 +174,11 @@ marketplace への PR だけが出なかった（Release は正しく作られ�
 
 準備: fork を作り、fork の Actions を有効にする（fork では既定で無効）。手元で fork を clone し、`origin` が fork であることを確かめる（**上流に push しない**。`git push --tags` は使わない）。
 
-検証用の版は、本番で使わない pre-release にする（例: `0.1.0-rc.0`）。上流に同名のタグがないことを、先に確かめる。
+検証用の版は、本番で使わない pre-release にする（例: `0.1.1-rc.0`）。上流に同名のタグがないことを、先に確かめる。
 
 ```sh
 acct=<自分のアカウント>
-v=0.1.0-rc.0
+v=0.1.1-rc.0
 (
   set -euo pipefail
   url="$(git remote get-url origin)"
@@ -201,7 +201,7 @@ v=0.1.0-rc.0
 )
 ```
 
-確かめたあと、Release の asset を利用者と同じ形で取り、照合する（`shasum -a 256 -c` が `OK`）。Mac での起動・quarantine の確かめは `docs/dist-manual-verification.md`。
+確かめたあと、Release の asset を利用者と同じ形で取り、照合する（`shasum -a 256 -c` が `OK`）。Mac での起動・quarantine の確かめは `docs/dist-manual-verification.md`。照合が通ったら、`docs/setup-verification.md` の A'（この rc の Release で /setup を確かめる）に進む。
 
 ```sh
 d="$(mktemp -d)" && cd "$d"
@@ -210,7 +210,7 @@ shasum -a 256 -c ./*.sha256
 unzip -p touryou-*.zip checksums.json | jq .
 ```
 
-後始末: fork の Release・タグ・ブランチを消す（fork ごと消してもよい）。手元の clone では、`git switch main` のあとで `git tag -d "v${v}"`・`git branch -D verify-release`。
+後始末: **A' が済んでから**、fork の Release・タグ・ブランチを消す（A' はこの Release から取るので、先に消すと通せない）（fork ごと消してもよい）。手元の clone では、`git switch main` のあとで `git tag -d "v${v}"`・`git branch -D verify-release`。
 
 ### 採用しない案
 
