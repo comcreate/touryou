@@ -217,20 +217,22 @@ rm -rf "${W}"
 - **前提**: フォークの試しのリリース（`v<rc の版>`）が、`docs/release.md` の「本番の前の検証（フォークで行う）」の手順で通っていること（Release に asset が 6 ファイルある）。
 - **手元の写しだけ**、取得先をフォークに書き換える（`scripts/install-runtime.sh` の `REPO_URL` の 1 行と、`.claude-plugin/plugin.json` の `repository`）。script は取得先を本番に固定し、`plugin.json` の `repository` も照合するため。リポジトリの script・`plugin.json` は変えない（守りを緩めない。試しの抜け道を本番の道筋に作らない）。
 - 手元の main の `plugin/` ではなく、フォークの Release の zip を使う: `release.yml` が作ったもの（zip の中の `checksums.json`・script・`plugin.json` の版）そのものを確かめるため。書き換えるのは上の 2 か所だけ。
-- フォークのアカウント名は、文書に書かない（`gh` で変数 `ACCT` に入れる）。`gh` はアカウント名を取る 1 か所だけで使い、ほかは curl で取る（フォークは公開なので、curl で取れる）。
+- フォークのアカウント名は、文書に書かない（`gh api user` で変数 `ACCT` に入れる）。`gh` はアカウント名を取る 1 か所だけで使い、ほかは curl で取る（フォークは公開なので、curl で取れる）。
 - コマンドは zsh（noclobber）に 1 行ずつ貼れる形。上書きは `>|`、変数は `${V}` の形、`!` は使わない。変数が空のときは `STOP` を出して何もしない。
 
 ### 0'. main を最新にする・作業の場所
 
-A の 0 と同じ（`W="${HOME}/touryou-verify"`、`mkdir -p "${W}/dl"`）。あわせて、フォークのアカウント名と rc の版を変数に入れる。
+A の 0 と同じに、main を最新にする。`gh auth status` で、フォークの持ち主のアカウントとして入っていることを確かめる（違えば `gh auth switch` で切り替える）。そのうえで、作業の場所・フォークのアカウント名・rc の版を変数に入れる。
 
 ```sh
-gh auth switch --hostname github.com --user ToshikiImagawa && ACCT="$(gh api user --jq .login)"
+W="${HOME}/touryou-verify"
+mkdir -p "${W}/dl"
+ACCT="$(gh api user --jq .login)"
 R=0.1.1-rc.0
 echo "${ACCT} ${R} ${W}"
 ```
 
-確かめる: 3 つとも空でない。`R` は、フォークに push した tag（`v${R}`）の版。
+確かめる: 3 つとも空でない。`ACCT` がフォークの持ち主。`R` は、フォークに push した tag（`v${R}`）の版。
 
 ### 1'. いまの ~/.touryou と常駐を退避する
 
@@ -248,7 +250,7 @@ ls -l "${W}/dl/"
 zip を展開して写しにする（`checksums.json` は zip の中のもの〔`release.yml` が作った本物〕をそのまま使う。作り直さない）。
 
 ```sh
-if [ -n "${W}" ] && [ -n "${R}" ]; then rm -rf "${W:?}/plugin" && mkdir -p "${W}/plugin" && unzip -q "${W}/dl/touryou-${R}.zip" -d "${W}/plugin"; else echo STOP; fi
+if [ -n "${W}" ] && [ -n "${R}" ] && [ -s "${W}/dl/touryou-${R}.zip" ]; then rm -rf "${W:?}/plugin" && mkdir -p "${W}/plugin" && unzip -q "${W}/dl/touryou-${R}.zip" -d "${W}/plugin"; else echo STOP; fi
 ls -A "${W}/plugin" "${W}/plugin/scripts"
 ```
 
@@ -287,7 +289,7 @@ grep -rn 'comcreate/touryou' "${W}/plugin/scripts" "${W}/plugin/.claude-plugin"
 
 A の 3〜8（S10・S11・S13・S12 の模造・後片付け）を、`V` を `${R}` にして行う（`V="${R}"` としてから、A のコマンドをそのまま貼ってよい）。違う所だけ:
 
-- **3（S10）**: 取得先は `https://github.com/${ACCT}/touryou/releases/download/v${R}/…`（script の出力）。本番（`comcreate`）を指していたら、2' の書き換えが効いていない。止めて 8 に進む。
+- **3（S10）**: 取得先は `https://github.com/${ACCT}/touryou/releases/download/v${R}/…`（script の出力）。本番（`comcreate`）を指していたら、2' の書き換えが効いていない。止めて A の 8（=8'）に進む。
 - **3（S11）**: `current` が `…/v${R}/touryou-darwin-arm64`。
 - **6（S12）**: 版の違いの知らせは、本体 v0.0.0-verify と plugin v`${R}`。
 - **8（後片付け）**: A の 8 と同じ。`rm -rf "${W}"` で、書き換えた写しも消える（リポジトリの `plugin/` は変えていない。`git status` がきれいなことを確かめる）。フォークの Release・tag・枝は、A' が済んでから消す（`docs/release.md` の「本番の前の検証」の後始末）。
