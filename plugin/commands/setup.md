@@ -135,7 +135,7 @@ plugin を新しい版にしたあと（セッションの始まりに「本体�
 
 定型文: 「常駐している daemon を、いったん止めて、新しい版に入れ替えます。入れ替えたあと、常駐の設定のまま（ログイン時に自動で動くまま）起動し直します。動いている子のセッションは止まります。よいですか（はい／いいえ）」
 
-**はっきり「はい」のときだけ** `env -u BASH_ENV -u ENV bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-runtime.sh" --restart-daemon` を実行する（タイムアウトは最大 10 分）。それ以外（「いいえ」・あいまい・質問）は、何もせずに、版を上げずに終わる（今の版のまま動き続ける）。
+**はっきり「はい」のときだけ** `env -u BASH_ENV -u ENV bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-runtime.sh" --restart-daemon` を実行する（タイムアウトは最大 10 分）。この実行の前に、手順 1 の定型文（script を実行する前）を、もう一度言う（1 回目の実行は、取得の前に終わっているため。取得するか・取得済みのものを使い直すかは、この 2 回目で決まる）。それ以外（「いいえ」・あいまい・質問）は、何もせずに、版を上げずに終わる（今の版のまま動き続ける）。
 
 script は、新しい版を置いて `--help` を確かめたあとで、今の版の `touryou launchd init`（今の生成物が、引数なしの init と同じかの確かめ。違えば、止めずに終わる）→ `touryou launchd stop` → `current` の付け替え → 新しい版の `touryou launchd apply --yes` の順に行う。新しい版の `apply` が失敗したら、`current` を前の版に戻して、前の版で `apply --yes` をやり直す。組織の名前つき（`--org`）の常駐は、起動し直さずに止まる（`docs/launchd.md` の手作業の手順で上げる）。
 

@@ -296,6 +296,8 @@ test("症状表: 観察した症状のとおり（約 1 分後に終了）。原
   assert.match(body, /初めてのときと、版が変わったときは、配布物を取得します/);
   assert.match(body, /同じ版がすでに入っているときは、取得しません/);
   assert.doesNotMatch(body, /定型文: 「配布物を取得します/);
+  // --restart-daemon での 2 回目の実行の前にも、手順 1 の定型文を言う（1 回目は取得の前に終わる）
+  assert.match(body, /この実行の前に、手順 1 の定型文（script を実行する前）を、もう一度言う/);
   assert.doesNotMatch(body, /実機/);
   assert.match(body, /利用者が、自分で消してよい/);
   assert.match(body, /消さなくても動く/);
