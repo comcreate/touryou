@@ -36,6 +36,16 @@ top="$(ls "$work/x")"
   for f in bin/node lib/dist/bin.js lib/dist-version; do
     [ -f "$work/x/${top}/$f" ] || { echo "検査に当たった: launchd が指す ${f} がない" >&2; rc=1; }
   done
+  # macOS の配布物（#73）: launchd が起こすのは TouRyou.app の中の node。bin/node は、そこへの相対のリンク（node は 1 つだけ）
+  case "${top}" in
+    *darwin*)
+      for f in TouRyou.app/Contents/MacOS/TouRyou TouRyou.app/Contents/Info.plist TouRyou.app/Contents/Resources/AppIcon.icns; do
+        [ -f "$work/x/${top}/$f" ] && [ ! -L "$work/x/${top}/$f" ] || { echo "検査に当たった: TouRyou.app の ${f} がない（または、リンク）" >&2; rc=1; }
+      done
+      [ "$(readlink "$work/x/${top}/bin/node" 2>/dev/null)" = "../TouRyou.app/Contents/MacOS/TouRyou" ] ||
+        { echo "検査に当たった: bin/node が、TouRyou.app の中の node への相対のリンクでない" >&2; rc=1; }
+      ;;
+  esac
   name_ver="$(basename "$tgz" | sed -n 's/^touryou-\(.*\)-[a-z0-9]*-[a-z0-9_]*\.tar\.gz$/\1/p')"
   [ -n "${name_ver}" ] || echo "配布物の名前に版がない（DIST_VERSION なしのビルド）ので、版の印の突き合わせは飛ばした" >&2
   if [ -n "${name_ver}" ] && [ -f "$work/x/${top}/lib/dist-version" ]; then

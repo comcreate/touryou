@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runBin } from "../src/bin.js";
-import { legacyPlistText, runDaemonScript } from "../src/launchd.js";
+import { LSREGISTER, legacyPlistText, runDaemonScript, v011PlistText } from "../src/launchd.js";
 import type { RunResult } from "../src/launchd-service.js";
 
 // `touryou launchd apply|status|restart|stop|uninstall`。launchctl と窓口は偽物に差し替える（実際の launchctl は呼ばない）。
@@ -30,6 +30,8 @@ afterEach(() => {
 
 interface Fake {
   readonly calls: string[][];
+  /** lsregister の呼び出し（引数をつないだもの）。 */
+  readonly ls: string[];
   readonly loaded: Map<string, { state: string; lastExit?: string }>;
   failOn?: string;
   /** daemon を読み込んだら、窓口が応答するか。 */
@@ -62,9 +64,13 @@ function makeHome(opts: { token?: boolean } = {}): { home: string; base: string;
 }
 
 function fake(state: string): Fake & { deps: Parameters<typeof runBin>[1]["launchd"] } {
-  const f: Fake = { calls: [], loaded: new Map(), daemonAnswers: true, whoamiCode: 401, t: 0 };
+  const f: Fake = { calls: [], ls: [], loaded: new Map(), daemonAnswers: true, whoamiCode: 401, t: 0 };
   const label = (target: string): string => target.replace(`gui/${UID}/`, "");
   const run = (cmd: string, args: readonly string[]): RunResult => {
+    if (cmd === LSREGISTER) {
+      f.ls.push(args.join(" "));
+      return { status: 0, stdout: "", stderr: "" };
+    }
     f.calls.push([cmd, ...args]);
     const [sub, ...rest] = args;
     const tail = `${sub} ${(rest.at(-1) ?? "").split("/").at(-1)}`;
@@ -159,7 +165,7 @@ describe("apply", () => {
       );
     }
     expect(r.stdout).toMatch(/whoami が 401/);
-    expect(r.stdout).toMatch(/「ログイン項目」に、node の項目が出るのは、正常/);
+    expect(r.stdout).toMatch(/「ログイン項目」には「TouRyou」の 1 項目が出る。「開発元を識別できない項目」と出るのは、.*ad-hoc.*正常/);
     expect(r.stdout).not.toContain("run-daemon.sh");
     expect(r.stdout + r.stderr).not.toContain(TOKEN);
   });
@@ -598,5 +604,78 @@ describe("古い形（v0.1.0 まで。run-daemon.sh を起こす plist）から�
     expect(r.exitCode).toBe(1);
     expect(readFileSync(h.script, "utf8")).toBe("#!/bin/sh\necho mine\n");
     expect(existsSync(h.dest)).toBe(false);
+  });
+});
+
+describe("前の形（v0.1.1。current/bin/node を直に起こす plist）からの引っ越しと、LaunchServices（#73）", () => {
+  function v011Home() {
+    const h = makeHome();
+    const agents = join(h.home, "Library", "LaunchAgents");
+    mkdirSync(join(h.base, "logs"), { recursive: true, mode: 0o700 });
+    for (const d of [join(h.base, "launchd"), agents]) mkdirSync(d, { recursive: true });
+    const text = v011PlistText({
+      label: DAEMON,
+      workingDirectory: h.base,
+      log: join(h.base, "logs", "daemon.log"),
+      path: "/usr/bin:/bin:/usr/sbin:/sbin",
+      base: h.base,
+    });
+    const src = join(h.base, "launchd", `${DAEMON}.plist`);
+    const dest = join(agents, `${DAEMON}.plist`);
+    writeFileSync(src, text);
+    writeFileSync(dest, text);
+    return { ...h, agents, src, dest, text, f: withUid(fake(h.state)) };
+  }
+
+  it("apply: .touryou/launchd が v0.1.1 の形のままなら、init を案内して止める", async () => {
+    const h = v011Home();
+    const r = await bin(h.home, h.f, ["apply", "--yes", "--org", ORG]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toMatch(/古い形.*touryou launchd init を実行して/);
+    expect(h.f.calls).toEqual([]);
+  });
+
+  it("init のあとの apply: LaunchAgents の v0.1.1 の形を、止めてから TouRyou.app を起こす形に置き換える", async () => {
+    const h = v011Home();
+    h.f.loaded.set(DAEMON, { state: "running" });
+    expect((await bin(h.home, undefined, ["init", "--org", ORG])).exitCode).toBe(0);
+    const r = await bin(h.home, h.f, ["apply", "--yes", "--org", ORG]);
+    expect(r.exitCode, r.stderr).toBe(0);
+    expect(seq(h.f)).toEqual([`bootout ${DAEMON}`, `bootstrap ${DAEMON}.plist`]);
+    expect(readFileSync(h.dest, "utf8")).toBe(readFileSync(h.src, "utf8"));
+    expect(readFileSync(h.dest, "utf8")).toContain("TouRyou.app/Contents/MacOS/TouRyou");
+  });
+
+  it("uninstall: init で新しい形にしたが、LaunchAgents は v0.1.1 の形のまま（apply の前）でも、両方を外す", async () => {
+    const h = v011Home();
+    expect((await bin(h.home, undefined, ["init", "--org", ORG])).exitCode).toBe(0);
+    const r = await bin(h.home, h.f, ["uninstall", "--yes", "--org", ORG]);
+    expect(r.exitCode, r.stdout + r.stderr).toBe(0);
+    for (const p of [h.dest, h.src]) expect(existsSync(p), p).toBe(false);
+  });
+
+  it("apply は TouRyou.app を LaunchServices に登録し（版のディレクトリの実パス）、uninstall は登録を解く", async () => {
+    const { home, base, f } = await initHome();
+    const real = join(base, "v9.9.9", "touryou-darwin-arm64");
+    mkdirSync(join(real, "TouRyou.app", "Contents", "MacOS"), { recursive: true });
+    rmSync(join(base, "current"), { recursive: true });
+    mkdirSync(join(real, "bin"), { recursive: true });
+    writeFileSync(join(real, "bin", "touryou-daemon"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    symlinkSync(real, join(base, "current"));
+    const a = await bin(home, f, ["apply", "--yes", "--org", ORG]);
+    expect(a.exitCode, a.stderr).toBe(0);
+    expect(f.ls).toEqual([`-f ${join(real, "TouRyou.app")}`]);
+    expect(a.stdout).toMatch(/LaunchServices に登録した/);
+    const u = await bin(home, f, ["uninstall", "--yes", "--org", ORG]);
+    expect(u.exitCode, u.stdout + u.stderr).toBe(0);
+    expect(f.ls.at(-1)).toBe(`-u ${join(real, "TouRyou.app")}`);
+  });
+
+  it("TouRyou.app がなければ、LaunchServices の登録は飛ばす（常駐は止めない）", async () => {
+    const { home, f } = await initHome();
+    const a = await bin(home, f, ["apply", "--yes", "--org", ORG]);
+    expect(a.exitCode, a.stderr).toBe(0);
+    expect(f.ls).toEqual([]);
+    expect(a.stdout).toMatch(/LaunchServices の登録は飛ばした/);
   });
 });

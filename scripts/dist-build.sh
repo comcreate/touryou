@@ -4,6 +4,8 @@
 # - 同梱する Node は、runner の node ではなく、nodejs.org の公式の配布物を取得し、SHASUMS256.txt と照合して使う
 #   （版は DIST_NODE_VERSION。既定 22.20.0。SHASUMS256.txt の署名〔GPG〕は、検証していない）。
 # - DIST_VERSION があれば、ファイル名に版を入れる（touryou-<版>-<os>-<arch>.tar.gz。中のディレクトリは touryou-<os>-<arch>）。
+# - macOS では、Node を TouRyou.app（Contents/MacOS/TouRyou）に入れ、入れ物ごと手元の署名（ad-hoc）にする。bin/node は、その中の node への
+#   相対のシンボリックリンク（node は 1 つだけ）。launchd は、入れ物の中の node を起こすので、ログイン項目に「TouRyou」と出る（#73）。
 set -euo pipefail
 out="${1:?出力のディレクトリ（絶対パス）を渡す}"
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -26,7 +28,18 @@ expected="$(grep "  ${tarball}\$" "${work}/SHASUMS256.txt" | cut -d' ' -f1)"
 actual="$(shasum -a 256 "${work}/${tarball}" | cut -d' ' -f1)"
 [ "${expected}" = "${actual}" ] || { echo "Node の sha256 が一致しない（期待 ${expected}、実際 ${actual}）" >&2; exit 1; }
 tar -C "${work}" -xzf "${work}/${tarball}" "node-v${node_version}-${os}-${narch}/bin/node"
-cp "${work}/node-v${node_version}-${os}-${narch}/bin/node" "${stage}/bin/node"
+# 同梱の node の実体の場所。macOS では TouRyou.app の中（bin/node は、そこへのリンク）
+bundle_id="com.comcreate-info.touryou" # packages/cli/src/launchd.ts の BUNDLE_ID と同じ（組織の公開のドメインの逆 DNS）
+if [ "$os" = darwin ]; then
+  app="${stage}/TouRyou.app"
+  node_bin="${app}/Contents/MacOS/TouRyou"
+  mkdir -p "${app}/Contents/MacOS" "${app}/Contents/Resources"
+  cp "${work}/node-v${node_version}-${os}-${narch}/bin/node" "${node_bin}"
+  ln -s ../TouRyou.app/Contents/MacOS/TouRyou "${stage}/bin/node"
+else
+  node_bin="${stage}/bin/node"
+  cp "${work}/node-v${node_version}-${os}-${narch}/bin/node" "${node_bin}"
+fi
 
 cd "$root"
 # daemon の依存（better-sqlite3 など。@touryou/core・@touryou/mcp を含む）を lib/ に 1 度だけ置く。mcp・cli は、その依存で足りる（重複を避ける）。
@@ -91,7 +104,7 @@ case "${os}-${narch}" in
   linux-arm64)  want_kind="ELF";    want_arch="aarch64" ;;
   *) echo "未対応: ${os}-${narch}" >&2; exit 1 ;;
 esac
-bins="$( { find "${stage}/lib" -name '*.node' -type f; echo "${stage}/bin/node"; } )"
+bins="$( { find "${stage}/lib" -name '*.node' -type f; echo "${node_bin}"; } )"
 nbins=0
 while IFS= read -r f; do
   [ -n "$f" ] || continue
@@ -110,7 +123,7 @@ done <<< "$bins"
 echo "検査したバイナリ: ${nbins} 個（すべて ${want_kind} ${want_arch}）"
 # 要るネイティブを、数ではなく名前で確かめる（node と、better-sqlite3 の同梱の prebuild）。
 # better-sqlite3 は npm の配布物に prebuilds/<os>-<arch>.node を含み、install 時のビルド（pnpm が無視する build scripts）は使わない。
-[ -f "${stage}/bin/node" ] || { echo "同梱の node がない（bin/node）" >&2; exit 1; }
+[ -f "${node_bin}" ] && [ -f "${stage}/bin/node" ] || { echo "同梱の node がない（${node_bin#"${stage}"/}・bin/node）" >&2; exit 1; }
 bs_nodes="$(find "${stage}"/lib/node_modules/.pnpm/better-sqlite3@*/node_modules/better-sqlite3/prebuilds -name "${os}-${narch}.node" -type f 2>/dev/null || true)"
 [ -n "$bs_nodes" ] || { echo "better-sqlite3 のネイティブ（prebuilds/${os}-${narch}.node）が配布物にない" >&2; exit 1; }
 # 配布物の node で、better-sqlite3 のネイティブを実際に読めること（:memory: を 1 回開く）
@@ -145,6 +158,47 @@ launcher touryou node_modules/@touryou/cli/dist/bin.js
 # launchd の plist と同じ起こし方（起動スクリプト・環境変数なしで、同梱の node で直に）で、版の印が読めること（#64）
 got="$(env -i "${stage}/bin/node" "${stage}/lib/dist/bin.js" --version)"
 [ "${got}" = "${dist_version}" ] || { echo "同梱の node で直に起こした daemon の --version が ${got}（期待は ${dist_version}）" >&2; exit 1; }
+
+if [ "$os" = darwin ]; then
+  echo "== TouRyou.app の Info.plist・アイコンを置き、入れ物ごと手元の署名（ad-hoc）にする（#73）"
+  cat > "${app}/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>${bundle_id}</string>
+  <key>CFBundleName</key><string>TouRyou</string>
+  <key>CFBundleDisplayName</key><string>TouRyou</string>
+  <key>CFBundleExecutable</key><string>TouRyou</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleShortVersionString</key><string>${dist_version}</string>
+  <key>CFBundleVersion</key><string>${dist_version}</string>
+  <key>LSUIElement</key><true/>
+</dict>
+</plist>
+PLIST
+  plutil -lint "${app}/Contents/Info.plist"
+  iconset="${work}/AppIcon.iconset"
+  mkdir -p "${iconset}"
+  for sz in 16 32 128 256 512; do
+    sips -z "${sz}" "${sz}" "${root}/assets/icon/icon-512.png" --out "${iconset}/icon_${sz}x${sz}.png" >/dev/null
+    [ "${sz}" = 512 ] || sips -z "$((sz * 2))" "$((sz * 2))" "${root}/assets/icon/icon-512.png" --out "${iconset}/icon_${sz}x${sz}@2x.png" >/dev/null
+  done
+  iconutil -c icns "${iconset}" -o "${app}/Contents/Resources/AppIcon.icns"
+  # hardened runtime は付けない（node〔V8〕の JIT のため）。中の実行ファイルは 1 つ（TouRyou）だけなので、入れ物の署名で中も署名される
+  codesign --force --sign - "${node_bin}"
+  codesign --force --sign - "${app}"
+  codesign --verify --strict --verbose=2 "${app}"
+  sig="$(codesign -dv "${app}" 2>&1)"
+  printf '%s\n' "${sig}" | grep -q '^Signature=adhoc$' || { echo "TouRyou.app の署名が ad-hoc でない" >&2; printf '%s\n' "${sig}" >&2; exit 1; }
+  printf '%s\n' "${sig}" | grep -q "^Identifier=${bundle_id}\$" || { echo "TouRyou.app の署名の Identifier が ${bundle_id} でない" >&2; printf '%s\n' "${sig}" >&2; exit 1; }
+  # 署名し直した node が動き、better-sqlite3 を読めること（入れ物の中の node と、bin/node のリンクの両方で）
+  (cd "${stage}/lib" && "${node_bin}" -e 'const D=require("better-sqlite3");new D(":memory:").close()') || { echo "署名し直した node で better-sqlite3 を読めない" >&2; exit 1; }
+  got="$(env -i "${node_bin}" "${stage}/lib/dist/bin.js" --version)"
+  [ "${got}" = "${dist_version}" ] || { echo "TouRyou.app の node で起こした daemon の --version が ${got}" >&2; exit 1; }
+fi
 
 echo "== tar.gz にする（再現性: mtime・所有者を固定。macOS の拡張属性は入れない）"
 export COPYFILE_DISABLE=1

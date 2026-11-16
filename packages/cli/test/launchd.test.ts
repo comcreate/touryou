@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runBin } from "../src/bin.js";
-import { legacyPlistText, plistText, runDaemonScript } from "../src/launchd.js";
+import { legacyPlistText, plistText, runDaemonScript, v011PlistText } from "../src/launchd.js";
 
 const has = (cmd: string, args: string[]): boolean => spawnSync(cmd, args).error === undefined;
 
@@ -207,9 +207,12 @@ describe("生成物", () => {
     expect(r.exitCode).toBe(0);
     const text = readFileSync(join(base, "launchd", `${ORG}.touryou.daemon.plist`), "utf8");
     expect(text).toContain(`<key>Label</key><string>${ORG}.touryou.daemon</string>`);
-    // shell を通さず、同梱の node で daemon の JS を直に起こす（current のリンクを通す。#64）
+    // shell を通さず、TouRyou.app の中の node（TouRyou）で daemon の JS を直に起こす（current のリンクを通す。#64・#73）
     expect(text).toContain(
-      `<key>ProgramArguments</key>\n  <array>\n    <string>${join(base, "current", "bin", "node")}</string>\n    <string>${join(base, "current", "lib", "dist", "bin.js")}</string>\n    <string>--config</string>\n    <string>${join(base, "config.json")}</string>\n  </array>`,
+      "<key>AssociatedBundleIdentifiers</key>\n  <array><string>com.comcreate-info.touryou</string></array>",
+    );
+    expect(text).toContain(
+      `<key>ProgramArguments</key>\n  <array>\n    <string>${join(base, "current", "TouRyou.app", "Contents", "MacOS", "TouRyou")}</string>\n    <string>${join(base, "current", "lib", "dist", "bin.js")}</string>\n    <string>--config</string>\n    <string>${join(base, "config.json")}</string>\n  </array>`,
     );
     expect(text).not.toContain("run-daemon.sh");
     expect(text).not.toContain("TOURYOU_DIST_VERSION"); // 版は plist に入れない（版を上げても plist は同じ）
@@ -238,6 +241,7 @@ describe("生成物", () => {
     await run(home, ["init", "--org", ORG]);
     const REQUIRED = [
       "Label",
+      "AssociatedBundleIdentifiers",
       "ProgramArguments",
       "WorkingDirectory",
       "EnvironmentVariables",
@@ -442,8 +446,10 @@ describe("plist の ProgramArguments（実際に走らせる）", () => {
     const h = makeHome();
     const out = join(h.home, "observed.txt");
     // 同梱の node の偽物（受け取った引数と、トークンの環境変数を書き出す）
+    const exe = join(h.base, "current", "TouRyou.app", "Contents", "MacOS");
+    mkdirSync(exe, { recursive: true });
     writeFileSync(
-      join(h.base, "current", "bin", "node"),
+      join(exe, "TouRyou"),
       `#!/bin/sh\n{ echo "args=$*"; echo "tok=\${CLAUDE_CODE_OAUTH_TOKEN:-none}"; } > "${out}"\n`,
       { mode: 0o755 },
     );
@@ -501,10 +507,10 @@ describe("古い形（v0.1.0 まで。run-daemon.sh を起こす plist）から�
     const { plist, script } = legacy(h, "touryou.daemon");
     const r = await run(h.home, ["init"]);
     expect(r.exitCode, r.stderr).toBe(0);
-    expect(r.stdout).toMatch(/古い形〔run-daemon\.sh を起こす〕から、新しい形に置き換えた/);
+    expect(r.stdout).toMatch(/古い形〔run-daemon\.sh か bin\/node を起こす〕から、新しい形〔TouRyou\.app を起こす〕に置き換えた/);
     expect(readFileSync(script, "utf8")).toBe(runDaemonScript(h.base));
     const text = readFileSync(plist, "utf8");
-    expect(text).toContain(join(h.base, "current", "bin", "node"));
+    expect(text).toContain(join(h.base, "current", "TouRyou.app", "Contents", "MacOS", "TouRyou"));
     expect(text).not.toContain("run-daemon.sh");
     expect(mode(plist)).toBe("644");
     expect(existsSync(`${plist}.new`)).toBe(false);
@@ -524,7 +530,7 @@ describe("古い形（v0.1.0 まで。run-daemon.sh を起こす plist）から�
     expect(r.exitCode, r.stderr).toBe(0);
     expect(existsSync(script)).toBe(true);
     const text = readFileSync(plist, "utf8");
-    expect(text).toContain(join(h.base, "current", "bin", "node"));
+    expect(text).toContain(join(h.base, "current", "TouRyou.app", "Contents", "MacOS", "TouRyou"));
     expect(text).toContain(
       "<key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>",
     );
@@ -572,5 +578,69 @@ describe("launchctl を実行しない", () => {
   it("launchd.ts は子プロセスを起動しない", () => {
     const src = readFileSync(new URL("../src/launchd.ts", import.meta.url), "utf8");
     expect(src).not.toMatch(/child_process|spawn|exec(Sync|File)?\(/);
+  });
+});
+
+describe("前の形（v0.1.1。current/bin/node を直に起こす plist）からの引っ越し（#73）", () => {
+  const v011 = (h: { base: string }, label: string, path = "/usr/bin:/bin:/usr/sbin:/sbin") => {
+    mkdirSync(join(h.base, "launchd"), { recursive: true, mode: 0o755 });
+    mkdirSync(join(h.base, "logs"), { recursive: true, mode: 0o700 });
+    const plist = join(h.base, "launchd", `${label}.plist`);
+    writeFileSync(
+      plist,
+      v011PlistText({
+        label,
+        workingDirectory: h.base,
+        log: join(h.base, "logs", "daemon.log"),
+        path,
+        base: h.base,
+      }),
+      { mode: 0o644 },
+    );
+    return plist;
+  };
+
+  it("v0.1.1 の形と同じなら、TouRyou.app を起こす形に置き換える。もう一度 init しても同じ", async () => {
+    const h = makeHome();
+    const plist = v011(h, "touryou.daemon");
+    expect(readFileSync(plist, "utf8")).toContain(join(h.base, "current", "bin", "node"));
+    const r = await run(h.home, ["init"]);
+    expect(r.exitCode, r.stderr).toBe(0);
+    expect(r.stdout).toMatch(/新しい形〔TouRyou\.app を起こす〕に置き換えた/);
+    const text = readFileSync(plist, "utf8");
+    expect(text).toContain(join(h.base, "current", "TouRyou.app", "Contents", "MacOS", "TouRyou"));
+    expect(text).not.toContain(join(h.base, "current", "bin", "node"));
+    expect(text).toContain("com.comcreate-info.touryou");
+    expect(existsSync(`${plist}.new`)).toBe(false);
+    expect((await run(h.home, ["init"])).stdout).toMatch(/既存と同じ/);
+  });
+
+  it("--org・--path-prefix つきの v0.1.1 の形も、同じ引数なら置き換え、違えば止まる", async () => {
+    const h = makeHome();
+    const plist = v011(h, `${ORG}.touryou.daemon`, "/opt/x:/usr/bin:/bin:/usr/sbin:/sbin");
+    const before = readFileSync(plist, "utf8");
+    const bad = await run(h.home, ["init", "--org", ORG]);
+    expect(bad.exitCode).toBe(1);
+    expect(readFileSync(plist, "utf8")).toBe(before);
+    const ok = await run(h.home, ["init", "--org", ORG, "--path-prefix", "/opt/x"]);
+    expect(ok.exitCode, ok.stderr).toBe(0);
+    expect(readFileSync(plist, "utf8")).toContain("TouRyou.app");
+  });
+
+  it("v0.1.1 の形を手で直していれば、置き換えずに止まる", async () => {
+    const h = makeHome();
+    const plist = v011(h, "touryou.daemon");
+    const edited = readFileSync(plist, "utf8").replace("<key>RunAtLoad</key><true/>", "");
+    writeFileSync(plist, edited);
+    expect((await run(h.home, ["init"])).exitCode).toBe(1);
+    expect(readFileSync(plist, "utf8")).toBe(edited);
+  });
+
+  it("plistText と v011PlistText は、ProgramArguments と AssociatedBundleIdentifiers だけが違う", () => {
+    const base = "/Users/x/.touryou";
+    const o = { label: "touryou.daemon", workingDirectory: base, log: `${base}/logs/daemon.log`, path: "/usr/bin" };
+    const a = v011PlistText({ ...o, base });
+    const b = plistText({ ...o, programArguments: [`${base}/current/bin/node`, `${base}/current/lib/dist/bin.js`, "--config", `${base}/config.json`] });
+    expect(b.replace(/\n  <key>AssociatedBundleIdentifiers<\/key>\n  <array><string>[^<]*<\/string><\/array>/, "")).toBe(a);
   });
 });

@@ -28,6 +28,19 @@ if env -i PATH=/usr/bin:/bin sh -c 'command -v node' >/dev/null 2>&1; then
   echo "この端末の /usr/bin か /bin に node がある。Node なしの確認にならないので失敗とする" >&2
   exit 1
 fi
+if [ "$(uname -s)" = Darwin ]; then
+  echo "== TouRyou.app の形と署名（ad-hoc）を確かめる（#73）"
+  app="$dir/TouRyou.app"
+  codesign --verify --strict --verbose=2 "$app"
+  sig="$(codesign -dv "$app" 2>&1)"
+  printf '%s\n' "$sig" | grep -q '^Signature=adhoc$' || { echo "署名が ad-hoc でない"; printf '%s\n' "$sig"; exit 1; }
+  printf '%s\n' "$sig" | grep -q '^Identifier=com.comcreate-info.touryou$' || { echo "署名の Identifier が違う"; printf '%s\n' "$sig"; exit 1; }
+  printf '%s\n' "$sig" | grep -q 'flags=.*runtime' && { echo "hardened runtime が付いている（node の JIT が動かない恐れ）"; exit 1; }
+  [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$app/Contents/Info.plist")" = TouRyou ] || { echo "CFBundleExecutable が TouRyou でない"; exit 1; }
+  [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' "$app/Contents/Info.plist")" = TouRyou ] || { echo "CFBundleName が TouRyou でない"; exit 1; }
+  [ "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' "$app/Contents/Info.plist")" = true ] || { echo "LSUIElement が true でない"; exit 1; }
+  [ "$(cd "$dir/bin" && cd -P "$(dirname "$(readlink node)")" && pwd -P)/TouRyou" = "$(cd -P "$app/Contents/MacOS" && pwd -P)/TouRyou" ] || { echo "bin/node が TouRyou.app の node を指さない"; exit 1; }
+fi
 echo "（この確認は、runner 上の展開先に quarantine が付かないため、Gatekeeper の影響は確かめられない。macOS の手元で確認する）"
 echo "== --help（同梱の node だけで）"
 env -i PATH=/usr/bin:/bin HOME="$work" "$dir/bin/touryou-daemon" --help | head -2
@@ -39,7 +52,12 @@ if grep -q 'ERR_MODULE_NOT_FOUND' "$work/mcp-help.err"; then echo "touryou-mcp: 
 echo "== touryou hook（Node なし）: 環境変数がなければ何も出さずに 0、daemon に届かなければ拒否（終了コード 2）"
 bash "$(dirname "$0")/dist-smoke-hook.sh" "$dir/bin/touryou"
 echo "== daemon を起動する"
-env -i PATH=/usr/bin:/bin HOME="$work" "$dir/bin/touryou-daemon" --config "$work/config.json" >"$work/out.log" 2>"$work/err.log" &
+if [ "$(uname -s)" = Darwin ]; then
+  # launchd の plist と同じ起こし方（TouRyou.app の中の node で、daemon の JS を直に。#73）
+  env -i PATH=/usr/bin:/bin HOME="$work" "$dir/TouRyou.app/Contents/MacOS/TouRyou" "$dir/lib/dist/bin.js" --config "$work/config.json" >"$work/out.log" 2>"$work/err.log" &
+else
+  env -i PATH=/usr/bin:/bin HOME="$work" "$dir/bin/touryou-daemon" --config "$work/config.json" >"$work/out.log" 2>"$work/err.log" &
+fi
 pid=$!
 for _ in $(seq 1 30); do
   if grep -q '"started"' "$work/err.log" "$work/out.log" 2>/dev/null; then break; fi

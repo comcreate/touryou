@@ -97,6 +97,10 @@ export const plainPath = (p: string): boolean =>
 /** 組織の逆ドメイン（2 つ以上のラベル。小文字の英数字とハイフン）。 */
 export const REVERSE_DOMAIN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 
+/** LaunchServices に app を登録する・登録を解く道具（macOS 付属）。 */
+export const LSREGISTER =
+  "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
+
 export const DEFAULT_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
 
 /**
@@ -154,10 +158,27 @@ exec "$base/current/bin/touryou-daemon" --config "$base/config.json"
 export const legacyScriptPath = (base: string): string => join(base, "bin", "run-daemon.sh");
 
 /**
- * plist の ProgramArguments（#64）。shell を通さず、同梱の node で daemon の JS を直に起こす
- * （shell を通すと、ログイン項目に、起動スクリプト・sh・bash が別々に出る）。current のリンクを通すので、版を上げても変わらない。
+ * 同梱の node を入れた TouRyou.app の bundle ID（#73）。組織の公開のドメイン（comcreate-info.com）の逆 DNS の形。
+ * 配布物の Info.plist（scripts/dist-build.sh）と、plist の AssociatedBundleIdentifiers で同じ値を使う。
+ */
+export const BUNDLE_ID = "com.comcreate-info.touryou";
+
+/** 同梱の node を入れた TouRyou.app（current のリンクを通す）。 */
+export const appBundlePath = (base: string): string => join(base, "current", "TouRyou.app");
+
+/**
+ * plist の ProgramArguments（#73）。shell を通さず、TouRyou.app の中の node（実行ファイルの名前が TouRyou）で daemon の JS を直に起こす。
+ * ログイン項目には「TouRyou」の 1 項目が出る（node の名前ではなく）。current のリンクを通すので、版を上げても変わらない。
  */
 export const daemonProgramArguments = (base: string): readonly string[] => [
+  join(appBundlePath(base), "Contents", "MacOS", "TouRyou"),
+  join(base, "current", "lib", "dist", "bin.js"),
+  "--config",
+  join(base, "config.json"),
+];
+
+/** 前の形（v0.1.1。#64）の ProgramArguments。同梱の node（`current/bin/node`）を直に起こす。引っ越し・外すときの確かめだけに使う。 */
+export const v011ProgramArguments = (base: string): readonly string[] => [
   join(base, "current", "bin", "node"),
   join(base, "current", "lib", "dist", "bin.js"),
   "--config",
@@ -172,11 +193,12 @@ const plistBody = (
     readonly log: string;
     readonly path: string;
   },
+  associated = "",
 ): string => `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>${xml(opts.label)}</string>
+  <key>Label</key><string>${xml(opts.label)}</string>${associated}
   <key>ProgramArguments</key>
   ${programArguments}
   <key>WorkingDirectory</key><string>${xml(opts.workingDirectory)}</string>
@@ -195,7 +217,13 @@ const plistBody = (
 </plist>
 `;
 
-/** plist（秘密を含まない）。`programArguments` は、daemonProgramArguments の値。 */
+const argsArray = (args: readonly string[]): string =>
+  `<array>\n${args.map((a) => `    <string>${xml(a)}</string>`).join("\n")}\n  </array>`;
+
+/**
+ * plist（秘密を含まない）。`programArguments` は、daemonProgramArguments の値。
+ * AssociatedBundleIdentifiers で、ログイン項目を TouRyou.app に結び付ける（ad-hoc の署名では効かない見込み。将来の署名で効く。害はない）。
+ */
 export function plistText(opts: {
   readonly label: string;
   readonly programArguments: readonly string[];
@@ -203,8 +231,22 @@ export function plistText(opts: {
   readonly log: string;
   readonly path: string;
 }): string {
-  const items = opts.programArguments.map((a) => `    <string>${xml(a)}</string>`).join("\n");
-  return plistBody(`<array>\n${items}\n  </array>`, opts);
+  return plistBody(
+    argsArray(opts.programArguments),
+    opts,
+    `\n  <key>AssociatedBundleIdentifiers</key>\n  <array><string>${BUNDLE_ID}</string></array>`,
+  );
+}
+
+/** 前の形（v0.1.1。#64。current/bin/node を直に起こす）の plist。引っ越し・外すときの確かめだけに使う。 */
+export function v011PlistText(opts: {
+  readonly label: string;
+  readonly workingDirectory: string;
+  readonly log: string;
+  readonly path: string;
+  readonly base: string;
+}): string {
+  return plistBody(argsArray(v011ProgramArguments(opts.base)), opts);
 }
 
 /** 古い形（v0.1.0 まで。ProgramArguments が起動スクリプト 1 つ）の plist。引っ越し・外すときの確かめだけに使う。 */
@@ -353,6 +395,7 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
   // 古い形（v0.1.0 まで）の生成物。同じ --org・--path-prefix の init が生成したものと、バイト単位で同じときだけ、置き換える（#64）
   const legacyScript = legacyScriptPath(base);
   const legacyPlist = legacyPlistText({ ...common, script: legacyScript });
+  const v011Plist = v011PlistText({ ...common, base });
   const readRegular = (p: string): string | undefined => {
     const st = lstatOrUndefined(p);
     return st?.isFile() === true ? readFileSync(p, "utf8") : undefined;
@@ -373,6 +416,9 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
     } else if (text === t.content) {
       same.push(t.path);
     } else if (text === legacyPlist && (scriptSt === undefined || scriptIsLegacy)) {
+      toReplace.push(t);
+    } else if (text === v011Plist) {
+      // v0.1.1 の形（current/bin/node を直に起こす）。同じ --org・--path-prefix の v0.1.1 の init の生成物と同じときだけ（#73）
       toReplace.push(t);
     } else {
       conflicts.push(t.path);
@@ -434,7 +480,7 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
   for (const t of toWrite) out.push(`  ${t.path}（${oct(t.mode)}）`);
   for (const t of toReplace)
     out.push(
-      `  ${t.path}（${oct(t.mode)}。古い形〔run-daemon.sh を起こす〕から、新しい形に置き換えた）`,
+      `  ${t.path}（${oct(t.mode)}。古い形〔run-daemon.sh か bin/node を起こす〕から、新しい形〔TouRyou.app を起こす〕に置き換えた）`,
     );
   if (scriptIsLegacy) {
     // LaunchAgents に古い形が残っているうちは、次のログインで起こされうるので、消さない（apply が置き換えたあと・uninstall で消す）
@@ -447,9 +493,13 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
   out.push(
     "【読み込む】（人が行う。ログイン時に、自動で動くようになる。macOS から、項目が追加された通知が出る）",
   );
+  out.push(
+    "  ログイン項目には「TouRyou」の 1 項目が出る。「開発元を識別できない項目」と出るのは、同梱の node を TouRyou の名前で手元の署名（ad-hoc）にしたためで、正常（docs/launchd.md）。",
+  );
   out.push("  端末で動かしている daemon があれば、先に止める（同じ state・同じポート）。");
   out.push(`  mkdir -p "${la}"`);
   out.push(`  cp "${join(plistDir, `${daemonLabel}.plist`)}" "${la}/"`);
+  out.push(`  "${LSREGISTER}" -f "${appBundlePath(base)}"`);
   out.push(`  launchctl bootstrap "gui/$(id -u)" "${join(la, `${daemonLabel}.plist`)}"`);
   out.push("");
   out.push("【止める】（人が行う）");
@@ -458,6 +508,7 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
   out.push("【削除する】（人が行う。止めたあと）");
   out.push(`  rm "${join(la, `${daemonLabel}.plist`)}"`);
   out.push(`  rm "${join(plistDir, `${daemonLabel}.plist`)}"`);
+  out.push(`  "${LSREGISTER}" -u "${appBundlePath(base)}"`);
   out.push(`  （ログ ${logsDir} は残る。要らなければ、自分で削除する）`);
   out.push("");
   out.push(

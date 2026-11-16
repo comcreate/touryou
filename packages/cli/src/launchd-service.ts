@@ -17,6 +17,7 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  realpathSync,
   readSync,
   renameSync,
   rmSync,
@@ -27,12 +28,14 @@ import { isAbsolute, join } from "node:path";
 import type { CommandResult } from "./commands.js";
 import type { RunResult } from "./launchd.js";
 import {
+  appBundlePath,
   type ConfigChecker,
   configProblem,
   DEFAULT_PATH,
   daemonProgramArguments,
   labelOf,
   legacyPlistText,
+  LSREGISTER,
   legacyScriptPath,
   maskValues,
   plainPath,
@@ -40,13 +43,14 @@ import {
   REVERSE_DOMAIN,
   runDaemonScript,
   stateDirOf,
+  v011PlistText,
 } from "./launchd.js";
 
 export type { RunResult } from "./launchd.js";
 
 export interface LaunchdServiceDeps {
   readonly env: Readonly<Record<string, string | undefined>>;
-  /** 外部コマンド（launchctl だけ）を実行する。 */
+  /** 外部コマンド（launchctl と lsregister だけ）を実行する。 */
   readonly run: (cmd: string, args: readonly string[]) => RunResult;
   /** apply の前の、設定の検査（`touryou-daemon --check-config`）を実行する。 */
   readonly checkConfig: ConfigChecker;
@@ -268,20 +272,36 @@ function isGeneratedPlist(ctx: Ctx, u: Unit, text: string): boolean {
   );
 }
 
-/** 古い形（v0.1.0 まで）の init が生成するのと、バイト単位で同じ plist か（#64。PATH の値の扱いは、新しい形と同じ）。 */
+/**
+ * 前の形の init が生成するのと、バイト単位で同じ plist か（PATH の値の扱いは、新しい形と同じ）。
+ * 前の形は 2 つ: v0.1.0 まで（run-daemon.sh を起こす。#64）と、v0.1.1（current/bin/node を直に起こす。#73）。
+ */
 function isLegacyPlist(ctx: Ctx, u: Unit, text: string): boolean {
   const path = pathValueOf(text);
+  if (path === undefined) return false;
+  const common = { label: u.label, workingDirectory: ctx.base, log: u.log, path };
   return (
-    path !== undefined &&
-    text ===
-      legacyPlistText({
-        label: u.label,
-        script: u.legacyScript,
-        workingDirectory: ctx.base,
-        log: u.log,
-        path,
-      })
+    text === legacyPlistText({ ...common, script: u.legacyScript }) ||
+    text === v011PlistText({ ...common, base: ctx.base })
   );
+}
+
+/**
+ * TouRyou.app を LaunchServices に登録する（`-f`）・登録を解く（`-u`）（#73）。ログイン項目が、app の名前とアイコンを引けるように。
+ * current のリンクの先（版のディレクトリ）の実パスで行う。失敗しても常駐は動くので、止めずに、知らせの行を返す。
+ */
+function lsregister(ctx: Ctx, flag: "-f" | "-u"): string {
+  let app: string;
+  try {
+    app = realpathSync(appBundlePath(ctx.base));
+  } catch {
+    return `TouRyou.app（current の中）がないので、LaunchServices の${flag === "-f" ? "登録" : "登録の解除"}は飛ばした`;
+  }
+  const r = ctx.deps.run(LSREGISTER, [flag, app]);
+  const what = flag === "-f" ? "登録した" : "登録を解いた";
+  return r.status === 0
+    ? `TouRyou.app を LaunchServices に${what}`
+    : `TouRyou.app の LaunchServices の${flag === "-f" ? "登録" : "登録の解除"}に失敗（終了コード ${r.status ?? "なし"}。常駐には影響しない）`;
 }
 
 /** 古い形の init が生成するのと、バイト単位で同じ起動スクリプトか。 */
@@ -302,7 +322,7 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
     const text = readOr(u.plistSrc) ?? "";
     if (isLegacyPlist(ctx, u, text)) {
       return fail(
-        `${u.plistSrc} が、古い形（run-daemon.sh を起こす。v0.1.0 まで）のまま。同じ --org・--path-prefix で touryou launchd init を実行して、新しい形に置き換えてから、やり直す`,
+        `${u.plistSrc} が、古い形（run-daemon.sh か bin/node を起こす。v0.1.1 まで）のまま。同じ --org・--path-prefix で touryou launchd init を実行して、新しい形に置き換えてから、やり直す`,
         1,
       );
     }
@@ -342,7 +362,7 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
       isLegacyPlist(ctx, u, dest) &&
       pathValueOf(dest) === pathValueOf(src)
     ) {
-      // 古い形（v0.1.0 まで）を apply が置いたもの。同じ --org・PATH の新しい形に、置き換える（#64）
+      // 古い形（v0.1.1 まで）を apply が置いたもの。同じ --org・PATH の新しい形に、置き換える（#64・#73）
       toReplace.push(u);
     } else if (dest === undefined || dest !== src) {
       return fail(
@@ -375,6 +395,7 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
     writeFileSync(u.plistDest, readOr(u.plistSrc) ?? "", { flag: "wx", mode: 0o644 });
     out.push(`置いた: ${u.plistDest}`);
   }
+  out.push(lsregister(ctx, "-f"));
   for (const u of ctx.units) {
     if (info(ctx, u).loaded) {
       out.push(`${u.label}: 読み込み済み（そのまま）`);
@@ -415,7 +436,7 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
   const st = await statusLines(ctx);
   out.push("", ...st.lines, "");
   out.push(
-    "ログイン時に自動で動くようになった。システム設定の「一般」→「ログイン項目」に、node の項目が出るのは、正常（touryou に同梱の node で daemon を動かしている。docs/launchd.md）。",
+    "ログイン時に自動で動くようになった。システム設定の「一般」→「ログイン項目」には「TouRyou」の 1 項目が出る。「開発元を識別できない項目」と出るのは、TouRyou に同梱した node を TouRyou の名前で手元の署名（ad-hoc）にしたためで、正常（docs/launchd.md）。",
   );
   return {
     exitCode: st.ok ? 0 : 1,
@@ -531,6 +552,7 @@ function uninstall(ctx: Ctx): CommandResult {
       remove(u.legacyScript, (t) => isLegacyScript(ctx, u, t));
     }
   }
+  out.push(lsregister(ctx, "-u"));
   out.push(`残した: ${ctx.logsDir}（ログ）・${ctx.stateDir}（daemon の状態）`);
   if (kept.length > 0) out.push("", ...kept);
   return {
