@@ -2,6 +2,10 @@
 
 ## 未公開
 
+### 利用者に見える変更
+
+- **常駐を外すとき、TouRyou.app がなければ LaunchServices の登録の解除を飛ばしたと知らせる**（#79）: `touryou launchd uninstall` で、current の中に TouRyou.app がないのに「登録を解いた」と出ていたのを、`apply` にそろえて「飛ばした」と出すようにした。
+
 ## 0.1.2（2026-11-16）
 
 ### 利用者に見える変更

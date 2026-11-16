@@ -344,8 +344,12 @@ function lsregister(ctx: Ctx, flag: "-f" | "-u"): string[] {
       out.push("TouRyou.app を LaunchServices に登録した");
     }
   } else {
-    if (current !== undefined) call("-u", current);
-    out.push("TouRyou.app の LaunchServices の登録を解いた");
+    if (current === undefined) {
+      out.push("TouRyou.app（current の中）がないので、LaunchServices の登録の解除は飛ばした");
+    } else {
+      call("-u", current);
+      out.push("TouRyou.app の LaunchServices の登録を解いた");
+    }
   }
   if (others.length > 0) out.push(`ほかの版の TouRyou.app の登録を解いた（${others.length} 個）`);
   if (failed > 0)

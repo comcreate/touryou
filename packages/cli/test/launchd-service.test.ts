@@ -706,4 +706,15 @@ describe("前の形（v0.1.1。current/bin/node を直に起こす plist）か�
     expect(f.ls).toEqual([]);
     expect(a.stdout).toMatch(/LaunchServices の登録は飛ばした/);
   });
+
+  it("TouRyou.app がなければ、uninstall も LaunchServices の登録の解除は飛ばしたと知らせる（#79）", async () => {
+    const { home, f } = await initHome();
+    const a = await bin(home, f, ["apply", "--yes", "--org", ORG]);
+    expect(a.exitCode, a.stderr).toBe(0);
+    const u = await bin(home, f, ["uninstall", "--yes", "--org", ORG]);
+    expect(u.exitCode, u.stderr).toBe(0);
+    expect(f.ls).toEqual([]);
+    expect(u.stdout).toMatch(/LaunchServices の登録の解除は飛ばした/);
+    expect(u.stdout).not.toMatch(/LaunchServices の登録を解いた/);
+  });
 });
