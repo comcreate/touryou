@@ -39,7 +39,7 @@ touryou reclaim <nodeId>
 
 `touryou --version`（`-v` も同じ）は、入っている配布物の版を 1 行で出す（窓口・トークンは使わない。daemon の起動も不要）。`touryou-daemon --version`・`touryou-mcp --version` も同じ。daemon・mcp・cli の版の食い違いの切り分けに使う。
 
-- 版の出どころの優先順: 拡張機能（`.mcpb`）の埋め込み → tar.gz の起動スクリプトが渡す環境変数 `TOURYOU_DIST_VERSION` → 隣の `package.json`。
+- 版の出どころの優先順: 拡張機能（`.mcpb`）の埋め込み → tar.gz の起動スクリプトが渡す環境変数 `TOURYOU_DIST_VERSION` → tar.gz の版の印 `lib/dist-version`（daemon だけが読む。launchd が同梱の node で直に起こすとき。#64） → 隣の `package.json`。
 - 開発のビルド（source から動かしているとき）は、`package.json` の版に「（開発ビルド）」を付けて出す（配布物と区別するため）。
 
 ## 木・状態の確認 `touryou tree` / `touryou state`（読み取りだけ）
@@ -116,16 +116,16 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 
 ## 常駐の生成 `touryou launchd init`
 
-`touryou launchd init [--org <組織の逆ドメイン>] [--path-prefix <ディレクトリ>]`: daemon・touryou-mcp を launchd で常駐させるための、起動スクリプトと plist を `$HOME/.touryou` の下に生成する。
+`touryou launchd init [--org <組織の逆ドメイン>] [--path-prefix <ディレクトリ>]`: daemon を launchd で常駐させるための plist を `$HOME/.touryou` の下に生成する。plist は、同梱の node（`current/bin/node`）で daemon の JS（`current/lib/dist/bin.js`）を直に起こす（起動スクリプト・shell を通さない。#64）。
 
 - 窓口・人間のトークン・環境変数（`TOURYOU_DAEMON_URL` など）は使わない（`HOME` だけ）。
 - **`init` は `launchctl` を実行しない**（読み込みは、下の `touryou launchd apply`）。起動する子プロセスは、設定の検査（`touryou-daemon --check-config`）だけ。トークンの値は、生成も表示もしない。
 - **生成する前に、`config.json` を daemon と同じ検査にかける**（設定の読み込み・`repoRoot`・`rootCwd`・`worktreeRoot` が実在する実パスか・`repoRoot` が git のリポジトリか。daemon は起動しない）。通らなければ、何も生成せずに終了コード 1 で止まり、理由と直し方を出す（値〔パス〕は `<パス>` に伏せる）。検査には `HOME` と plist と同じ `PATH` だけを渡す。検査を実行できない（daemon がない・古い版・時間切れ）ときは「設定を検査できない」と分けて出す。
-- 既存のファイルは、黙って上書きしない。生成先がシンボリックリンクなら、辿らずに止まる。
+- 既存のファイルは、黙って上書きしない。生成先がシンボリックリンクなら、辿らずに止まる。ただし、古い形（v0.1.1 まで。`bin/run-daemon.sh` を起こす plist）の生成物が、同じ `--org`・`--path-prefix` の古い `init` の生成物とバイト単位で同じなら、plist を新しい形に置き換え、`run-daemon.sh` を消す（違えば止まる）。
 - `--org` を省略すると、plist の Label は、組織のドメインを含まない `touryou.daemon`。自分のドメインにしたいときは `--org com.example` のように付けると `com.example.touryou.daemon` になる。不正な値（小文字の英数字とハイフンのラベルを、ドットで 2 つ以上つないだ形でない）は拒否する。
 - 秘密は扱わない（子の認証を外した（CLI の子は、親のセッションが `claude --bg` で起動する））。常駐は daemon だけ（子用の HTTP の `touryou-mcp` の常駐は外した）。
 - 終了コード: 0 成功 / 1 前提（`/setup`）がない・設定の検査が通らない・既存と違う・権限の確認で問題 / 2 引数の誤り。
-- 読み込むと、ログイン項目に `run-daemon.sh` が「開発元を識別できない項目」として出る（署名しない方針どおり）。
+- 読み込むと、ログイン項目に `node` の項目が出る見込み（`docs/launchd.md` の 3。古い形のときに出た `sh`・`bash` が残ることがある）。
 - 手順の全体と、限界（ACL・`ps` で環境が読める点など）は、[`docs/launchd.md`](launchd.md) の「1. 生成する」。
 
 ## 常駐の操作 `touryou launchd apply|status|restart|stop|uninstall`
@@ -134,15 +134,15 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 
 | サブコマンド | すること |
 |:--|:--|
-| `apply --yes` | 前提（init の生成物。前の版の生成物が残っていないこと）と、`config.json` が daemon の検査（`init` と同じ）を通ることを確かめ（通らなければ、plist を置かず・`launchctl` を呼ばずに終了コード 1）、plist を `$HOME/Library/LaunchAgents` に置き（既存と違えば止める）、daemon を `launchctl bootstrap` し、窓口の応答（未認証の whoami が 401。約 60 秒まで）を待つ。読み込み済みなら、そのまま |
+| `apply --yes` | 前提（init の生成物。前の版の生成物が残っていないこと）と、`config.json` が daemon の検査（`init` と同じ）を通ることを確かめ（通らなければ、plist を置かず・`launchctl` を呼ばずに終了コード 1）、plist を `$HOME/Library/LaunchAgents` に置き（既存と違えば止める）、daemon を `launchctl bootstrap` し、窓口の応答（未認証の whoami が 401。約 60 秒まで）を待つ。読み込み済みなら、そのまま。`.touryou/launchd` の plist が古い形なら、`init` を案内して止める。LaunchAgents の plist が同じ PATH の古い形なら、止めてから置き換えて読み込む |
 | `status` | `launchctl print` の state・pid・last exit code と、窓口の応答。last exit code が 0 以外なら、`logs/daemon.log`（plist の `StandardErrorPath`）の最後の失敗の行（`失敗 [code]: …`。値は `<パス>` に伏せ、200 字で切る）を出す。終了コード 78（前の版の起動スクリプト）なら、外し方の案内と、`logs/daemon.log` の起動スクリプトの決まった文の行だけを出す |
 | `restart` | daemon を `launchctl kickstart -k` し、窓口の応答を待つ（版を上げたあと） |
 | `stop` | daemon を `launchctl bootout`（前の版の touryou-mcp が読み込まれていれば、先に止める。plist は残るので、次のログインでまた動く） |
-| `uninstall --yes` | 止めてから、TouRyou が生成したと判定できる plist（LaunchAgents と `.touryou/launchd`）・起動スクリプト（`.touryou/bin`）だけを消す。判定できないものは残して終了コード 1。`logs`・`state` は残す。トークンのファイルは消さない |
+| `uninstall --yes` | 止めてから、TouRyou が生成したと判定できる plist（LaunchAgents と `.touryou/launchd`）・古い形の起動スクリプト（`.touryou/bin/run-daemon.sh`）だけを消す。判定できないものは残して終了コード 1。`logs`・`state` は残す。トークンのファイルは消さない |
 
 - `apply`・`uninstall` は、**`--yes` がないと何もしない**（終了コード 2）。永続化・削除なので、利用者の同意を取ってから付ける（`/setup`・`/touryou:service` が定型文で聞く）。
 - `apply`・`restart` が途中で止まったとき（窓口が約 60 秒で応答しない）は、**daemon は読み込み済みのまま**（KeepAlive で動き続けうる）。`touryou launchd stop` で止めるか、直してから `apply --yes` をやり直す。
-- `uninstall` は、`init` が作るのと同じ内容（`--path-prefix` の違いを含む。PATH の値はファイルから取って作り直して比べる）とバイト単位で同じもの（LaunchAgents の plist は `.touryou/launchd` の plist と同じもの）だけを消す。LaunchAgents の plist を残したときは、対の起動スクリプトも残す（次のログインで、ないスクリプトを指さないように）。
+- `uninstall` は、`init` が作るのと同じ内容（`--path-prefix` の違いを含む。PATH の値はファイルから取って作り直して比べる）とバイト単位で同じもの（LaunchAgents の plist は `.touryou/launchd` の plist と同じもの）だけを消す。古い形（v0.1.1 まで）も、同じ内容なら消す。LaunchAgents の plist が `.touryou/launchd` の plist と違っても、同じ PATH の古い形なら消す（`init` だけ新しい形にした場面）。LaunchAgents の plist を残したときは、古い形の起動スクリプトも残す（次のログインで、ないスクリプトを指さないように）。
 - `--org` は `init` と同じ値にする（省略すると Label は `touryou.daemon`）。
 - 終了コード: 0 成功 / 1 前提がない・設定の検査が通らない・既存と違う・起動の確認で問題・消せなかったものがある / 2 引数の誤り・`--yes` がない。
 

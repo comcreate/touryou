@@ -18,6 +18,7 @@ import {
   openSync,
   readFileSync,
   readSync,
+  renameSync,
   rmSync,
   type Stats,
   writeFileSync,
@@ -29,7 +30,10 @@ import {
   type ConfigChecker,
   configProblem,
   DEFAULT_PATH,
+  daemonProgramArguments,
   labelOf,
+  legacyPlistText,
+  legacyScriptPath,
   maskValues,
   plainPath,
   plistText,
@@ -105,7 +109,8 @@ interface Ctx {
 interface Unit {
   readonly name: "daemon";
   readonly label: string;
-  readonly script: string;
+  /** 古い形（v0.1.1 まで）の起動スクリプト。いまは生成しない。古い形と同じなら、uninstall で消す。 */
+  readonly legacyScript: string;
   readonly plistSrc: string;
   readonly plistDest: string;
   readonly log: string;
@@ -253,18 +258,40 @@ function isGeneratedPlist(ctx: Ctx, u: Unit, text: string): boolean {
   return (
     path !== undefined &&
     text ===
-      plistText({ label: u.label, script: u.script, workingDirectory: ctx.base, log: u.log, path })
+      plistText({
+        label: u.label,
+        programArguments: daemonProgramArguments(ctx.base),
+        workingDirectory: ctx.base,
+        log: u.log,
+        path,
+      })
   );
 }
 
-/** init が生成するのと、バイト単位で同じ起動スクリプトか。 */
-const isGeneratedScript = (ctx: Ctx, _u: Unit, text: string): boolean =>
+/** 古い形（v0.1.1 まで）の init が生成するのと、バイト単位で同じ plist か（#64。PATH の値の扱いは、新しい形と同じ）。 */
+function isLegacyPlist(ctx: Ctx, u: Unit, text: string): boolean {
+  const path = pathValueOf(text);
+  return (
+    path !== undefined &&
+    text ===
+      legacyPlistText({
+        label: u.label,
+        script: u.legacyScript,
+        workingDirectory: ctx.base,
+        log: u.log,
+        path,
+      })
+  );
+}
+
+/** 古い形の init が生成するのと、バイト単位で同じ起動スクリプトか。 */
+const isLegacyScript = (ctx: Ctx, _u: Unit, text: string): boolean =>
   text === runDaemonScript(ctx.base);
 
 const isRegular = (p: string): boolean => lstatOr(p)?.isFile() === true;
 
 async function apply(ctx: Ctx): Promise<CommandResult> {
-  const missing = ctx.units.flatMap((u) => [u.plistSrc, u.script]).filter((p) => !isRegular(p));
+  const missing = ctx.units.map((u) => u.plistSrc).filter((p) => !isRegular(p));
   if (missing.length > 0) {
     return fail(
       `touryou launchd init の生成物がない（または通常のファイルでない）:\n${missing.map((p) => `  ${p}`).join("\n")}\n先に touryou launchd init を実行する`,
@@ -273,6 +300,12 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
   }
   for (const u of ctx.units) {
     const text = readOr(u.plistSrc) ?? "";
+    if (isLegacyPlist(ctx, u, text)) {
+      return fail(
+        `${u.plistSrc} が、古い形（run-daemon.sh を起こす。v0.1.1 まで）のまま。同じ --org・--path-prefix で touryou launchd init を実行して、新しい形に置き換えてから、やり直す`,
+        1,
+      );
+    }
     if (!isGeneratedPlist(ctx, u, text)) {
       return fail(
         `${u.plistSrc} が、touryou launchd init の生成するものと違う（--org〔${u.label}〕が違う・手で直した）。同じ --org で touryou launchd init を実行し直す`,
@@ -297,11 +330,21 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
   }
   // 先に全部を確かめる（違う内容の既存があれば、何も置かない）
   const toCopy: Unit[] = [];
+  const toReplace: Unit[] = [];
   for (const u of ctx.units) {
     const st = lstatOr(u.plistDest);
+    const dest = st?.isFile() === true ? readOr(u.plistDest) : undefined;
+    const src = readOr(u.plistSrc) ?? "";
     if (st === undefined) {
       toCopy.push(u);
-    } else if (!st.isFile() || readOr(u.plistDest) !== readOr(u.plistSrc)) {
+    } else if (
+      dest !== undefined &&
+      isLegacyPlist(ctx, u, dest) &&
+      pathValueOf(dest) === pathValueOf(src)
+    ) {
+      // 古い形（v0.1.1 まで）を apply が置いたもの。同じ --org・PATH の新しい形に、置き換える（#64）
+      toReplace.push(u);
+    } else if (dest === undefined || dest !== src) {
       return fail(
         `${u.plistDest} が、生成した plist と違う（または通常のファイルでない）。何も変えずに止めた。中身を確かめ、要らなければ touryou launchd uninstall --yes で外してから、やり直す`,
         1,
@@ -310,6 +353,24 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
   }
   if (agents === undefined) mkdirSync(ctx.agentsDir, { recursive: true, mode: 0o755 });
   const out: string[] = [];
+  for (const u of toReplace) {
+    // 読み込んだままでは、古い plist で動き続ける。止めてから、置き換える
+    if (info(ctx, u).loaded) {
+      const r = ctx.deps.run("launchctl", ["bootout", `${ctx.domain}/${u.label}`]);
+      if (r.status !== 0) {
+        return fail(
+          `launchctl bootout ${u.label} に失敗（古い形の plist を置き換える前）: ${r.stderr.trim()}。何も置き換えていない`,
+          1,
+        );
+      }
+      out.push(`${u.label}: 古い形の plist で動いていたので、止めた`);
+    }
+    const tmp = `${u.plistDest}.new`;
+    rmSync(tmp, { force: true });
+    writeFileSync(tmp, readOr(u.plistSrc) ?? "", { flag: "wx", mode: 0o644 });
+    renameSync(tmp, u.plistDest);
+    out.push(`置き換えた（古い形 → 新しい形）: ${u.plistDest}`);
+  }
   for (const u of toCopy) {
     writeFileSync(u.plistDest, readOr(u.plistSrc) ?? "", { flag: "wx", mode: 0o644 });
     out.push(`置いた: ${u.plistDest}`);
@@ -340,7 +401,7 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
   const st = await statusLines(ctx);
   out.push("", ...st.lines, "");
   out.push(
-    "ログイン時に自動で動くようになった。システム設定の「一般」→「ログイン項目」に、run-daemon.sh の項目が「開発元を識別できない項目」として出るのは、正常。",
+    "ログイン時に自動で動くようになった。システム設定の「一般」→「ログイン項目」に、node の項目が出るのは、正常（touryou に同梱の node で daemon を動かしている。docs/launchd.md）。",
   );
   return {
     exitCode: st.ok ? 0 : 1,
@@ -430,23 +491,30 @@ function uninstall(ctx: Ctx): CommandResult {
     return true;
   };
   for (const u of ctx.units) {
-    // LaunchAgents の plist は、.touryou/launchd の plist とバイト単位で同じとき（apply が置いたもの）だけ消す
+    // LaunchAgents の plist は、.touryou/launchd の plist とバイト単位で同じとき（apply が置いたもの）だけ消す。
+    // 古い形（v0.1.1 まで）を apply が置いたまま、init だけ新しい形にした場面では、同じ PATH の古い形も消す（#64）
     const src = readOr(u.plistSrc);
+    const srcOk =
+      src !== undefined && (isGeneratedPlist(ctx, u, src) || isLegacyPlist(ctx, u, src));
     const destKept = !remove(
       u.plistDest,
-      (t) => src !== undefined && t === src && isGeneratedPlist(ctx, u, t),
+      (t) =>
+        srcOk &&
+        (t === src || (isLegacyPlist(ctx, u, t) && pathValueOf(t) === pathValueOf(src ?? ""))),
       src === undefined
         ? `touryou launchd init の生成物〔${u.plistSrc}〕がないので、apply が置いたものか確かめられない`
         : undefined,
     );
-    remove(u.plistSrc, (t) => isGeneratedPlist(ctx, u, t));
+    remove(u.plistSrc, (t) => isGeneratedPlist(ctx, u, t) || isLegacyPlist(ctx, u, t));
     if (destKept) {
-      // 残した plist が、次のログインで、もうない起動スクリプトを指さないように、対のスクリプトも残す
-      if (lstatOr(u.script) !== undefined) {
-        kept.push(`${u.script}（${u.plistDest} を残したので、対の起動スクリプトも残した）`);
+      // 残した plist が古い形なら、次のログインで、もうない起動スクリプトを指さないように、対のスクリプトも残す
+      if (lstatOr(u.legacyScript) !== undefined) {
+        kept.push(
+          `${u.legacyScript}（${u.plistDest} を残したので、古い形の起動スクリプトも残した）`,
+        );
       }
     } else {
-      remove(u.script, (t) => isGeneratedScript(ctx, u, t));
+      remove(u.legacyScript, (t) => isLegacyScript(ctx, u, t));
     }
   }
   out.push(`残した: ${ctx.logsDir}（ログ）・${ctx.stateDir}（daemon の状態）`);
@@ -511,7 +579,7 @@ export async function runLaunchdService(
     return {
       name,
       label,
-      script: join(binDir, "run-daemon.sh"),
+      legacyScript: legacyScriptPath(base),
       plistSrc: join(plistDir, `${label}.plist`),
       plistDest: join(agentsDir, `${label}.plist`),
       log: join(logsDir, `${name}.log`),

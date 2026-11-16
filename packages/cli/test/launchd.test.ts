@@ -17,7 +17,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runBin } from "../src/bin.js";
-import { plistText } from "../src/launchd.js";
+import { legacyPlistText, plistText, runDaemonScript } from "../src/launchd.js";
 
 const has = (cmd: string, args: string[]): boolean => spawnSync(cmd, args).error === undefined;
 
@@ -145,14 +145,13 @@ describe("設定の検査（daemon の --check-config）", () => {
 });
 
 describe("生成物", () => {
-  it("起動スクリプト 0700・plist 0644・bin と logs は 0700 で作る。launchctl の案内を出す", async () => {
+  it("plist 0644・logs は 0700 で作る。起動スクリプト（bin/）は作らない（#64）。launchctl の案内を出す", async () => {
     const { home, base } = makeHome();
     const r = await run(home, ["init", "--org", ORG]);
     expect(r.exitCode).toBe(0);
-    expect(mode(join(base, "bin", "run-daemon.sh"))).toBe("700");
-    expect(existsSync(join(base, "bin", "run-mcp.sh"))).toBe(false);
-    expect(mode(join(base, "bin"))).toBe("700");
+    expect(existsSync(join(base, "bin"))).toBe(false);
     expect(mode(join(base, "logs"))).toBe("700");
+    expect(r.stdout).not.toContain("run-daemon.sh");
     const plists = readdirSync(join(base, "launchd")).sort();
     expect(plists).toEqual([`${ORG}.touryou.daemon.plist`]);
     for (const p of plists) expect(mode(join(base, "launchd", p))).toBe("644");
@@ -208,7 +207,12 @@ describe("生成物", () => {
     expect(r.exitCode).toBe(0);
     const text = readFileSync(join(base, "launchd", `${ORG}.touryou.daemon.plist`), "utf8");
     expect(text).toContain(`<key>Label</key><string>${ORG}.touryou.daemon</string>`);
-    expect(text).toContain(`<array><string>${join(base, "bin", "run-daemon.sh")}</string></array>`);
+    // shell を通さず、同梱の node で daemon の JS を直に起こす（current のリンクを通す。#64）
+    expect(text).toContain(
+      `<key>ProgramArguments</key>\n  <array>\n    <string>${join(base, "current", "bin", "node")}</string>\n    <string>${join(base, "current", "lib", "dist", "bin.js")}</string>\n    <string>--config</string>\n    <string>${join(base, "config.json")}</string>\n  </array>`,
+    );
+    expect(text).not.toContain("run-daemon.sh");
+    expect(text).not.toContain("TOURYOU_DIST_VERSION"); // 版は plist に入れない（版を上げても plist は同じ）
     expect(text).toContain(`<key>WorkingDirectory</key><string>${base}</string>`);
     expect(text).toContain(
       `<key>StandardOutPath</key><string>${join(base, "logs", "daemon.log")}</string>`,
@@ -226,10 +230,6 @@ describe("生成物", () => {
     for (const t of [text, r.stdout, r.stderr]) {
       expect(t).not.toContain(TOKEN);
       expect(t).not.toMatch(/OAUTH|oauth-secret/);
-    }
-    // 起動スクリプトにも、トークンの値は入らない
-    for (const f of ["run-daemon.sh"]) {
-      expect(readFileSync(join(base, "bin", f), "utf8")).not.toContain(TOKEN);
     }
   });
 
@@ -269,12 +269,13 @@ describe("生成物", () => {
     // エスケープ: 値に & < > があっても、XML が壊れない
     const t = plistText({
       label: "a&b<c>d",
-      script: "/x/y",
+      programArguments: ["/x/n&ode", "/x/y"],
       workingDirectory: "/x",
       log: "/x/l",
       path: "/usr/bin",
     });
     expect(t).toContain("<string>a&amp;b&lt;c&gt;d</string>");
+    expect(t).toContain("<string>/x/n&amp;ode</string>");
     expect(t).not.toContain("a&b<c>d");
   });
 
@@ -314,17 +315,12 @@ describe("生成物", () => {
     const again = await run(home, ["init", "--org", ORG]);
     expect(again.exitCode).toBe(0);
     expect(again.stdout).toMatch(/既存と同じ/);
-    // 別の組織名: 起動スクリプトは同じだが、plist が別名になるだけ（既存の plist は触らない）
+    // 別の組織名: plist が別名になるだけ（既存の plist は触らない）
     expect((await run(home, ["init", "--org", "org.other"])).exitCode).toBe(0);
-    // 利用者が手で直したスクリプト → 上書きしない
-    const script = join(base, "bin", "run-daemon.sh");
-    writeFileSync(script, "#!/bin/sh\necho edited\n");
-    const edited = readFileSync(script, "utf8");
-    // 新しく書くはずだった plist（--path-prefix を変えると、既存の plist と内容が違う）も、書かれない
+    // --path-prefix を変えると、既存の plist と内容が違う → 書かれない
     const r = await run(home, ["init", "--org", ORG, "--path-prefix", "/opt/x"]);
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toMatch(/黙って上書きしない/);
-    expect(readFileSync(script, "utf8")).toBe(edited);
     expect(
       readFileSync(join(base, "launchd", `${ORG}.touryou.daemon.plist`), "utf8"),
     ).not.toContain("/opt/x");
@@ -340,7 +336,7 @@ describe("生成物", () => {
     expect(mode(join(base, "logs"))).toBe("755");
   });
 
-  it("run-daemon.sh だけが違い、plist がまだない場面でも、何も書かずに止まる（plist・run-mcp.sh・launchd/ を作らない）", async () => {
+  it("古い形の run-daemon.sh だけがあり、中身が古い形の生成物と違えば、plist がまだなくても、何も書かずに止まる（launchd/ を作らない）", async () => {
     const { home, base } = makeHome();
     mkdirSync(join(base, "bin"), { mode: 0o700 });
     const script = join(base, "bin", "run-daemon.sh");
@@ -360,8 +356,6 @@ describe("生成物", () => {
         process.umask(mask);
         const { home, base } = makeHome();
         expect((await run(home, ["init", "--org", ORG])).exitCode).toBe(0);
-        expect(mode(join(base, "bin", "run-daemon.sh"))).toBe("700");
-        expect(mode(join(base, "bin"))).toBe("700");
         expect(mode(join(base, "logs"))).toBe("700");
         expect(mode(join(base, "launchd", `${ORG}.touryou.daemon.plist`))).toBe("644");
       }
@@ -443,25 +437,134 @@ describe("生成物", () => {
   // 案内の「トークンのファイルを作る」を、実際に bash で走らせる（利用者の zsh・bash の `read -s` と同じ形）
 });
 
-describe("run-daemon.sh（実際にシェルで走らせる）", () => {
-  it("秘密を扱わない（子の認証トークンを読まない）。touryou-daemon を --config で exec する", async () => {
+describe("plist の ProgramArguments（実際に走らせる）", () => {
+  it("秘密を扱わない（子の認証トークンを読まない）。同梱の node に daemon の JS と --config を渡す", async () => {
     const h = makeHome();
     const out = join(h.home, "observed.txt");
+    // 同梱の node の偽物（受け取った引数と、トークンの環境変数を書き出す）
     writeFileSync(
-      join(h.base, "current", "bin", "touryou-daemon"),
+      join(h.base, "current", "bin", "node"),
       `#!/bin/sh\n{ echo "args=$*"; echo "tok=\${CLAUDE_CODE_OAUTH_TOKEN:-none}"; } > "${out}"\n`,
       { mode: 0o755 },
     );
     writeFileSync(join(h.state, "oauth-token"), TOKEN, { mode: 0o600 });
     expect((await run(h.home, ["init", "--org", ORG])).exitCode).toBe(0);
-    const script = join(h.base, "bin", "run-daemon.sh");
-    const text = readFileSync(script, "utf8");
+    const text = readFileSync(join(h.base, "launchd", `${ORG}.touryou.daemon.plist`), "utf8");
     expect(text).not.toMatch(/oauth-token|CLAUDE_CODE_OAUTH_TOKEN/);
-    const r = spawnSync("/bin/sh", [script], { encoding: "utf8", env: { PATH: "/usr/bin:/bin" } });
+    const args = [
+      ...(
+        /<key>ProgramArguments<\/key>\s*<array>([\s\S]*?)<\/array>/.exec(text)?.[1] ?? ""
+      ).matchAll(/<string>([^<]*)<\/string>/g),
+    ].map((m) => m[1] as string);
+    const r = spawnSync(args[0] as string, args.slice(1), {
+      encoding: "utf8",
+      env: { PATH: "/usr/bin:/bin" },
+    });
     expect(r.status).toBe(0);
     const seen = readFileSync(out, "utf8");
-    expect(seen).toContain(`args=--config ${join(h.base, "config.json")}`);
+    expect(seen).toContain(
+      `args=${join(h.base, "current", "lib", "dist", "bin.js")} --config ${join(h.base, "config.json")}`,
+    );
     expect(seen).toContain("tok=none");
+  });
+});
+
+describe("古い形（v0.1.1 まで。run-daemon.sh を起こす plist）からの引っ越し（#64）", () => {
+  /** v0.1.1 の init が生成したのと同じ、古い形の生成物を置く。 */
+  const legacy = (
+    h: { home: string; base: string },
+    label: string,
+    path = "/usr/bin:/bin:/usr/sbin:/sbin",
+  ): { plist: string; script: string } => {
+    mkdirSync(join(h.base, "bin"), { recursive: true, mode: 0o700 });
+    mkdirSync(join(h.base, "launchd"), { recursive: true, mode: 0o755 });
+    mkdirSync(join(h.base, "logs"), { recursive: true, mode: 0o700 });
+    const script = join(h.base, "bin", "run-daemon.sh");
+    writeFileSync(script, runDaemonScript(h.base), { mode: 0o700 });
+    const plist = join(h.base, "launchd", `${label}.plist`);
+    writeFileSync(
+      plist,
+      legacyPlistText({
+        label,
+        script,
+        workingDirectory: h.base,
+        log: join(h.base, "logs", "daemon.log"),
+        path,
+      }),
+      { mode: 0o644 },
+    );
+    return { plist, script };
+  };
+
+  it("古い形と同じなら、plist を新しい形に置き換え、run-daemon.sh を消す。もう一度 init しても同じ", async () => {
+    const h = makeHome();
+    const { plist, script } = legacy(h, "touryou.daemon");
+    const r = await run(h.home, ["init"]);
+    expect(r.exitCode, r.stderr).toBe(0);
+    expect(r.stdout).toMatch(/古い形〔run-daemon\.sh を起こす〕から、新しい形に置き換えた/);
+    expect(existsSync(script)).toBe(false);
+    const text = readFileSync(plist, "utf8");
+    expect(text).toContain(join(h.base, "current", "bin", "node"));
+    expect(text).not.toContain("run-daemon.sh");
+    expect(mode(plist)).toBe("644");
+    expect(existsSync(`${plist}.new`)).toBe(false);
+    const again = await run(h.home, ["init"]);
+    expect(again.exitCode).toBe(0);
+    expect(again.stdout).toMatch(/既存と同じ/);
+  });
+
+  it("--org・--path-prefix つきの古い形も、同じ引数の init なら置き換える（PATH の値の扱いも同じ）", async () => {
+    const h = makeHome();
+    const { plist, script } = legacy(
+      h,
+      `${ORG}.touryou.daemon`,
+      "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    );
+    const r = await run(h.home, ["init", "--org", ORG, "--path-prefix", "/opt/homebrew/bin"]);
+    expect(r.exitCode, r.stderr).toBe(0);
+    expect(existsSync(script)).toBe(false);
+    const text = readFileSync(plist, "utf8");
+    expect(text).toContain(join(h.base, "current", "bin", "node"));
+    expect(text).toContain(
+      "<key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>",
+    );
+  });
+
+  it("古い形でも、--path-prefix が違う init なら、置き換えずに止まる（何も消さない）", async () => {
+    const h = makeHome();
+    const { plist, script } = legacy(h, "touryou.daemon", "/opt/x:/usr/bin:/bin:/usr/sbin:/sbin");
+    const before = readFileSync(plist, "utf8");
+    const r = await run(h.home, ["init"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toMatch(/黙って上書きしない/);
+    expect(readFileSync(plist, "utf8")).toBe(before);
+    expect(readFileSync(script, "utf8")).toBe(runDaemonScript(h.base));
+  });
+
+  it("古い形の plist でも、run-daemon.sh を手で直していれば、何も書かず・消さずに止まる", async () => {
+    const h = makeHome();
+    const { plist, script } = legacy(h, "touryou.daemon");
+    writeFileSync(script, "#!/bin/sh\necho mine\n");
+    const before = readFileSync(plist, "utf8");
+    const r = await run(h.home, ["init"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain(script);
+    expect(readFileSync(plist, "utf8")).toBe(before);
+    expect(readFileSync(script, "utf8")).toBe("#!/bin/sh\necho mine\n");
+  });
+
+  it("古い形の plist を手で直していれば（環境変数を足したなど）、置き換えずに止まる", async () => {
+    const h = makeHome();
+    const { plist, script } = legacy(h, "touryou.daemon");
+    const edited = readFileSync(plist, "utf8").replace(
+      "<key>PATH</key>",
+      "<key>FOO</key><string>1</string>\n    <key>PATH</key>",
+    );
+    writeFileSync(plist, edited);
+    const r = await run(h.home, ["init"]);
+    expect(r.exitCode).toBe(1);
+    expect(readFileSync(plist, "utf8")).toBe(edited);
+    expect(existsSync(script)).toBe(true);
   });
 });
 

@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runBin } from "../src/bin.js";
+import { legacyPlistText, runDaemonScript } from "../src/launchd.js";
 import type { RunResult } from "../src/launchd-service.js";
 
 // `touryou launchd apply|status|restart|stop|uninstall`。launchctl と窓口は偽物に差し替える（実際の launchctl は呼ばない）。
@@ -158,7 +159,8 @@ describe("apply", () => {
       );
     }
     expect(r.stdout).toMatch(/whoami が 401/);
-    expect(r.stdout).toMatch(/開発元を識別できない項目/);
+    expect(r.stdout).toMatch(/「ログイン項目」に、node の項目が出るのは、正常/);
+    expect(r.stdout).not.toContain("run-daemon.sh");
     expect(r.stdout + r.stderr).not.toContain(TOKEN);
   });
 
@@ -339,8 +341,7 @@ describe("uninstall", () => {
     const r = await bin(home, f, ["uninstall", "--yes", "--org", ORG]);
     expect(r.exitCode).toBe(1);
     expect(readFileSync(join(agents, `${DAEMON}.plist`), "utf8")).toBe("someone else's plist");
-    // LaunchAgents の daemon の plist を残したので、対の run-daemon.sh も残す
-    expect(existsSync(join(base, "bin", "run-daemon.sh"))).toBe(true);
+    expect(existsSync(join(base, "launchd", `${DAEMON}.plist`))).toBe(false);
   });
 });
 
@@ -384,23 +385,10 @@ describe("launchd の操作の回帰", () => {
     );
     writeFileSync(src, edited);
     writeFileSync(join(agents, `${DAEMON}.plist`), edited);
-    const script = join(base, "bin", "run-daemon.sh");
-    writeFileSync(script, `${readFileSync(script, "utf8")}\n# 手で足した行\n`);
     const r = await bin(home, f, ["uninstall", "--yes", "--org", ORG]);
     expect(r.exitCode).toBe(1);
     expect(readFileSync(src, "utf8")).toBe(edited);
     expect(readFileSync(join(agents, `${DAEMON}.plist`), "utf8")).toBe(edited);
-    expect(existsSync(script)).toBe(true);
-  });
-
-  it("uninstall: LaunchAgents の plist を残したら、対の起動スクリプトも残す", async () => {
-    const { home, base, f, agents } = await initHome();
-    await bin(home, f, ["apply", "--yes", "--org", ORG]);
-    writeFileSync(join(agents, `${DAEMON}.plist`), "changed by someone");
-    const r = await bin(home, f, ["uninstall", "--yes", "--org", ORG]);
-    expect(r.exitCode).toBe(1);
-    expect(existsSync(join(base, "bin", "run-daemon.sh"))).toBe(true);
-    expect(r.stdout).toMatch(/対の起動スクリプトも残した/);
   });
 
   it("uninstall: LaunchAgents の plist がシンボリックリンクなら、消さずに残す", async () => {
@@ -411,7 +399,6 @@ describe("launchd の操作の回帰", () => {
     expect(r.exitCode).toBe(1);
     // リンクそのものを残す（辿った先の有無ではなく、リンクがあるか）
     expect(lstatSync(join(agents, `${DAEMON}.plist`)).isSymbolicLink()).toBe(true);
-    expect(existsSync(join(base, "bin", "run-daemon.sh"))).toBe(true);
   });
 
   it("uninstall: bootout が失敗したら、何も消さずに終了コード 1", async () => {
@@ -422,7 +409,7 @@ describe("launchd の操作の回帰", () => {
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toMatch(/何も消していない/);
     expect(existsSync(join(agents, `${DAEMON}.plist`))).toBe(true);
-    expect(existsSync(join(base, "bin", "run-daemon.sh"))).toBe(true);
+    expect(existsSync(join(base, "launchd", `${DAEMON}.plist`))).toBe(true);
   });
 
   it("init の --path-prefix つきの plist も、生成物として扱う（apply・uninstall）", async () => {
@@ -488,5 +475,124 @@ describe("launchd の操作の回帰", () => {
     await bin(home, f, ["apply", "--yes", "--org", ORG]);
     const r = await bin(home, f, ["status", "--org", ORG]);
     expect(r.stdout).not.toMatch(/restart は、読み込まれていない/);
+  });
+});
+
+describe("古い形（v0.1.1 まで。run-daemon.sh を起こす plist）からの引っ越し（#64）", () => {
+  /** v0.1.1 の init・apply が置いたのと同じ、古い形の生成物（.touryou/launchd・bin・LaunchAgents）。 */
+  function legacyHome(path = "/usr/bin:/bin:/usr/sbin:/sbin") {
+    const h = makeHome();
+    const agents = join(h.home, "Library", "LaunchAgents");
+    for (const d of [join(h.base, "bin"), join(h.base, "logs")]) {
+      mkdirSync(d, { recursive: true });
+      chmodSync(d, 0o700);
+    }
+    for (const d of [join(h.base, "launchd"), agents]) mkdirSync(d, { recursive: true });
+    const script = join(h.base, "bin", "run-daemon.sh");
+    writeFileSync(script, runDaemonScript(h.base), { mode: 0o700 });
+    const text = legacyPlistText({
+      label: DAEMON,
+      script,
+      workingDirectory: h.base,
+      log: join(h.base, "logs", "daemon.log"),
+      path,
+    });
+    const src = join(h.base, "launchd", `${DAEMON}.plist`);
+    const dest = join(agents, `${DAEMON}.plist`);
+    writeFileSync(src, text);
+    writeFileSync(dest, text);
+    return { ...h, agents, script, src, dest, text, f: withUid(fake(h.state)) };
+  }
+
+  it("apply: .touryou/launchd が古い形のままなら、init を案内して止める（launchctl は呼ばない）", async () => {
+    const h = legacyHome();
+    const r = await bin(h.home, h.f, ["apply", "--yes", "--org", ORG]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toMatch(/古い形.*touryou launchd init を実行して/);
+    expect(h.f.calls).toEqual([]);
+    expect(readFileSync(h.dest, "utf8")).toBe(h.text);
+  });
+
+  it("init のあとの apply: LaunchAgents の古い形を、止めてから新しい形に置き換え、読み込む", async () => {
+    const h = legacyHome();
+    h.f.loaded.set(DAEMON, { state: "running" });
+    expect((await bin(h.home, undefined, ["init", "--org", ORG])).exitCode).toBe(0);
+    expect(existsSync(h.script)).toBe(false);
+    const r = await bin(h.home, h.f, ["apply", "--yes", "--org", ORG]);
+    expect(r.exitCode, r.stderr).toBe(0);
+    expect(seq(h.f)).toEqual([`bootout ${DAEMON}`, `bootstrap ${DAEMON}.plist`]);
+    expect(readFileSync(h.dest, "utf8")).toBe(readFileSync(h.src, "utf8"));
+    expect(readFileSync(h.dest, "utf8")).not.toContain("run-daemon.sh");
+    expect(r.stdout).toMatch(/置き換えた（古い形 → 新しい形）/);
+  });
+
+  it("init のあとの apply: --path-prefix つきの古い形も、同じ PATH なら置き換える", async () => {
+    const pv = "/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+    const h = legacyHome(pv);
+    expect(
+      (await bin(h.home, undefined, ["init", "--org", ORG, "--path-prefix", "/opt/homebrew/bin"]))
+        .exitCode,
+    ).toBe(0);
+    const r = await bin(h.home, h.f, ["apply", "--yes", "--org", ORG]);
+    expect(r.exitCode, r.stderr).toBe(0);
+    expect(readFileSync(h.dest, "utf8")).toContain(`<string>${pv}</string>`);
+  });
+
+  it("apply: LaunchAgents の古い形が、新しい形と PATH が違えば、置き換えずに止める", async () => {
+    const h = legacyHome("/opt/x:/usr/bin:/bin:/usr/sbin:/sbin");
+    rmSync(h.src);
+    rmSync(h.script);
+    expect((await bin(h.home, undefined, ["init", "--org", ORG])).exitCode).toBe(0);
+    const before = readFileSync(h.dest, "utf8");
+    const r = await bin(h.home, h.f, ["apply", "--yes", "--org", ORG]);
+    expect(r.exitCode).toBe(1);
+    expect(readFileSync(h.dest, "utf8")).toBe(before);
+    expect(seq(h.f)).toEqual([]);
+  });
+
+  it("apply: 古い形の plist を止められなければ、置き換えずに止める", async () => {
+    const h = legacyHome();
+    h.f.loaded.set(DAEMON, { state: "running" });
+    expect((await bin(h.home, undefined, ["init", "--org", ORG])).exitCode).toBe(0);
+    h.f.failOn = "bootout";
+    const r = await bin(h.home, h.f, ["apply", "--yes", "--org", ORG]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toMatch(/何も置き換えていない/);
+    expect(readFileSync(h.dest, "utf8")).toBe(h.text);
+  });
+
+  it("uninstall: 古い形のまま（init していない）でも、plist・run-daemon.sh を外す", async () => {
+    const h = legacyHome();
+    h.f.loaded.set(DAEMON, { state: "running" });
+    const r = await bin(h.home, h.f, ["uninstall", "--yes", "--org", ORG]);
+    expect(r.exitCode, r.stdout + r.stderr).toBe(0);
+    for (const p of [h.dest, h.src, h.script]) expect(existsSync(p), p).toBe(false);
+  });
+
+  it("uninstall: init で新しい形にしたが、LaunchAgents は古い形のまま（apply の前）でも、両方を外す", async () => {
+    const h = legacyHome();
+    expect((await bin(h.home, undefined, ["init", "--org", ORG])).exitCode).toBe(0);
+    const r = await bin(h.home, h.f, ["uninstall", "--yes", "--org", ORG]);
+    expect(r.exitCode, r.stdout + r.stderr).toBe(0);
+    for (const p of [h.dest, h.src, h.script]) expect(existsSync(p), p).toBe(false);
+  });
+
+  it("uninstall: LaunchAgents の古い形を残したら（手で直した）、run-daemon.sh も残す", async () => {
+    const h = legacyHome();
+    writeFileSync(h.dest, `${h.text}<!-- edited -->\n`);
+    const r = await bin(h.home, h.f, ["uninstall", "--yes", "--org", ORG]);
+    expect(r.exitCode).toBe(1);
+    expect(existsSync(h.dest)).toBe(true);
+    expect(existsSync(h.script)).toBe(true);
+    expect(r.stdout).toMatch(/古い形の起動スクリプトも残した/);
+  });
+
+  it("uninstall: run-daemon.sh を手で直していれば、消さずに残す", async () => {
+    const h = legacyHome();
+    writeFileSync(h.script, "#!/bin/sh\necho mine\n");
+    const r = await bin(h.home, h.f, ["uninstall", "--yes", "--org", ORG]);
+    expect(r.exitCode).toBe(1);
+    expect(readFileSync(h.script, "utf8")).toBe("#!/bin/sh\necho mine\n");
+    expect(existsSync(h.dest)).toBe(false);
   });
 });

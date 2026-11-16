@@ -231,6 +231,8 @@ interface Capabilities {
 - 設定（`config.json`）は、/setup が 1 つのコマンドで書く（ホームの下・git のリポジトリ・未作成を確かめ、600 で書く）。承認は、導入・設定・常駐の登録で約 3 回（前は約 12 回）。
 - SessionStart のフック（`scripts/runtime-version-notice.sh`）は、`current` の版と plugin の版が違えば知らせるだけ。取得・daemon の起動し直しはしない。本体がない・読めないときは何も出さず、セッションを止めない。
 - 取得先は本番（`plugin.json` の `repository`）に固定し、試しのための差し替えの道（引数・環境変数）は作らない。tag の前の実機の確かめは、直前の Release の配布物を使う（plugin の写しに、その `checksums.json` を置く。手順は `docs/setup-verification.md`。Issue #48）。
+- 常駐の plist の `ProgramArguments` は、同梱の node（`<base>/current/bin/node`）と daemon の JS（`<base>/current/lib/dist/bin.js`）・`--config <base>/config.json` で、shell を通さない。shell の起動スクリプトを通すと、macOS のログイン項目（Background Task Management）に、起動スクリプト・`sh`・`bash` が別々の「開発元を識別できない項目」として出る（Issue #64）。`current` のリンクを通すので、版を上げても plist は変わらない。版は plist に書かず、daemon が配布物の版の印 `lib/dist-version`（`dist-build.sh` が置き、`dist-check.sh` が配布物の名前の版と同じかを確かめる）から読む（`resolveVersion` は、環境変数 `TOURYOU_DIST_VERSION` の次に読む）。
+- 古い形（v0.1.1 まで。`<base>/bin/run-daemon.sh` を起こす plist）の生成物は、同じ `--org`・PATH の古い `init` の生成物とバイト単位で同じときだけ、新しい形と同じに扱う。`init` は plist を置き換えて `run-daemon.sh` を消し、`apply` は LaunchAgents の古い形を、止めてから置き換え、`uninstall` は両方の形を外す。違えば、いまと同じく止める。`--restart-daemon` の道は、古い版の `init`（確かめ）→ `stop` → 付け替え → 新しい版の `init`（引っ越し）→ `apply --yes`。新しい版の `init`・`apply` が失敗したら、新しい版の `uninstall --yes` → 前の版に付け替え → 前の版の `init`・`apply --yes` で戻す。
 - daemon の寿命（統合セッション・子のセッションと別の寿命で動き、版上げの起動し直しは同意のあとだけ、失敗したら前の版に戻す）は NFR_015。IR_002 はフックの記録と拒否で、寿命の要求ではない。
 
 ## 6.6. plugin の shell script の書き方
@@ -308,6 +310,10 @@ plugin が利用者の Mac で走らせる shell script（`plugin/scripts/*.sh`�
 | resume・fork・compact で `CLAUDE_CODE_SESSION_ID` が変わるか | 中 | 変わる場合は、合う購読がないときの扱いのとおり受信箱に落ちる |
 
 # 10. 変更履歴
+
+## v1.6
+
+- 配布・導入（6.5 節）に、常駐の plist が shell を通さず同梱の node で daemon を直に起こすこと、版の印 `lib/dist-version`、古い形（`run-daemon.sh`）からの引っ越しと戻し方を足した。ログイン項目に `run-daemon.sh`・`sh`・`bash` の 3 つが「開発元を識別できない項目」として出て、利用者が不安に思ったため（Issue #64）。
 
 ## v1.5
 

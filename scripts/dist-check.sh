@@ -32,6 +32,15 @@ top="$(ls "$work/x")"
     printf '%s\n' "${dangling}" | sed "s#^$work/x/#  #" >&2
     rc=1
   fi
+  # launchd の plist が直に指すもの（#64）: 同梱の node・daemon の JS・版の印。印の中身は、配布物の名前の版と同じ
+  for f in bin/node lib/dist/bin.js lib/dist-version; do
+    [ -f "$work/x/${top}/$f" ] || { echo "検査に当たった: launchd が指す ${f} がない" >&2; rc=1; }
+  done
+  name_ver="$(basename "$tgz" | sed -n 's/^touryou-\(.*\)-[a-z0-9]*-[a-z0-9_]*\.tar\.gz$/\1/p')"
+  if [ -n "${name_ver}" ] && [ -f "$work/x/${top}/lib/dist-version" ]; then
+    mark="$(cat "$work/x/${top}/lib/dist-version")"
+    [ "${mark}" = "${name_ver}" ] || { echo "検査に当たった: 版の印（${mark}）が、配布物の名前の版（${name_ver}）と違う" >&2; rc=1; }
+  fi
   exit "$rc"
 ) || exit 1
 echo "配布物の中身の検査（install-runtime.sh と同じ check_list・check_types・check_kinds・check_links）: 通った"
