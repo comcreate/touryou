@@ -6,6 +6,7 @@
 
 ### 利用者に見える変更
 
+- **/setup の許可の確認を、知らせた回数に合わせる**（#69。#63）: `/touryou:setup` の中で走らせる Bash を 3 つ（導入・設定・常駐の登録）だけにし、node の道具や `/touryou:start`・`/touryou:service` の中身を代わりに呼ばない（確かめは script の出力と Read で行い、接続の確かめは利用者に `/touryou:start` を打ってもらう）。知らせる回数を書き分けた（常駐あり 3 回・なし 2 回・版を上げるときは 1〜2 回）。設定の段でパスを言い直したときは、その段だけをやり直せる。回数の確かめは、次の実機で行う。
 - **同じ版のときに、/setup が「配布物を取得します」と言い切らない**（#67。#62）: `/touryou:setup` が導入の script の前に言う定型文を「導入の script を実行します。初めて・版が変わったときは、配布物を取得します（約 150MB）。同じ版が入っているときは、取得しません」にした。実際に取得したかは script の出力が知らせる。
 - **/setup の検査の一覧のファイルを ~/.touryou/work に残さない**（#66。#61）: `install-runtime.sh` が中身の検査で作る一覧（`list.txt`・`list-v.txt`、約 0.9MB）を、置き場の中の一時ディレクトリに作り、成功でも失敗でも、中断（Ctrl-C・SIGTERM）でも消す。`~/.touryou/work` に残るのは、取得した tar.gz だけ。
 - **常駐の plist から、shell を通さず同梱の node で daemon を直に起こす**（#70。#64）: ログイン項目に `run-daemon.sh`・`sh`・`bash` の 3 つが「開発元を識別できない項目」として出ていた。`touryou launchd init` の plist は、`current/bin/node` で `current/lib/dist/bin.js` を直に起こし、`run-daemon.sh` を作らない（ログイン項目は `node` の 1 項目の見込み）。版は plist に書かず、配布物の版の印（`lib/dist-version`）を daemon が読む。v0.1.0 の形の生成物は、同じ `--org`・`--path-prefix` の古い `init` の生成物とバイト単位で同じときだけ置き換え（手で直していれば止まる）、`uninstall` は古い形も外す。上げたあとも `sh`・`bash` の項目が残ることがあるが、害はない（`docs/launchd.md`）。
