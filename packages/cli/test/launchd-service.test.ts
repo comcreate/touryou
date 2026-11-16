@@ -680,6 +680,25 @@ describe("前の形（v0.1.1。current/bin/node を直に起こす plist）か�
     expect(f.ls.at(-1)).toBe(`-u ${join(real, "TouRyou.app")}`);
   });
 
+  it("版を上げたあとの apply は、前の版の TouRyou.app の登録を解いてから、今の版を登録する。uninstall は全部の版で解く", async () => {
+    const { home, base, f } = await initHome();
+    const oldApp = join(base, "v1.0.0", "touryou-darwin-arm64", "TouRyou.app");
+    const real = join(base, "v1.0.1", "touryou-darwin-arm64");
+    mkdirSync(join(oldApp, "Contents", "MacOS"), { recursive: true });
+    mkdirSync(join(real, "TouRyou.app", "Contents", "MacOS"), { recursive: true });
+    mkdirSync(join(real, "bin"), { recursive: true });
+    writeFileSync(join(real, "bin", "touryou-daemon"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    rmSync(join(base, "current"), { recursive: true });
+    symlinkSync(real, join(base, "current"));
+    const a = await bin(home, f, ["apply", "--yes", "--org", ORG]);
+    expect(a.exitCode, a.stderr).toBe(0);
+    expect(f.ls).toEqual([`-u ${oldApp}`, `-f ${join(real, "TouRyou.app")}`]);
+    f.ls.length = 0;
+    const u = await bin(home, f, ["uninstall", "--yes", "--org", ORG]);
+    expect(u.exitCode, u.stdout + u.stderr).toBe(0);
+    expect(f.ls).toEqual([`-u ${oldApp}`, `-u ${join(real, "TouRyou.app")}`]);
+  });
+
   it("TouRyou.app がなければ、LaunchServices の登録は飛ばす（常駐は止めない）", async () => {
     const { home, f } = await initHome();
     const a = await bin(home, f, ["apply", "--yes", "--org", ORG]);

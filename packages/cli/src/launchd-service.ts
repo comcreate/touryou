@@ -16,6 +16,7 @@ import {
   lstatSync,
   mkdirSync,
   openSync,
+  readdirSync,
   readFileSync,
   readSync,
   realpathSync,
@@ -286,22 +287,70 @@ function isLegacyPlist(ctx: Ctx, u: Unit, text: string): boolean {
   );
 }
 
+/** 版のディレクトリ（`<base>/v<版>/<配布物の名前>/TouRyou.app`）の実パスの一覧。 */
+function versionApps(ctx: Ctx): string[] {
+  const apps: string[] = [];
+  let vs: string[] = [];
+  try {
+    vs = readdirSync(ctx.base).filter((n) => /^v[0-9]/.test(n));
+  } catch {
+    return apps;
+  }
+  for (const v of vs) {
+    let ds: string[] = [];
+    try {
+      ds = readdirSync(join(ctx.base, v));
+    } catch {
+      continue;
+    }
+    for (const d of ds) {
+      const app = join(ctx.base, v, d, "TouRyou.app");
+      if (lstatOr(app)?.isDirectory() === true) apps.push(app);
+    }
+  }
+  return apps;
+}
+
 /**
  * TouRyou.app を LaunchServices に登録する（`-f`）・登録を解く（`-u`）（#73）。ログイン項目が、app の名前とアイコンを引けるように。
- * current のリンクの先（版のディレクトリ）の実パスで行う。失敗しても常駐は動くので、止めずに、知らせの行を返す。
+ * 登録は current のリンクの先（版のディレクトリ）の実パスで行い、ほかの版の TouRyou.app の登録は解く（同じ bundle ID の登録を、版の数だけためない）。
+ * 解くときは、全部の版で解く。失敗しても常駐は動くので、止めずに、知らせの行を返す。
  */
-function lsregister(ctx: Ctx, flag: "-f" | "-u"): string {
-  let app: string;
+function lsregister(ctx: Ctx, flag: "-f" | "-u"): string[] {
+  let current: string | undefined;
   try {
-    app = realpathSync(appBundlePath(ctx.base));
+    current = realpathSync(appBundlePath(ctx.base));
   } catch {
-    return `TouRyou.app（current の中）がないので、LaunchServices の${flag === "-f" ? "登録" : "登録の解除"}は飛ばした`;
+    current = undefined;
   }
-  const r = ctx.deps.run(LSREGISTER, [flag, app]);
-  const what = flag === "-f" ? "登録した" : "登録を解いた";
-  return r.status === 0
-    ? `TouRyou.app を LaunchServices に${what}`
-    : `TouRyou.app の LaunchServices の${flag === "-f" ? "登録" : "登録の解除"}に失敗（終了コード ${r.status ?? "なし"}。常駐には影響しない）`;
+  const others = versionApps(ctx).filter((a) => {
+    try {
+      return realpathSync(a) !== current;
+    } catch {
+      return false;
+    }
+  });
+  const out: string[] = [];
+  let failed = 0;
+  const call = (f: "-f" | "-u", app: string): void => {
+    if (ctx.deps.run(LSREGISTER, [f, app]).status !== 0) failed += 1;
+  };
+  for (const a of others) call("-u", a);
+  if (flag === "-f") {
+    if (current === undefined) {
+      out.push("TouRyou.app（current の中）がないので、LaunchServices の登録は飛ばした");
+    } else {
+      call("-f", current);
+      out.push("TouRyou.app を LaunchServices に登録した");
+    }
+  } else {
+    if (current !== undefined) call("-u", current);
+    out.push("TouRyou.app の LaunchServices の登録を解いた");
+  }
+  if (others.length > 0) out.push(`ほかの版の TouRyou.app の登録を解いた（${others.length} 個）`);
+  if (failed > 0)
+    out.push(`LaunchServices の登録・解除のうち ${failed} 回が失敗した（常駐には影響しない）`);
+  return out;
 }
 
 /** 古い形の init が生成するのと、バイト単位で同じ起動スクリプトか。 */
@@ -395,7 +444,7 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
     writeFileSync(u.plistDest, readOr(u.plistSrc) ?? "", { flag: "wx", mode: 0o644 });
     out.push(`置いた: ${u.plistDest}`);
   }
-  out.push(lsregister(ctx, "-f"));
+  out.push(...lsregister(ctx, "-f"));
   for (const u of ctx.units) {
     if (info(ctx, u).loaded) {
       out.push(`${u.label}: 読み込み済み（そのまま）`);
@@ -552,7 +601,7 @@ function uninstall(ctx: Ctx): CommandResult {
       remove(u.legacyScript, (t) => isLegacyScript(ctx, u, t));
     }
   }
-  out.push(lsregister(ctx, "-u"));
+  out.push(...lsregister(ctx, "-u"));
   out.push(`残した: ${ctx.logsDir}（ログ）・${ctx.stateDir}（daemon の状態）`);
   if (kept.length > 0) out.push("", ...kept);
   return {

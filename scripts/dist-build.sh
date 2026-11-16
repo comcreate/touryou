@@ -187,8 +187,7 @@ PLIST
     [ "${sz}" = 512 ] || sips -z "$((sz * 2))" "$((sz * 2))" "${root}/assets/icon/icon-512.png" --out "${iconset}/icon_${sz}x${sz}@2x.png" >/dev/null
   done
   iconutil -c icns "${iconset}" -o "${app}/Contents/Resources/AppIcon.icns"
-  # hardened runtime は付けない（node〔V8〕の JIT のため）。中の実行ファイルは 1 つ（TouRyou）だけなので、入れ物の署名で中も署名される
-  codesign --force --sign - "${node_bin}"
+  # hardened runtime は付けない（node〔V8〕の JIT のため）。中の実行ファイルは 1 つ（主の TouRyou）だけなので、入れ物の署名で中も署名し直される
   codesign --force --sign - "${app}"
   codesign --verify --strict --verbose=2 "${app}"
   sig="$(codesign -dv "${app}" 2>&1)"
