@@ -237,6 +237,29 @@ const realOrUndefined = (p: string): string | undefined => {
   }
 };
 
+/**
+ * `repoRoot` が git のリポジトリか（`git rev-parse --git-dir` が通るか）。`touryou-daemon --check-config` で使う
+ * （常駐にする前に、消したフォルダ・git でないフォルダを指した設定を止める。Issue の背景は docs/launchd.md）。
+ */
+export async function checkGitRepo(
+  repoRoot: string,
+  run: GitRunner = nodeGit,
+): Promise<Result<undefined, Failure>> {
+  const r = await run(["rev-parse", "--git-dir"], { cwd: repoRoot });
+  if (r.code === 0) return { ok: true, value: undefined };
+  return r.stderr.startsWith(GIT_MISSING_MESSAGE)
+    ? fail(
+        "invalidConfig",
+        GIT_MISSING_MESSAGE,
+        "git を入れ、plist の PATH（--path-prefix）に git の場所を足す",
+      )
+    : fail(
+        "invalidConfig",
+        `repoRoot ${repoRoot} が、git のリポジトリでない`,
+        "repoRoot を、git のリポジトリの実パスにする",
+      );
+}
+
 export function createGitPorts(
   options: GitPortsOptions,
   run: GitRunner = nodeGit,
