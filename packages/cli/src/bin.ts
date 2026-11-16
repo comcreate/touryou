@@ -49,8 +49,25 @@ export interface BinDeps {
   /** 待ち（daemon の再起動の待ちなど。試験で差し替える）。 */
   readonly sleep?: (ms: number) => Promise<void>;
   /** `touryou launchd apply|status|…` の外部コマンド・窓口の確認（試験で差し替える）。 */
-  readonly launchd?: Partial<Pick<LaunchdServiceDeps, "run" | "uid" | "probe" | "waitMs" | "now">>;
+  readonly launchd?: Partial<
+    Pick<LaunchdServiceDeps, "run" | "uid" | "probe" | "waitMs" | "now" | "checkConfig">
+  >;
 }
+
+/** 設定の検査（`touryou-daemon --check-config`）を、子プロセスで実行する（窓口・state には触れない）。 */
+const checkConfigBySpawn = (
+  cmd: string,
+  args: readonly string[],
+  env: Readonly<Record<string, string>>,
+) => {
+  // 環境は、渡したものだけ（呼んだ側の PATH・GIT_DIR などを受け継がない）
+  const r = spawnSync(cmd, args, { encoding: "utf8", timeout: 30_000, env: { ...env } });
+  return {
+    status: r.status,
+    stdout: r.stdout ?? "",
+    stderr: r.error === undefined ? (r.stderr ?? "") : `起動できない（${r.error.message}）`,
+  };
+};
 
 const usage = (cause: string): CommandResult => ({
   exitCode: 2,
@@ -130,6 +147,7 @@ export async function runBin(argv: readonly string[], deps: BinDeps): Promise<Co
     const doFetch = deps.fetch ?? fetch;
     return runLaunchdService(argv.slice(1), {
       env: deps.env,
+      checkConfig: deps.launchd?.checkConfig ?? checkConfigBySpawn,
       sleep,
       run:
         deps.launchd?.run ??
@@ -157,7 +175,10 @@ export async function runBin(argv: readonly string[], deps: BinDeps): Promise<Co
   }
   if (argv[0] === "launchd") {
     // 起動スクリプト・plist の生成。daemon の窓口・トークンは使わない。launchctl は実行しない
-    return runLaunchd(argv.slice(1), { env: deps.env });
+    return runLaunchd(argv.slice(1), {
+      env: deps.env,
+      checkConfig: deps.launchd?.checkConfig ?? checkConfigBySpawn,
+    });
   }
   if (argv[0] === "child") {
     return runChild(argv.slice(1), {
