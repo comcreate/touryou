@@ -13,6 +13,7 @@ import {
   linkSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   readlinkSync,
   rmSync,
@@ -127,6 +128,13 @@ test("初めて: 取得 → 照合 → 展開 → current を v<版> に向け�
       .sort(),
     ["current", "v1.0.0", "work"],
   );
+  // work に残るのは、取得した tar.gz だけ（中身の一覧のファイルは残らない。#61）
+  assert.deepEqual(
+    spawnSync("ls", ["-A", join(h, ".touryou", "work")], { encoding: "utf8" })
+      .stdout.trim()
+      .split("\n"),
+    ["touryou-1.0.0-darwin-arm64.tar.gz"],
+  );
 });
 
 test("同じ版がすでに入って動くなら、何もしない（取得しない）", () => {
@@ -203,6 +211,15 @@ test("配布物の先頭が touryou-darwin-arm64/ 以外: 止まる", () => {
   const r = install(makePlugin("1.0.0", tb), h, tb);
   assert.equal(r.status, 1, out(r));
   assert.match(r.stdout, /中身が、想定と違う/);
+  // 失敗でも、中身の一覧（一時ディレクトリ・work の中）を残さない（#61）
+  assert.deepEqual(
+    readdirSync(join(h, ".touryou")).filter((n) => n.startsWith(".lists.")),
+    [],
+  );
+  assert.deepEqual(
+    readdirSync(join(h, ".touryou", "work")).filter((n) => n.startsWith("list")),
+    [],
+  );
 });
 
 test("check_list: 絶対パス・.. の要素・空の一覧を断る", () => {
