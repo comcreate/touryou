@@ -21,7 +21,7 @@ claude plugin marketplace add comcreate/touryou
 1. 版をそろえる（上の「版の決まり」）。準備の PR（`release: <版> の準備`）を出し、マージする。
 2. `bash scripts/check.sh` と `claude plugin validate plugin` が通ることを確かめる。
    - **2-a 新しい /setup の実機の確かめ**（tag の前。導入の script・`setup.md`・hooks を変えたときは必ず行う）: `docs/setup-verification.md` の A。手元の `plugin/` の写しに、直前の Release の `.sha256` から作った `checksums.json` を置き、`claude --plugin-dir <写し>` で `/touryou:setup` を通す（S10〜S13）。取得先は本番のまま、script には手を入れない。直前の Release に #56 の壊れたリンクがあるとき（v0.1.0）は、フォークの rc で A' を行う（下の「本番の前の検証」で rc の Release を作り、その zip を写しにして、手元の写しだけ取得先をフォークに書き換える）。
-3. main にマージしたあと、タグを付けて push する（タグは `v` + plugin.json の `version`。違うと失敗する）。書き込みの権限のあるアカウントで、clone のディレクトリで実行する（`gh api repos/comcreate/touryou --jq .permissions.push` が `true` であること）。zsh の対話に貼れるように、コメント行（`#`）は入れていない。
+3. main にマージしたあと、タグを付けて push する（タグは `v` + plugin.json の `version`。違うと失敗する）。決まりを越えてよい管理者のアカウントで、clone のディレクトリで実行する（`gh api repos/comcreate/touryou --jq .permissions.push` が `true` であること。`true` でも、決まりを越えられないと tag は作れない。下の段落）。zsh の対話に貼れるように、コメント行（`#`）は入れていない。
 
    ```sh
    (
@@ -40,7 +40,9 @@ claude plugin marketplace add comcreate/touryou
    )
    ```
 
-   push が拒否されても、手元にタグが残る。やり直しは、権限を直してから、もう一度実行する（手元のタグが origin/main を指していれば、そのまま push に進む。`-f` は使わない）。
+   tag を作れる人は、リポジトリの決まり（ruleset）で限られている。tag は、決まりを越えてよい管理者が、手元の端末から付ける（v0.1.1・v0.1.2 もそうした）。push のときに `remote: Bypassed rule violations for refs/tags/v<版>:` と `remote: - Cannot create ref due to creations being restricted.` の行が出ても、そのあとに `* [new tag]` が出れば成功（管理者が決まりを越えたという知らせ）。Claude Code のクラウドのセッションから tag を push すると、HTTP 403 で断られる。回り込まずに、管理者に頼む。
+
+   push が拒否されても、手元にタグが残る。やり直しは、権限を直してから（403 のときは、上のとおり管理者に頼む）、もう一度実行する（手元のタグが origin/main を指していれば、そのまま push に進む。`-f` は使わない）。
 
 4. `.github/workflows/release.yml` が、`plugin/` の中身を根にした zip（`touryou-<版>.zip`）と、その `.sha256` を Release に付ける。sha256 と URL は、実行の Summary に出る。Release は不変に扱う（付け直し〔`--clobber`〕はしない。Release がすでにあれば、ワークフローは失敗する。やり直し方は、下の「やり直す」）。
    同じ実行で、macOS（**arm64 のみ**）の配布物（Node 同梱の `touryou-<版>-darwin-arm64.tar.gz` と `.sha256`）を作り、展開して daemon が起動する確認（smoke。`scripts/dist-smoke.sh`）を通したものだけを、同じ Release に付ける（失敗すると、Release は作られない）。smoke は、はじめに、利用者の `/setup` と同じ中身の検査（`scripts/dist-check.sh`。`plugin/scripts/install-runtime.sh` を source して `check_list`・`check_types`・`check_kinds`・`check_links` を使い、行き先のないリンクも断る）を tar.gz に当てる。`scripts/dist-build.sh` は、lib の外を指す・行き先のないシンボリックリンク（pnpm deploy が残す `.pnpm/node_modules/@touryou/daemon`）を取り除き、取り除いたものをビルドの出力に出す（#56）。あわせて、Claude デスクトップアプリの拡張機能 `touryou-mcp-<版>.mcpb` と `.sha256` も作る（`scripts/mcpb-build.sh`。JS だけ・未署名。`docs/desktop-extension.md`）。Release の asset は、zip・tar.gz・.mcpb と、それぞれの `.sha256` の 6 ファイル。配布物の sha256 は `checksums.json`（`scripts/make-checksums.mjs` が、リリースの実行の中で `plugin/` に書く。リポジトリにはない）に入れ、zip に入れる。利用者の `/setup` が、plugin の中の `scripts/install-runtime.sh` で、これと照合する（script も zip に入り、許可リストで `scripts/install-runtime.sh`・`scripts/runtime-version-notice.sh` だけを通す）。

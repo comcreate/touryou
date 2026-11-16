@@ -6,6 +6,10 @@
 
 - **常駐を外すとき、TouRyou.app がなければ LaunchServices の登録の解除を飛ばしたと知らせる**（#79）: `touryou launchd uninstall` で、current の中に TouRyou.app がないのに「登録を解いた」と出ていたのを、`apply` にそろえて「飛ばした」と出すようにした。
 
+### 内部の変更
+
+- **手順書に、tag を付けるのは決まりを越えてよい管理者で、手元から push すると書く**（#80）: `docs/release.md` の 3 に、ruleset で tag を作れる人が限られていること、「Bypassed rule violations … creations being restricted」の行のあとに `* [new tag]` が出れば成功であること、クラウドのセッションからの push は 403 で断られるので管理者に頼むことを書き足した。
+
 ## 0.1.2（2026-11-16）
 
 ### 利用者に見える変更
