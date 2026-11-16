@@ -6,6 +6,7 @@
 
 ### 利用者に見える変更
 
+- **同じ版のときに、/setup が「配布物を取得します」と言い切らない**（#67。#62）: `/touryou:setup` が導入の script の前に言う定型文を「導入の script を実行します。初めて・版が変わったときは、配布物を取得します（約 150MB）。同じ版が入っているときは、取得しません」にした。実際に取得したかは script の出力が知らせる。
 - **/setup の検査の一覧のファイルを ~/.touryou/work に残さない**（#66。#61）: `install-runtime.sh` が中身の検査で作る一覧（`list.txt`・`list-v.txt`、約 0.9MB）を、置き場の中の一時ディレクトリに作り、成功でも失敗でも、中断（Ctrl-C・SIGTERM）でも消す。`~/.touryou/work` に残るのは、取得した tar.gz だけ。
 - **常駐の plist から、shell を通さず同梱の node で daemon を直に起こす**（#70。#64）: ログイン項目に `run-daemon.sh`・`sh`・`bash` の 3 つが「開発元を識別できない項目」として出ていた。`touryou launchd init` の plist は、`current/bin/node` で `current/lib/dist/bin.js` を直に起こし、`run-daemon.sh` を作らない（ログイン項目は `node` の 1 項目の見込み）。版は plist に書かず、配布物の版の印（`lib/dist-version`）を daemon が読む。v0.1.0 の形の生成物は、同じ `--org`・`--path-prefix` の古い `init` の生成物とバイト単位で同じときだけ置き換え（手で直していれば止まる）、`uninstall` は古い形も外す。上げたあとも `sh`・`bash` の項目が残ることがあるが、害はない（`docs/launchd.md`）。
 - **常駐の登録の前に、設定を daemon と同じ検査にかける**（#70。#65）: `touryou-daemon --check-config`（起動せず、設定の読み込み・実パス・`repoRoot` が git のリポジトリかを確かめる）を足した。`launchd init`・`apply` と、`/setup` の版上げ（常駐の daemon を止める前）がこれを実行し、通らなければ何も変えずに止まる（値は伏せる）。`launchd status` は、last exit code が 0 以外なら `daemon.log` の最後の失敗の行を出す。
