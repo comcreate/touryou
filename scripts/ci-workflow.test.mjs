@@ -264,6 +264,13 @@ test("macOS の PR・push の workflow は ci-macos.yml の 1 ジョブだけ。
     order,
   );
   assert.match(mac, /\non:\n {2}workflow_dispatch:\n/);
+  // 配布物のビルドは release.yml の dist と同じ Node（22.20.0）
+  const rel = /node-version: (\S+)/.exec(
+    read("release.yml").slice(read("release.yml").indexOf("\n  dist:\n")),
+  )?.[1];
+  assert.equal(rel, "22.20.0");
+  const before = mac.slice(0, mac.indexOf("run: pnpm build"));
+  assert.equal(/node-version: (\S+)\n(?![\s\S]*node-version:)/.exec(before)?.[1], rel);
 });
 
 test("ci-macos.yml: 配布物の確かめは main への push では飛ばす。artifact は手で実行したときだけ（1 日）", () => {

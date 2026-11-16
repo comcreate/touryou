@@ -35,7 +35,7 @@ jobs:
           failed="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/1/jobs" --paginate \
             --jq '.jobs[] | select(.conclusion == "failure") | .id')"
           if [ -z "${failed}" ]; then
-            echo "${RUN_NAME}: 落ちたジョブが見つかりません。走らせ直しません" >> "$GITHUB_STEP_SUMMARY"
+            echo "${RUN_NAME}: conclusion が failure のジョブがありません（timed_out などは見ない）。走らせ直しません" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           for id in ${failed}; do
