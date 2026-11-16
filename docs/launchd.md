@@ -72,7 +72,7 @@ macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動か�
 | 外す | `touryou launchd uninstall --yes` | 止めてから、TouRyou が生成したと判定できる plist（古い形の `run-daemon.sh` も）だけを消す（`logs`・`state` は残す） |
 
 - `apply`・`uninstall` は、`--yes` がないと何もしない（永続化・削除なので、利用者の同意を取ってから付ける。`/setup`・`/touryou:service` は定型文で聞く）。
-- 読み込むと、システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」に、**開発元の名前（Node.js Foundation）で 1 項目**が出ます（v0.1.1 の実機で確認）。TouRyou に同梱した nodejs.org の公式の node の署名の名前で、正常です（「開発元を識別できない項目」ではありません）。TouRyou の本体は署名しません。
+- 読み込むと、システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」に、**TouRyou**（1 項目）が出ます（#73）。「開発元を識別できない項目」と出るのは、TouRyou に同梱した node を TouRyou の名前で手元の署名（ad-hoc）にしたためで、正常です。plist は `current/TouRyou.app/Contents/MacOS/TouRyou`（同梱の node。`bin/node` はそこへのリンク）で daemon を起こし、`AssociatedBundleIdentifiers` に `com.comcreate-info.touryou` を入れます。`touryou launchd apply` は TouRyou.app を LaunchServices に登録し（`lsregister -f`）、`uninstall` は登録を解きます（`lsregister -u`）。v0.1.1 では「Node.js Foundation」の項目でした。Apple の開発者の署名（Developer ID）は、まだ使いません（ADR）。
 
 ### ログイン項目に `sh`・`bash` が残っているとき
 

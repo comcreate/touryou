@@ -44,8 +44,14 @@ const makeTarball = (extra) => {
   mkdirSync(pnpmNm, { recursive: true });
   writeFileSync(join(top, "bin", "touryou-daemon"), "#!/bin/sh\nexit 0\n");
   chmodSync(join(top, "bin", "touryou-daemon"), 0o755);
-  // launchd の plist が直に指すもの（#64）
-  writeFileSync(join(top, "bin", "node"), "");
+  // launchd の plist が直に指すもの（#64・#73）。node は TouRyou.app の中で、bin/node はそこへの相対のリンク
+  const app = join(top, "TouRyou.app", "Contents");
+  mkdirSync(join(app, "MacOS"), { recursive: true });
+  mkdirSync(join(app, "Resources"), { recursive: true });
+  writeFileSync(join(app, "MacOS", "TouRyou"), "");
+  writeFileSync(join(app, "Info.plist"), "");
+  writeFileSync(join(app, "Resources", "AppIcon.icns"), "");
+  symlinkSync("../TouRyou.app/Contents/MacOS/TouRyou", join(top, "bin", "node"));
   mkdirSync(join(top, "lib", "dist"), { recursive: true });
   writeFileSync(join(top, "lib", "dist", "bin.js"), "");
   writeFileSync(join(top, "lib", "dist-version"), "0.0.0\n");
@@ -66,6 +72,20 @@ test("dist-check: 中を指すリンクだけの配布物は通る", () => {
   const r = run(makeTarball());
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /通った/);
+});
+
+test("dist-check: macOS の配布物で、bin/node が TouRyou.app を指さない・Info.plist がないなら赤（#73）", () => {
+  const r1 = run(
+    makeTarball((top) => {
+      rmSync(join(top, "bin", "node"));
+      writeFileSync(join(top, "bin", "node"), "");
+    }),
+  );
+  assert.equal(r1.status, 1);
+  assert.match(r1.stderr, /bin\/node が、TouRyou\.app の中の node への相対のリンクでない/);
+  const r2 = run(makeTarball((top) => rmSync(join(top, "TouRyou.app", "Contents", "Info.plist"))));
+  assert.equal(r2.status, 1);
+  assert.match(r2.stderr, /Info\.plist がない/);
 });
 
 test("dist-check: v0.1.0 と同じ作り（.pnpm/node_modules/@touryou/daemon がビルドのソースを指す）なら、check_links で赤", () => {

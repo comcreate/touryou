@@ -64,7 +64,14 @@ function makeHome(opts: { token?: boolean } = {}): { home: string; base: string;
 }
 
 function fake(state: string): Fake & { deps: Parameters<typeof runBin>[1]["launchd"] } {
-  const f: Fake = { calls: [], ls: [], loaded: new Map(), daemonAnswers: true, whoamiCode: 401, t: 0 };
+  const f: Fake = {
+    calls: [],
+    ls: [],
+    loaded: new Map(),
+    daemonAnswers: true,
+    whoamiCode: 401,
+    t: 0,
+  };
   const label = (target: string): string => target.replace(`gui/${UID}/`, "");
   const run = (cmd: string, args: readonly string[]): RunResult => {
     if (cmd === LSREGISTER) {
@@ -165,7 +172,9 @@ describe("apply", () => {
       );
     }
     expect(r.stdout).toMatch(/whoami が 401/);
-    expect(r.stdout).toMatch(/「TouRyou」の 1 項目が出る。「開発元を識別できない項目」と出るのは、.*ad-hoc.*正常/);
+    expect(r.stdout).toMatch(
+      /「TouRyou」の 1 項目が出る。「開発元を識別できない項目」と出るのは、.*ad-hoc.*正常/,
+    );
     expect(r.stdout).not.toContain("run-daemon.sh");
     expect(r.stdout + r.stderr).not.toContain(TOKEN);
   });

@@ -82,7 +82,7 @@ touryou-daemon --config <設定ファイル>   # 窓口の URL が出る
 
 流れ: **起動**（親が `cd <作業ツリー> && claude --bg '<指示>' --name <名前> --settings '{"crossSessionInbound":"accept"}'` を実行。`--model`・`--effort`・フォークの `--resume <id> --fork-session` が入ることがある）→ **紐付け**（子が `child_bind` を引数なしで呼ぶ）→ **知らせ**（受信箱を読めという 1 行が届き、`inbox_fetch` で読む）→ **停止**（子へ知らせ → 猶予 → 親が `claude stop`）→ **削除**（親が `claude rm`）。詳しくは [`docs/plugin.md`](docs/plugin.md) の「親から子を起動する流れ」と「注意（CLI の子）」。Desktop の子（`childRuntime: "desktop"`）は、これまでどおりです。
 
-ログイン時に自動で動かすときは、`/touryou:setup` の手順 3 で「常駐にする」を選びます（同意の問いに「はい」と答えたときだけ登録します。以後の確認・止める・外すは `/touryou:service`）。手作業の手順は [`docs/launchd.md`](docs/launchd.md)（`touryou launchd init`）。読み込むと、システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」に、開発元の名前（Node.js Foundation）で 1 項目が出ます（TouRyou に同梱した node の署名の名前で、正常です）。
+ログイン時に自動で動かすときは、`/touryou:setup` の手順 3 で「常駐にする」を選びます（同意の問いに「はい」と答えたときだけ登録します。以後の確認・止める・外すは `/touryou:service`）。手作業の手順は [`docs/launchd.md`](docs/launchd.md)（`touryou launchd init`）。読み込むと、システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」に、**TouRyou**（1 項目）が出ます。「開発元を識別できない項目」と出るのは、TouRyou に同梱した node を TouRyou の名前で手元の署名（ad-hoc）にしたためで、正常です。
 
 ### 4. plugin を付ける
 

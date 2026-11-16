@@ -65,7 +65,7 @@
 |:--|:--|:--|:--|
 | S1 | 同意がないと登録しない | `/setup` の手順 3 で「常駐」を選び、同意の問いに「いいえ」 | 登録せずに、手で起動する案内（3-B）になる。`<H>/Library/LaunchAgents` に TouRyou の plist がない |
 | S3 | Claude Code の承認で `launchctl bootstrap` が通る | 同意に「はい」。`touryou launchd apply --yes` を承認する | 終了コード 0。未認証の whoami が 401 の行。sandbox などで拒否されたら、その文面を記録 |
-| S4 | ログイン項目の通知の見え方 | S3 の直後 | macOS の通知と、システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」に、開発元の名前（Node.js Foundation）で 1 項目が出る（「開発元を識別できない項目」ではない）。見え方を記録 |
+| S4 | ログイン項目の通知の見え方 | S3 の直後 | macOS の通知と、システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」に、**TouRyou**（1 項目）が出る。「開発元を識別できない項目」と出るのは、ad-hoc の署名のためで正常（#73）。名前・アイコン（TouRyou のアイコンか、汎用の絵か）を記録 |
 | S5 | ログインし直しても動く | ログアウト → ログイン（または再起動）のあと、`/touryou:service status` | 読み込み済み・running、窓口が 401。`/touryou:status` が通る |
 | S6 | 起動し直す・止める | `/touryou:service restart`、続けて `stop` | restart は終了コード 0。stop のあとは「読み込まれていない」で、戻し方（次のログイン、または同意のあとの `apply --yes`）が案内される（restart は案内しない） |
 | S7 | 外す | `/touryou:service uninstall`（同意に「はい」） | plist（LaunchAgents と `<H>/.touryou/launchd`）と `<H>/.touryou/bin` の起動スクリプトが消え、`logs`・`state` は残る。ログイン項目からも消える |
@@ -231,8 +231,8 @@
   2. 新しい版を入れる: `/touryou:setup`（常駐の起動し直しに「はい」と答える）
   3. システム設定 → 一般 → ログイン項目と機能拡張 →「バックグラウンドでの実行を許可」を開き、TouRyou に関わる項目の名前・数・「開発元を識別できない項目」かどうかを見る
   4. 上げたあとの記録と比べ: `sudo sfltool dumpbtm >| "${HOME}/btm-after.txt"; diff "${HOME}/btm-before.txt" "${HOME}/btm-after.txt" | grep -i -E 'touryou|node|/bin/sh|bash' | sed -E 's#/Users/[^/]+#~#g'`
-  5. 版をもう 1 回上げ（次の版が出たとき）、3・4 をもう一度見る（`Node.js Foundation` の項目が増えないか）
+  5. 版をもう 1 回上げ（次の版が出たとき）、3・4 をもう一度見る（`TouRyou` の項目が増えないか）
   6. `/touryou:service` の uninstall のあと、3 を見て、`sudo sfltool dumpbtm >| "${HOME}/btm-uninstalled.txt"; grep -i -c -E 'touryou|run-daemon' "${HOME}/btm-uninstalled.txt"` の数を見る
-- **期待する結果**: 2 のあと、ログイン項目（「バックグラウンドでの実行を許可」）の TouRyou の項目は、開発元の名前の `Node.js Foundation` の 1 つ。5 で増えない。6 で `Node.js Foundation` の項目が消える。v0.1.0 のときの `sh`・`bash` は残ることがある（害はない。`sfltool resetbtm` は、ほかのアプリの項目も消すので使わない）。
+- **期待する結果**: 2 のあと、ログイン項目（「バックグラウンドでの実行を許可」）の TouRyou の項目は `TouRyou` の 1 つ（「開発元を識別できない項目」と出るのは ad-hoc の署名のためで正常。アイコンが TouRyou の絵か汎用の絵かを記録する。#73）。5 で増えない。6 で `TouRyou` の項目が消える。v0.1.1 のときの `Node.js Foundation` の項目は、上げたあとに消えるかを記録する。v0.1.0 のときの `sh`・`bash` は残ることがある（害はない。`sfltool resetbtm` は、ほかのアプリの項目も消すので使わない）。
 - **後始末**: `rm -f "${HOME}/btm-before.txt" "${HOME}/btm-after.txt" "${HOME}/btm-uninstalled.txt"`（ユーザー名の入ったパスなどが入っているので、残さない）
 - **結果の返し方**: 項目の名前と数、「開発元を識別できない項目」かどうかだけを返す。`btm-*.txt` の中身はそのまま貼らない（ユーザー名の入ったパスなどが入る）。

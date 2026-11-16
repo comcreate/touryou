@@ -4,6 +4,7 @@
 
 ### 利用者に見える変更
 
+- **常駐のログイン項目を「TouRyou」の名前で出す**（#73）: macOS の配布物に `TouRyou.app` を置き、同梱の node を `Contents/MacOS/TouRyou` に入れて、入れ物ごと手元の署名（ad-hoc）にした（`bin/node` はそこへのリンクで、node は 1 つ）。`touryou launchd init` の plist は `current/TouRyou.app/Contents/MacOS/TouRyou` で daemon を起こし、`AssociatedBundleIdentifiers`（`com.comcreate-info.touryou`）を付ける。`apply` は TouRyou.app を LaunchServices に登録し、`uninstall` は解く。v0.1.1 の形（`current/bin/node`）・v0.1.0 の形（`run-daemon.sh`）の生成物は、バイト単位で同じときだけ置き換える。ログイン項目は「TouRyou」の 1 項目で、「開発元を識別できない項目」と出るのは ad-hoc の署名のためで正常。Developer ID の署名は、本番の正式リリースの前に見直す（ADR）。
 - **/setup などの案内の、取得の大きさとログイン項目の名前を実際に合わせる**（#74）: 取得の大きさを「約 150MB」から「約 41MB」（v0.1.1 の tar.gz。展開後は約 130MB）にした。常駐を入れたときのログイン項目を「node の 1 項目」から「開発元の名前（Node.js Foundation）で 1 項目」にした（同梱の node の署名の名前で、正常）。導入の script の知らせの文・`touryou launchd init` の知らせの文・`README.md`・`docs/cli.md`・`docs/launchd.md`・`docs/release.md`・手の確かめの一覧も合わせた。
 
 ## 0.1.1（2026-11-16）

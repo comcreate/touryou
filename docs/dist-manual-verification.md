@@ -96,7 +96,7 @@ spctl -a -vv "$dir/bin/node" 2>&1 | head -3
 - **A. ブラウザ取得 → Terminal の `tar -xzf`**: 期待: 展開後のファイルに quarantine が付く。手順 2 の `--help` までは通り、手順 4 の daemon が約 1 分後に失敗する。
 - **B. ブラウザ取得 → Finder で展開**: 期待: A と同じ。
 - **C. quarantine を外した場合**（A・B の後に `xattr -dr com.apple.quarantine "$dir"`）: 期待: daemon が起動し、窓口が 401。比較のためだけで、利用者に求めない。
-- 署名の期待: `node` は Node.js Foundation の Developer ID・hardened runtime。`touryou`・`touryou-daemon`・`touryou-mcp`（起動スクリプト）は署名なし。`better-sqlite3` の `.node` は adhoc（linker-signed）。
+- 署名の期待（#73 から）: `TouRyou.app`（中の `Contents/MacOS/TouRyou` が node）は ad-hoc（`Signature=adhoc`・hardened runtime なし）。`bin/node` は、それへのリンク。`touryou`・`touryou-daemon`・`touryou-mcp`（起動スクリプト）は署名なし。`better-sqlite3` の `.node` は adhoc（linker-signed）。
 
 ### 起動に失敗したときの症状
 
