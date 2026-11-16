@@ -15,7 +15,7 @@ Claude Code の auto モード（権限の自動判定）で実行している�
 - **途中で中断したときは、そのまま `/setup` を最初からやり直してよい**（導入の script は、照合が通った取得済みのファイルを使い直し、途中の展開は片付けてから置き直す）。
 - このコマンドは、`Read` 以外を、事前に許可していない。**コマンドごとに、承認の確認が出る**（正常）。
 - **この `/setup` の中で走らせる Bash は、手順 1・手順 2・手順 3-A の 2 の 3 つだけ**（版が変わり常駐しているときは、手順 1 を引数なしで 1 回〔`RESULT: need-restart-consent`・終了コード 3〕、チャットで「はい」のあとに `--restart-daemon` つきで 1 回、の 2 回。手順 2・3 は飛ばす。同意を、終了コード 3 の前に先回りして取らない）。それぞれを、**書かれた 1 行のまま、1 回の Bash で**走らせる（`&&` の前後を別の Bash に分けない・つなぎ足さない）。承認の確認の回数は、Bash の数と同じにする。
-- **確かめのための別のコマンドは、走らせない**。`ls`・`cat`・`test`・`stat`・`readlink`・`which`・`git -C … rev-parse`・`launchctl`・`uname`・`echo` などで、置き場・パス・リポジトリ・常駐を前もって・あとから確かめない。確かめは、**script とコマンドの出力（`RESULT:`・`CONFIG:`・`LAUNCHD:`・`OK`・`launchd apply` の状態の表示）と、`Read`**（事前に許可されていて、確認が出ない）で行う。出力が長くて切れたときも、読み直すためのコマンドは走らせない（出力の最後の行で分ける）。
+- **確かめのための別のコマンドは、走らせない**。`ls`・`cat`・`test`・`stat`・`readlink`・`which`・`git -C … rev-parse`・`launchctl`・`uname`・`echo` などで、置き場・パス・リポジトリ・常駐を前もって・あとから確かめない。確かめは、**script とコマンドの出力（`RESULT:`・`CONFIG:`・`LAUNCHD:`・`OK`・`launchd apply` の状態の表示）と、`Read`**（事前に許可されていて、確認が出ない）で行う。ただし、`root-token` などのトークンのファイルは、Read でも読まない（下の決まり）。出力が長くて切れたときも、読み直すためのコマンドは走らせない（出力の最後の行で分ける）。
 - 手順 2 のパス（ホームの下か・git のリポジトリか・`config.json` がないか）は、手順 2 のコマンドの中で確かめる。**前もって別のコマンドで確かめない**（`OK` が出なければ止まる）。
 - **この `/setup` の中で、node の道具（`whoami`・`tree_list` など）・`/touryou:service`・`/touryou:start` の中身を、代わりに実行しない**（それぞれに承認の確認が出る）。接続の確かめは、最後に、利用者に `/touryou:start` を打ってもらう。
 - **本体の取得・照合・展開・付け替えは、plugin の中の 1 本の script（`scripts/install-runtime.sh`）が行う**。script は、plugin の zip の一部で、Claude Code が、marketplace の sha256 で zip ごと確かめてから置いたもの。取得元・版・sha256 は、script が plugin の中の `checksums.json`・`plugin.json` から読む（引数・環境変数では変えられない。受け付ける引数は `--restart-daemon` だけ）。
