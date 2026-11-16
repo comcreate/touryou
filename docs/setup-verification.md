@@ -4,7 +4,7 @@
 
 - **A. tag の前**: 手元の clone の `plugin/` の写しに、**直前の Release** の配布物の `checksums.json` を置き、`claude --plugin-dir <写し>` で `/touryou:setup` を通す（`docs/release.md` の「リリースの手順」の 2-a）。
 - **A'. tag の前（フォークの rc）**: 直前の Release が v0.1.0 のとき（#56）は、A は通らない。フォークの試しのリリース（rc）の zip を写しにし、手元の写しだけ取得先をフォークに書き換えて、同じ確かめを行う。
-- **C. tag の後**: Release の zip の `checksums.json` を確かめてから marketplace の PR をマージし、前の版を入れた Mac で update する（`docs/release.md` の 6）。
+- **C. tag の後**: Release の zip の `checksums.json` を確かめ、本番の zip の写しで、常駐している前の版からの版上げを通してから marketplace の PR をマージし、前の版を入れた Mac で update する（`docs/release.md` の 6）。
 
 決まり:
 
@@ -320,6 +320,53 @@ unzip -l "touryou-${V}.zip" | grep scripts/
 ```
 
 確かめる: `checksums.json` の `version` が `${V}`、`darwin-arm64` の `sha256` が `.sha256` の値と同じ。zip に `scripts/install-runtime.sh` と `scripts/runtime-version-notice.sh` がある。違えば、マージしない（`docs/release.md` の「やり直す」）。
+
+### マージの前: 本番の zip の写しで、常駐している前の版から上げる
+
+marketplace の PR をマージする前に、本番の Release の zip を手元の写しにして、**前の版を入れて常駐させている Mac** で `/touryou:setup` の版上げを通す（配る前の確かめ。利用者が update で受け取るのと同じ zip・同じ取得先）。A' と同じく zip をそのまま写しにするが、取得先は本番なので、**書き換えは要らない**。いまの `~/.touryou` と常駐は、退避しない（前の版から上げるのを確かめるため）。`V` は上と同じ新しい版。
+
+いまの状態を記録する。
+
+```sh
+readlink "${HOME}/.touryou/current"
+ls "${HOME}/Library/LaunchAgents/" | grep touryou
+"${HOME}/.touryou/current/bin/touryou" launchd status
+```
+
+確かめる: `current` が前の版、常駐が running。
+
+zip を取り、展開して写しにする（`checksums.json` は zip の中のものをそのまま使う）。
+
+```sh
+W="${HOME}/touryou-verify"
+mkdir -p "${W}/dl"
+if [ -n "${V}" ]; then curl -fsSL -o "${W}/dl/touryou-${V}.zip" "https://github.com/comcreate/touryou/releases/download/v${V}/touryou-${V}.zip" && rm -rf "${W:?}/plugin" && mkdir -p "${W}/plugin" && unzip -q "${W}/dl/touryou-${V}.zip" -d "${W}/plugin"; else echo STOP; fi
+grep '"version"' "${W}/plugin/.claude-plugin/plugin.json" "${W}/plugin/checksums.json"
+grep -n '^REPO_URL=' "${W}/plugin/scripts/install-runtime.sh"
+```
+
+確かめる: 2 つの `version` が `${V}`。`REPO_URL` が `https://github.com/comcreate/touryou`。
+
+```sh
+claude --plugin-dir "${W}/plugin"
+```
+
+確かめる:
+
+- **S12**: セッションの始まりに、版の違いの知らせ（本体の前の版と plugin v`${V}`）が出る。`/touryou:setup` で、script が `RESULT: need-restart-consent` で止まり、起動し直しの同意を聞かれる。「はい」のあと `RESULT: upgraded-restarted`。取得先は `https://github.com/comcreate/touryou/releases/download/v${V}/…`（script の出力）。
+- セッションを出てから、
+
+```sh
+readlink "${HOME}/.touryou/current"
+"${HOME}/.touryou/current/bin/touryou" launchd status
+ls "${HOME}/Library/LaunchAgents/" | grep touryou
+```
+
+  `current` が `…/v${V}/touryou-darwin-arm64`、常駐が running。
+- 前の版が v0.1.0 のときは（#64）、plist が新しい形になっている（`plutil -p "${HOME}/Library/LaunchAgents/touryou.daemon.plist"` の `ProgramArguments` の先頭が `…/current/bin/node`。`--org` 付きのときは、その名前の plist）。`"${HOME}/.touryou/bin/run-daemon.sh"` が消えている。システム設定の「一般」→「ログイン項目」で、`run-daemon.sh` が消え、`node` の項目が出る（`sh`・`bash` は残ることがある。`docs/launchd.md`）。
+- **S13**: もう一度 `claude --plugin-dir "${W}/plugin"` で `/touryou:setup`。`RESULT: already`。
+
+後片付け: `rm -rf "${W}"`。上げた本体（`current` が新しい版）と常駐は、そのままでよい（marketplace の PR のマージのあと、update で plugin も同じ版になる）。通らなければ、marketplace の PR をマージしない（`docs/release.md` の「やり直す」）。結果は、リリースの準備の PR か Issue に書く。
 
 ### マージの後: update → /setup → Q8
 

@@ -1,20 +1,92 @@
 /**
- * `touryou launchd init`。daemon を launchd で常駐させるための、起動スクリプトと plist を、
- * `<base>/bin`・`<base>/launchd` に生成する（`docs/launchd.md`）。
+ * `touryou launchd init`。daemon を launchd で常駐させるための plist を、
+ * `<base>/launchd` に生成する（`docs/launchd.md`）。plist は、同梱の node で daemon の JS を直に起こす（shell を通さない。#64）。
  *
  * やらないこと（決定済みの方針）:
  * - `launchctl` を実行しない（読み込み・LaunchAgents への配置は、人が行う。ここは案内を出すだけ。子プロセスを起動しない）。
  * - 秘密を扱わない（子の認証は扱わない。plist・起動スクリプトに秘密を書かない）。
  * - 常駐は daemon だけ（子用の HTTP の touryou-mcp の常駐は外した）。
- * - 既存のファイルを黙って上書きしない（同じ内容なら何もしない。違えば、何も書かずに止まる）。
+ * - 既存のファイルを黙って上書きしない（同じ内容なら何もしない。違えば、何も書かずに止まる。古い形の生成物と同じものだけは、置き換える）。
  */
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import { readSecureFile } from "@touryou/core/fs";
 import type { CommandResult } from "./commands.js";
 
 export interface LaunchdDeps {
   readonly env: Readonly<Record<string, string | undefined>>;
+  /** 設定の検査（`<base>/current/bin/touryou-daemon --check-config`）を実行する。 */
+  readonly checkConfig: ConfigChecker;
+}
+
+/** 外部コマンドの結果。 */
+export interface RunResult {
+  readonly status: number | null;
+  readonly stdout: string;
+  readonly stderr: string;
+}
+/**
+ * daemon の入口（`cmd`）を、引数 `args`・環境 `env` だけで実行する（呼んだ側の環境は渡さない。常駐のときと同じ HOME・PATH にする）。
+ */
+export type ConfigChecker = (
+  cmd: string,
+  args: readonly string[],
+  env: Readonly<Record<string, string>>,
+) => RunResult;
+
+/**
+ * 出す前に、値を伏せる: 絶対パスを `<パス>` に置き換え、制御文字を除き、長さを切る（設定・ログの値を、そのまま出さない）。
+ */
+export function maskValues(text: string, max = 200): string {
+  const t = text
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: 制御文字を取り除く
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/(^|[\s(（「"'=:])\/[^\s)）」"',、。]*/g, "$1<パス>")
+    .trim();
+  return t.length > max ? `${t.slice(0, max)}…` : t;
+}
+
+/**
+ * 常駐にする前に、config.json を daemon と同じ検査にかける（daemon の `--check-config`。設定の読み込み・
+ * repoRoot・rootCwd・worktreeRoot が実在する実パスか・repoRoot が git のリポジトリか）。
+ * 通れば undefined。通らなければ、止める理由と直し方（値は伏せる）。
+ */
+export function configProblem(
+  home: string,
+  path: string,
+  check: ConfigChecker,
+): string | undefined {
+  const base = join(home, ".touryou");
+  const daemon = join(base, "current", "bin", "touryou-daemon");
+  // plist と同じ HOME・PATH（git は、この PATH で探す）
+  const r = check(daemon, ["--check-config", "--config", join(base, "config.json")], {
+    HOME: home,
+    PATH: path,
+  });
+  if (r.status === 0) return undefined;
+  if (r.status !== 1) {
+    // 起動できない・タイムアウト（null）、引数の誤り（2。--check-config を知らない古い daemon）は、設定の誤りと分ける
+    return `current の daemon で、設定を検査できない（終了コード ${r.status ?? "なし"}。daemon が置かれていない・版が古い・時間切れ）。何もせずに止めた。/touryou:setup で入れ直してから、もう一度実行する`;
+  }
+  const lines = r.stderr
+    .split("\n")
+    .filter((l) => l.trim() !== "")
+    .slice(0, 12)
+    .map((l) => `  ${maskValues(l)}`);
+  return [
+    "config.json が、daemon の設定の検査を通らない。常駐にすると、daemon が起動のたびに落ち続けるので、何もせずに止めた:",
+    ...(lines.length > 0 ? lines : [`  検査を実行できない（終了コード ${r.status ?? "なし"}）`]),
+    "直し方: config.json の repoRoot・rootCwd・worktreeRoot を、今ある git のリポジトリ・フォルダの実パス（リンクを解決したもの）にする（/setup のやり直しでもよい）。直したら、もう一度実行する",
+  ].join("\n");
 }
 
 /** パスに使える文字（空白は可。シェルの二重引用符・XML で、特別な意味を持つ文字を含まない）。 */
@@ -37,7 +109,7 @@ export const labelOf = (org: string | undefined, name: string): string =>
 
 const HELP = `touryou launchd init [--org <組織の逆ドメイン>] [--path-prefix <ディレクトリ[:ディレクトリ…]>]
 
-daemon を、launchd で常駐させるための、起動スクリプトと plist を生成する。\`launchctl\` は実行しない。秘密は扱わない。
+daemon を、launchd で常駐させるための plist を生成する（同梱の node で daemon を直に起こす。起動スクリプトは作らない）。\`launchctl\` は実行しない。秘密は扱わない。
 
   --org            plist の Label に使う、組織の逆ドメイン（省略すると Label は touryou.daemon。例: com.example → com.example.touryou.daemon。小文字の英数字とハイフン、ドットで 2 つ以上）
   --path-prefix    plist の PATH の先頭に足す、絶対パスのディレクトリ（git の場所。例: Homebrew の bin）。省略可
@@ -49,9 +121,10 @@ daemon を、launchd で常駐させるための、起動スクリプトと plis
   touryou launchd restart [--org …]          daemon を起動し直す（版を上げたあと）
   touryou launchd stop [--org …]             daemon を止める（plist は残るので、次のログインでまた動く）
   touryou launchd uninstall --yes [--org …]
-                                         止めて、touryou が生成した plist・起動スクリプトを消す（logs・state は残す）
+                                         止めて、touryou が生成した plist（古い形の run-daemon.sh も）を消す（logs・state は残す）
 
-出力先: <HOME>/.touryou/bin（起動スクリプト 0700）・<HOME>/.touryou/launchd（plist 0644）・<HOME>/.touryou/logs（0700）。
+出力先: <HOME>/.touryou/launchd（plist 0644）・<HOME>/.touryou/logs（0700）。
+古い形（v0.1.0 まで。<HOME>/.touryou/bin/run-daemon.sh を起こす plist）は、生成したものと同じときだけ、新しい形に置き換える。
 前提: /setup を実行済み（<HOME>/.touryou/config.json と <HOME>/.touryou/current がある）。再実行できる（既存のファイルは上書きしない）。
 `;
 
@@ -64,7 +137,10 @@ const fail = (cause: string, exitCode: 1 | 2 = 2): CommandResult => ({
 const xml = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-/** 起動スクリプト（daemon）。秘密は扱わない（touryou は Anthropic の認証を扱わない。NFR_013）。 */
+/**
+ * 古い形（v0.1.0 まで）の起動スクリプト（daemon）。いまは生成しない。古い形の生成物と、バイト単位で同じかを確かめて、
+ * 新しい形へ引っ越す（init）・外す（uninstall）ときだけに使う（#64）。
+ */
 export function runDaemonScript(base: string): string {
   return `#!/bin/sh
 # touryou launchd init が生成した（手で直さない。直すときは、いったん削除して、再生成する）
@@ -74,21 +150,35 @@ exec "$base/current/bin/touryou-daemon" --config "$base/config.json"
 `;
 }
 
-/** plist（秘密を含まない）。 */
-export function plistText(opts: {
-  readonly label: string;
-  readonly script: string;
-  readonly workingDirectory: string;
-  readonly log: string;
-  readonly path: string;
-}): string {
-  return `<?xml version="1.0" encoding="UTF-8"?>
+/** 古い形（v0.1.0 まで）の起動スクリプトの置き場所。 */
+export const legacyScriptPath = (base: string): string => join(base, "bin", "run-daemon.sh");
+
+/**
+ * plist の ProgramArguments（#64）。shell を通さず、同梱の node で daemon の JS を直に起こす
+ * （shell を通すと、ログイン項目に、起動スクリプト・sh・bash が別々に出る）。current のリンクを通すので、版を上げても変わらない。
+ */
+export const daemonProgramArguments = (base: string): readonly string[] => [
+  join(base, "current", "bin", "node"),
+  join(base, "current", "lib", "dist", "bin.js"),
+  "--config",
+  join(base, "config.json"),
+];
+
+const plistBody = (
+  programArguments: string,
+  opts: {
+    readonly label: string;
+    readonly workingDirectory: string;
+    readonly log: string;
+    readonly path: string;
+  },
+): string => `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key><string>${xml(opts.label)}</string>
   <key>ProgramArguments</key>
-  <array><string>${xml(opts.script)}</string></array>
+  ${programArguments}
   <key>WorkingDirectory</key><string>${xml(opts.workingDirectory)}</string>
   <key>EnvironmentVariables</key>
   <dict>
@@ -104,6 +194,28 @@ export function plistText(opts: {
 </dict>
 </plist>
 `;
+
+/** plist（秘密を含まない）。`programArguments` は、daemonProgramArguments の値。 */
+export function plistText(opts: {
+  readonly label: string;
+  readonly programArguments: readonly string[];
+  readonly workingDirectory: string;
+  readonly log: string;
+  readonly path: string;
+}): string {
+  const items = opts.programArguments.map((a) => `    <string>${xml(a)}</string>`).join("\n");
+  return plistBody(`<array>\n${items}\n  </array>`, opts);
+}
+
+/** 古い形（v0.1.0 まで。ProgramArguments が起動スクリプト 1 つ）の plist。引っ越し・外すときの確かめだけに使う。 */
+export function legacyPlistText(opts: {
+  readonly label: string;
+  readonly script: string;
+  readonly workingDirectory: string;
+  readonly log: string;
+  readonly path: string;
+}): string {
+  return plistBody(`<array><string>${xml(opts.script)}</string></array>`, opts);
 }
 
 interface Target {
@@ -204,6 +316,8 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
       1,
     );
   }
+  const problem = configProblem(home, pathValue, deps.checkConfig);
+  if (problem !== undefined) return fail(problem, 1);
 
   const binDir = join(base, "bin");
   const logsDir = join(base, "logs");
@@ -222,37 +336,50 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
     );
   }
   const daemonLabel = labelOf(org, "daemon");
-  const plist = (label: string, script: string, log: string): string =>
-    plistText({
-      label,
-      script,
-      workingDirectory: base,
-      log,
-      path: pathValue,
-    });
+  const plistPath = join(plistDir, `${daemonLabel}.plist`);
+  const common = {
+    label: daemonLabel,
+    workingDirectory: base,
+    log: join(logsDir, "daemon.log"),
+    path: pathValue,
+  };
   const targets: Target[] = [
-    { path: join(binDir, "run-daemon.sh"), content: runDaemonScript(base), mode: 0o700 },
     {
-      path: join(plistDir, `${daemonLabel}.plist`),
-      content: plist(daemonLabel, join(binDir, "run-daemon.sh"), join(logsDir, "daemon.log")),
+      path: plistPath,
+      content: plistText({ ...common, programArguments: daemonProgramArguments(base) }),
       mode: 0o644,
     },
   ];
+  // 古い形（v0.1.0 まで）の生成物。同じ --org・--path-prefix の init が生成したものと、バイト単位で同じときだけ、置き換える（#64）
+  const legacyScript = legacyScriptPath(base);
+  const legacyPlist = legacyPlistText({ ...common, script: legacyScript });
+  const readRegular = (p: string): string | undefined => {
+    const st = lstatOrUndefined(p);
+    return st?.isFile() === true ? readFileSync(p, "utf8") : undefined;
+  };
+  const scriptSt = lstatOrUndefined(legacyScript);
+  const scriptIsLegacy = readRegular(legacyScript) === runDaemonScript(base);
 
   // 先に全部を確かめる（1 つでも、違う内容の既存があれば、何も書かない）
   const toWrite: Target[] = [];
+  const toReplace: Target[] = [];
   const same: string[] = [];
   const conflicts: string[] = [];
   for (const t of targets) {
     const st = lstatOrUndefined(t.path);
+    const text = readRegular(t.path);
     if (st === undefined) {
       toWrite.push(t);
-    } else if (!st.isFile() || readFileSync(t.path, "utf8") !== t.content) {
-      conflicts.push(t.path);
-    } else {
+    } else if (text === t.content) {
       same.push(t.path);
+    } else if (text === legacyPlist && (scriptSt === undefined || scriptIsLegacy)) {
+      toReplace.push(t);
+    } else {
+      conflicts.push(t.path);
     }
   }
+  // 古い形の起動スクリプトは、古い形と同じときだけ消す。違えば（手で直した・リンクなど）、止める
+  if (scriptSt !== undefined && !scriptIsLegacy) conflicts.push(legacyScript);
   if (conflicts.length > 0) {
     return fail(
       `既存のファイルが、生成する内容と違う（または通常のファイルでない）ので、何も書かずに止めた（黙って上書きしない）:\n${conflicts
@@ -267,7 +394,6 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
   // ディレクトリ（自分が作るものだけ、権限を設定する。既存のものは、権限を確かめる）
   const dirNotes: string[] = [];
   for (const [dir, mode] of [
-    [binDir, 0o700],
     [logsDir, 0o700],
     [plistDir, 0o755],
   ] as const) {
@@ -282,6 +408,14 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
     mkdirSync(dirname(t.path), { recursive: true });
     writeFileSync(t.path, t.content, { flag: "wx", mode: t.mode });
     chmodSync(t.path, t.mode);
+  }
+  // 古い形からの引っ越し: 一時ファイルに書いてから、置き換える（途中で止まっても、古い形か新しい形のどちらかが残る）
+  for (const t of toReplace) {
+    const tmp = `${t.path}.new`;
+    rmSync(tmp, { force: true });
+    writeFileSync(tmp, t.content, { flag: "wx", mode: t.mode });
+    chmodSync(tmp, t.mode);
+    renameSync(tmp, t.path);
   }
 
   // 生成後の確認（権限）
@@ -298,6 +432,16 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
   const out: string[] = [];
   out.push("【生成した】");
   for (const t of toWrite) out.push(`  ${t.path}（${oct(t.mode)}）`);
+  for (const t of toReplace)
+    out.push(
+      `  ${t.path}（${oct(t.mode)}。古い形〔run-daemon.sh を起こす〕から、新しい形に置き換えた）`,
+    );
+  if (scriptIsLegacy) {
+    // LaunchAgents に古い形が残っているうちは、次のログインで起こされうるので、消さない（apply が置き換えたあと・uninstall で消す）
+    out.push(
+      `  ${legacyScript}（古い形の起動スクリプト。apply が LaunchAgents の plist を置き換えたあとに消す）`,
+    );
+  }
   for (const p of same) out.push(`  ${p}（既存と同じ。そのまま）`);
   out.push("");
   out.push(
@@ -313,7 +457,7 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
   out.push("");
   out.push("【削除する】（人が行う。止めたあと）");
   out.push(`  rm "${join(la, `${daemonLabel}.plist`)}"`);
-  out.push(`  rm "${join(plistDir, `${daemonLabel}.plist`)}" "${join(binDir, "run-daemon.sh")}"`);
+  out.push(`  rm "${join(plistDir, `${daemonLabel}.plist`)}"`);
   out.push(`  （ログ ${logsDir} は残る。要らなければ、自分で削除する）`);
   out.push("");
   out.push(

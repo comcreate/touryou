@@ -2,12 +2,12 @@
 
 ## 未公開
 
-## 0.1.1（YYYY-MM-DD）
-
-<!-- 日付は tag の日に直す（docs/release.md の「版の決まり」） -->
+## 0.1.1（2026-11-16）
 
 ### 利用者に見える変更
 
+- **常駐の plist から、shell を通さず同梱の node で daemon を直に起こす**（#70。#64）: ログイン項目に `run-daemon.sh`・`sh`・`bash` の 3 つが「開発元を識別できない項目」として出ていた。`touryou launchd init` の plist は、`current/bin/node` で `current/lib/dist/bin.js` を直に起こし、`run-daemon.sh` を作らない（ログイン項目は `node` の 1 項目の見込み）。版は plist に書かず、配布物の版の印（`lib/dist-version`）を daemon が読む。v0.1.0 の形の生成物は、同じ `--org`・`--path-prefix` の古い `init` の生成物とバイト単位で同じときだけ置き換え（手で直していれば止まる）、`uninstall` は古い形も外す。上げたあとも `sh`・`bash` の項目が残ることがあるが、害はない（`docs/launchd.md`）。
+- **常駐の登録の前に、設定を daemon と同じ検査にかける**（#70。#65）: `touryou-daemon --check-config`（起動せず、設定の読み込み・実パス・`repoRoot` が git のリポジトリかを確かめる）を足した。`launchd init`・`apply` と、`/setup` の版上げ（常駐の daemon を止める前）がこれを実行し、通らなければ何も変えずに止まる（値は伏せる）。`launchd status` は、last exit code が 0 以外なら `daemon.log` の最後の失敗の行を出す。
 - **配布物から、ビルドの場所を指す壊れたシンボリックリンクを除く**（#56）: v0.1.0 の tar.gz には、pnpm deploy が残した `lib/node_modules/.pnpm/node_modules/@touryou/daemon`（CI のマシンの元のソースを指す）が入り、新しい `/touryou:setup` が「外を指すシンボリックリンクがある」で止まった。v0.1.1 の配布物から、`scripts/dist-build.sh` が展開先の外を指す・行き先のないリンクを取り除き（取り除いたものをビルドの出力に出す）、`scripts/dist-smoke.sh` が `/setup` と同じ検査（`install-runtime.sh` の関数）を tar.gz に当ててから Release に付ける。`/setup` の検査は緩めていない。
 - **macOS の bash 3.2 で、日本語の表示の直前の変数で導入の script が止まるのを直す**（#47）: `plugin/scripts/` の shell script の変数を、すべて `${名前}` の形にした（UTF-8 のロケールの bash 3.2 は、`$ver）` の全角の文字を名前の一部として読む）。`pnpm validate:plugin` が、`plugin/scripts` の `$名前` と、`$名前` のすぐあとの ASCII でない文字（`scripts/*.sh` も）を拒む。試験を UTF-8 のロケールでも走らせる。
 - **本体の導入を plugin の中の script にまとめた**（#12）: `/touryou:setup` の取得・照合・展開・付け替え・動作の確かめと、版が変わったときの常駐の daemon の起動し直し（「はい」のあとだけ）を、plugin の中の `scripts/install-runtime.sh` が 1 回で行う。承認の確認は約 12 回から約 3 回になった。本体と plugin の版が違うと、セッションの始まりに知らせる（知らせるだけ）。
@@ -36,7 +36,6 @@
 - **Dependabot による actions の上げ**（#45・#46）: `pnpm/action-setup` 6.1.0・`actions/setup-node` 7.1.0・`actions/upload-artifact` 7.0.2（#45。patch・minor の自動マージ）と、`actions/download-artifact` 8.0.2（#46。メジャー。人がレビューしてマージ）。
 - **必須の check を docs だけの PR・marketplace-self の PR でも出し、コミットのメールを確かめる**（#21。#14）: `ci.yml` は `paths-ignore` を使わず、docs などだけの変更ではジョブの中で重い段を飛ばして成功で終える。`marketplace-self` が出した PR のブランチで `ci.yml` を `workflow_dispatch` で起こす。author・committer・`Co-authored-by` のメールが noreply の形でなければ失敗する（`scripts/ci-commit-emails.sh`）。
 - **Desktop の子を起動時の整合でプロセスと照合しない方針**（#24。#11）: 方針を設計書に書き、試験を足した（動きは変えていない）。
-- **ログイン項目の sh・bash の説明**: `docs/launchd.md`・`docs/cli.md` に、ログイン項目に `run-daemon.sh` のほかに `sh`・`bash`（Apple が署名した macOS の `/bin/sh`・`/bin/bash`）も「開発元を識別できない項目」として出ることがあり、害はないこと・確かめ方・スイッチをオフにしないことを足した。
 - **文書の地の文の製品名を TouRyou にそろえる**（#42）: docs・README・SECURITY・.sdd・plugin の commands と skills の地の文で、製品として読まれる touryou を TouRyou にした。コマンドを指す素の touryou はバッククォートで囲んだ。バッククォートの中・コードが出す文字列（受信箱の知らせ・フックの文）・ファイル名・URL・ADR の過去の項は変えていない。
 - **使わない .gitkeep を消し、actions の版をそろえる**（#18）: `packages/core/test/.gitkeep` と `plugin/agents/.gitkeep` を消した（`plugin/agents/` は任意にした）。workflow の `actions/checkout`・`actions/setup-node`・`pnpm/action-setup` を、それぞれ v7.0.1・v7.0.0・v6.0.10 にそろえた。
 
@@ -52,7 +51,7 @@ v0.1.0 を入れている Mac で、次のとおり（細部は `docs/setup-veri
    ```
 
 2. 新しいセッションで `/touryou:setup` を実行する（本体が v0.1.1 に入れ替わる）。セッションの始まりに、本体と plugin の版の違いの知らせが出ることもあるが、出なくても実行する。
-3. 常駐（launchd）させているときは、`/touryou:setup` が daemon の起動し直しの同意を聞くので、「はい」と答える（「いいえ」なら何も変えずに止まる）。
+3. 常駐（launchd）させているときは、`/touryou:setup` が daemon の起動し直しの同意を聞くので、「はい」と答える（「いいえ」なら何も変えずに止まる）。「はい」のあと、常駐の plist が新しい形（同梱の node で直に起こす。#64）に置き換わり、ログイン項目の出方が変わる（`run-daemon.sh` が消え、`node` の項目になる見込み。`sh`・`bash` の項目は残ることがあるが、害はない）。plist を手で直していたときは、置き換えずに止まるので、`docs/launchd.md` の「古い形からの引っ越し」に従う。
 4. 上げる前から開いている統合セッションは、古い版の `touryou-mcp` のまま動き続ける。`/mcp` で `plugin:touryou:node` を選んで Reconnect する（Reconnect がない画面なら、Claude Code を起動し直す）。そのあと `/touryou:start` で、接続を確かめる。
 
 ## 0.1.0（最初の公開）

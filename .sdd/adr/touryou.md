@@ -188,3 +188,15 @@ category: "developer-tooling"
 - **Decision**: `plugin/scripts/*.sh` の変数の展開は、すべて `${名前}` の形で書く（`$1`・`$?`・`$$`・`$#`・`$@` は除く）。`scripts/plugin-check.mjs` が、`plugin/` の中の `.sh` の `$名前` を拒み（shell でない言語の `$` の行だけ `# plugin-check: allow-dollar` で外す）、`$名前` のすぐあとに ASCII でない文字があるものは、`plugin/` とリポジトリの `scripts/*.sh` のどちらでも、印があっても拒む。試験は UTF-8 のロケールの組でも script を走らせる。
 - **Rationale**: macOS の bash 3.2 は UTF-8 のロケールで、`$ver）` の全角の文字の 1 バイト目を名前の一部として読み、`set -u` の script が止まる（#47）。日本語の文を出す script ではほぼどこでも起きうるので、一部だけを直すのでなく、書き方を 1 つにそろえて機械で検査するほうが、見落としがない。
 - **Rejected alternatives**: script の頭で `LC_ALL=C` にする — 出す日本語の文や、呼ぶコマンドのロケールまで変わり、書き方の罠も残ったままで、別の script で同じことが起きる。shellcheck で検査する — この形（名前のすぐあとの ASCII でない文字）を見ないうえ、CI と手元に新しい依存が増える。
+
+## 2026-11-16 常駐の登録の前に、daemon の --check-config で設定を検査する
+
+- **Decision**: `touryou launchd init`・`apply` は、書く・置く・`launchctl` を呼ぶ前に、`<base>/current/bin/touryou-daemon --check-config --config <base>/config.json` を実行し、終了コードが 0 でなければ何もせずに止まる。`--check-config` は daemon の `main` に足した、起動しない道で、起動と同じ `loadConfigFile` と git の口の作成（`createGitPorts` の実パスの検査）に、repoRoot が git のリポジトリか（`checkGitRepo`。`git rev-parse --git-dir`）を足したもの。CLI は、出力のパスを `<パス>` に伏せて出す。`launchd status` は、last exit code が 0 以外なら、`daemon.log` の最後の `失敗 [code]: …` の行を、伏せて長さを切って出す。plist の `KeepAlive`（`SuccessfulExit` が false）は変えない。
+- **Rationale**: 消したフォルダを指した設定で常駐にすると、daemon は起動のたびに `invalidConfig` で落ち、KeepAlive で起こし直され続け、`status` には理由が出なかった（#65）。検査を daemon の入口に置けば、CLI に daemon（better-sqlite3 を含む）の依存を足さずに、daemon と同じ関数で検査でき、同じ `current` の版の検査になる（だぶった実装を作らない）。KeepAlive を変えると、ふつうの落ちたときの起こし直しまでなくなるので、変えずに、登録の前の検査と `status` の理由の表示で扱う。
+- **Rejected alternatives**: CLI に `@touryou/daemon` の依存を足して関数を直に呼ぶ — 人間用のコマンドに、ネイティブのモジュールを持つ daemon を引き込む。CLI に実パスの検査を書き直す — daemon の検査とずれうる。`KeepAlive` を `false` にする・`SuccessfulExit` を外す — 設定の誤り以外で落ちたときに、起こし直されなくなる。daemon が設定の誤りで終了コード 0 を返して起こし直しを止める — 失敗が `status` から見えなくなり、`SuccessfulExit` の意味とも合わない。
+
+## 2026-11-16 常駐の plist から、shell を通さず同梱の node で daemon を直に起こす
+
+- **Decision**: `touryou launchd init` の plist の `ProgramArguments` を、`<base>/current/bin/node`・`<base>/current/lib/dist/bin.js`・`--config`・`<base>/config.json` にし、起動スクリプト（`run-daemon.sh`）を作らない。版は plist に書かず、配布物の版の印 `lib/dist-version` を daemon が読む。古い形の生成物は、古い `init` の生成物とバイト単位で同じときだけ置き換える・外す。版上げの戻しの道は、新しい版の `uninstall --yes` → 前の版の `init` → `apply --yes` にする。
+- **Rationale**: shell の起動スクリプトを通すと、macOS のログイン項目に、起動スクリプト・`sh`・`bash` の 3 つが「開発元を識別できない項目」として出て、`uninstall` のあとも `sh`・`bash` が残り、利用者がマルウェアを疑った（Issue #64）。実行されたファイルごとに項目が出るとみて（推測。実機で確かめる）、実行するものを node 1 つにする。同梱の node は nodejs.org の公式の配布物で、署名つきの見込み（推測）。版を plist に書くと、版を上げるたびに plist が変わり、作り直しが要るので、配布物の中の印から読む。新しい版の生成物は前の版の `apply` では扱えないので、戻すときは、両方の形が分かる新しい版で外してから、前の版で作り直す。
+- **Rejected alternatives**: shell を残して項目を減らす — `sh`・`bash` が残り、減るのは高々 1 つ。文書だけ — 不安の元が残る（説明は #59 で足した）。`AssociatedBundleIdentifiers`・署名 — 署名した .app に束ねるための鍵で、署名しない方針では使えない。版を plist の `EnvironmentVariables` に書く — 版を上げるたびに plist の作り直しと置き換えが要る。

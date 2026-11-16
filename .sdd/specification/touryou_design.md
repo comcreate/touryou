@@ -7,7 +7,7 @@ sdd-phase: "implement"
 sdd-version: "5.1.0"
 impl-status: "implemented"
 created: "2026-11-14"
-updated: "2026-11-15"
+updated: "2026-11-16"
 depends-on: ["spec-touryou"]
 tags: ["claude-code", "mcp", "orchestration"]
 category: "developer-tooling"
@@ -227,10 +227,12 @@ interface Capabilities {
 
 - plugin（marketplace の zip）は本体を同梱しない。本体（daemon・`touryou-mcp`・`touryou`。Node 同梱の tar.gz）は GitHub Release に置き、その sha256 を zip の中の `checksums.json` に入れる。zip は marketplace の sha256 で Claude Code が確かめる。
 - `/touryou:setup` は、plugin の中の `scripts/install-runtime.sh` を 1 回の承認で走らせる。script は、版・名前・sha256 を plugin の中の `checksums.json`・`plugin.json` からだけ読み（引数・環境変数では変えない。受け付ける引数は `--restart-daemon` だけ）、取得（https だけ）→ sha256 の照合 → quarantine の確かめ → `tar -t` の検査 → 一時ディレクトリへの展開とシンボリックリンクの検査 → `$HOME/.touryou/v<版>` → 新しい版の `--help` → `current` の付け替え（rename で入れ替え）の順に進む。照合が通るまで展開も実行もしない。どこで失敗しても `current` は古いまま。同じ版が入って動けば何もしない。
-- 常駐（launchd の plist がある）で版が変わるときは、同意（`--restart-daemon`。チャットの「はい」のあと）がなければ何も変えずに終了コード 3。同意があれば、古い版で `launchd init`（生成物が同じかの確かめ）と `stop` → 付け替え → 新しい版で `apply --yes`。stop のあとのどこで失敗しても（付け替え・新しい版の apply）、前の版に戻して起動し直してから、そのときの状態（current の版・daemon が動いているか・次にすること）を出して止まる（NFR_015）。呼び出しは `env -u BASH_ENV -u ENV bash` で、script の頭で取り込まれた関数を消し PATH を OS の既定にする。tar の中身は、通常のファイル・ディレクトリ・中を指すシンボリックリンクだけを通す。配布物を作る側（`scripts/dist-build.sh`）は、lib の外を指す・行き先のないシンボリックリンクを取り除き、Release に付ける前の smoke（`scripts/dist-smoke.sh`）で、同じ検査の関数（install-runtime.sh を source した `scripts/dist-check.sh`）を tar.gz に当てる（#56）。初めての常駐の登録（`init` と `apply --yes`）は、/setup が「はい」を取ってから行う。
+- 常駐（launchd の plist がある）で版が変わるときは、同意（`--restart-daemon`。チャットの「はい」のあと）がなければ何も変えずに終了コード 3。同意があれば、古い版で `launchd init`（生成物が同じかの確かめ）と `stop` → 付け替え → 新しい版で `apply --yes`。stop のあとのどこで失敗しても（付け替え・新しい版の apply）、前の版に戻して起動し直してから、そのときの状態（current の版・daemon が動いているか・次にすること）を出して止まる（NFR_015）。呼び出しは `env -u BASH_ENV -u ENV bash` で、script の頭で取り込まれた関数を消し PATH を OS の既定にする。tar の中身は、通常のファイル・ディレクトリ・中を指すシンボリックリンクだけを通す。配布物を作る側（`scripts/dist-build.sh`）は、lib の外を指す・行き先のないシンボリックリンクを取り除き、Release に付ける前の smoke（`scripts/dist-smoke.sh`）で、同じ検査の関数（install-runtime.sh を source した `scripts/dist-check.sh`）を tar.gz に当てる（#56）。初めての常駐の登録（`init` と `apply --yes`）は、/setup が「はい」を取ってから行う。`init`・`apply` は、書く・置く・`launchctl` を呼ぶ前に、`current` の `touryou-daemon --check-config` で設定を検査する（daemon の起動と同じ `loadConfigFile` と git の口の作成〔repoRoot・worktreeRoot が実パス・rootCwd が repoRoot の配下に実在〕に、repoRoot が git のリポジトリかを足したもの。窓口・state には触れない）。通らなければ何もせずに終了コード 1 で、daemon の失敗の文と直し方を、パスを伏せて出す。`status` は、last exit code が 0 以外なら、plist の StandardErrorPath（`logs/daemon.log`）の末尾 64KiB から、最後の `失敗 [code]: …` の行を、パスを伏せ 200 字で切って出す。検査の子プロセスには `HOME` と plist と同じ `PATH` だけを渡し、終了コード 1 だけを設定の誤り、それ以外（起動できない・時間切れ・古い daemon の 2）を「検査できない」として分ける。版上げの script は、常駐の daemon を止める前に、新しい版の `--check-config` を走らせ、通らなければ何も止めずに終わる。plist の `KeepAlive`（`SuccessfulExit` が false）は変えない（#65）。
 - 設定（`config.json`）は、/setup が 1 つのコマンドで書く（ホームの下・git のリポジトリ・未作成を確かめ、600 で書く）。承認は、導入・設定・常駐の登録で約 3 回（前は約 12 回）。
 - SessionStart のフック（`scripts/runtime-version-notice.sh`）は、`current` の版と plugin の版が違えば知らせるだけ。取得・daemon の起動し直しはしない。本体がない・読めないときは何も出さず、セッションを止めない。
 - 取得先は本番（`plugin.json` の `repository`）に固定し、試しのための差し替えの道（引数・環境変数）は作らない。tag の前の実機の確かめは、直前の Release の配布物を使う（plugin の写しに、その `checksums.json` を置く。手順は `docs/setup-verification.md`。Issue #48）。
+- 常駐の plist の `ProgramArguments` は、同梱の node（`<base>/current/bin/node`）と daemon の JS（`<base>/current/lib/dist/bin.js`）・`--config <base>/config.json` で、shell を通さない。shell の起動スクリプトを通すと、macOS のログイン項目（Background Task Management）に、起動スクリプト・`sh`・`bash` が別々の「開発元を識別できない項目」として出る（Issue #64）。`current` のリンクを通すので、版を上げても plist は変わらない。版は plist に書かず、daemon が配布物の版の印 `lib/dist-version`（`dist-build.sh` が置き、`dist-check.sh` が配布物の名前の版と同じかを確かめる）から読む（`resolveVersion` は、環境変数 `TOURYOU_DIST_VERSION` の次に読む）。
+- 古い形（v0.1.0 まで。`<base>/bin/run-daemon.sh` を起こす plist）の生成物は、同じ `--org`・PATH の古い `init` の生成物とバイト単位で同じときだけ、新しい形と同じに扱う。`init` は plist を置き換え、`apply` は LaunchAgents の古い形を、止めてから置き換えたあとで `run-daemon.sh` を消し（`init` と `apply` の間で止まっても、LaunchAgents の古い形が起こす先を残す）、`uninstall` は両方の形を外す。違えば、いまと同じく止める。`--restart-daemon` の道は、古い版の `init`（確かめ）→ `stop` → 付け替え → 新しい版の `init`（引っ越し）→ `apply --yes`。新しい版の `init`・`apply` が失敗したら、新しい版の `uninstall --yes` → 前の版に付け替え → 前の版の `init`・`apply --yes` で戻す。
 - daemon の寿命（統合セッション・子のセッションと別の寿命で動き、版上げの起動し直しは同意のあとだけ、失敗したら前の版に戻す）は NFR_015。IR_002 はフックの記録と拒否で、寿命の要求ではない。
 
 ## 6.6. plugin の shell script の書き方
@@ -261,7 +263,7 @@ plugin が利用者の Mac で走らせる shell script（`plugin/scripts/*.sh`�
 | NFR_012 | 特定のリポジトリ構成を前提にしない。plugin の設定にリポジトリのパスを埋め込まず、起動時に渡す |
 | NFR_013 | Anthropic の認証を扱わない。子は起動する Claude Code・Claude Desktop の利用者の認証で動く |
 | NFR_014 | daemon はセッションを呼ばず、出来事を SSE に出すだけ |
-| NFR_015 | daemon は launchd（または手）で、セッションと別に動かす。版上げは導入の script が、同意（`--restart-daemon`）のあとだけ止めて起動し直し、新しい版の起動に失敗したら `current` を前の版に戻して起動し直す（6.5 節） |
+| NFR_015 | daemon は launchd（または手）で、セッションと別に動かす。版上げは導入の script が、同意（`--restart-daemon`）のあとだけ止めて起動し直し、新しい版の起動に失敗したら `current` を前の版に戻して起動し直す。常駐への登録の前に `touryou-daemon --check-config` で設定を検査し、`status` は最後の失敗の行を出す（6.5 節） |
 
 # 8. テスト戦略
 
@@ -308,6 +310,14 @@ plugin が利用者の Mac で走らせる shell script（`plugin/scripts/*.sh`�
 | resume・fork・compact で `CLAUDE_CODE_SESSION_ID` が変わるか | 中 | 変わる場合は、合う購読がないときの扱いのとおり受信箱に落ちる |
 
 # 10. 変更履歴
+
+## v1.6
+
+- 配布・導入（6.5 節）に、常駐の plist が shell を通さず同梱の node で daemon を直に起こすこと、版の印 `lib/dist-version`、古い形（`run-daemon.sh`）からの引っ越しと戻し方を足した。ログイン項目に `run-daemon.sh`・`sh`・`bash` の 3 つが「開発元を識別できない項目」として出て、利用者が不安に思ったため（Issue #64）。
+
+## v1.5
+
+- 配布・導入（6.5 節）に、常駐の登録（`launchd init`・`apply`）の前の設定の検査（`touryou-daemon --check-config`）と、`launchd status` の最後の失敗の行を足した。消したフォルダを指した設定で常駐にすると、daemon が起動のたびに落ち続け、理由が `status` に出なかったため（Issue #65）。
 
 ## v1.4
 

@@ -40,17 +40,27 @@ const tmp = () => {
 const sha = (f) => createHash("sha256").update(readFileSync(f)).digest("hex");
 
 /** 仮の配布物（tar.gz）を作る。stub の touryou は、呼ばれた引数を $HOME/calls.log に足す。 */
-const makeTarball = (ver, { extra, failApply = false, daemonOk = true } = {}) => {
+const makeTarball = (
+  ver,
+  {
+    extra,
+    failApply = false,
+    failInit = false,
+    failUninstall = false,
+    daemonOk = true,
+    configBad = false,
+  } = {},
+) => {
   const d = tmp();
   const bin = join(d, "touryou-darwin-arm64", "bin");
   mkdirSync(bin, { recursive: true });
   writeFileSync(
     join(bin, "touryou-daemon"),
-    `#!/bin/sh\n[ "$1" = "--help" ] && { echo "usage: touryou-daemon"; exit ${daemonOk ? 0 : 1}; }\nexit 0\n`,
+    `#!/bin/sh\n[ "$1" = "--help" ] && { echo "usage: touryou-daemon"; exit ${daemonOk ? 0 : 1}; }\n[ "$1" = "--check-config" ] && { echo "失敗 [invalidConfig]: repoRoot $HOME/gone が、実パスでない" >&2; exit ${configBad ? 1 : 0}; }\nexit 0\n`,
   );
   writeFileSync(
     join(bin, "touryou"),
-    `#!/bin/sh\necho "v${ver} $*" >> "$HOME/calls.log"\n[ "$1 $2" = "launchd stop" ] && [ -n "\${STUB_FAIL_STOP:-}" ] && exit 1\n[ "$1 $2" = "launchd apply" ] && [ -n "\${STUB_FAIL_APPLY_ALL:-}" ] && exit 1\n[ "$1 $2" = "launchd apply" ] && exit ${failApply ? 1 : 0}\nexit 0\n`,
+    `#!/bin/sh\necho "v${ver} $*" >> "$HOME/calls.log"\n[ "$1 $2" = "launchd stop" ] && [ -n "\${STUB_FAIL_STOP:-}" ] && exit 1\n[ "$1 $2" = "launchd apply" ] && [ -n "\${STUB_FAIL_APPLY_ALL:-}" ] && exit 1\n[ "$1 $2" = "launchd apply" ] && exit ${failApply ? 1 : 0}\n[ "$1 $2" = "launchd init" ] && exit ${failInit ? 1 : 0}\n[ "$1 $2" = "launchd uninstall" ] && exit ${failUninstall ? 1 : 0}\nexit 0\n`,
   );
   chmodSync(join(bin, "touryou-daemon"), 0o755);
   chmodSync(join(bin, "touryou"), 0o755);
@@ -271,7 +281,7 @@ test("版が変わる（常駐あり）・同意なし: 何も変えず（取得
   assert.deepEqual(lines(join(h, "calls.log")), []);
 });
 
-test("版が変わる（常駐あり）・--restart-daemon: 古い版で init（同じかの確かめ）と stop → 付け替え → 新しい版で apply --yes", () => {
+test("版が変わる（常駐あり）・--restart-daemon: 古い版で init（同じかの確かめ）と stop → 付け替え → 新しい版で init（古い形からの引っ越し。#64）と apply --yes", () => {
   const h = managedHome();
   const tb = makeTarball("1.0.0");
   const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"]);
@@ -281,11 +291,24 @@ test("版が変わる（常駐あり）・--restart-daemon: 古い版で init（
   assert.deepEqual(lines(join(h, "calls.log")), [
     "v0.9.0 launchd init",
     "v0.9.0 launchd stop",
+    "v1.0.0 launchd init",
     "v1.0.0 launchd apply --yes",
   ]);
 });
 
-test("版が変わる（常駐あり）・新しい版の apply が失敗: current を古い版に戻して、起動し直す", () => {
+test("版が変わる（常駐あり）・新しい版の設定の検査が通らない: 止めずに（init・stop も呼ばずに）終わる。HOME は伏せる", () => {
+  const h = managedHome();
+  const tb = makeTarball("1.0.0", { configBad: true });
+  const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"]);
+  assert.equal(r.status, 1, out(r));
+  assert.match(r.stdout, /設定の検査を通らない/);
+  assert.match(r.stdout, /invalidConfig/);
+  assert.ok(!r.stdout.includes(h), out(r));
+  assert.equal(cur(h), join(h, ".touryou", "v0.9.0", "touryou-darwin-arm64"));
+  assert.deepEqual(lines(join(h, "calls.log")), []);
+});
+
+test("版が変わる（常駐あり）・新しい版の apply が失敗: 新しい版の uninstall で新しい形を外し、current を古い版に戻して、古い版の init（古い形を作り直す）と apply で起動し直す（#64）", () => {
   const h = managedHome();
   const tb = makeTarball("1.0.0", { failApply: true });
   const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"]);
@@ -294,9 +317,13 @@ test("版が変わる（常駐あり）・新しい版の apply が失敗: curre
   assert.deepEqual(lines(join(h, "calls.log")), [
     "v0.9.0 launchd init",
     "v0.9.0 launchd stop",
+    "v1.0.0 launchd init",
     "v1.0.0 launchd apply --yes",
+    "v1.0.0 launchd uninstall --yes",
+    "v0.9.0 launchd init",
     "v0.9.0 launchd apply --yes",
   ]);
+  assert.match(r.stdout, /v0\.9\.0 で動いている/);
 });
 
 test("--org つきの常駐（名前の違う plist）は、起動し直さずに止まる", () => {
@@ -588,3 +615,33 @@ for (const { label, env } of LOCALES) {
     assert.equal(j.hookSpecificOutput.additionalContext, j.systemMessage);
   });
 }
+
+// --- 古い形（v0.1.0 まで。run-daemon.sh を起こす plist）からの引っ越し（#64） ---
+
+test("常駐の版上げ・新しい版の init が失敗: 新しい版の uninstall のあと、古い版の init と apply で起動し直す", () => {
+  const h = managedHome();
+  const tb = makeTarball("1.0.0", { failInit: true });
+  const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"]);
+  assert.equal(r.status, 1, out(r));
+  assert.equal(cur(h), OLD(h));
+  assert.deepEqual(lines(join(h, "calls.log")), [
+    "v0.9.0 launchd init",
+    "v0.9.0 launchd stop",
+    "v1.0.0 launchd init",
+    "v1.0.0 launchd uninstall --yes",
+    "v0.9.0 launchd init",
+    "v0.9.0 launchd apply --yes",
+  ]);
+  assert.match(r.stdout, /v1\.0\.0 の launchd init が通らなかった/);
+  assert.match(r.stdout, /v0\.9\.0 で動いている/);
+});
+
+test("常駐の版上げ・新しい版の apply が失敗し、新しい版の uninstall も失敗: current は新しい版のまま、daemon は止まっている、と出す", () => {
+  const h = managedHome();
+  const tb = makeTarball("1.0.0", { failApply: true, failUninstall: true });
+  const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"]);
+  assert.equal(r.status, 1, out(r));
+  assert.match(r.stdout, /RESULT: failed/);
+  assert.match(r.stdout, /current は v1\.0\.0 のまま、常駐の daemon は止まっている/);
+  assert.ok(!lines(join(h, "calls.log")).includes("v0.9.0 launchd apply --yes"));
+});

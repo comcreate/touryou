@@ -11,7 +11,7 @@ claude plugin marketplace add comcreate/touryou
 ## 版の決まり
 
 - 版は semver。`plugin/.claude-plugin/plugin.json`・ルートと `packages/*` の `package.json` の `version` を、すべて同じ版にそろえる（`release.yml` の `version` のジョブが、タグと plugin.json・ルートと `packages/*` の package.json が同じでなければ失敗する）。
-- `CHANGELOG.md` に、同じ版の節を作る（`release.yml` は CHANGELOG を見ないので、準備の PR のレビューで確かめる）。節は `## <版>（<tag の日 YYYY-MM-DD>）` とし、中を「利用者に見える変更」「内部の変更」「上げ方」に分ける。項は `- **題**（#N）: 説明`。`## 未公開` の項は、この節に移す（`## 未公開` の見出しは残す）。準備の PR では日付を `YYYY-MM-DD` のままにし、tag を付ける日に直す（直す PR を tag の前にマージする。tag は、直したコミットに付ける）。
+- `CHANGELOG.md` に、同じ版の節を作る（`release.yml` は CHANGELOG を見ないので、準備の PR のレビューで確かめる）。節は `## <版>（<tag の日 YYYY-MM-DD>）` とし、中を「利用者に見える変更」「内部の変更」「上げ方」に分ける。項は `- **題**（#N）: 説明`。`## 未公開` の項は、この節に移す（`## 未公開` の見出しは残す）。日付は、tag を付ける日にする（準備の PR を出す日と tag の日が違うときは、準備の PR の中で、マージの前に tag の日に直す。日付だけを直す PR は作らない。tag は、そのマージのコミットに付ける）。
 - 準備の PR では、前の版の tag からマージされた PR に、項の抜けがないかを `git log v<前の版>..origin/main --oneline` で確かめる。
 - 版に `-` があれば（例: `0.2.0-rc.0`）、Release は pre-release になる。
 - 最初の公開は `0.1.0`（決定）。
@@ -45,7 +45,7 @@ claude plugin marketplace add comcreate/touryou
 4. `.github/workflows/release.yml` が、`plugin/` の中身を根にした zip（`touryou-<版>.zip`）と、その `.sha256` を Release に付ける。sha256 と URL は、実行の Summary に出る。Release は不変に扱う（付け直し〔`--clobber`〕はしない。Release がすでにあれば、ワークフローは失敗する。やり直し方は、下の「やり直す」）。
    同じ実行で、macOS（**arm64 のみ**）の配布物（Node 同梱の `touryou-<版>-darwin-arm64.tar.gz` と `.sha256`）を作り、展開して daemon が起動する確認（smoke。`scripts/dist-smoke.sh`）を通したものだけを、同じ Release に付ける（失敗すると、Release は作られない）。smoke は、はじめに、利用者の `/setup` と同じ中身の検査（`scripts/dist-check.sh`。`plugin/scripts/install-runtime.sh` を source して `check_list`・`check_types`・`check_kinds`・`check_links` を使い、行き先のないリンクも断る）を tar.gz に当てる。`scripts/dist-build.sh` は、lib の外を指す・行き先のないシンボリックリンク（pnpm deploy が残す `.pnpm/node_modules/@touryou/daemon`）を取り除き、取り除いたものをビルドの出力に出す（#56）。あわせて、Claude デスクトップアプリの拡張機能 `touryou-mcp-<版>.mcpb` と `.sha256` も作る（`scripts/mcpb-build.sh`。JS だけ・未署名。`docs/desktop-extension.md`）。Release の asset は、zip・tar.gz・.mcpb と、それぞれの `.sha256` の 6 ファイル。配布物の sha256 は `checksums.json`（`scripts/make-checksums.mjs` が、リリースの実行の中で `plugin/` に書く。リポジトリにはない）に入れ、zip に入れる。利用者の `/setup` が、plugin の中の `scripts/install-runtime.sh` で、これと照合する（script も zip に入り、許可リストで `scripts/install-runtime.sh`・`scripts/runtime-version-notice.sh` だけを通す）。
 5. `marketplace-self` のジョブが、`.claude-plugin/marketplace.json` を新しい版に書き換える PR を出す。中身（3 つの値）を確かめてマージする。PR が出なければ、Summary の値で手で直して PR を出す（Release はそのままでよい）。
-6. **tag の後の確かめ**（marketplace の PR のマージの前と後）: マージの前に、Release の zip の `checksums.json` を確かめる（`unzip -p touryou-<版>.zip checksums.json`）。マージのあとに、前の版を入れた Mac で update → `/touryou:setup`（S12）→ Q8。手順は `docs/setup-verification.md` の C。不具合が出たら、版を上げて直す（Release は付け直さない）。
+6. **tag の後の確かめ**（marketplace の PR のマージの前と後）: マージの前に、Release の zip の `checksums.json` を確かめる（`unzip -p touryou-<版>.zip checksums.json`）。続けて、本番の zip を手元の写しにして、常駐している前の版の Mac で `/touryou:setup` の版上げを通す（取得先の書き換えは要らない）。マージのあとに、前の版を入れた Mac で update → `/touryou:setup`（S12）→ Q8。手順は `docs/setup-verification.md` の C。不具合が出たら、版を上げて直す（Release は付け直さない）。
 
 ## 配布物では効かない、開発用の抜け道
 
