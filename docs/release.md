@@ -116,7 +116,7 @@ claude plugin marketplace add comcreate/touryou
 
 `dist` の配布物は 1 回あたり約 41MB（v0.1.1 の tar.gz が約 41MB。zip・mcpb・sha256 は合わせて 1MB 未満）。Actions の artifact の保存容量を使い切らないように、次のようにしている。
 
-- `dist-smoke.yml` は、PR では artifact を上げない（手で実行したときだけ、1 日の保存）。
+- `ci-macos.yml` の配布物の確かめは、PR では artifact を上げない（手で実行したときだけ、1 日の保存）。
 - `release.yml` の `dist` の artifact は 1 日の保存で、`release` が成功したときだけ、`cleanup` のジョブ（権限は `actions: write` だけ）が、その run の artifact を消す。`release` が失敗・skipped・cancelled のときは消さない（1 日の保存期限まで残るので、その間は `release` だけを再実行できる）。
 - 容量が尽きて `Artifact storage quota has been hit` で失敗したときは、容量が戻るのを待ってから、タグを付け直す（下の「やり直す」）。
 
@@ -126,12 +126,13 @@ claude plugin marketplace add comcreate/touryou
 |:--|:--|:--|
 | `ci.yml` | ubuntu（node 22・24） | push（main）・PR・`workflow_dispatch`（`release.yml` の `marketplace-self` が起こす。手でも起こせる）。いつも動く（必須の check のため）。`docs/**`・`.sdd/**`・`CHANGELOG.md`・`README.md`・`LICENSE` だけの変更では、checkout と変更の判定（`scripts/ci-code-changed.sh`）のあとの段を飛ばし、すぐ成功で終える。`workflow_dispatch` と、差分を取れないときは、すべて走らせる |
 | （同じ `ci.yml` の check の中） | | `check (ubuntu-latest, node 22)` の job で（node 24 の job では飛ばす）、どの変更でも（docs だけでも）、コミットのメールを確かめる（`scripts/ci-commit-emails.sh`）。author・committer・本文の `Co-authored-by` のメールが、GitHub の noreply（`<番号>+<名前>@users.noreply.github.com`。github-actions のボットも含む）・GitHub の `noreply` のアドレス・Anthropic の `noreply` のアドレス（正確な一覧は `scripts/ci-commit-emails.sh`）のどれかでなければ失敗する。範囲は、PR では base と head の間、push では before と after の間（新しいブランチ・force push で before が取れないときは、ほかのブランチにない after のコミット）。失敗の文には、コミットの短い番号と欄だけを出し、アドレスは出さない |
-| `ci-macos.yml` | macos-15（node 24） | push（main）・PR で、`packages/**`・`scripts/**`・`plugin/**`・`package.json`・`pnpm-lock.yaml`・`pnpm-workspace.yaml`・`biome.json`・`tsconfig*.json`・自分の yml が変わったときだけ（`paths`）。必須の check ではないので、`paths` のまま（毎回は動かさない） |
-| `dist-smoke.yml` | macos-15 | PR で、配布物に関わるファイルが変わったときだけ |
+| `ci-macos.yml` | macos-15（node 24） | push（main）・PR で、`packages/**`・`scripts/**`・`plugin/**`・`package.json`・`pnpm-lock.yaml`・`pnpm-workspace.yaml`・`biome.json`・`tsconfig*.json`・自分の yml が変わったときだけ（`paths`）と、`workflow_dispatch`。必須の check ではないので、`paths` のまま（毎回は動かさない）。Mac の機械を 1 台だけ待つよう、1 つのジョブ（`check (macos-15, node 24)`）で、`scripts/check.sh` のあとに配布物の確かめ（tar.gz・.mcpb を作り、展開して daemon を起こす）を続けて行う。配布物の確かめは PR と手で実行したときだけ（main への push では check だけ）。artifact を上げるのは手で実行したときだけ |
 | `release.yml` | macos-15（dist）・ubuntu | タグの push のとき |
 | `dependabot-auto-merge.yml` | ubuntu | Dependabot の PR（`pull_request`）のとき。下の「Dependabot の actions の更新と自動マージ」 |
+| `macos-capacity-rerun.yml` | ubuntu | `ci-macos.yml`・`release.yml` が失敗で終わったとき（`workflow_run`）。下の「macOS の機械が割り当てられなかったとき」 |
 | `dependabot-main-ci.yml` | ubuntu | Dependabot の PR の `ci.yml` が成功で終わったとき（`workflow_run`）。マージを待って、main で `ci.yml` を起こす |
 
+- **macOS の機械が割り当てられなかったとき**: macOS（arm64）の機械が足りない時間には、ジョブが始まらないまま、およそ 15 分で落ちる（annotations に「The job was not acquired by Runner of type hosted even after multiple attempts」）。GitHub 側の時間切れなので、`timeout-minutes` では直らない。`macos-capacity-rerun.yml` が、1 回目の実行（`run_attempt` が 1）で、落ちたジョブのすべてにその文があるときだけ、落ちたジョブを 1 回だけ走らせ直す（summary に残す）。試験が本当に落ちたとき・取り消し（cancelled）は走らせ直さない。`release.yml` は、`dist` が落ちると `release` が動かないので、走らせ直しても Release は二重にできない。2 回目も落ちたら、手で走らせ直す。checkout はせず、権限は `actions: write`・`checks: read` だけ。
 - macOS の runner は、ubuntu より実行の費用が大きい（public のリポジトリの標準の runner は、無料の枠の扱いが違う。GitHub の公式の記載を確かめる）。そのため、macOS は必要なときだけ動かす。
 - コミットのメールの確かめで落ちたら: GitHub の Settings → Emails で「Keep my email addresses private」を有効にし、`git config user.email "<番号>+<名前>@users.noreply.github.com"` を設定して、外れたコミットを直してから push し直す（squash のマージでは、PR のコミットの author が本文の `Co-authored-by` に入るため）。
 - どれも `concurrency` で、同じ ref（PR）の前の実行を止める。

@@ -8,6 +8,7 @@
 
 ### 内部の変更
 
+- **PR ごとの macOS のジョブを 1 つにまとめ、機械が割り当てられなかったときは 1 回だけ自動で走らせ直す**（#84・#85）: `dist-smoke.yml` を `ci-macos.yml` にまとめ、1 つのジョブで `scripts/check.sh` と配布物の確かめを続けて行うようにした（Mac の機械を 1 台だけ待つ）。`macos-capacity-rerun.yml` を足し、`CI (macOS)`・`Release` が「was not acquired by Runner」だけで落ちたとき、落ちたジョブを 1 回だけ走らせ直す（試験の失敗は走らせ直さない）。
 - **手順書に、tag を付けるのは決まりを越えてよい管理者で、手元から push すると書く**（#80）: `docs/release.md` の 3 に、ruleset で tag を作れる人が限られていること、「Bypassed rule violations … creations being restricted」の行のあとに `* [new tag]` が出れば成功であること、クラウドのセッションからの push は 403 で断られるので管理者に頼むことを書き足した。
 
 ## 0.1.2（2026-11-16）

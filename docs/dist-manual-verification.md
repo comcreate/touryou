@@ -2,7 +2,7 @@
 
 目的: Node 同梱の配布物（`touryou-darwin-arm64.tar.gz`。**対象は macOS の arm64 のみ**。x64〔Intel〕は対象外）が、**Node のない Mac** で、取得して展開するだけで動くかを確かめる。確かめるのは、(1) Node なしで daemon が起動する (2) Gatekeeper・署名の影響 (3) フック（`touryou hook`）が Node なしで動く (4) `touryou-mcp --stdio` が動く。
 
-- 配布物は、Release の asset か、Actions（`Dist smoke (experiment)`）の artifact から取る。
+- 配布物は、Release の asset か、Actions（`CI (macOS)`）の artifact から取る。
 - 配布物の中身（tar の一覧・特殊なファイル・シンボリックリンクが展開先の外や行き先のない所を指さないこと）は、CI の `scripts/dist-smoke.sh` が、利用者の `/setup` と同じ検査（`scripts/dist-check.sh`。`install-runtime.sh` の関数をそのまま使う）で確かめる。手元で確かめるなら `bash scripts/dist-check.sh <tar.gz の絶対パス>`（#56）。
 - **トークン・パスの値は、どこにも書き写さない**。
 - 作業用のディレクトリは、各自の一時の場所の下を使う。
@@ -19,10 +19,10 @@
 
 ### artifact の取り方
 
-main への push では、配布物は作られない（`Dist smoke (experiment)` は、手動実行と、関連ファイルを変える PR だけで動き、artifact を上げるのは手動実行のときだけ）。**検証の直前に、手動で実行する**。
+main への push では、配布物は作られない（`CI (macOS)` の配布物の確かめは、手動実行と、関連ファイルを変える PR だけで動き、artifact を上げるのは手動実行のときだけ）。**検証の直前に、手動で実行する**。
 
-1. リポジトリの Actions → 左の一覧の `Dist smoke (experiment)` → `Run workflow`（ブランチは `main`）。
-2. 実行が終わる（`dist (macos-15)` が緑）のを待ち、その実行のページの下の Artifacts から、`touryou-dist-macos-15`（arm64）をダウンロードする。
+1. リポジトリの Actions → 左の一覧の `CI (macOS)` → `Run workflow`（ブランチは `main`）。
+2. 実行が終わる（`check (macos-15, node 24)` が緑）のを待ち、その実行のページの下の Artifacts から、`touryou-dist-macos-15`（arm64）をダウンロードする。
 3. artifact は **1 日で消える**。消えたら、1. からやり直す。ダウンロードには、GitHub にログインしている必要がある。
 
 > **x64（Intel）は対象外**（決定。Apple が Intel Mac を OS のサポート対象外としている。将来の課題）。この手順書は、arm64 の Mac で、arm64 の配布物（名前に `darwin-arm64`）を使う。

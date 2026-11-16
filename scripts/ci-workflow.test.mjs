@@ -1,8 +1,8 @@
-// .github/workflows の ci.yml・ci-macos.yml・dist-smoke.yml の形を確かめる（macOS の runner の費用を抑える決めごと・必須の check が必ず報告されること）。
+// .github/workflows の ci.yml・ci-macos.yml・macos-capacity-rerun.yml の形を確かめる（macOS の runner の費用を抑える決めごと・必須の check が必ず報告されること）。
 // `node --test scripts/*.test.mjs`
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -10,7 +10,10 @@ import { test } from "node:test";
 const read = (f) => readFileSync(new URL(`../.github/workflows/${f}`, import.meta.url), "utf8");
 const ci = read("ci.yml");
 const mac = read("ci-macos.yml");
-const dist = read("dist-smoke.yml");
+const rerun = read("macos-capacity-rerun.yml");
+const workflowFiles = spawnSync("git", ["ls-files", ".github/workflows"], { encoding: "utf8" })
+  .stdout.split("\n")
+  .filter(Boolean);
 
 /** `on.<event>.<key>:` の一覧（2 字下げのイベント、4 字下げのキー、6 字下げの「- "…"」）。 */
 function list(src, event, key) {
@@ -111,11 +114,10 @@ test("ci-code-changed.sh: docs・.sdd・CHANGELOG・README・LICENSE だけな�
   assert.equal(codeChanged(["docs.ts", "README.md.bak"]), "true");
 });
 
-test("ci.yml・ci-macos.yml・dist-smoke.yml は、同じ ref の前の実行を止める（concurrency・cancel-in-progress）", () => {
+test("ci.yml・ci-macos.yml は、同じ ref の前の実行を止める（concurrency・cancel-in-progress）", () => {
   for (const [name, src] of [
     ["ci.yml", ci],
     ["ci-macos.yml", mac],
-    ["dist-smoke.yml", dist],
   ]) {
     assert.match(
       src,
@@ -123,8 +125,8 @@ test("ci.yml・ci-macos.yml・dist-smoke.yml は、同じ ref の前の実行を
       name,
     );
   }
-  const groups = [ci, mac, dist].map((s) => /\n {2}group: (.*)\n/.exec(s)?.[1]);
-  assert.equal(new Set(groups).size, 3, "concurrency の group が、ワークフローごとに違うこと");
+  const groups = [ci, mac].map((s) => /\n {2}group: (.*)\n/.exec(s)?.[1]);
+  assert.equal(new Set(groups).size, 2, "concurrency の group が、ワークフローごとに違うこと");
 });
 
 // コミットのメールの確かめ（scripts/ci-commit-emails.sh）。一時の git のリポジトリで、許す形・外れる形を確かめる。
@@ -240,4 +242,115 @@ test("ci.yml: コミットのメールの確かめは、変更の判定より前
   assert.match(steps[at], /ci-commit-emails\.sh "\$\{BEFORE\}\.\.\$\{AFTER\}"/);
   const body = steps[at].slice(steps[at].indexOf("run: |") + 6).replace(/^ {10}/gm, "");
   assert.equal(spawnSync("bash", ["-n"], { input: body, encoding: "utf8" }).status, 0);
+});
+
+// PR ごとの macOS のジョブは 1 つ（#85）。機械が割り当てられなかったときの走らせ直し（#84）。
+test("macOS の PR・push の workflow は ci-macos.yml の 1 ジョブだけ。check.sh と配布物の確かめ（dist-build・mcpb・smoke）を続けて行う", () => {
+  const macOs = workflowFiles.filter(
+    (f) => !f.endsWith("release.yml") && /runs-on: macos/.test(readFileSync(f, "utf8")),
+  );
+  assert.deepEqual(macOs, [".github/workflows/ci-macos.yml"]);
+  assert.equal([...mac.matchAll(/runs-on: macos/g)].length, 1);
+  assert.match(mac, /\n {4}name: check \(macos-15, node 24\)\n/);
+  const order = [
+    "bash scripts/check.sh",
+    "bash scripts/dist-build.sh",
+    "bash scripts/mcpb-build.sh",
+    "bash scripts/dist-smoke.sh",
+  ].map((c) => mac.indexOf(c));
+  for (const i of order) assert.ok(i > 0);
+  assert.deepEqual(
+    [...order].sort((a, b) => a - b),
+    order,
+  );
+  assert.match(mac, /\non:\n {2}workflow_dispatch:\n/);
+});
+
+test("ci-macos.yml: 配布物の確かめは main への push では飛ばす。artifact は手で実行したときだけ（1 日）", () => {
+  const steps = mac.split(/\n(?= {6}- )/);
+  const at = steps.findIndex((s) => /pnpm build/.test(s));
+  assert.ok(at > 0);
+  for (const s of steps.slice(at)) {
+    if (/upload-artifact@/.test(s)) {
+      assert.match(s, /if: github\.event_name == 'workflow_dispatch'/);
+      assert.match(s, /retention-days: 1\b/);
+    } else assert.match(s, /if: github\.event_name != 'push'/, s);
+  }
+});
+
+test("macos-capacity-rerun.yml: workflow_run（completed）で CI (macOS) と Release を見る。failure・run_attempt 1・このリポジトリのときだけ。権限は actions: write と checks: read。checkout しない", () => {
+  assert.match(
+    rerun,
+    /\n {2}workflow_run:\n {4}workflows: \["CI \(macOS\)", Release\]\n {4}types: \[completed\]\n/,
+  );
+  assert.match(mac, /^name: CI \(macOS\)$/m);
+  assert.match(read("release.yml"), /^name: Release$/m);
+  assert.match(rerun, /github\.event\.workflow_run\.conclusion == 'failure'/);
+  assert.match(rerun, /github\.event\.workflow_run\.run_attempt == 1\b/);
+  assert.match(rerun, /github\.repository == 'comcreate\/touryou'/);
+  assert.match(rerun, /\npermissions:\n {2}actions: write\n {2}checks: read\n\n/);
+  assert.equal([...rerun.matchAll(/permissions:/g)].length, 1);
+  assert.doesNotMatch(rerun, /actions\/checkout|pull_request_target|head_sha|head_branch/);
+});
+
+/** 走らせ直しの段を、偽の gh（呼び出しを記録し、決めた答えを返す）で動かす。 */
+function runRerun(jobs, annotations) {
+  const dir = mkdtempSync(join(tmpdir(), "ci-rerun-"));
+  try {
+    const body = rerun.slice(rerun.indexOf("run: |") + 6).replace(/^ {10}/gm, "");
+    const gh = join(dir, "gh");
+    writeFileSync(
+      gh,
+      `#!/usr/bin/env bash
+echo "$*" >> "${dir}/calls"
+case "$*" in
+  *"/attempts/1/jobs"*) printf '%s\\n' ${jobs.map((j) => `"${j}"`).join(" ")} ;;
+  *"/check-runs/"*) id="$(echo "$*" | sed -E 's#.*/check-runs/([0-9]+)/.*#\\1#')"; cat "${dir}/ann-$id" 2>/dev/null || true ;;
+esac
+`,
+    );
+    chmodSync(gh, 0o755);
+    for (const [id, text] of Object.entries(annotations))
+      writeFileSync(join(dir, `ann-${id}`), text);
+    const r = spawnSync("bash", ["-e"], {
+      input: body,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        PATH: `${dir}:${process.env.PATH}`,
+        GITHUB_REPOSITORY: "o/r",
+        GITHUB_STEP_SUMMARY: join(dir, "summary"),
+        RUN_ID: "9",
+        RUN_NAME: "CI (macOS)",
+      },
+    });
+    assert.equal(r.status, 0, r.stderr);
+    const calls = readFileSync(join(dir, "calls"), "utf8");
+    return {
+      rerun: /-X POST .*actions\/runs\/9\/rerun-failed-jobs/.test(calls),
+      summary: readFileSync(join(dir, "summary"), "utf8"),
+    };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const NOT_ACQUIRED =
+  "The job was not acquired by Runner of type hosted even after multiple attempts\nDue to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times.\n";
+
+test("macos-capacity-rerun.yml: 落ちたジョブのすべてに「was not acquired by Runner」があるときだけ走らせ直す。試験の失敗・混ざったとき・落ちたジョブがないときは走らせ直さない", () => {
+  assert.equal(runRerun(["11"], { 11: NOT_ACQUIRED }).rerun, true);
+  assert.equal(runRerun(["11", "12"], { 11: NOT_ACQUIRED, 12: NOT_ACQUIRED }).rerun, true);
+  const real = runRerun(["11"], { 11: "Process completed with exit code 1.\n" });
+  assert.equal(real.rerun, false);
+  assert.match(real.summary, /走らせ直しません/);
+  assert.equal(runRerun(["11", "12"], { 11: NOT_ACQUIRED, 12: "exit code 1\n" }).rerun, false);
+  // 注意の文（capacity constraints）だけでは走らせ直さない
+  assert.equal(
+    runRerun(["11"], {
+      11: "Due to capacity constraints, jobs targeting macOS arm64 runners may experience longer queue times.\n",
+    }).rerun,
+    false,
+  );
+  assert.equal(runRerun([], {}).rerun, false);
 });

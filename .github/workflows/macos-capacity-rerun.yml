@@ -1,0 +1,49 @@
+name: macOS capacity rerun
+
+# macOS（arm64）の機械が足りず、ジョブが割り当てられないまま落ちたとき（check run の annotations に
+# 「The job was not acquired by Runner of type hosted even after multiple attempts」が出る）、落ちたジョブを 1 回だけ走らせ直す。
+# - 対象: CI (macOS)（ci-macos.yml）と Release（release.yml の macOS の dist）。
+#   Release は、dist が落ちると release（Release を作る）が動かないので、落ちたジョブ（と、それに続くジョブ）だけを走らせ直しても、Release は二重にできない。
+# - 走らせ直すのは、1 回目（run_attempt が 1）で、落ちたジョブのすべてに、その文があるときだけ。試験が本当に落ちたときは走らせ直さない（失敗を隠さない）。
+# - 取り消し（concurrency の cancelled）は conclusion が failure でないので、動かない。
+# - checkout はしない（PR のコードを動かさない。fork の PR でも安全）。API の呼び出しだけ。docs/release.md の「CI の実行時間と費用」。
+on:
+  workflow_run:
+    workflows: ["CI (macOS)", Release]
+    types: [completed]
+
+permissions:
+  actions: write
+  checks: read
+
+jobs:
+  rerun:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: >-
+      github.repository == 'comcreate/touryou' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.run_attempt == 1
+    steps:
+      - name: 機械が割り当てられずに落ちたジョブだけなら、落ちたジョブを 1 回だけ走らせ直す
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_NAME: ${{ github.event.workflow_run.name }}
+        run: |
+          pattern='was not acquired by Runner'
+          failed="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/attempts/1/jobs" --paginate \
+            --jq '.jobs[] | select(.conclusion == "failure") | .id')"
+          if [ -z "${failed}" ]; then
+            echo "${RUN_NAME}: 落ちたジョブが見つかりません。走らせ直しません" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          for id in ${failed}; do
+            # ジョブの id は、check run の id と同じ
+            if ! gh api "repos/${GITHUB_REPOSITORY}/check-runs/${id}/annotations" --paginate --jq '.[].message' | grep -qF "${pattern}"; then
+              echo "${RUN_NAME}: ジョブ ${id} は、機械の不足ではない理由で落ちました。走らせ直しません（失敗を隠さない）" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          done
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/rerun-failed-jobs"
+          echo "${RUN_NAME}: 機械が割り当てられずに落ちたジョブを、1 回だけ走らせ直しました（run ${RUN_ID}）" >> "$GITHUB_STEP_SUMMARY"

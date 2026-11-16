@@ -81,7 +81,7 @@ test("release: 書き込み先のリポジトリは、この run のリポジト
   assert.deepEqual(jobs, ["version", "dist", "release", "marketplace-self", "cleanup"]);
 });
 
-const dist = readFileSync(new URL("../.github/workflows/dist-smoke.yml", import.meta.url), "utf8");
+const dist = readFileSync(new URL("../.github/workflows/ci-macos.yml", import.meta.url), "utf8");
 
 /** `  <name>:` のジョブの本文（次の 2 字下げのジョブまで）。 */
 function jobBlock(src, name) {
@@ -97,7 +97,7 @@ function uploadSteps(src) {
   return src.split(/\n(?= {6}- )/).filter((s) => /uses: actions\/upload-artifact@/.test(s));
 }
 
-test("dist-smoke: artifact を上げるのは、手で実行したときだけ（PR では上げない）。保存は 1 日", () => {
+test("ci-macos（配布物の確かめ）: artifact を上げるのは、手で実行したときだけ（PR では上げない）。保存は 1 日", () => {
   const ups = uploadSteps(dist);
   assert.equal(ups.length, 1);
   assert.match(ups[0], /if: github\.event_name == 'workflow_dispatch'/);
