@@ -137,9 +137,14 @@ exec "\$here/bin/node" "\$here/lib/$2" "\$@"
 LAUNCH
   chmod +x "${stage}/bin/$1"
 }
+# 版の印。launchd は起動スクリプトを通さず、同梱の node で lib/dist/bin.js を直に起こす（#64）。daemon は、これを読む
+printf '%s\n' "${dist_version}" > "${stage}/lib/dist-version"
 launcher touryou-daemon dist/bin.js
 launcher touryou-mcp node_modules/@touryou/mcp/dist/bin.js
 launcher touryou node_modules/@touryou/cli/dist/bin.js
+# launchd の plist と同じ起こし方（起動スクリプト・環境変数なしで、同梱の node で直に）で、版の印が読めること（#64）
+got="$(env -i "${stage}/bin/node" "${stage}/lib/dist/bin.js" --version)"
+[ "${got}" = "${dist_version}" ] || { echo "同梱の node で直に起こした daemon の --version が ${got}（期待は ${dist_version}）" >&2; exit 1; }
 
 echo "== tar.gz にする（再現性: mtime・所有者を固定。macOS の拡張属性は入れない）"
 export COPYFILE_DISABLE=1

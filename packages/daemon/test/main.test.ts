@@ -236,3 +236,40 @@ describe("窓口のポートの決め方（port-file.ts）", () => {
     expect(s.err.join("")).toContain("シンボリックリンク");
   });
 });
+
+describe("--check-config（起動せず、設定だけを検査する）", () => {
+  it("通れば終了コード 0。窓口を開かず、stateDir を作らない", async () => {
+    const s = setup();
+    let checked = "";
+    const r = await main(["--check-config", "--config", s.path], {
+      ...s.deps,
+      checkRepo: async (repo) => {
+        checked = repo;
+        return ok(undefined);
+      },
+    });
+    expect(r.exitCode).toBe(0);
+    expect(r.daemon).toBeUndefined();
+    expect(checked).toBe(s.config.repoRoot);
+    expect(() => statSync(s.config.stateDir as string)).toThrow();
+  });
+
+  it("実パスの検査（git の口）・git のリポジトリの検査が通らなければ、終了コード 1 で理由を出す", async () => {
+    const s = setup();
+    const bad = await main(["--check-config", "--config", s.path], {
+      ...s.deps,
+      loadWorktreePorts: async () => ({
+        ok: false,
+        error: failure("invalidConfig", "repoRoot が、実パスでない", "直す"),
+      }),
+    });
+    expect(bad.exitCode).toBe(1);
+    expect(s.err.join("")).toMatch(/失敗 \[invalidConfig\]: repoRoot が、実パスでない/);
+    const notRepo = await main(["--check-config", "--config", s.path], {
+      ...s.deps,
+      checkRepo: async () => ({ ok: false, error: failure("invalidConfig", "git でない", "直す") }),
+    });
+    expect(notRepo.exitCode).toBe(1);
+    expect(s.err.join("")).toMatch(/git でない/);
+  });
+});

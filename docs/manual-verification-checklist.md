@@ -222,3 +222,17 @@
   3. `touryou confirm-stopped <nodeId> --note <根拠>` で宣言する。別の子で、HTML 画面の「止めたと宣言…」（ノード ID の打ち込み）でも宣言する（画面の確かめ方は [`docs/manual-verification-ui.md`](manual-verification-ui.md) の「停止の宣言」）。
   4. 動いている Desktop の子がある状態で、daemon を再起動する。根の受信箱を見る。もう一度再起動して、また見る。そのあと、その子を止めたと宣言する。
 - **期待する結果**: 停止済み（stopped）になり、宣言した者と根拠が記録に残り、代行依頼が解決済みになる。打ち込みが違えば（空・1 文字違い・前後に空白）送れない。再起動のあと、根の受信箱に（停止未完了の帯で）1 件出る。もう一度再起動しても増えない。対象の子をすべて止めたと宣言すると、根の「daemon の再起動のあと」の依頼も解決済みになる。窓口のポートは、前回のポートを stateDir に保存して使い続ける（`portSource` が saved）。
+
+## L. 常駐のログイン項目（Issue #64）
+
+- **前提**: v0.1.1 の形（`run-daemon.sh` を起こす plist）で常駐している Mac。zsh（`noclobber` でも動くように、上書きは `>|` で書く）。`sfltool dumpbtm` は管理者のパスワードを聞くことがある。
+- **手順**（写して打てる形。`!` は使わない）:
+  1. 上げる前の記録: `sudo sfltool dumpbtm >| "${HOME}/btm-before.txt"`
+  2. 新しい版を入れる: `/touryou:setup`（常駐の起動し直しに「はい」と答える）
+  3. システム設定 → 一般 → ログイン項目 を開き、TouRyou に関わる項目の名前・数・「開発元を識別できない項目」かどうかを見る
+  4. 上げたあとの記録と比べ: `sudo sfltool dumpbtm >| "${HOME}/btm-after.txt"; diff "${HOME}/btm-before.txt" "${HOME}/btm-after.txt" | grep -i -E 'touryou|node|/bin/sh|bash' | sed -E 's#/Users/[^/]+#~#g'`
+  5. 版をもう 1 回上げ（次の版が出たとき）、3・4 をもう一度見る（`node` の項目が増えないか）
+  6. `/touryou:service` の uninstall のあと、3 を見て、`sudo sfltool dumpbtm >| "${HOME}/btm-uninstalled.txt"; grep -i -c -E 'touryou|run-daemon' "${HOME}/btm-uninstalled.txt"` の数を見る
+- **期待する結果**: 2 のあと、ログイン項目の TouRyou の項目は `node` の 1 つ（見込み）。5 で増えない。6 で `node` の項目が消える。v0.1.1 のときの `sh`・`bash` は残ることがある（害はない。`sfltool resetbtm` は、ほかのアプリの項目も消すので使わない）。
+- **後始末**: `rm -f "${HOME}/btm-before.txt" "${HOME}/btm-after.txt" "${HOME}/btm-uninstalled.txt"`（ユーザー名の入ったパスなどが入っているので、残さない）
+- **結果の返し方**: 項目の名前と数、「開発元を識別できない項目」かどうかだけを返す。`btm-*.txt` の中身はそのまま貼らない（ユーザー名の入ったパスなどが入る）。
