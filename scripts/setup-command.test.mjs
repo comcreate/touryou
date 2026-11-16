@@ -161,6 +161,14 @@ test("限界の明記と承認の回数: 安全は人の確認と script の sha
   assert.match(rules, /文書どおりに動くことは、試験では保証できない/);
   assert.match(text, /約 3 回、コマンドの承認の確認が出ます/);
   assert.doesNotMatch(text, /約 12 回/);
+  // 3 つのほかに Bash を走らせない・確かめは出力と Read・node の道具を呼ばない（#63）
+  assert.match(
+    rules,
+    /この `\/setup` の中で走らせる Bash は、手順 1・手順 2・手順 3-A の 2 の 3 つだけ/,
+  );
+  assert.match(rules, /確かめのための別のコマンドは、走らせない/);
+  assert.match(rules, /前もって別のコマンドで確かめない/);
+  assert.match(rules, /`\/touryou:start` の中身を、代わりに実行しない/);
   assert.match(
     text,
     /auto モード（権限の自動判定）[^\n]*自動判定で止められたときは、出た文面をそのまま利用者に伝え/,

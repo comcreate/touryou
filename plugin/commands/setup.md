@@ -5,7 +5,7 @@ allowed-tools: Read
 
 TouRyou の配布物（Node 同梱。daemon・`touryou-mcp`・`touryou`）を、この Mac に置きます。**利用者が、自分で実行するコマンド**です。置く場所は `$HOME` の下の `.touryou` です（実際のパスは、この文書に書きません）。
 
-最初に、利用者に伝える（定型文）: 「これから、約 3 回、コマンドの承認の確認が出ます（本体の導入・設定・常駐の登録で 1 回ずつ）。1 回ごとに、画面のコマンドを読んで、問題なければ承認してください。」
+最初に、利用者に伝える（定型文）: 「これから、約 3 回、コマンドの承認の確認が出ます（本体の導入・設定・常駐の登録で 1 回ずつ。常駐にしないときは 2 回）。1 回ごとに、画面のコマンドを読んで、問題なければ「1. Yes」で承認してください。これより多く出たときは、その画面のコマンドを控えて、COMCREATE に知らせてください。」
 
 Claude Code の auto モード（権限の自動判定）で実行しているときは、承認の確認はほとんど出ない見込み（推測）。自動判定で止められたときは、出た文面をそのまま利用者に伝え、利用者に手で許可してもらう（書き換えて実行し直さない）。**チャットでの「はい」（常駐の同意など。`--yes`・`--restart-daemon` を付ける前の定型文）は、auto モードでも必ず取る**（権限の自動判定とは別のもの）。
 
@@ -14,6 +14,10 @@ Claude Code の auto モード（権限の自動判定）で実行している�
 - **この文書に書かれたコマンドを、書かれたとおりに実行する**。引数・取得先・書き込み先を、変えない。ほかのコマンドは、実行しない。**コマンドが失敗したら、書き換えて実行し直さずに止まり**、出力をそのまま人に伝える（書き換えが安全に見えても、文書の外の動きになる）。
 - **途中で中断したときは、そのまま `/setup` を最初からやり直してよい**（導入の script は、照合が通った取得済みのファイルを使い直し、途中の展開は片付けてから置き直す）。
 - このコマンドは、`Read` 以外を、事前に許可していない。**コマンドごとに、承認の確認が出る**（正常）。
+- **この `/setup` の中で走らせる Bash は、手順 1・手順 2・手順 3-A の 2 の 3 つだけ**（版が変わり常駐しているときは、手順 1 の代わりに `--restart-daemon` つきの 1 つ）。それぞれを、**書かれた 1 行のまま、1 回の Bash で**走らせる（`&&` の前後を別の Bash に分けない・つなぎ足さない）。承認の確認の回数は、Bash の数と同じにする。
+- **確かめのための別のコマンドは、走らせない**。`ls`・`cat`・`test`・`stat`・`readlink`・`which`・`git -C … rev-parse`・`launchctl`・`uname`・`echo` などで、置き場・パス・リポジトリ・常駐を前もって・あとから確かめない。確かめは、**script とコマンドの出力（`RESULT:`・`CONFIG:`・`LAUNCHD:`・`OK`・`launchd apply` の状態の表示）と、`Read`**（事前に許可されていて、確認が出ない）で行う。出力が長くて切れたときも、読み直すためのコマンドは走らせない（出力の最後の行で分ける）。
+- 手順 2 のパス（ホームの下か・git のリポジトリか・`config.json` がないか）は、手順 2 のコマンドの中で確かめる。**前もって別のコマンドで確かめない**（`OK` が出なければ止まる）。
+- **この `/setup` の中で、node の道具（`whoami`・`tree_list` など）・`/touryou:service`・`/touryou:start` の中身を、代わりに実行しない**（それぞれに承認の確認が出る）。接続の確かめは、最後に、利用者に `/touryou:start` を打ってもらう。
 - **本体の取得・照合・展開・付け替えは、plugin の中の 1 本の script（`scripts/install-runtime.sh`）が行う**。script は、plugin の zip の一部で、Claude Code が、marketplace の sha256 で zip ごと確かめてから置いたもの。取得元・版・sha256 は、script が plugin の中の `checksums.json`・`plugin.json` から読む（引数・環境変数では変えられない。受け付ける引数は `--restart-daemon` だけ）。
 - **安全は、「承認のときに、人が、画面のコマンドが手順 1 のとおりであることを確かめること」と「script の中の sha256 の照合」に依る。**承認の画面に出るのは、実際のコマンドの文字列で、この文書の説明とは別。モデルが、この文書と違うコマンドを出しても、止められるのは、人の目と、sha256 の照合だけ。**文書どおりに動くことは、試験では保証できない**（試験は、この文書の内容と、script の動きを検査するだけ）。
 - 取得は **手順 1 の script の中の `curl` だけ**（認証なし。配布物のリポジトリは public。https だけ・リダイレクトの先も https だけ）。ブラウザ・メール・AirDrop での取得は、案内しない（quarantine が付いて、daemon が動かないため。下の症状表）。`curl` で取得したファイルには、quarantine が付かない（`curl` は quarantine の属性を付けない）。macOS の版で変わりうるので、**それでも script が、取得したファイルと展開したファイルで、必ず確かめる**。
@@ -57,11 +61,11 @@ Claude Code の auto モード（権限の自動判定）で実行している�
       定型文: 「これから、ログインしたときに daemon を自動で動かす設定（macOS の launchd。`$HOME/Library/LaunchAgents` に 1 つの plist を置きます）を入れます。システム設定のログイン項目に、1 項目が「開発元を識別できない項目」として追加されます。やめるときは /touryou:service の uninstall で外せます。入れてよいですか（はい／いいえ）」
    2. **生成と登録・起動**: `"$HOME/.touryou/current/bin/touryou" launchd init && "$HOME/.touryou/current/bin/touryou" launchd apply --yes`（**1 の「はい」のあとだけ**。`--yes` は同意を取ったことの印）。`init` は、起動スクリプトと plist を `$HOME/.touryou` の下に作る（`launchctl` は実行しない。既存と違う内容のファイルがあると、何も書かずに終了コード 1 で止まる）。`apply` は、plist を LaunchAgents に置き、daemon を読み込み、窓口の応答（未認証の whoami が 401）を待って、最後に状態を出す。終了コードが 0 なら成功。0 でなければ、出力（状態・`daemon.log` の起動スクリプトの文）をそのまま伝えて止まる。
       定型文（成功）: 「常駐にしました。macOS から「ログイン項目が追加された」という通知が出て、システム設定のログイン項目に run-daemon.sh の 1 項目が「開発元を識別できない項目」として出ます。これは正常です（署名していない起動スクリプトのため）。」
-   3. **つながるのを待つ**: この会話の node は、配布物と daemon を見つけると、10 秒ほどで自動でつながる（Reconnect は要らない。plugin の中継〔`scripts/touryou-mcp-shim.sh`〕が、道具の一覧が変わったことを Claude Code に知らせる）。そのあと `/touryou:start` で、接続を確かめる。`/start` で node の道具がまだ使えなければ、`/mcp` で `plugin:touryou:node` を選んで Reconnect する（Reconnect がない画面〔デスクトップ版など〕なら、Claude Code を起動し直す）。以後の確認・起動し直し・止める・外すは、`/touryou:service`。
+   3. **つながるのを待つ**: この会話の node は、配布物と daemon を見つけると、10 秒ほどで自動でつながる（Reconnect は要らない。plugin の中継〔`scripts/touryou-mcp-shim.sh`〕が、道具の一覧が変わったことを Claude Code に知らせる）。そのあと、利用者に `/touryou:start` を打ってもらい、接続を確かめる（この `/setup` の中で、node の道具を呼ばない）。`/start` で node の道具がまだ使えなければ、`/mcp` で `plugin:touryou:node` を選んで Reconnect する（Reconnect がない画面〔デスクトップ版など〕なら、Claude Code を起動し直す）。以後の確認・起動し直し・止める・外すは、`/touryou:service`。
    **3-B. 手で起動する**（別の端末で行う。起動の順序は daemon → 統合セッション）:
    - `"$HOME/.touryou/current/bin/touryou-daemon" --config "$HOME/.touryou/config.json"`（窓口の URL が出る）
    - 統合セッションの MCP は、plugin の `.mcp.json` が stdio で `touryou-mcp --stdio` を起動し、`touryou-mcp` が `state` の `root-token`・`port` を自分で読む（手で起動しない・環境変数は要らない）。`TOURYOU_DAEMON_URL` は、統合セッションの環境には設定しない。
-   - 続けて、**つながるのを待つ**: daemon を起動したあと、この会話の node は、配布物と daemon を見つけると、10 秒ほどで自動でつながる（Reconnect は要らない。plugin の中継〔`scripts/touryou-mcp-shim.sh`〕が、道具の一覧が変わったことを Claude Code に知らせる）。そのあと `/touryou:start` で、接続を確かめる。`/start` で node の道具がまだ使えなければ、`/mcp` で `plugin:touryou:node` を選んで Reconnect する（Reconnect がない画面〔デスクトップ版など〕なら、Claude Code を起動し直す）。
+   - 続けて、**つながるのを待つ**: daemon を起動したあと、この会話の node は、配布物と daemon を見つけると、10 秒ほどで自動でつながる（Reconnect は要らない。plugin の中継〔`scripts/touryou-mcp-shim.sh`〕が、道具の一覧が変わったことを Claude Code に知らせる）。そのあと、利用者に `/touryou:start` を打ってもらい、接続を確かめる（この `/setup` の中で、node の道具を呼ばない）。`/start` で node の道具がまだ使えなければ、`/mcp` で `plugin:touryou:node` を選んで Reconnect する（Reconnect がない画面〔デスクトップ版など〕なら、Claude Code を起動し直す）。
    定型文: 「次のコマンドを、別のターミナルで実行してください。」
    定型文（つながるのを待つ。3-A・3-B のどちらでも）: 「この会話の node は、10 秒ほどで自動でつながります。つながらなければ、/mcp で node を選んで Reconnect してください（または Claude Code を起動し直してください）。」
    デスクトップアプリ（普通のチャット・Cowork〔このコンピュータ〕）でも使うなら、続けて `/touryou:desktop` で拡張機能を入れられる、と 1 行だけ伝える（このコマンドでは入れない）。
