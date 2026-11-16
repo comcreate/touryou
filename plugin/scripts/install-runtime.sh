@@ -33,6 +33,8 @@ LABEL_PLIST="touryou.daemon.plist"
 # 自分の場所は、読み込んだ時点で決める（bash 3.2 は、source した file の関数の中で BASH_SOURCE[0] が自分を指さないことがある）
 SELF="${BASH_SOURCE[0]:-$0}"
 CONTACT="この plugin を配布した COMCREATE（連絡先: contact@comcreate-info.com）"
+# 中身の一覧の一時ディレクトリ（手順 6 で作る）。環境から入った値を使わない（die と終わりの片付けが消すのは、ここで作ったものだけ）
+LISTS=""
 
 # --- 出力（HOME を伏せる） ---
 mask() {
@@ -56,8 +58,14 @@ finish() {
   printf 'RESULT: %s\n' "$2"
   exit "$1"
 }
+cleanup_lists() {
+  # 中身の一覧の一時ディレクトリを消す（work に残さない）。消すのは、置き場の中の .lists. で始まるものだけ
+  case "${LISTS}" in "${BASE:-/nonexistent}"/.lists.*) rm -rf "${LISTS}" ;; esac
+  LISTS=""
+}
 die() {
   # $1: 理由, $2: 次にすること, $3: いまの状態（省略すると「current は変えていない」）
+  cleanup_lists
   say "止めました: $1"
   say "いまの状態: ${3:-current は変えていません（いま動いているものは、そのまま）}"
   [ -z "${2:-}" ] || say "次にすること: $2"
@@ -288,13 +296,19 @@ main() {
   fi
 
   # 6. 中身の一覧
-  local list="${WORK}/list.txt"
+  # 一覧は、置き場の中の一時ディレクトリに作り、検査のあとに消す（失敗のときは die が消す。work に残さない）
+  # 中断（Ctrl-C・SIGTERM）でも消す。exit の道（die・finish・set -e）は EXIT で消す
+  trap 'cleanup_lists' EXIT
+  trap 'exit 130' INT TERM
+  LISTS="$(mktemp -d "${BASE}/.lists.XXXXXX")" || die "一時ディレクトリを作れない" "空き容量を確かめて、もう一度 /touryou:setup"
+  local list="${LISTS}/list.txt"
   if ! tar -tzf "${file}" >"${list}" 2>/dev/null; then die "配布物を読めない（壊れている）" "もう一度 /touryou:setup"; fi
   check_list "${list}" || die "配布物の中身が、想定と違う（${DIST_DIR}/ の外・絶対パス・.. がある）" "${CONTACT} に知らせる"
   if LC_ALL=C grep -q '[[:cntrl:]]' "${list}"; then die "配布物の中身が、想定と違う（名前に制御文字がある）" "${CONTACT} に知らせる"; fi
-  local vlist="${WORK}/list-v.txt"
+  local vlist="${LISTS}/list-v.txt"
   if ! tar -tvzf "${file}" >"${vlist}" 2>/dev/null; then die "配布物を読めない（壊れている）" "もう一度 /touryou:setup"; fi
   check_types "${vlist}" || die "配布物の中身が、想定と違う（デバイス・FIFO・ハードリンクなど、特殊なファイルがある）" "${CONTACT} に知らせる"
+  cleanup_lists
 
   # 7. 一時ディレクトリに展開して確かめ、v<版> に移す
   local stage="${BASE}/.stage-v${ver}.$$"

@@ -13,6 +13,7 @@ import {
   linkSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   readlinkSync,
   rmSync,
@@ -137,6 +138,13 @@ test("初めて: 取得 → 照合 → 展開 → current を v<版> に向け�
       .sort(),
     ["current", "v1.0.0", "work"],
   );
+  // work に残るのは、取得した tar.gz だけ（中身の一覧のファイルは残らない。#61）
+  assert.deepEqual(
+    spawnSync("ls", ["-A", join(h, ".touryou", "work")], { encoding: "utf8" })
+      .stdout.trim()
+      .split("\n"),
+    ["touryou-1.0.0-darwin-arm64.tar.gz"],
+  );
 });
 
 test("同じ版がすでに入って動くなら、何もしない（取得しない）", () => {
@@ -213,6 +221,15 @@ test("配布物の先頭が touryou-darwin-arm64/ 以外: 止まる", () => {
   const r = install(makePlugin("1.0.0", tb), h, tb);
   assert.equal(r.status, 1, out(r));
   assert.match(r.stdout, /中身が、想定と違う/);
+  // 失敗でも、中身の一覧（一時ディレクトリ・work の中）を残さない（#61）
+  assert.deepEqual(
+    readdirSync(join(h, ".touryou")).filter((n) => n.startsWith(".lists.")),
+    [],
+  );
+  assert.deepEqual(
+    readdirSync(join(h, ".touryou", "work")).filter((n) => n.startsWith("list")),
+    [],
+  );
 });
 
 test("check_list: 絶対パス・.. の要素・空の一覧を断る", () => {
@@ -526,7 +543,28 @@ test("特殊なファイル（FIFO・ハードリンク）・名前に制御文�
     assert.match(r.stdout, /RESULT: failed/, label);
     assert.ok(!existsSync(join(h, ".touryou", "v1.0.0")), label);
     assert.ok(!existsSync(join(h, ".touryou", "current")), label);
+    // tar -tv の一覧（check_types）の後で止まっても、一覧の一時ディレクトリを残さない（#61）
+    assert.deepEqual(
+      readdirSync(join(h, ".touryou")).filter((n) => n.startsWith(".lists.")),
+      [],
+      label,
+    );
   }
+});
+
+test("環境に LISTS があっても、早い die（手順 6 より前）で、そのパスを消さない（#61）", () => {
+  const tb = makeTarball("1.0.0");
+  const h = newHome();
+  const victim = join(tmp(), "victim");
+  mkdirSync(victim);
+  writeFileSync(join(victim, "keep.txt"), "x");
+  const r = install(makePlugin("1.0.0", tb), h, tb, [], {
+    env: { LISTS: victim },
+    extra: 'platform() { echo "Linux x86_64"; }',
+  });
+  assert.equal(r.status, 1, out(r));
+  assert.match(r.stdout, /RESULT: failed/);
+  assert.ok(existsSync(join(victim, "keep.txt")), "環境から入った LISTS のパスを消さない");
 });
 
 test("setup.md の呼び出し（env -u BASH_ENV -u ENV bash）では、BASH_ENV のファイルが読まれない。環境から取り込んだ関数（uname の上書き）は、script の頭で消える", {
@@ -644,4 +682,28 @@ test("常駐の版上げ・新しい版の apply が失敗し、新しい版の 
   assert.match(r.stdout, /RESULT: failed/);
   assert.match(r.stdout, /current は v1\.0\.0 のまま、常駐の daemon は止まっている/);
   assert.ok(!lines(join(h, "calls.log")).includes("v0.9.0 launchd apply --yes"));
+});
+
+test("版上げの新しい道（設定の検査・init・apply・uninstall）のどこで止まっても、一覧の一時ディレクトリ（.lists.*）を残さない（#61）", () => {
+  // uninstall は、apply が失敗したあとの戻しの道でだけ呼ばれる
+  const fails = [
+    ["check-config"],
+    ["launchd init"],
+    ["launchd apply"],
+    ["launchd apply", "launchd uninstall"],
+  ];
+  for (const fs of fails) {
+    const f = fs.join("+");
+    const h = managedHome();
+    const tb = makeTarball("1.0.0");
+    const arms = fs.map((x) => `*"${x}"*) return 1 ;;`).join(" ");
+    const extra = `run_masked() { case "$*" in ${arms} esac; "$@"; }`;
+    const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"], { extra });
+    assert.notEqual(r.status, 0, `${f}: ${out(r)}`);
+    assert.deepEqual(
+      readdirSync(join(h, ".touryou")).filter((n) => n.startsWith(".lists.")),
+      [],
+      f,
+    );
+  }
 });
