@@ -30,6 +30,7 @@
 
 ### 内部の変更
 
+- **daemon が使っていない MCP の SDK への依存を外す**（#60。#53）: `packages/daemon/package.json` から `@modelcontextprotocol/sdk` を外し、lockfile を作り直した（削除だけ。新しい版は入れていない）。mcp・cli は、引き続き SDK を使う。`scripts/dist-build.sh` のコメントを、SDK の解決の道筋に合わせた。
 - **出す前の /setup の確かめを、フォークの rc の配布物で行う**（#58。#48・#56）: v0.1.0 の配布物は #56 の壊れたリンクで `/setup` の検査に止められ、`docs/setup-verification.md` の A が通らない。新しい A' は、フォークの試しのリリース（例 `0.1.1-rc.0`）の zip をそのまま写しにし、手元の写しだけ `install-runtime.sh` の `REPO_URL` と `plugin.json` の `repository` をフォークに書き換えて（1 か所ずつを確かめる）、S10〜S13 を通す。配る script・`plugin.json` は変えていない。`docs/release.md` の 2-a・フォークの検証の例の版（`0.1.1-rc.0`）・後始末の時期を直した。`check_links` の注を実際の動き（行き先の親が中にあれば、行き先のないリンクは通す）に合わせた。
 - **新しい /setup の実機の確かめの手順**（#48）: `docs/setup-verification.md` を足した。tag の前は、手元の plugin の写しに直前の Release の `checksums.json` を置いて `claude --plugin-dir` で `/touryou:setup` を通し（S10〜S13。版上げは複製した版で模造する）、tag の後は zip の `checksums.json` を確かめてから marketplace の PR をマージし、update → `/setup` → Q8 を行う。取得先は本番のまま、script には手を入れていない。`docs/release.md` の手順に 2-a と 6 を足した。
 - **Dependabot で actions の版を上げ、patch・minor を自動でマージする**（#44）: `.github/dependabot.yml` で、workflow の actions の上げを週に 1 回、patch・minor は 1 本の PR に、メジャーは actions ごとの別の PR にする（公開から 14 日たった版だけ）。`dependabot-auto-merge.yml` が、github-actions の patch・minor で `.github/workflows/` の中だけを変える PR に auto-merge を付け、必須の check が通ってからマージされる。メジャーの上げは人がレビューする。マージのあとは `dependabot-main-ci.yml` が main で `ci.yml` を起こす。リポジトリの設定の「Allow auto-merge」が要る（`docs/release.md`）。
