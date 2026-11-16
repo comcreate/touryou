@@ -398,6 +398,20 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
       );
     }
   }
+  // LaunchAgents が新しい形になったら、古い形の起動スクリプトは、もうどこからも起こされない。古い形と同じなら消す（#64）
+  for (const u of ctx.units) {
+    const dest = readOr(u.plistDest);
+    const script = readOr(u.legacyScript);
+    if (
+      dest !== undefined &&
+      isGeneratedPlist(ctx, u, dest) &&
+      script !== undefined &&
+      isLegacyScript(ctx, u, script)
+    ) {
+      rmSync(u.legacyScript);
+      out.push(`消した: ${u.legacyScript}（古い形の起動スクリプト）`);
+    }
+  }
   const st = await statusLines(ctx);
   out.push("", ...st.lines, "");
   out.push(

@@ -37,6 +37,7 @@ top="$(ls "$work/x")"
     [ -f "$work/x/${top}/$f" ] || { echo "検査に当たった: launchd が指す ${f} がない" >&2; rc=1; }
   done
   name_ver="$(basename "$tgz" | sed -n 's/^touryou-\(.*\)-[a-z0-9]*-[a-z0-9_]*\.tar\.gz$/\1/p')"
+  [ -n "${name_ver}" ] || echo "配布物の名前に版がない（DIST_VERSION なしのビルド）ので、版の印の突き合わせは飛ばした" >&2
   if [ -n "${name_ver}" ] && [ -f "$work/x/${top}/lib/dist-version" ]; then
     mark="$(cat "$work/x/${top}/lib/dist-version")"
     [ "${mark}" = "${name_ver}" ] || { echo "検査に当たった: 版の印（${mark}）が、配布物の名前の版（${name_ver}）と違う" >&2; rc=1; }

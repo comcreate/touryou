@@ -496,13 +496,13 @@ describe("古い形（v0.1.1 まで。run-daemon.sh を起こす plist）から�
     return { plist, script };
   };
 
-  it("古い形と同じなら、plist を新しい形に置き換え、run-daemon.sh を消す。もう一度 init しても同じ", async () => {
+  it("古い形と同じなら、plist を新しい形に置き換える。run-daemon.sh は、LaunchAgents の古い形が起こしうるので残す。もう一度 init しても同じ", async () => {
     const h = makeHome();
     const { plist, script } = legacy(h, "touryou.daemon");
     const r = await run(h.home, ["init"]);
     expect(r.exitCode, r.stderr).toBe(0);
     expect(r.stdout).toMatch(/古い形〔run-daemon\.sh を起こす〕から、新しい形に置き換えた/);
-    expect(existsSync(script)).toBe(false);
+    expect(readFileSync(script, "utf8")).toBe(runDaemonScript(h.base));
     const text = readFileSync(plist, "utf8");
     expect(text).toContain(join(h.base, "current", "bin", "node"));
     expect(text).not.toContain("run-daemon.sh");
@@ -522,7 +522,7 @@ describe("古い形（v0.1.1 まで。run-daemon.sh を起こす plist）から�
     );
     const r = await run(h.home, ["init", "--org", ORG, "--path-prefix", "/opt/homebrew/bin"]);
     expect(r.exitCode, r.stderr).toBe(0);
-    expect(existsSync(script)).toBe(false);
+    expect(existsSync(script)).toBe(true);
     const text = readFileSync(plist, "utf8");
     expect(text).toContain(join(h.base, "current", "bin", "node"));
     expect(text).toContain(

@@ -517,9 +517,13 @@ describe("古い形（v0.1.1 まで。run-daemon.sh を起こす plist）から�
     const h = legacyHome();
     h.f.loaded.set(DAEMON, { state: "running" });
     expect((await bin(h.home, undefined, ["init", "--org", ORG])).exitCode).toBe(0);
-    expect(existsSync(h.script)).toBe(false);
+    // init と apply の間で止まっても、LaunchAgents の古い形が起こす run-daemon.sh は残っている（次のログインで落ち続けない）
+    expect(readFileSync(h.dest, "utf8")).toContain(h.script);
+    expect(existsSync(h.script)).toBe(true);
     const r = await bin(h.home, h.f, ["apply", "--yes", "--org", ORG]);
     expect(r.exitCode, r.stderr).toBe(0);
+    expect(existsSync(h.script)).toBe(false);
+    expect(r.stdout).toMatch(/消した: .*run-daemon\.sh/);
     expect(seq(h.f)).toEqual([`bootout ${DAEMON}`, `bootstrap ${DAEMON}.plist`]);
     expect(readFileSync(h.dest, "utf8")).toBe(readFileSync(h.src, "utf8"));
     expect(readFileSync(h.dest, "utf8")).not.toContain("run-daemon.sh");

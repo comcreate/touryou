@@ -417,8 +417,6 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
     chmodSync(tmp, t.mode);
     renameSync(tmp, t.path);
   }
-  const removedLegacy = scriptIsLegacy;
-  if (removedLegacy) rmSync(legacyScript);
 
   // 生成後の確認（権限）
   const problems: string[] = [...dirNotes];
@@ -438,8 +436,12 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
     out.push(
       `  ${t.path}（${oct(t.mode)}。古い形〔run-daemon.sh を起こす〕から、新しい形に置き換えた）`,
     );
-  if (removedLegacy)
-    out.push(`  ${legacyScript}（古い形の起動スクリプト。要らなくなったので消した）`);
+  if (scriptIsLegacy) {
+    // LaunchAgents に古い形が残っているうちは、次のログインで起こされうるので、消さない（apply が置き換えたあと・uninstall で消す）
+    out.push(
+      `  ${legacyScript}（古い形の起動スクリプト。apply が LaunchAgents の plist を置き換えたあとに消す）`,
+    );
+  }
   for (const p of same) out.push(`  ${p}（既存と同じ。そのまま）`);
   out.push("");
   out.push(

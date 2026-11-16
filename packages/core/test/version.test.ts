@@ -18,10 +18,11 @@ describe("resolveVersion", () => {
     expect(versionLine(v)).toBe("0.2.0-rc.1");
   });
 
-  it("版の印が空・形が違えば、package.json の版（開発ビルド）", () => {
+  it("版の印があるのに空・形が違えば、unknown（開発ビルドと見分けがつく）", () => {
     for (const distVersion of ["", "\n", "1.0.0 extra", "x".repeat(65)]) {
       const v = resolveVersion({ packageVersion: "0.0.1", env: {}, distVersion });
-      expect(v.source, JSON.stringify(distVersion)).toBe("package");
+      expect(v, JSON.stringify(distVersion)).toEqual({ version: "unknown", source: "dist" });
+      expect(versionLine(v)).toBe("unknown");
     }
     expect(versionLine(resolveVersion({ packageVersion: "0.0.1" }))).toBe("0.0.1（開発ビルド）");
   });

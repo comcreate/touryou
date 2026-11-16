@@ -38,7 +38,7 @@ macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動か�
 | `launchd/<Label>.plist` | 0644 | 下の 2 |
 | `logs/`（ディレクトリ） | 0700 | daemon のログ `daemon.log` |
 
-- **古い形からの引っ越し**: v0.1.1 までの `init` は、`bin/run-daemon.sh`（`#!/bin/sh`）を作り、plist はそれを起こしていました。新しい `init` は、`launchd/<Label>.plist` と `bin/run-daemon.sh` が、**同じ `--org`・`--path-prefix` の古い `init` が生成したものとバイト単位で同じとき**だけ、plist を新しい形に置き換え、`run-daemon.sh` を消します。どちらかを手で直していれば、何も書かず・消さずに止まります。`apply` は、`LaunchAgents` の plist が同じ `PATH` の古い形なら、止めて（`launchctl bootout`）から置き換えて読み込みます。`uninstall` は、古い形・新しい形のどちらも外します。
+- **古い形からの引っ越し**: v0.1.1 までの `init` は、`bin/run-daemon.sh`（`#!/bin/sh`）を作り、plist はそれを起こしていました。新しい `init` は、`launchd/<Label>.plist` と `bin/run-daemon.sh` が、**同じ `--org`・`--path-prefix` の古い `init` が生成したものとバイト単位で同じとき**だけ、plist を新しい形に置き換えます（`run-daemon.sh` は、`LaunchAgents` の古い形が次のログインで起こしうるので、まだ消しません）。どちらかを手で直していれば、何も書かず・消さずに止まります。`apply` は、`LaunchAgents` の plist が同じ `PATH` の古い形なら、止めて（`launchctl bootout`）から置き換えて読み込み、そのあとで `run-daemon.sh`（古い形と同じもの）を消します。`uninstall` は、古い形・新しい形のどちらも外します。
 - `--path-prefix`: plist の `PATH` の先頭に足すディレクトリ（コロン区切りの絶対パス。Homebrew の `git` を使うときなど）。既定の `PATH` は `/usr/bin:/bin:/usr/sbin:/sbin`。
 
 ### 設定の検査（`init`・`apply` の前）
@@ -83,7 +83,7 @@ macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動か�
 
 ## 4. 版を上げる
 
-**止める → `/setup` → 起動し直す**の順です（`/setup` の「版を上げる」が、この順で案内します）。`/setup` の `--restart-daemon` の道は、古い版の `launchd init`（生成物が同じかの確かめ）→ `stop` → `current` の付け替え → 新しい版の `launchd init`（古い形なら、新しい形に置き換える）→ 新しい版の `apply --yes` です。新しい版の `init`・`apply` が失敗したときは、新しい版の `uninstall --yes` で新しい形を外し、`current` を戻し、古い版の `init`・`apply --yes` で、古い形のまま起動し直します。`/setup` が新しい版を `current` に入れたあと、`touryou launchd apply --yes`（または `restart`）で起動し直します。
+**止める → `/setup` → 起動し直す**の順です（`/setup` の「版を上げる」が、この順で案内します）。`/setup` の `--restart-daemon` の道は、古い版の `launchd init`（生成物が同じかの確かめ）→ `stop` → `current` の付け替え → 新しい版の `launchd init`（古い形なら、新しい形に置き換える）→ 新しい版の `apply --yes` です。新しい版の `init`・`apply` が失敗したときは、新しい版の `uninstall --yes` で新しい形を外し、`current` を戻し、古い版の `init`・`apply --yes` で、古い形のまま起動し直します。
 
 ## 5. ログの整理
 

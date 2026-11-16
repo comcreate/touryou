@@ -41,9 +41,10 @@ export function resolveVersion(opts: {
   if (typeof envVersion === "string" && envVersion !== "") {
     return { version: envVersion, source: "env" };
   }
-  const dist = opts.distVersion?.trim();
-  if (dist !== undefined && /^[0-9A-Za-z.+-]{1,64}$/.test(dist)) {
-    return { version: dist, source: "dist" };
+  if (opts.distVersion !== undefined) {
+    // 印のファイルがあるのに形が違う（壊れた・空）ときは、開発ビルドと見分けがつくよう unknown にする
+    const dist = opts.distVersion.trim();
+    return { version: /^[0-9A-Za-z.+-]{1,64}$/.test(dist) ? dist : "unknown", source: "dist" };
   }
   return { version: opts.packageVersion, source: "package" };
 }
