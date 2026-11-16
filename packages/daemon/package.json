@@ -14,7 +14,6 @@
   "dependencies": {
     "@touryou/core": "workspace:*",
     "@touryou/mcp": "workspace:*",
-    "@modelcontextprotocol/sdk": "1.32.1",
     "better-sqlite3": "13.0.3"
   },
   "engines": {
