@@ -31,7 +31,7 @@ Claude Code の auto モード（権限の自動判定）で実行している�
 
 ## 手順
 
-1. **本体の導入（script。1 コマンド）**: `env -u BASH_ENV -u ENV bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-runtime.sh"`。`${CLAUDE_PLUGIN_ROOT}` は、この文書の中で、plugin のディレクトリの絶対パスに置き換わっている（Bash の環境変数には入らないので、置き換わった文字列のまま実行する）。置き換わっていない（`${CLAUDE_PLUGIN_ROOT}` の文字のまま）ときは、止まる。**このコマンドは、タイムアウトを長め（最大 10 分）にして実行する**（初めて・版が変わったときは、約 150MB の取得を含む）。
+1. **本体の導入（script。1 コマンド）**: `env -u BASH_ENV -u ENV bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-runtime.sh"`。`${CLAUDE_PLUGIN_ROOT}` は、この文書の中で、plugin のディレクトリの絶対パスに置き換わっている（Bash の環境変数には入らないので、置き換わった文字列のまま実行する）。置き換わっていない（`${CLAUDE_PLUGIN_ROOT}` の文字のまま）ときは、止まる。**このコマンドは、タイムアウトを長め（最大 10 分）にして実行する**（初めて・版が変わったときは、約 41MB の取得〔展開後は約 130MB〕を含む）。
    `env -u BASH_ENV -u ENV` は、非対話の bash が script の前に読むファイル（環境変数 `BASH_ENV`・`ENV` が指すもの）を読ませないため（script の頭では、環境から取り込まれた関数を消し、`PATH` を OS の既定にする）。承認の画面では、`env -u BASH_ENV -u ENV bash` と、plugin の中の `scripts/install-runtime.sh` だけで、引数がない（`--restart-daemon` は、下の「版が変わり、常駐しているとき」だけ）ことを確かめてもらう。
    script がすること（順に。どこで失敗しても、`current` は古いまま。理由と次にすることを出して、0 以外で終わる）: 対象の確認（`Darwin arm64`・`git`〔Xcode の Command Line Tools〕）→ plugin の中の `checksums.json`・`plugin.json` から版・名前・sha256 を読み、版の一致・`repository` の固定値・形を確かめる → 同じ版が入って動くなら、何もせずに終わる → `curl`（https だけ）で `$HOME/.touryou/work` に取得 → sha256 を `checksums.json` と照合（**通るまで、展開も実行もしない**。合わなければ、取得したものを消す）→ quarantine の確かめ → `tar -t` の検査（先頭が `touryou-darwin-arm64/` だけ・絶対パス・`..` を断る）→ 一時ディレクトリに展開し、外を指すシンボリックリンク・quarantine を断る → `$HOME/.touryou/v<版>` に移す → 新しい版の `touryou-daemon --help` が動くことを確かめる → `current` を付け替える（新しいリンクを作ってから入れ替える）。
    出力の最後の行（`RESULT: …`）で分ける。その前の `CONFIG:`・`LAUNCHD:` の行は、設定・常駐の有無（成功のときだけ出る）:
@@ -39,7 +39,7 @@ Claude Code の auto モード（権限の自動判定）で実行している�
    - `RESULT: already`（同じ版がすでに入っている）・`RESULT: upgraded`（版を上げた。常駐なし）・`RESULT: upgraded-restarted`（版を上げ、常駐の daemon を起動し直した）: `CONFIG: present` なら、手順 2 を飛ばす。`LAUNCHD: present` なら、手順 3 も飛ばして、下の「版を上げたあと」へ。`upgraded` で daemon を手で動かしているなら、止めてから起動し直すよう伝える。
    - `RESULT: need-restart-consent`（終了コード 3。版が変わり、常駐している）: 何も変わっていない。下の「版が変わり、常駐しているとき」の問いを出す。
    - `RESULT: failed`（終了コード 1・2）: 止まる。出力の「止めました」「次にすること」を、そのまま伝える。
-   定型文（script を実行する前）: 「導入の script を実行します。初めてのときと、版が変わったときは、配布物を取得します（目安として約 150MB です。回線によっては、数分かかります）。同じ版がすでに入っているときは、取得しません。」実際に取得したか（取得した・取得済みのものを使い直した・何もしなかった）は、script の出力の行が知らせるので、終わったあとに、この定型文を繰り返さない（取得の大きさ・時間を、もう一度言わない）。
+   定型文（script を実行する前）: 「導入の script を実行します。初めてのときと、版が変わったときは、配布物を取得します（目安として約 41MB です。回線によっては、数分かかります）。同じ版がすでに入っているときは、取得しません。」実際に取得したか（取得した・取得済みのものを使い直した・何もしなかった）は、script の出力の行が知らせるので、終わったあとに、この定型文を繰り返さない（取得の大きさ・時間を、もう一度言わない）。
    定型文（Command Line Tools がない）: 「この Mac には、git（Xcode の Command Line Tools）が入っていません。Terminal で `xcode-select --install` を実行して、インストールが終わってから、もう一度 /setup を実行してください（ダウンロードに、ネットワークと時間が要ります。Xcode だけを入れているときは、Xcode を一度開いて、ライセンスに同意してください）。」
    定型文（`checksums.json` がない・版が違う）: 「この plugin の版には、配布物の情報が入っていません。この plugin を配布した COMCREATE（連絡先: contact@comcreate-info.com）に、確かめてください。」
    定型文（取得の失敗）: 「配布物を取得できませんでした。ネットワークの接続を確かめて、もう一度 /setup を実行してください。`404` と出たときは、plugin の版の配布物が公開されていません。plugin を新しい版にしてから（`claude plugin marketplace update touryou` と `claude plugin update touryou@touryou`）、もう一度実行してください。分からなければ、この plugin を配布した COMCREATE（連絡先: contact@comcreate-info.com）に相談してください。」
@@ -58,9 +58,9 @@ Claude Code の auto モード（権限の自動判定）で実行している�
    定型文: 「daemon の起動のしかたを選んでください。(1) 常駐にする（推奨。ログインしたら自動で動きます。macOS のログイン項目に 1 項目が追加されます） (2) 手で起動する（使うたびに Terminal で起動します）」
    **3-A. 常駐にする**（コマンドは 1 つ。`"$HOME/.touryou/current/bin/touryou"` の `launchd` サブコマンド）:
    1. **同意**: 次の定型文で尋ね、**はっきり「はい」のときだけ**進む。それ以外（「いいえ」・あいまい・質問）は、登録せずに 3-B へ進む。
-      定型文: 「これから、ログインしたときに daemon を自動で動かす設定（macOS の launchd。`$HOME/Library/LaunchAgents` に 1 つの plist を置きます）を入れます。システム設定のログイン項目に、node の 1 項目が追加されます。やめるときは /touryou:service の uninstall で外せます。入れてよいですか（はい／いいえ）」
+      定型文: 「これから、ログインしたときに daemon を自動で動かす設定（macOS の launchd。`$HOME/Library/LaunchAgents` に 1 つの plist を置きます）を入れます。システム設定のログイン項目に、開発元の名前（Node.js Foundation）で 1 項目が追加されます。やめるときは /touryou:service の uninstall で外せます。入れてよいですか（はい／いいえ）」
    2. **生成と登録・起動**: `"$HOME/.touryou/current/bin/touryou" launchd init && "$HOME/.touryou/current/bin/touryou" launchd apply --yes`（**1 の「はい」のあとだけ**。`--yes` は同意を取ったことの印）。`init` は、plist を `$HOME/.touryou` の下に作る（前の版の形〔run-daemon.sh〕なら、新しい形に置き換える）（`launchctl` は実行しない。既存と違う内容のファイルがあると、何も書かずに終了コード 1 で止まる）。`apply` は、plist を LaunchAgents に置き、daemon を読み込み、窓口の応答（未認証の whoami が 401）を待って、最後に状態を出す。`init`・`apply` は、どちらも先に `config.json` を daemon と同じ検査（`repoRoot`・`rootCwd`・`worktreeRoot` が今ある実パスか・`repoRoot` が git のリポジトリか）にかけ、通らなければ何もせずに終了コード 1 で止まる（「daemon の設定の検査を通らない」と、理由・直し方が出る。値は伏せてある）。そのときは、その文と直し方をそのまま伝え、設定を直すか、この `/setup` の手順 2 をやり直すよう案内して止まる（自分で `config.json` を書き換えない）。終了コードが 0 なら成功。0 でなければ、出力（状態・最後の失敗の行）をそのまま伝えて止まる。
-      定型文（成功）: 「常駐にしました。macOS から「ログイン項目が追加された」という通知が出て、システム設定のログイン項目に node の 1 項目が出ます。これは正常です（TouRyou に同梱した node で daemon を動かしているため）。前の版から上げた場合、sh・bash の項目が残ることがありますが、TouRyou はもう使っておらず、害はありません。」
+      定型文（成功）: 「常駐にしました。macOS から「ログイン項目が追加された」という通知が出て、システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」に、開発元の名前（Node.js Foundation）で 1 項目が出ます。TouRyou に同梱した node の署名の名前で、正常です。前の版から上げた場合、sh・bash の項目が残ることがありますが、TouRyou はもう使っておらず、害はありません。」
    3. **つながるのを待つ**: この会話の node は、配布物と daemon を見つけると、10 秒ほどで自動でつながる（Reconnect は要らない。plugin の中継〔`scripts/touryou-mcp-shim.sh`〕が、道具の一覧が変わったことを Claude Code に知らせる）。そのあと、利用者に `/touryou:start` を打ってもらい、接続を確かめる（この `/setup` の中で、node の道具を呼ばない）。`/start` で node の道具がまだ使えなければ、`/mcp` で `plugin:touryou:node` を選んで Reconnect する（Reconnect がない画面〔デスクトップ版など〕なら、Claude Code を起動し直す）。以後の確認・起動し直し・止める・外すは、`/touryou:service`。
    **3-B. 手で起動する**（別の端末で行う。起動の順序は daemon → 統合セッション）:
    - `"$HOME/.touryou/current/bin/touryou-daemon" --config "$HOME/.touryou/config.json"`（窓口の URL が出る）
@@ -158,4 +158,4 @@ script は、新しい版を置いて `--help` を確かめたあとで、今の
 | `Bad CPU type in executable` | 機種と配布物が違う（対象は arm64） | `uname -sm` が `Darwin arm64` か確かめる |
 | 手順 1 で、照合に失敗する | 取得の失敗、または配布物の差し替え | script は展開せず、取得したものを消している。取り直す。それでも合わなければ、この plugin を配布した COMCREATE（連絡先: contact@comcreate-info.com）に相談する |
 
-`$HOME/.touryou/work` に残るのは、取得した tar.gz（目安として約 150MB）だけ（次の同じ版の実行で、照合して使い直す。中身の検査に使う一覧のファイルは、script が一時ディレクトリに作り、成功・失敗・中断〔Ctrl-C〕のどれでも消す）。インストールの確認のあとは、**利用者が、自分で消してよい**（消さなくても動く。このコマンドは、`rm` を実行しない。script は、自分の一時ディレクトリと、照合に失敗した取得だけを消す）。古い版のディレクトリ（`$HOME/.touryou/v<前の版>`）も残る（戻すときのため。消すのは利用者）。
+`$HOME/.touryou/work` に残るのは、取得した tar.gz（目安として約 41MB）だけ（次の同じ版の実行で、照合して使い直す。中身の検査に使う一覧のファイルは、script が一時ディレクトリに作り、成功・失敗・中断〔Ctrl-C〕のどれでも消す）。インストールの確認のあとは、**利用者が、自分で消してよい**（消さなくても動く。このコマンドは、`rm` を実行しない。script は、自分の一時ディレクトリと、照合に失敗した取得だけを消す）。古い版のディレクトリ（`$HOME/.touryou/v<前の版>`）も残る（戻すときのため。消すのは利用者）。

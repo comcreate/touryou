@@ -112,7 +112,7 @@ claude plugin marketplace add comcreate/touryou
 
 ## Actions の artifact の容量
 
-`dist` の配布物は 1 回あたり約 150MB。Actions の artifact の保存容量を使い切らないように、次のようにしている。
+`dist` の配布物は 1 回あたり約 41MB（v0.1.1 の tar.gz が約 41MB。zip・mcpb・sha256 は合わせて 1MB 未満）。Actions の artifact の保存容量を使い切らないように、次のようにしている。
 
 - `dist-smoke.yml` は、PR では artifact を上げない（手で実行したときだけ、1 日の保存）。
 - `release.yml` の `dist` の artifact は 1 日の保存で、`release` が成功したときだけ、`cleanup` のジョブ（権限は `actions: write` だけ）が、その run の artifact を消す。`release` が失敗・skipped・cancelled のときは消さない（1 日の保存期限まで残るので、その間は `release` だけを再実行できる）。

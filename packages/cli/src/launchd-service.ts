@@ -415,7 +415,7 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
   const st = await statusLines(ctx);
   out.push("", ...st.lines, "");
   out.push(
-    "ログイン時に自動で動くようになった。システム設定の「一般」→「ログイン項目」に、node の項目が出るのは、正常（touryou に同梱の node で daemon を動かしている。docs/launchd.md）。",
+    "ログイン時に自動で動くようになった。システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」に、開発元の名前（Node.js Foundation）で 1 項目が出るのは、正常（touryou に同梱した node の署名の名前。docs/launchd.md）。",
   );
   return {
     exitCode: st.ok ? 0 : 1,

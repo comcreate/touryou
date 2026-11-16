@@ -159,7 +159,7 @@ describe("apply", () => {
       );
     }
     expect(r.stdout).toMatch(/whoami が 401/);
-    expect(r.stdout).toMatch(/「ログイン項目」に、node の項目が出るのは、正常/);
+    expect(r.stdout).toMatch(/開発元の名前（Node\.js Foundation）で 1 項目が出るのは、正常/);
     expect(r.stdout).not.toContain("run-daemon.sh");
     expect(r.stdout + r.stderr).not.toContain(TOKEN);
   });
