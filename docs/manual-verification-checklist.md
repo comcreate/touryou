@@ -229,9 +229,9 @@
 - **手順**（写して打てる形。`!` は使わない）:
   1. 上げる前の記録: `sudo sfltool dumpbtm >| "${HOME}/btm-before.txt"`
   2. 新しい版を入れる: `/touryou:setup`（常駐の起動し直しに「はい」と答える）
-  3. システム設定 → 一般 → ログイン項目 を開き、TouRyou に関わる項目の名前・数・「開発元を識別できない項目」かどうかを見る
+  3. システム設定 → 一般 → ログイン項目と機能拡張 →「バックグラウンドでの実行を許可」を開き、TouRyou に関わる項目の名前・数・「開発元を識別できない項目」かどうかを見る
   4. 上げたあとの記録と比べ: `sudo sfltool dumpbtm >| "${HOME}/btm-after.txt"; diff "${HOME}/btm-before.txt" "${HOME}/btm-after.txt" | grep -i -E 'touryou|node|/bin/sh|bash' | sed -E 's#/Users/[^/]+#~#g'`
-  5. 版をもう 1 回上げ（次の版が出たとき）、3・4 をもう一度見る（`node` の項目が増えないか）
+  5. 版をもう 1 回上げ（次の版が出たとき）、3・4 をもう一度見る（`Node.js Foundation` の項目が増えないか）
   6. `/touryou:service` の uninstall のあと、3 を見て、`sudo sfltool dumpbtm >| "${HOME}/btm-uninstalled.txt"; grep -i -c -E 'touryou|run-daemon' "${HOME}/btm-uninstalled.txt"` の数を見る
 - **期待する結果**: 2 のあと、ログイン項目（「バックグラウンドでの実行を許可」）の TouRyou の項目は、開発元の名前の `Node.js Foundation` の 1 つ。5 で増えない。6 で `Node.js Foundation` の項目が消える。v0.1.0 のときの `sh`・`bash` は残ることがある（害はない。`sfltool resetbtm` は、ほかのアプリの項目も消すので使わない）。
 - **後始末**: `rm -f "${HOME}/btm-before.txt" "${HOME}/btm-after.txt" "${HOME}/btm-uninstalled.txt"`（ユーザー名の入ったパスなどが入っているので、残さない）
