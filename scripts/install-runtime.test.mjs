@@ -516,7 +516,28 @@ test("特殊なファイル（FIFO・ハードリンク）・名前に制御文�
     assert.match(r.stdout, /RESULT: failed/, label);
     assert.ok(!existsSync(join(h, ".touryou", "v1.0.0")), label);
     assert.ok(!existsSync(join(h, ".touryou", "current")), label);
+    // tar -tv の一覧（check_types）の後で止まっても、一覧の一時ディレクトリを残さない（#61）
+    assert.deepEqual(
+      readdirSync(join(h, ".touryou")).filter((n) => n.startsWith(".lists.")),
+      [],
+      label,
+    );
   }
+});
+
+test("環境に LISTS があっても、早い die（手順 6 より前）で、そのパスを消さない（#61）", () => {
+  const tb = makeTarball("1.0.0");
+  const h = newHome();
+  const victim = join(tmp(), "victim");
+  mkdirSync(victim);
+  writeFileSync(join(victim, "keep.txt"), "x");
+  const r = install(makePlugin("1.0.0", tb), h, tb, [], {
+    env: { LISTS: victim },
+    extra: 'platform() { echo "Linux x86_64"; }',
+  });
+  assert.equal(r.status, 1, out(r));
+  assert.match(r.stdout, /RESULT: failed/);
+  assert.ok(existsSync(join(victim, "keep.txt")), "環境から入った LISTS のパスを消さない");
 });
 
 test("setup.md の呼び出し（env -u BASH_ENV -u ENV bash）では、BASH_ENV のファイルが読まれない。環境から取り込んだ関数（uname の上書き）は、script の頭で消える", {
