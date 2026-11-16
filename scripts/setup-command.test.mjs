@@ -168,6 +168,8 @@ test("限界の明記と承認の回数: 安全は人の確認と script の sha
   );
   assert.match(rules, /確かめのための別のコマンドは、走らせない/);
   assert.match(rules, /前もって別のコマンドで確かめない/);
+  assert.match(rules, /手順 1 を引数なしで 1 回[^\n]*`--restart-daemon` つきで 1 回、の 2 回/);
+  assert.match(body, /手順 2 のコマンドを、置き換える値だけ変えて、もう 1 回走らせてよい/);
   assert.match(rules, /`\/touryou:start` の中身を、代わりに実行しない/);
   assert.match(
     text,
