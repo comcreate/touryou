@@ -165,7 +165,7 @@ describe("apply", () => {
       );
     }
     expect(r.stdout).toMatch(/whoami が 401/);
-    expect(r.stdout).toMatch(/「ログイン項目」には「TouRyou」の 1 項目が出る。「開発元を識別できない項目」と出るのは、.*ad-hoc.*正常/);
+    expect(r.stdout).toMatch(/「TouRyou」の 1 項目が出る。「開発元を識別できない項目」と出るのは、.*ad-hoc.*正常/);
     expect(r.stdout).not.toContain("run-daemon.sh");
     expect(r.stdout + r.stderr).not.toContain(TOKEN);
   });

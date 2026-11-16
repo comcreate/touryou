@@ -301,7 +301,7 @@ test("症状表: 観察した症状のとおり（約 1 分後に終了）。原
   assert.match(body, /起動して約 1 分後に終了する/);
   assert.match(body, /`Killed: 9`、「開けません」 \| 原因は未確認/);
   assert.doesNotMatch(body, /管理者/);
-  assert.match(body, /目安として約 150MB/);
+  assert.match(body, /目安として約 41MB/);
   // 取得しないこともある書き方（同じ版がすでに入っているときは、取得しない。#62）
   assert.match(body, /初めてのときと、版が変わったときは、配布物を取得します/);
   assert.match(body, /同じ版がすでに入っているときは、取得しません/);

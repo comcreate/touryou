@@ -72,7 +72,7 @@ macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動か�
 | 外す | `touryou launchd uninstall --yes` | 止めてから、TouRyou が生成したと判定できる plist（古い形の `run-daemon.sh` も）だけを消す（`logs`・`state` は残す） |
 
 - `apply`・`uninstall` は、`--yes` がないと何もしない（永続化・削除なので、利用者の同意を取ってから付ける。`/setup`・`/touryou:service` は定型文で聞く）。
-- 読み込むと、システム設定の「一般」→「ログイン項目」に、項目が出ます。**見込みは `node` の 1 項目**です（TouRyou に同梱した nodejs.org の公式の node で、daemon を直に起こしているため）。開発元の表示は、node の署名によって変わりえます（推測。実機で確かめ中）。TouRyou の本体は署名しません。
+- 読み込むと、システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」に、**開発元の名前（Node.js Foundation）で 1 項目**が出ます（v0.1.1 の実機で確認）。TouRyou に同梱した nodejs.org の公式の node の署名の名前で、正常です（「開発元を識別できない項目」ではありません）。TouRyou の本体は署名しません。
 
 ### ログイン項目に `sh`・`bash` が残っているとき
 

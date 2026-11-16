@@ -436,7 +436,7 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
   const st = await statusLines(ctx);
   out.push("", ...st.lines, "");
   out.push(
-    "ログイン時に自動で動くようになった。システム設定の「一般」→「ログイン項目」には「TouRyou」の 1 項目が出る。「開発元を識別できない項目」と出るのは、TouRyou に同梱した node を TouRyou の名前で手元の署名（ad-hoc）にしたためで、正常（docs/launchd.md）。",
+    "ログイン時に自動で動くようになった。システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」に「TouRyou」の 1 項目が出る。「開発元を識別できない項目」と出るのは、TouRyou に同梱した node を TouRyou の名前で手元の署名（ad-hoc）にしたためで、正常（docs/launchd.md）。",
   );
   return {
     exitCode: st.ok ? 0 : 1,
