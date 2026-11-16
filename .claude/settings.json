@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "touryou": {
+      "source": {
+        "source": "github",
+        "repo": "comcreate/touryou"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "touryou@touryou": true
+  }
+}
