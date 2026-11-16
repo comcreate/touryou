@@ -683,3 +683,27 @@ test("常駐の版上げ・新しい版の apply が失敗し、新しい版の 
   assert.match(r.stdout, /current は v1\.0\.0 のまま、常駐の daemon は止まっている/);
   assert.ok(!lines(join(h, "calls.log")).includes("v0.9.0 launchd apply --yes"));
 });
+
+test("版上げの新しい道（設定の検査・init・apply・uninstall）のどこで止まっても、一覧の一時ディレクトリ（.lists.*）を残さない（#61）", () => {
+  // uninstall は、apply が失敗したあとの戻しの道でだけ呼ばれる
+  const fails = [
+    ["check-config"],
+    ["launchd init"],
+    ["launchd apply"],
+    ["launchd apply", "launchd uninstall"],
+  ];
+  for (const fs of fails) {
+    const f = fs.join("+");
+    const h = managedHome();
+    const tb = makeTarball("1.0.0");
+    const arms = fs.map((x) => `*"${x}"*) return 1 ;;`).join(" ");
+    const extra = `run_masked() { case "$*" in ${arms} esac; "$@"; }`;
+    const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"], { extra });
+    assert.notEqual(r.status, 0, `${f}: ${out(r)}`);
+    assert.deepEqual(
+      readdirSync(join(h, ".touryou")).filter((n) => n.startsWith(".lists.")),
+      [],
+      f,
+    );
+  }
+});
