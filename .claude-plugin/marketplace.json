@@ -10,11 +10,11 @@
     {
       "name": "touryou",
       "description": "統合セッション 1 対 作業セッション n の木構造で Claude セッションを束ねるオーケストレーター。macOS（Apple Silicon）のみ対応。daemon などの本体は /setup で GitHub Release から取得する",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "source": {
         "source": "archive",
-        "url": "https://github.com/comcreate/touryou/releases/download/v0.1.1/touryou-0.1.1.zip",
-        "sha256": "dcd7a1a90f328312fabb7e43189ca1132dc57bfc8339e5ee90197b4de5c1dd53"
+        "url": "https://github.com/comcreate/touryou/releases/download/v0.1.2/touryou-0.1.2.zip",
+        "sha256": "2c26bc5c40becd66d61e94d60b5c2f94a14113c541272e26b0fcc2c4f36c5fac"
       }
     }
   ]
