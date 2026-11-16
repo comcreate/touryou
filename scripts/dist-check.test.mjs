@@ -44,6 +44,11 @@ const makeTarball = (extra) => {
   mkdirSync(pnpmNm, { recursive: true });
   writeFileSync(join(top, "bin", "touryou-daemon"), "#!/bin/sh\nexit 0\n");
   chmodSync(join(top, "bin", "touryou-daemon"), 0o755);
+  // launchd の plist が直に指すもの（#64）
+  writeFileSync(join(top, "bin", "node"), "");
+  mkdirSync(join(top, "lib", "dist"), { recursive: true });
+  writeFileSync(join(top, "lib", "dist", "bin.js"), "");
+  writeFileSync(join(top, "lib", "dist-version"), "0.0.0\n");
   // 中を指す、正しいリンク（dist-build.sh の出力にもある形）
   symlinkSync(
     "../../@touryou+core@file+packages+core/node_modules/@touryou/core",
@@ -93,4 +98,22 @@ test("dist-check: 写しを作らず、install-runtime.sh を source して関�
   const src = spawnSync("cat", [SCRIPT], { encoding: "utf8" }).stdout;
   assert.match(src, /\. "\$\{here\}\/\.\.\/plugin\/scripts\/install-runtime\.sh"/);
   assert.doesNotMatch(src, /^check_links\(\)/m);
+});
+
+test("dist-check: launchd が直に指すもの（bin/node・lib/dist/bin.js・lib/dist-version）がなければ赤（#64）", () => {
+  for (const f of [
+    ["bin", "node"],
+    ["lib", "dist", "bin.js"],
+    ["lib", "dist-version"],
+  ]) {
+    const r = run(makeTarball((top) => rmSync(join(top, ...f))));
+    assert.equal(r.status, 1, f.join("/"));
+    assert.match(r.stderr, new RegExp(`launchd が指す ${f.join("/").replace(".", "\\.")} がない`));
+  }
+});
+
+test("dist-check: 版の印が、配布物の名前の版と違えば赤（#64）", () => {
+  const r = run(makeTarball((top) => writeFileSync(join(top, "lib", "dist-version"), "9.9.9\n")));
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /版の印（9\.9\.9）が、配布物の名前の版（0\.0\.0）と違う/);
 });

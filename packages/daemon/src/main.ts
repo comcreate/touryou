@@ -18,6 +18,11 @@ export interface MainDeps {
   readonly stderr: (text: string) => void;
   /** 最終削除の後に、追記のみの保証を確かめられなかったとき。呼び出し側は daemon を止める（fail closed）。 */
   readonly onFatal?: (cause: string) => void;
+  /**
+   * `--check-config` のときの、repoRoot が git のリポジトリかの確かめ（既定は bin.ts が git-ports の `checkGitRepo` を渡す）。
+   * 渡さなければ、この確かめを省く。
+   */
+  readonly checkRepo?: (repoRoot: string) => Promise<Result<undefined, Failure>>;
 }
 
 export interface MainResult {
@@ -28,9 +33,12 @@ export interface MainResult {
 
 const USAGE = `使い方:
   touryou-daemon --config <設定ファイルの絶対パス> [--port <1〜65535>]
+  touryou-daemon --check-config --config <設定ファイルの絶対パス>
+  --check-config  起動せず、設定の読み込みと実パスの検査（repoRoot・rootCwd・worktreeRoot があり、実パスで、
+                  repoRoot が git のリポジトリ）だけを行う（touryou launchd init・apply が、常駐にする前に使う）
   --port      窓口のポート（設定の port より優先。どちらもなければ、前回のポートを stateDir に保存して使い続ける）
   -h, --help  この使い方を表示する（終了コード 0）
-終了コード: 0 起動した（または --help） / 1 起動に失敗 / 2 引数の誤り`;
+終了コード: 0 起動した（または --help・検査が通った） / 1 起動に失敗 / 2 引数の誤り`;
 
 const formatFailure = (f: Failure): string =>
   `失敗 [${f.code}]: ${f.cause}\n次の操作:\n${f.nextActions.map((a) => `  - ${a}`).join("\n")}\n`;
@@ -68,7 +76,8 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<Mai
     deps.stdout(`${USAGE}\n`);
     return { exitCode: 0 };
   }
-  const parsed = parseArgs(argv);
+  const checkOnly = argv.includes("--check-config");
+  const parsed = parseArgs(argv.filter((a) => a !== "--check-config"));
   if (!parsed.ok) {
     deps.stderr(`${parsed.error}\n${USAGE}\n`);
     return { exitCode: 2 };
@@ -84,6 +93,17 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<Mai
   if (!worktree.ok) {
     deps.stderr(formatFailure(worktree.error));
     return { exitCode: 1 };
+  }
+  if (checkOnly) {
+    // 起動しない（窓口・state に触れない）。git の口を作れた（実パスの検査が通った）うえで、repoRoot が git のリポジトリか
+    const repo =
+      deps.checkRepo === undefined ? undefined : await deps.checkRepo(config.value.repoRoot);
+    if (repo !== undefined && !repo.ok) {
+      deps.stderr(formatFailure(repo.error));
+      return { exitCode: 1 };
+    }
+    deps.stdout("設定の検査が通った\n");
+    return { exitCode: 0 };
   }
   const made = createDaemon(config.value, {
     worktree: worktree.value,

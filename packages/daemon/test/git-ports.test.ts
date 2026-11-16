@@ -869,3 +869,19 @@ describe("保管の鍵と持ち主", () => {
     expect(l.ok && l.value.items.length).toBe(2);
   });
 });
+
+describe("checkGitRepo（--check-config の、git のリポジトリの検査）", () => {
+  it("git のリポジトリなら通り、そうでなければ invalidConfig", async () => {
+    const { checkGitRepo } = await import("../src/git-ports.js");
+    const { mkdtempSync, realpathSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { execFileSync } = await import("node:child_process");
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), "touryou-checkrepo-")));
+    const no = await checkGitRepo(dir);
+    expect(no.ok).toBe(false);
+    if (!no.ok) expect(no.error.code).toBe("invalidConfig");
+    execFileSync("git", ["init", "-q"], { cwd: dir });
+    expect((await checkGitRepo(dir)).ok).toBe(true);
+  });
+});

@@ -6,6 +6,7 @@
  * - 捕捉されない例外・拒否された Promise は、標準エラーに記録して、終了コード 1 で終わる。
  */
 
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { resolveVersion, versionLine } from "@touryou/core";
 import { loadWorktreePorts } from "./loaders.js";
@@ -24,8 +25,16 @@ if (process.argv[2] === "--version" || process.argv[2] === "-v") {
       return "0.0.0";
     }
   })();
+  // tar.gz の配布物の版の印（lib/dist-version。launchd が同梱の node で直に起こすときは、起動スクリプトの環境変数がない。#64）
+  const distVersion = (() => {
+    try {
+      return readFileSync(new URL("../dist-version", import.meta.url), "utf8");
+    } catch {
+      return undefined;
+    }
+  })();
   process.stdout.write(
-    `${versionLine(resolveVersion({ packageVersion: pkgVersion, env: process.env }))}\n`,
+    `${versionLine(resolveVersion({ packageVersion: pkgVersion, env: process.env, ...(distVersion === undefined ? {} : { distVersion }) }))}\n`,
   );
   process.exit(0);
 }
@@ -48,6 +57,8 @@ const result = await main(process.argv.slice(2), {
     fatalStop?.();
   },
   loadWorktreePorts,
+  // git の口と同じく、使うときに読み込む
+  checkRepo: async (repoRoot) => (await import("./git-ports.js")).checkGitRepo(repoRoot),
   stdout: (t) => process.stdout.write(t),
   stderr: (t) => process.stderr.write(t),
 });
