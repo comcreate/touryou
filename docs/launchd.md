@@ -74,11 +74,10 @@ macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動か�
 - `apply`・`uninstall` は、`--yes` がないと何もしない（永続化・削除なので、利用者の同意を取ってから付ける。`/setup`・`/touryou:service` は定型文で聞く）。
 - 読み込むと、システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」に、**TouRyou**（1 項目）が出ます（#73）。「開発元を識別できない項目」と出るのは、TouRyou に同梱した node を TouRyou の名前で手元の署名（ad-hoc）にしたためで、正常です。plist は `current/TouRyou.app/Contents/MacOS/TouRyou`（同梱の node。`bin/node` はそこへのリンク）で daemon を起こし、`AssociatedBundleIdentifiers` に `com.comcreate-info.touryou` を入れます。`touryou launchd apply` は TouRyou.app を LaunchServices に登録し（`lsregister -f`）、`uninstall` は登録を解きます（`lsregister -u`）。v0.1.1 では「Node.js Foundation」の項目でした。Apple の開発者の署名（Developer ID）は、まだ使いません（ADR）。
 
-### ログイン項目に `sh`・`bash` が残っているとき
+### ログイン項目の `sh`・`bash` について
 
-- v0.1.0 までは、plist が `run-daemon.sh`（`#!/bin/sh`）を起こし、それがさらに起動スクリプトを起こしていたので、ログイン項目に `run-daemon.sh`・`sh`・`bash` の 3 つが「開発元を識別できない項目」として出ました（macOS の `/bin/sh` は、`bash` などを呼び直す入口です）。マルウェアではありません。
-- `sh`・`bash` は、Apple が署名した macOS のプログラム（チーム ID がないので、開発元の名前が出ない）。確かめ方: `codesign -dvv /bin/sh 2>&1 | grep -E '^(Identifier|Authority|TeamIdentifier)'`（`Identifier=com.apple.sh`・`Authority=Software Signing`・`TeamIdentifier=not set`）。スイッチはオフにしない（常駐を入れ直したときに止まるおそれがある）。
-- 新しい版へ上げたあと（引っ越しのあと）、および `uninstall` のあとも、`sh`・`bash` の項目が残ることがあります（11-15 の実機で、`uninstall` のあとに残った）。TouRyou は、もうそれらを起こしません。**残っていても害はありません**。
+- v0.1.0 までは、plist が `run-daemon.sh`（`#!/bin/sh`）を起こしていたので、ログイン項目に `run-daemon.sh` の 1 項目が「開発元を識別できない項目」として出ました。マルウェアではありません。新しい版へ上げると（引っ越しのあと）、この項目は消えます。
+- ログイン項目に `sh`・`bash` が出ていても、それは **TouRyou の項目ではありません**（TouRyou を入れる前からある、ほかのものの項目です。11-16 の利用者の確かめ）。TouRyou のために触る必要はありません。
 - `sfltool resetbtm` は、ログイン項目の記録を**ほかのアプリの分まで全部**消してしまう（再起動が要り、各アプリの許可を取り直すことになる）ので、**勧めません**。
 - 手で行うときは、`init` が出す命令（`cp` と `launchctl bootstrap "gui/$(id -u)" …`・`launchctl bootout "gui/$(id -u)/<Label>"`）を、そのまま使える。
 

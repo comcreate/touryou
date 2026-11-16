@@ -125,7 +125,7 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 - `--org` を省略すると、plist の Label は、組織のドメインを含まない `touryou.daemon`。自分のドメインにしたいときは `--org com.example` のように付けると `com.example.touryou.daemon` になる。不正な値（小文字の英数字とハイフンのラベルを、ドットで 2 つ以上つないだ形でない）は拒否する。
 - 秘密は扱わない（子の認証を外した（CLI の子は、親のセッションが `claude --bg` で起動する））。常駐は daemon だけ（子用の HTTP の `touryou-mcp` の常駐は外した）。
 - 終了コード: 0 成功 / 1 前提（`/setup`）がない・設定の検査が通らない・既存と違う・権限の確認で問題 / 2 引数の誤り。
-- 読み込むと、システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」に、**TouRyou**（1 項目）が出る。「開発元を識別できない項目」と出るのは、TouRyou に同梱した node を TouRyou の名前で手元の署名（ad-hoc）にしたためで、正常（apply は TouRyou.app を LaunchServices に登録し、uninstall は解く）（`docs/launchd.md` の 3。古い形のときに出た `sh`・`bash` が残ることがある）。
+- 読み込むと、システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」に、**TouRyou**（1 項目）が出る。「開発元を識別できない項目」と出るのは、TouRyou に同梱した node を TouRyou の名前で手元の署名（ad-hoc）にしたためで、正常（apply は TouRyou.app を LaunchServices に登録し、uninstall は解く）（`docs/launchd.md` の 3。ログイン項目の `sh`・`bash` は TouRyou の項目ではない）。
 - 手順の全体と、限界（ACL・`ps` で環境が読める点など）は、[`docs/launchd.md`](launchd.md) の「1. 生成する」。
 
 ## 常駐の操作 `touryou launchd apply|status|restart|stop|uninstall`

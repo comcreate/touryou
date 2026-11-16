@@ -233,6 +233,6 @@
   4. 上げたあとの記録と比べ: `sudo sfltool dumpbtm >| "${HOME}/btm-after.txt"; diff "${HOME}/btm-before.txt" "${HOME}/btm-after.txt" | grep -i -E 'touryou|node|/bin/sh|bash' | sed -E 's#/Users/[^/]+#~#g'`
   5. 版をもう 1 回上げ（次の版が出たとき）、3・4 をもう一度見る（`TouRyou` の項目が増えないか）
   6. `/touryou:service` の uninstall のあと、3 を見て、`sudo sfltool dumpbtm >| "${HOME}/btm-uninstalled.txt"; grep -i -c -E 'touryou|run-daemon' "${HOME}/btm-uninstalled.txt"` の数を見る
-- **期待する結果**: 2 のあと、ログイン項目（「バックグラウンドでの実行を許可」）の TouRyou の項目は `TouRyou` の 1 つ（「開発元を識別できない項目」と出るのは ad-hoc の署名のためで正常。アイコンが TouRyou の絵か汎用の絵かを記録する。#73）。5 で増えない。6 で `TouRyou` の項目が消える。v0.1.1 のときの `Node.js Foundation` の項目は、上げたあとに消えるかを記録する。v0.1.0 のときの `sh`・`bash` は残ることがある（害はない。`sfltool resetbtm` は、ほかのアプリの項目も消すので使わない）。
+- **期待する結果**: 2 のあと、ログイン項目（「バックグラウンドでの実行を許可」）の TouRyou の項目は `TouRyou` の 1 つ（「開発元を識別できない項目」と出るのは ad-hoc の署名のためで正常。アイコンが TouRyou の絵か汎用の絵かを記録する。#73）。5 で増えない。6 で `TouRyou` の項目が消える。v0.1.1 のときの `Node.js Foundation` の項目は、上げたあとに消えるかを記録する。v0.1.0 のときの `run-daemon.sh` の項目は消える。`sh`・`bash` の項目は TouRyou の項目ではないので、見なくてよい（`sfltool resetbtm` は、ほかのアプリの項目も消すので使わない）。
 - **後始末**: `rm -f "${HOME}/btm-before.txt" "${HOME}/btm-after.txt" "${HOME}/btm-uninstalled.txt"`（ユーザー名の入ったパスなどが入っているので、残さない）
 - **結果の返し方**: 項目の名前と数、「開発元を識別できない項目」かどうかだけを返す。`btm-*.txt` の中身はそのまま貼らない（ユーザー名の入ったパスなどが入る）。

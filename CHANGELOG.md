@@ -11,6 +11,7 @@
 
 ### 内部の変更
 
+- **ログイン項目の sh・bash の説明を直す**: ログイン項目の `sh`・`bash` は TouRyou の項目ではなかった（入れる前からある、ほかのものの項目。v0.1.0 の常駐が出していたのは `run-daemon.sh` の 1 つ）ので、`docs/launchd.md`・`docs/cli.md`・設計書・手の確かめの文書を直した。0.1.1 の節は、そのときの記録として変えていない。
 - **v0.1.0・v0.1.1 の形の常駐からの引っ越しの試験**（#76。#73）: `touryou launchd init`・`apply`・`uninstall` が、v0.1.0 の形（`run-daemon.sh`）と v0.1.1 の形（`current/bin/node`）の生成物を、バイト単位で同じときだけ置き換える・外すことを試験で守る。ad-hoc の署名と Developer ID の判断を ADR に書いた。
 
 ### 上げ方
@@ -25,7 +26,7 @@ v0.1.0・v0.1.1 を入れている Mac で、次のとおり（細部は `docs/s
    ```
 
 2. 新しいセッションで `/touryou:setup` を実行する（本体が v0.1.2 に入れ替わる）。セッションの始まりに、本体と plugin の版の違いの知らせが出ることもあるが、出なくても実行する。
-3. 常駐（launchd）させているときは、`/touryou:setup` が daemon の起動し直しの同意を聞くので、「はい」と答える（「いいえ」なら何も変えずに止まる）。「はい」のあと、常駐の plist が新しい形（TouRyou.app の中の node で daemon を起こす。#73）に置き換わり、ログイン項目が「Node.js Foundation」（v0.1.1）から「**TouRyou**」の 1 項目に変わる。「開発元を識別できない項目」と出るのは、手元の署名（ad-hoc）のためで正常。v0.1.0 から上げたときは `run-daemon.sh` が消え、`sh`・`bash` の項目は残ることがあるが、害はない。plist を手で直していたときは、置き換えずに止まるので、`docs/launchd.md` の「古い形からの引っ越し」に従う。
+3. 常駐（launchd）させているときは、`/touryou:setup` が daemon の起動し直しの同意を聞くので、「はい」と答える（「いいえ」なら何も変えずに止まる）。「はい」のあと、常駐の plist が新しい形（TouRyou.app の中の node で daemon を起こす。#73）に置き換わり、ログイン項目が「Node.js Foundation」（v0.1.1）から「**TouRyou**」の 1 項目に変わる。「開発元を識別できない項目」と出るのは、手元の署名（ad-hoc）のためで正常。v0.1.0 から上げたときは `run-daemon.sh` の項目が消える（`sh`・`bash` の項目は TouRyou の項目ではない）。plist を手で直していたときは、置き換えずに止まるので、`docs/launchd.md` の「古い形からの引っ越し」に従う。
 4. 上げる前から開いている統合セッションは、古い版の `touryou-mcp` のまま動き続ける。`/mcp` で `plugin:touryou:node` を選んで Reconnect する（Reconnect がない画面なら、Claude Code を起動し直す）。そのあと `/touryou:start` で、接続を確かめる。
 
 ## 0.1.1（2026-11-16）

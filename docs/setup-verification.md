@@ -363,7 +363,7 @@ ls "${HOME}/Library/LaunchAgents/" | grep touryou
 ```
 
   `current` が `…/v${V}/touryou-darwin-arm64`、常駐が running。
-- 前の版が v0.1.0 のときは（#64）、plist が新しい形になっている（`plutil -p "${HOME}/Library/LaunchAgents/touryou.daemon.plist"` の `ProgramArguments` の先頭が `…/current/TouRyou.app/Contents/MacOS/TouRyou`。前の版が v0.1.1〔先頭が `…/current/bin/node`〕のときも、同じ新しい形になる。`--org` 付きのときは、その名前の plist）。`"${HOME}/.touryou/bin/run-daemon.sh"` が消えている。システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」で、`run-daemon.sh` が消え、**TouRyou**（1 項目。「開発元を識別できない項目」と出るのは、ad-hoc の署名のためで正常）が出る（`sh`・`bash` は残ることがある。`docs/launchd.md`）。
+- 前の版が v0.1.0 のときは（#64）、plist が新しい形になっている（`plutil -p "${HOME}/Library/LaunchAgents/touryou.daemon.plist"` の `ProgramArguments` の先頭が `…/current/TouRyou.app/Contents/MacOS/TouRyou`。前の版が v0.1.1〔先頭が `…/current/bin/node`〕のときも、同じ新しい形になる。`--org` 付きのときは、その名前の plist）。`"${HOME}/.touryou/bin/run-daemon.sh"` が消えている。システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」で、`run-daemon.sh` が消え、**TouRyou**（1 項目。「開発元を識別できない項目」と出るのは、ad-hoc の署名のためで正常）が出る（`sh`・`bash` の項目は TouRyou の項目ではない。`docs/launchd.md`）。
 - **S13**: もう一度 `claude --plugin-dir "${W}/plugin"` で `/touryou:setup`。`RESULT: already`。
 
 後片付け: `rm -rf "${W}"`。上げた本体（`current` が新しい版）と常駐は、そのままでよい（marketplace の PR のマージのあと、update で plugin も同じ版になる）。通らなければ、marketplace の PR をマージしない（`docs/release.md` の「やり直す」）。結果は、リリースの準備の PR か Issue に書く。
