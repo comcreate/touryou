@@ -494,7 +494,7 @@ describe("launchd の操作の回帰", () => {
 });
 
 describe("古い形（v0.1.0 まで。run-daemon.sh を起こす plist）からの引っ越し（#64）", () => {
-  /** v0.1.1 の init・apply が置いたのと同じ、古い形の生成物（.touryou/launchd・bin・LaunchAgents）。 */
+  /** v0.1.0 の init・apply が置いたのと同じ、古い形の生成物（.touryou/launchd・bin・LaunchAgents）。 */
   function legacyHome(path = "/usr/bin:/bin:/usr/sbin:/sbin") {
     const h = makeHome();
     const agents = join(h.home, "Library", "LaunchAgents");

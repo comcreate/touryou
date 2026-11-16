@@ -2,10 +2,31 @@
 
 ## 未公開
 
+## 0.1.2（2026-11-16）
+
 ### 利用者に見える変更
 
-- **常駐のログイン項目を「TouRyou」の名前で出す**（#73）: macOS の配布物に `TouRyou.app` を置き、同梱の node を `Contents/MacOS/TouRyou` に入れて、入れ物ごと手元の署名（ad-hoc）にした（`bin/node` はそこへのリンクで、node は 1 つ）。`touryou launchd init` の plist は `current/TouRyou.app/Contents/MacOS/TouRyou` で daemon を起こし、`AssociatedBundleIdentifiers`（`com.comcreate-info.touryou`）を付ける。`apply` は TouRyou.app を LaunchServices に登録し、`uninstall` は解く。v0.1.1 の形（`current/bin/node`）・v0.1.0 の形（`run-daemon.sh`）の生成物は、バイト単位で同じときだけ置き換える。ログイン項目は「TouRyou」の 1 項目で、「開発元を識別できない項目」と出るのは ad-hoc の署名のためで正常。Developer ID の署名は、本番の正式リリースの前に見直す（ADR）。
-- **/setup などの案内の、取得の大きさとログイン項目の名前を実際に合わせる**（#74）: 取得の大きさを「約 150MB」から「約 41MB」（v0.1.1 の tar.gz。展開後は約 130MB）にした。常駐を入れたときのログイン項目を「node の 1 項目」から「開発元の名前（Node.js Foundation）で 1 項目」にした（同梱の node の署名の名前で、正常）。導入の script の知らせの文・`touryou launchd init` の知らせの文・`README.md`・`docs/cli.md`・`docs/launchd.md`・`docs/release.md`・手の確かめの一覧も合わせた。
+- **常駐のログイン項目を「TouRyou」の名前で出す**（#76。#73）: macOS の配布物に `TouRyou.app` を置き、同梱の node を `Contents/MacOS/TouRyou` に入れて、入れ物ごと手元の署名（ad-hoc）にした（`bin/node` はそこへのリンクで、node は 1 つ）。`touryou launchd init` の plist は `current/TouRyou.app/Contents/MacOS/TouRyou` で daemon を起こし、`AssociatedBundleIdentifiers`（`com.comcreate-info.touryou`）を付ける。`apply` は TouRyou.app を LaunchServices に登録し、`uninstall` は解く。v0.1.1 の形（`current/bin/node`）・v0.1.0 の形（`run-daemon.sh`）の生成物は、バイト単位で同じときだけ置き換える。ログイン項目は「TouRyou」の 1 項目で、「開発元を識別できない項目」と出るのは ad-hoc の署名のためで正常。Developer ID の署名は、本番の正式リリースの前に見直す（ADR）。
+- **/setup などの案内の、取得の大きさとログイン項目の名前を実際に合わせる**（#75。#74）: 取得の大きさを「約 150MB」から「約 41MB」（v0.1.1 の tar.gz。展開後は約 130MB）にした。常駐を入れたときのログイン項目の名前を、実際の出方に合わせた（v0.1.2 からは「TouRyou」の 1 項目。#73）。導入の script の知らせの文・`touryou launchd init` の知らせの文・`README.md`・`docs/cli.md`・`docs/launchd.md`・`docs/release.md`・手の確かめの一覧も合わせた。
+
+### 内部の変更
+
+- **v0.1.0・v0.1.1 の形の常駐からの引っ越しの試験**（#76。#73）: `touryou launchd init`・`apply`・`uninstall` が、v0.1.0 の形（`run-daemon.sh`）と v0.1.1 の形（`current/bin/node`）の生成物を、バイト単位で同じときだけ置き換える・外すことを試験で守る。ad-hoc の署名と Developer ID の判断を ADR に書いた。
+
+### 上げ方
+
+v0.1.0・v0.1.1 を入れている Mac で、次のとおり（細部は `docs/setup-verification.md` の C と、`/touryou:setup` の手順〔`plugin/commands/setup.md`〕）。
+
+1. plugin を上げる。
+
+   ```sh
+   claude plugin marketplace update touryou
+   claude plugin update touryou@touryou
+   ```
+
+2. 新しいセッションで `/touryou:setup` を実行する（本体が v0.1.2 に入れ替わる）。セッションの始まりに、本体と plugin の版の違いの知らせが出ることもあるが、出なくても実行する。
+3. 常駐（launchd）させているときは、`/touryou:setup` が daemon の起動し直しの同意を聞くので、「はい」と答える（「いいえ」なら何も変えずに止まる）。「はい」のあと、常駐の plist が新しい形（TouRyou.app の中の node で daemon を起こす。#73）に置き換わり、ログイン項目が「Node.js Foundation」（v0.1.1）から「**TouRyou**」の 1 項目に変わる。「開発元を識別できない項目」と出るのは、手元の署名（ad-hoc）のためで正常。v0.1.0 から上げたときは `run-daemon.sh` が消え、`sh`・`bash` の項目は残ることがあるが、害はない。plist を手で直していたときは、置き換えずに止まるので、`docs/launchd.md` の「古い形からの引っ越し」に従う。
+4. 上げる前から開いている統合セッションは、古い版の `touryou-mcp` のまま動き続ける。`/mcp` で `plugin:touryou:node` を選んで Reconnect する（Reconnect がない画面なら、Claude Code を起動し直す）。そのあと `/touryou:start` で、接続を確かめる。
 
 ## 0.1.1（2026-11-16）
 

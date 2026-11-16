@@ -476,7 +476,7 @@ describe("plist の ProgramArguments（実際に走らせる）", () => {
 });
 
 describe("古い形（v0.1.0 まで。run-daemon.sh を起こす plist）からの引っ越し（#64）", () => {
-  /** v0.1.1 の init が生成したのと同じ、古い形の生成物を置く。 */
+  /** v0.1.0 の init が生成したのと同じ、古い形の生成物を置く。 */
   const legacy = (
     h: { home: string; base: string },
     label: string,

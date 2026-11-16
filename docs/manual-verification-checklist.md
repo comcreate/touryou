@@ -225,7 +225,7 @@
 
 ## L. 常駐のログイン項目（Issue #64）
 
-- **前提**: v0.1.1 の形（`run-daemon.sh` を起こす plist）で常駐している Mac。zsh（`noclobber` でも動くように、上書きは `>|` で書く）。`sfltool dumpbtm` は管理者のパスワードを聞くことがある。
+- **前提**: v0.1.1 の形（`current/bin/node` を起こす plist）か v0.1.0 の形（`run-daemon.sh` を起こす plist）で常駐している Mac。zsh（`noclobber` でも動くように、上書きは `>|` で書く）。`sfltool dumpbtm` は管理者のパスワードを聞くことがある。
 - **手順**（写して打てる形。`!` は使わない）:
   1. 上げる前の記録: `sudo sfltool dumpbtm >| "${HOME}/btm-before.txt"`
   2. 新しい版を入れる: `/touryou:setup`（常駐の起動し直しに「はい」と答える）
