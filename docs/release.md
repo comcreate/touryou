@@ -40,6 +40,8 @@ claude plugin marketplace add comcreate/touryou
    )
    ```
 
+   tag を作れる人は、リポジトリの決まり（ruleset）で限られている。tag は、決まりを越えてよい管理者が、手元の端末から付ける（v0.1.1・v0.1.2 もそうした）。push のときに `remote: Bypassed rule violations for refs/tags/v<版>:` と `- Cannot create ref due to creations being restricted.` の行が出ても、そのあとに `* [new tag]` が出れば成功（管理者が決まりを越えたという知らせ）。Claude Code のクラウドのセッションから tag を push すると、HTTP 403 で断られる。回り込まずに、管理者に頼む。
+
    push が拒否されても、手元にタグが残る。やり直しは、権限を直してから、もう一度実行する（手元のタグが origin/main を指していれば、そのまま push に進む。`-f` は使わない）。
 
 4. `.github/workflows/release.yml` が、`plugin/` の中身を根にした zip（`touryou-<版>.zip`）と、その `.sha256` を Release に付ける。sha256 と URL は、実行の Summary に出る。Release は不変に扱う（付け直し〔`--clobber`〕はしない。Release がすでにあれば、ワークフローは失敗する。やり直し方は、下の「やり直す」）。
