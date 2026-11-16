@@ -276,7 +276,7 @@ main() {
   if [ -f "${file}" ] && [ "$(sha256_of "${file}")" = "${sha}" ]; then
     say "取得済みの配布物が、checksums.json と一致しました（取り直しません）"
   else
-    say "配布物を取得します（v${ver}。目安として約 150MB。数分かかることがあります）"
+    say "配布物を取得します（v${ver}。目安として約 41MB。数分かかることがあります）"
     rm -f "${part}"
     if ! fetch "${REPO_URL}/releases/download/v${ver}/${name}" "${part}"; then
       rm -f "${part}"
