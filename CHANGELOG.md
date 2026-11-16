@@ -11,7 +11,8 @@
 
 ### 内部の変更
 
-- **ログイン項目の sh・bash の説明を直す**: ログイン項目の `sh`・`bash` は TouRyou の項目ではなかった（入れる前からある、ほかのものの項目。v0.1.0 の常駐が出していたのは `run-daemon.sh` の 1 つ）ので、`docs/launchd.md`・`docs/cli.md`・設計書・手の確かめの文書を直した。0.1.1 の節は、そのときの記録として変えていない。
+- **hono の例外の後片付け**（#51）: @hono/node-server 2.1.6 が公開から 14 日を過ぎるので、#71 で足した `pnpm-workspace.yaml` の `minimumReleaseAgeExclude` の例外を消した（入る版は変わらない）。
+- **ログイン項目の sh・bash の説明を直す**: ログイン項目の `sh`・`bash` は TouRyou の項目ではなかった（入れる前からある、ほかのものの項目。v0.1.0 の常駐が出していたのは `run-daemon.sh` の 1 つ）ので、`docs/launchd.md`・`docs/cli.md`・設計書・手の確かめの文書と、`/touryou:setup` の定型文を直した。0.1.1 の節は、そのときの記録として変えていない。
 - **v0.1.0・v0.1.1 の形の常駐からの引っ越しの試験**（#76。#73）: `touryou launchd init`・`apply`・`uninstall` が、v0.1.0 の形（`run-daemon.sh`）と v0.1.1 の形（`current/bin/node`）の生成物を、バイト単位で同じときだけ置き換える・外すことを試験で守る。ad-hoc の署名と Developer ID の判断を ADR に書いた。
 
 ### 上げ方
