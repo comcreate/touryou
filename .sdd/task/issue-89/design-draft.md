@@ -45,7 +45,7 @@ Issue #89 の技術設計の下書き（一時的。実装が終わったら、�
 | 束ね | esbuild（開発の依存に既にある） | いまの固定の版 | `graph.js` を 1 つの文字列にして埋め込む |
 | 自動の配置 | 自前の純粋な関数 `layoutOf` | — | elkjs（EPL/GPL・8.2 MB）を使わない |
 
-- R0 が公式の作りで通らない（area のプラグインの描く合図で、自前の要素を描けない）と PR-3 で分かったら、Lit（`rete-lit-plugin`）に替える（E1）。そのときは `adoptedStyleSheets` が CSP に当たらないかを、PR-3 の Playwright で確かめる。
+- R0 が公式の作りで通らない（area のプラグインの描く合図で、自前の要素を描けない）と PR-3 で分かったら、Lit（`rete-lit-plugin`）に替える（E1）。そのときは `adoptedStyleSheets` が CSP に当たらないかを、PR-3 の Playwright で確かめる。**替えるときは、6 節の表（依存・走査・SVG の作り方）を見直し、その PR で利用者に確かめる**。
 
 # 4. アーキテクチャ
 
@@ -135,11 +135,12 @@ export interface UiFlow {
 | 決まり | いま | あと | 守りの保ち方 |
 |:--|:--|:--|:--|
 | 依存 | 画面は依存なし | daemon に `rete`・`rete-area-plugin`・`rete-readonly-plugin` を足す | 版は完全に固定（`^`・`~` なし）。`minimumReleaseAge` 14 日の内。npm は Dependabot の外なので手で上げ、確かめの手順（ライセンス・`innerHTML`・`eval`・`<style>` の差し込みの有無）を `docs/release.md` に書く（E4） |
+| 図の入口 | — | `graph.js` が外に出すのは、`window` の 1 つの名前 `touryouGraph`（`{ draw(host, view), destroy() }`）だけ。`app.js` はこの名前だけを見る（なければ一覧だけ） | 試験で、`graph.js` が `window` に足す名前が `touryouGraph` 1 つだけであること、`app.js` が呼ぶのが `touryouGraph.draw`・`touryouGraph.destroy` だけであることを確かめる |
 | 資産 | `/ui`・`/ui/app.js`・`/ui/app.css` | `/ui/graph.js` を足す | 認証なし・回数の制限なし・状態を含まない（いまの資産と同じ）。HTML の `<script src>` は 2 つ（`app.js` のあとに `graph.js`）。`app.js` は `graph.js` がなくても動く（一覧だけ出す） |
-| 走査の試験 | `app.js` の文字列を走査 | `app.js` と、図の**自前のコード**（束ねる前の `graph-*.ts`・`svg-el.ts` の出力）を、同じ走査にかける。束ねたあとの `graph.js` 全体には、別の試験で「`eval`・`new Function`・`document.write`・`<style>` の差し込み（`createElement("style")`）・`insertAdjacentHTML`・`outerHTML`・`innerHTML` への空でない代入・`setAttribute("style"`・`import(`・`postMessage`・`window.open`・storage・cookie がない」を確かめる | ライブラリは走査の SAFE の外。そのかわり禁止の API の不在を、版を上げるたびに試験で確かめる（E3） |
+| 走査の試験 | `app.js` の文字列を走査 | `app.js` と、図の**自前のコード**（束ねる前の `graph-*.ts`・`svg-el.ts` の出力）を、同じ走査にかける。束ねたあとの `graph.js` 全体には、別の試験で次を確かめる：(1) `innerHTML`・`outerHTML` への代入は、`= ""`（空の文字列の定数）の形だけを許し、ほかの形はすべて落とす。(2) 次がない：`eval`・`Function(`（`new` の有無によらず）・`document.write`・`<style>` の差し込み（`createElement("style")`）・`insertAdjacentHTML`・`setAttribute("style"`・`setAttribute("on`・`srcdoc`・文字列を渡す `setTimeout`・`setInterval`・`import(`・`fetch`・`XMLHttpRequest`・`WebSocket`・`EventSource`・`postMessage`・`window.open`・storage・cookie。(3) ライブラリ側に `createElementNS` がない（SVG は `svgEl` の 1 か所だけ、をライブラリにも効かせる）。(4) 埋め込んだ文字列（`UI_GRAPH_JS`）が、固定の版と lockfile から束ね直したものと一致する（`scripts/check.sh` で束ね直して比べる。手で書き換えた束を入れない） | ライブラリは走査の SAFE の外。そのかわり禁止の API の不在を、版を上げるたびに試験で確かめる（E3） |
 | CSP | `default-src 'none'; script-src 'self'; style-src 'self'; …` | **変えない** | `<style>`・`style` 属性を差し込まない。`element.style.x = …`（プロパティ）は CSP に当たらない |
 | タグの許可リスト | `div`・`span`・`p`・`button`・`textarea` | `details`・`summary`・`code` を足す（D4） | 属性は付けない。試験の「`el` に渡すタグ」の許可リストを合わせる |
-| SVG | 作らない（生成を禁止） | `svgEl(tag, attrs)` だけが作る。タグ：`svg`・`g`・`path`・`rect`・`text`・`title`。属性：`class`・`d`・`x`・`y`・`width`・`height`・`rx`・`viewBox`。値は数か、数で組んだ `d`（命令は `M`・`L`・`C`・`Q`・`A`・`Z`） | 試験で、`createElementNS`・`setAttributeNS` が `svg-el.ts` の 1 か所だけにあることを数える。`href`・`on*`・`style` 属性・`foreignObject`・`use`・`a`・`marker`・`image` は入れない。文字は `text` 要素の `textContent` だけ |
+| SVG | 作らない（生成を禁止） | `svgEl(tag, attrs)` だけが作る。タグ：`svg`・`g`・`path`・`rect`・`text`・`title`。属性：`class`・`d`・`x`・`y`・`width`・`height`・`rx`・`viewBox`。`class` は、決まった名前の一覧（`SVG_CLASSES`。例：`flow-up`・`flow-down`・`stage-sent`・`stage-delivered`・`stage-done`・`await`・`branch-idle`・`band-turn` など）の中からだけ（空白で区切った複数も、どれも一覧にあるときだけ）。ほかの属性の値は数か、数で組んだ `d`・`viewBox`（`d` の命令は `M`・`L`・`C`・`Q`・`A`・`Z`）。それ以外の値は拒む | 試験で、`createElementNS`・`setAttributeNS` が `svg-el.ts` の 1 か所だけにあることを数える。`href`・`on*`・`style` 属性・`foreignObject`・`use`・`a`・`marker`・`image` は入れない。文字は `text` 要素の `textContent` だけ |
 | 動く玉（D8） | — | CSS の `offset-path` を、`graph-path.ts` の 1 か所だけで `element.style.offsetPath = "path('…')"` として設定する（中身は `d` と同じ検査を通した文字列） | 走査の SAFE に `offsetPath` を足し、使う所が 1 か所だけであることを試験で数える |
 | 図に渡す値 | — | `drawGraph(host, view)` の中で、表示モデルから作り直す：文字は `uiText` を通したもの（題・状態の名前・種類の名前・時刻）、ID は `ID_PATTERN` を通したもの、数 | 表示モデルをそのまま rete に渡さない。rete のノードのデータは ID と数だけ |
 | プロパティの許可リスト | 走査の `SAFE` | `classList`・`dataset`・`offsetPath`・`clipboard`・`writeText` などを足す | 足すものを PR-4・PR-5 の本文に表で出す |
@@ -150,7 +151,7 @@ export interface UiFlow {
 - **横向きの木**：根が左、深さが右へ。親は子の並びの真ん中の高さ。兄弟は生まれた順（記録の `seq`）で固定する。
 - 親の箱は高さ 80px のまま。**親の箱の右に縦の幹**を置き、そこから**子ごとに枝分かれ**する（子ごとの端子）。外側の子ほど親の近くで曲げて、線を交わらせない。線は**角丸の折れ線**。
 - やり取りのまだない子は、薄い点線の枝だけ。灰色のつながりの線は出さない。
-- 1 本の枝に、上りと下りの道を並べる。矢印の先は、端の向きから三角を数で計算して `path` で描く（`marker` を使わない）。
+- 1 本の枝に、上りと下りの道を並べる。**上の道が上り（子 → 親。矢印は左向き ←）、下の道が下り（親・人 → 子。矢印は右向き →）**（D1）。どの枝でも同じ。矢印の先は、端の向きから三角を数で計算して `path` で描く（`marker` を使わない）。
 - 線の色は、落ち着いた藍 1 色で、新しいほど濃い。すべて破線。**柿色は答え待ちだけ**。
 - 動きはやり取りの段に結びつける：`sent`＝速く流れ、玉が繰り返し走る／`delivered`＝ゆっくり流れる／`done`＝止まる。終わった作業の線は動かさない。
 - 箱は作業の状態の 3 段（出番／進んでいる／終わった）。印と文字を必ず添える。活動中の点・役割の印・左の縁の段の色・列の見出し。
@@ -165,8 +166,8 @@ export interface UiFlow {
 | `flowsOf`・`needsHumanOf`・`band`・`title`・`lastActivityAt` | core の単体の試験（記録の列から期待の値。上限・24 時間・統合の見える範囲） |
 | `layoutOf` | vm／単体：根だけ・鎖・横に広い・深さの不揃い・子 50・同じ入力で同じ出力・重ならない・親が子の真ん中の高さ |
 | `graph-path` | `d` が許した命令と数だけ・上りと下りが交わらない・矢印の向き |
-| `svgEl` | 許していないタグ・属性・値を拒む。`createElementNS` が 1 か所だけ |
-| 走査 | いまの `ui-assets.test.ts` を `graph-*` の自前のコードにも。束ねた `graph.js` の禁止の API の不在 |
+| `svgEl` | 許していないタグ・属性・値を拒む。一覧にない `class`（空白で区切ったうちの 1 つでも）を拒む。`createElementNS` が 1 か所だけ |
+| 走査 | いまの `ui-assets.test.ts` を `graph-*` の自前のコードにも。束ねた `graph.js` の 6 節の (1)〜(3)。束ね直しの一致（(4)。check で） |
 | CSP の下で動く | Playwright（PR-3・PR-5）：CSP のヘッダーつきで `/ui` を開き、コンソールに CSP の違反がないこと・図が描かれること・`prefers-reduced-motion` で動きが止まること |
 | 画面写し | `docs/images` の明暗を撮り直す（PR-5） |
 
@@ -178,6 +179,8 @@ export interface UiFlow {
 - 横向きの木（8 節の案 B）を図の形にする。research.md 6.1 の「深さで段に分けた縦の木」は、8 節の調べのあと、横向き（根が左）に置き換えた。
 
 ## 9.2. 未解決の課題
+
+範囲の外（#89 では作らない）：受信箱の項目を人が片付ける操作（#99）、統合が子からのやり取りを受け取ったことの記録（#102）。「止まっているかも」は、daemon の CLI の見張りの知らせ（`isStallSummary`）があるときだけ出し、画面で推し量らない。
 
 | 課題 | 影響 | 扱い |
 |:--|:--|:--|
