@@ -75,7 +75,7 @@ button.sm{font-size:12.5px;padding:2px 10px}
 button.danger{border-color:var(--shu);color:var(--shu);background:transparent}
 button.done{background:var(--matsu);border-color:var(--matsu);color:var(--on-strong)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;margin:-1px;padding:0;border:0}
-button.copy{display:inline-flex;align-items:center;justify-content:center;min-width:32px;min-height:28px;padding:4px 8px}
+button.copy{display:inline-flex;align-items:center;justify-content:center;min-width:40px;min-height:34px;padding:4px 10px}
 .copy-ico{position:relative;display:inline-block;width:14px;height:14px}
 .copy-ico::before,.copy-ico::after{content:"";position:absolute;width:9px;height:10px;border:1.6px solid currentColor;border-radius:2px;box-sizing:border-box}
 .copy-ico::before{left:0;top:4px}
@@ -1617,7 +1617,15 @@ export const UI_JS = `'use strict';
     nextSeen = new Set();
     renderTodo(v, byId);
     cardStatus = statusesOf(v);
+    // カードは描き直しのたびに作り直すので、focus がカードにあったら、作り直したあとの同じ子のカードへ戻す
+    // （移った先を、キーボード・読み上げの人が見失わないように）。入力欄など、ほかに focus があるときは触らない
+    var act = document.activeElement;
+    var focusedCard = act && typeof act.id === 'string' && /^card-/.test(act.id) ? act.id : '';
     renderCards(v, byId);
+    if (focusedCard) {
+      var again = document.getElementById(focusedCard);
+      if (again) { again.tabIndex = -1; again.focus({ preventScroll: true }); }
+    }
     var drawn = renderList(v);
     graphView = v;
     renderGraph(v, view.lastSeq);

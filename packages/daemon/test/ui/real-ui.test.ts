@@ -349,7 +349,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(named.length).toBeGreaterThan(0);
     for (const b of named) {
       expect(b).toMatchObject({ label: "写す", title: "写す", text: "", icon: true });
-      expect(b.h).toBeGreaterThanOrEqual(26);
+      expect(b.h).toBeGreaterThanOrEqual(34);
     }
     await page.click(`#card-${LONG} .cmd button.copy`);
     await page.waitForFunction(() => document.querySelector(".cmd button.copy.done") !== null);
@@ -438,6 +438,8 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       { timeout: 5000 },
     );
     expect(await has()).toBe(true);
+    // 描き直しのあとも、focus は作り直した同じ子のカードにある
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("card-ui-b");
     await page.waitForTimeout(1700);
     expect(await has()).toBe(false);
     current = state;
