@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>状態画面の見本</title>
+<!--
+  Issue #89 の画面の案（見本）。値はすべて作り物。
+  外のファイル・CDN は使わない。描画は textContent と createElement だけ（本番の決まりに合わせた書き方）。
+  関係図は、形だけを示す静的な SVG（本番の作りは research.md の「関係図の道」で決める）。
+-->
+<style>
+:root{--bg:#fff;--fg:#1d1f23;--muted:#5d6470;--line:#d9dde3;--card:#f6f7f9;--accent:#2457c5;--warn:#a65b00;--warn-bg:#fff4e0;--danger:#b3261e;--danger-bg:#fdecea;--ok:#1e7a3c;--ok-bg:#e6f4ea;--chip:#eceff3}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171b;--fg:#e6e8eb;--muted:#9aa3ae;--line:#30353d;--card:#1d2026;--accent:#7aa2ff;--warn:#f0b35a;--warn-bg:#3a2a10;--danger:#ff8a80;--danger-bg:#3d1714;--ok:#7bd88f;--ok-bg:#16301f;--chip:#2a2e35}}
+:root[data-theme="dark"]{--bg:#15171b;--fg:#e6e8eb;--muted:#9aa3ae;--line:#30353d;--card:#1d2026;--accent:#7aa2ff;--warn:#f0b35a;--warn-bg:#3a2a10;--danger:#ff8a80;--danger-bg:#3d1714;--ok:#7bd88f;--ok-bg:#16301f;--chip:#2a2e35}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif}
+main{max-width:960px;margin:0 auto;padding:16px}
+header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0}h2{font-size:16px;margin:24px 0 8px}
+.conn{font-size:13px;color:var(--muted)}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px}
+.note{font-size:13px;color:var(--muted)}
+button{font:inherit;font-size:14px;padding:5px 12px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button.danger{border-color:var(--danger);color:var(--danger)}
+button.small{font-size:12px;padding:1px 8px}
+.todo{border:2px solid var(--warn);background:var(--warn-bg);border-radius:10px;padding:12px 16px}
+.todo h2{margin:0 0 8px;font-size:17px}
+.todo-item{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line)}
+.todo-item:first-of-type{border-top:none}
+.todo-what{flex:1 1 320px}
+.chip{display:inline-block;font-size:12px;padding:0 8px;border-radius:10px;background:var(--chip);color:var(--fg);margin-right:4px}
+.chip.warn{background:var(--warn);color:var(--bg)}.chip.danger{background:var(--danger);color:var(--bg)}.chip.ok{background:var(--ok);color:var(--bg)}
+.cmd{display:flex;gap:6px;align-items:center;margin-top:4px}
+code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:4px;padding:1px 6px;overflow-wrap:anywhere}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+.card.needs{border-left:4px solid var(--warn)}
+.card-title{font-weight:600;margin:0 0 4px}
+.meta{font-size:13px;color:var(--muted)}
+.id{font-size:11px;color:var(--muted);font-family:ui-monospace,Menlo,monospace}
+.entry{border-top:1px solid var(--line);padding:6px 0;font-size:14px}
+.entry .when{font-size:12px;color:var(--muted)}
+details>summary{cursor:pointer;color:var(--accent);font-size:13px}
+.actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.desc{font-size:12px;color:var(--muted)}
+.irreversible{font-size:12px;color:var(--danger)}
+.blocked{background:var(--danger-bg);border-radius:6px;padding:8px;margin:6px 0}
+.admin{border:1px solid var(--line);border-radius:10px;padding:8px 16px;margin-top:24px}
+.admin>summary{font-size:16px;font-weight:600;color:var(--fg)}
+.graph{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px;overflow-x:auto}
+.graph svg{display:block;min-width:620px;width:100%;height:auto}
+.g-node rect{fill:var(--bg);stroke:var(--line);stroke-width:1.5}
+.g-node.warn rect{stroke:var(--warn);stroke-width:2.5}
+.g-node text{fill:var(--fg);font-size:13px}.g-node text.sub{fill:var(--muted);font-size:11px}
+.g-edge{stroke:var(--muted);stroke-width:1.5;fill:none}
+.g-msg{stroke:var(--accent);stroke-width:1.5;fill:none;stroke-dasharray:5 4}
+.g-msg.warn{stroke:var(--warn)}
+.g-label{fill:var(--accent);font-size:11px}.g-label.warn{fill:var(--warn)}
+.legend{font-size:12px;color:var(--muted);margin-top:4px}
+.toggle{font-size:12px}
+.callout{font-size:12px;color:var(--muted);border-left:3px solid var(--line);padding-left:8px;margin:4px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>touryou 状態画面 <span class="note">（見本・値は作り物）</span></h1>
+  <span class="conn"><span class="dot"></span>つながっています（更新は自動）<span class="note">・接続の作りは #88 で変わる</span></span>
+  <button class="toggle" id="theme" type="button">明暗を切り替える</button>
+</header>
+<main>
+  <section class="todo" aria-labelledby="todo-h">
+    <h2 id="todo-h">いまあなたがすること（<span id="todo-count"></span> 件）</h2>
+    <div id="todo"></div>
+  </section>
+
+  <h2>作業ごとのようす</h2>
+  <p class="note">子 1 つを 1 枚にまとめています。人の操作が要る子を先に出します。済んだ子は下の「済んだ作業」にたたんでいます。</p>
+  <div class="cards" id="cards"></div>
+  <details style="margin-top:12px"><summary>済んだ作業（2 件）</summary><div class="cards" id="done-cards" style="margin-top:8px"></div></details>
+
+  <h2>関係図（案）</h2>
+  <div class="graph" role="img" aria-label="統合と子の関係と、メッセージの流れの図">
+    <svg viewBox="0 0 680 300" xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <path class="g-edge" d="M340 62 C340 110 120 100 120 160"/>
+      <path class="g-edge" d="M340 62 L340 160"/>
+      <path class="g-edge" d="M340 62 C340 110 560 100 560 160"/>
+      <path class="g-msg warn" d="M150 160 C150 120 300 110 320 66" style="color:var(--warn)" marker-end="url(#arr)"/>
+      <text class="g-label warn" x="168" y="112">判断を求む · 4 分前</text>
+      <path class="g-msg" d="M530 160 C530 120 380 110 360 66" style="color:var(--accent)" marker-end="url(#arr)"/>
+      <text class="g-label" x="440" y="112">済んだ · 1 時間前</text>
+      <g class="g-node"><rect x="250" y="20" width="180" height="44" rx="8"/><text x="262" y="40">統合（あなたの親）</text><text class="sub" x="262" y="56">実行中</text></g>
+      <g class="g-node warn"><rect x="30" y="160" width="190" height="50" rx="8"/><text x="42" y="181">ログの集計を直す</text><text class="sub" x="42" y="198">調べ役 · 判断待ち · 要対応 2</text></g>
+      <g class="g-node warn"><rect x="245" y="160" width="190" height="50" rx="8"/><text x="257" y="181">設定の読み込みを調べる</text><text class="sub" x="257" y="198">作業役 · 止まっているかも</text></g>
+      <g class="g-node"><rect x="465" y="160" width="190" height="50" rx="8"/><text x="477" y="181">文書の誤字を直す</text><text class="sub" x="477" y="198">作業役 · 済んだ</text></g>
+      <path class="g-edge" d="M340 210 L340 240"/>
+      <g class="g-node"><rect x="255" y="240" width="170" height="44" rx="8"/><text x="267" y="260">試験を足す（孫）</text><text class="sub" x="267" y="276">作業役 · 実行中</text></g>
+    </svg>
+  </div>
+  <p class="legend">実線＝親子。点線の矢印＝メッセージ（誰から誰へ・いつ）。オレンジ＝人の操作が要る。図は見るだけ（動かせない）。子の箱を押すと、そのカードへ移る（案）。</p>
+
+  <details class="admin">
+    <summary>管理（まれに使う操作）</summary>
+    <p class="note">ふだんは使いません。ここの操作の多くは取り消せません。押すと、対象の ID を打ち込む確認が出ます。</p>
+    <h2>アーカイブした作業の削除</h2>
+    <div class="card">
+      <p class="card-title">先週の調べもの（アーカイブ済み・子 3 つ）</p>
+      <p class="meta">自動で消える日：12 月 1 日（あと 14 日）</p>
+      <div class="actions">
+        <button type="button">自動で消すのを止めておく…</button>
+        <button type="button" class="danger">いますぐ消す…</button>
+      </div>
+      <p class="irreversible">「いますぐ消す」は取り消せません。消したという記録（削除の記録）は残ります。</p>
+      <details><summary>くわしい選び方</summary>
+        <div class="actions"><button type="button">止めておく：30 日</button><button type="button">止めておく：90 日</button><button type="button">止めておく：日数を決める…</button><button type="button" class="danger">記録も残さずに消す…</button></div>
+      </details>
+    </div>
+    <h2>捨てた作業の保管</h2>
+    <div class="card">
+      <p class="meta">捨てた子の成果は、しばらく保管しています。必要ならブランチに取り出せます。</p>
+      <div class="actions"><button type="button">保管の一覧を見る</button></div>
+    </div>
+  </details>
+</main>
+<script>
+(function () {
+  'use strict';
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  // 作り物の値。分（何分前）で持つ。
+  var NOW = Date.now();
+  function ago(min) {
+    if (min < 1) return 'いま';
+    if (min < 60) return min + ' 分前';
+    if (min < 1440) return Math.floor(min / 60) + ' 時間前';
+    return Math.floor(min / 1440) + ' 日前';
+  }
+  function clock(min) {
+    var d = new Date(NOW - min * 60000);
+    return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  }
+  function copyButton(text) {
+    var b = el('button', 'small', '写す');
+    b.type = 'button';
+    b.addEventListener('click', function () {
+      if (navigator.clipboard) navigator.clipboard.writeText(text).then(function () { b.textContent = '写しました'; }, function () { b.textContent = '写せません'; });
+    });
+    return b;
+  }
+  var KIND = { progress: '進み具合', done: '済んだ', violation: '止められた操作', failure: 'うまくいかなかった', info: '知らせ', decision: '判断を求む', stall: '止まっているかも' };
+  var CHILDREN = [
+    { title: 'ログの集計を直す', role: '調べ役', state: '判断待ち', last: 4, id: 'n-sample-a1', needs: 2, entries: [
+      { kind: 'decision', min: 4, text: '集計の単位を「日」と「時」のどちらにしますか。日にすると古い記録とそろいます。時にすると細かく見られますが、出力が長くなります。' },
+      { kind: 'violation', min: 9, text: '書き込みが止められました：scripts/report.sh（作業の範囲の外）', blocked: true },
+      { kind: 'progress', min: 15, text: '集計の関数を 2 つに分けた。試験は通る。' }
+    ] },
+    { title: '設定の読み込みを調べる', role: '作業役', state: '止まっているかも', last: 27, id: 'n-sample-b2', needs: 1, entries: [
+      { kind: 'stall', min: 2, text: '25 分、報告も道具の使用もありません。入力を待って止まっているかもしれません。', attach: true },
+      { kind: 'progress', min: 27, text: '読み込みの順を調べ始めた。' }
+    ] },
+    { title: '試験を足す（孫）', role: '作業役', state: '実行中', last: 1, id: 'n-sample-c3', needs: 0, entries: [
+      { kind: 'progress', min: 1, text: '境界の試験を 3 つ足した。' }
+    ] }
+  ];
+  var DONE = [
+    { title: '文書の誤字を直す', role: '作業役', state: '済んだ（受け入れ済み）', last: 62, id: 'n-sample-d4', needs: 0, entries: [{ kind: 'done', min: 62, text: '誤字を 4 か所直した。根拠：差分と試験の結果。' }] },
+    { title: '先週の調べもの', role: '調べ役', state: 'アーカイブ済み', last: 4320, id: 'n-sample-e5', needs: 0, entries: [{ kind: 'info', min: 4320, text: '前の日の知らせ（アーカイブした子のもの）。' }] }
+  ];
+
+  // --- いまあなたがすること ---
+  var todo = document.getElementById('todo');
+  var todos = [
+    { chip: '判断を求む', cls: 'warn', what: '「ログの集計を直す」が、集計の単位を聞いています。', act: function (box) {
+      var a = el('div', 'actions');
+      ['日にする', '時にする', '自由に答える…'].forEach(function (t, i) { var b = el('button', i === 0 ? 'primary' : '', t); b.type = 'button'; a.appendChild(b); });
+      box.appendChild(a);
+    } },
+    { chip: '範囲を広げる頼み', cls: 'danger', what: '「ログの集計を直す」が、scripts/report.sh への書き込みを頼んでいます。', act: function (box) {
+      var a = el('div', 'actions');
+      [['広げる（この 1 つだけ許す）…', 'primary'], ['断る（そのままにする）', ''], ['子に別の道を伝える…', '']].forEach(function (p) { var b = el('button', p[1], p[0]); b.type = 'button'; a.appendChild(b); });
+      box.appendChild(a);
+      box.appendChild(el('p', 'desc', '広げると、子はこの場所に書けるようになります。断ると、子には「範囲の外」と伝わり、子は別のやり方を考えます。'));
+    } },
+    { chip: '止まっているかも', cls: 'warn', what: '「設定の読み込みを調べる」が 25 分動いていません。子のセッションを開いて確かめてください。', act: function (box) {
+      var c = el('div', 'cmd');
+      var cmd = 'touryou attach n-sample-b2';
+      c.appendChild(el('code', '', cmd));
+      c.appendChild(copyButton(cmd));
+      box.appendChild(c);
+      box.appendChild(el('p', 'desc', '端末にこのコマンドを貼って開きます（コマンドの形は仮。実装の段で決める）。'));
+    } }
+  ];
+  document.getElementById('todo-count').textContent = String(todos.length);
+  todos.forEach(function (t) {
+    var row = el('div', 'todo-item');
+    row.appendChild(el('span', 'chip ' + t.cls, t.chip));
+    var box = el('div', 'todo-what');
+    box.appendChild(el('div', '', t.what));
+    t.act(box);
+    row.appendChild(box);
+    todo.appendChild(row);
+  });
+
+  // --- 子のカード ---
+  function card(c) {
+    var k = el('div', 'card' + (c.needs > 0 ? ' needs' : ''));
+    k.appendChild(el('p', 'card-title', c.title));
+    var m = el('div', 'meta');
+    m.appendChild(el('span', 'chip', c.role));
+    m.appendChild(el('span', 'chip' + (c.needs > 0 ? ' warn' : ''), c.state));
+    m.appendChild(el('span', '', '最後の動き ' + ago(c.last)));
+    if (c.needs > 0) m.appendChild(el('span', '', ' · 要対応 ' + c.needs));
+    k.appendChild(m);
+    var idl = el('div', 'id', 'ID ' + c.id + ' ');
+    idl.appendChild(copyButton(c.id));
+    k.appendChild(idl);
+    c.entries.forEach(function (e) {
+      var row = el('div', 'entry');
+      var head = el('div');
+      head.appendChild(el('span', 'chip' + (e.blocked ? ' danger' : ''), KIND[e.kind]));
+      head.appendChild(el('span', 'when', clock(e.min) + '（' + ago(e.min) + '）'));
+      row.appendChild(head);
+      if (e.text.length > 40) {
+        var d = el('details');
+        d.appendChild(el('summary', '', e.text.slice(0, 40) + '…（全文を開く）'));
+        d.appendChild(el('div', '', e.text));
+        row.appendChild(d);
+      } else {
+        row.appendChild(el('div', '', e.text));
+      }
+      if (e.blocked) {
+        var b = el('div', 'blocked');
+        b.appendChild(el('div', '', '子は範囲を広げる頼みを出しています。答えは上の「いまあなたがすること」でも出せます。'));
+        var a = el('div', 'actions');
+        ['広げる…', '断る', '子に別の道を伝える…'].forEach(function (t) { var x = el('button', 'small', t); x.type = 'button'; a.appendChild(x); });
+        b.appendChild(a);
+        row.appendChild(b);
+      }
+      if (e.attach) {
+        row.appendChild(el('p', 'callout', '開き方は上の「いまあなたがすること」に、コマンドと写すボタンがあります。'));
+      }
+      k.appendChild(row);
+    });
+    var more = el('details');
+    more.appendChild(el('summary', '', 'この子への操作'));
+    var acts = el('div', 'actions');
+    var s = el('button', '', '止める…'); s.type = 'button'; acts.appendChild(s);
+    var u = el('button', '', '結び付けを外す…'); u.type = 'button'; acts.appendChild(u);
+    more.appendChild(acts);
+    more.appendChild(el('p', 'desc', '止める：子の作業を止めます（あとで再開できます）。'));
+    more.appendChild(el('p', 'desc', '結び付けを外す：子のセッションと見張りのつながりを切ります。ふだんは要りません。'));
+    k.appendChild(more);
+    return k;
+  }
+  var cards = document.getElementById('cards');
+  CHILDREN.slice().sort(function (a, b) { return b.needs - a.needs; }).forEach(function (c) { cards.appendChild(card(c)); });
+  var dc = document.getElementById('done-cards');
+  DONE.forEach(function (c) { dc.appendChild(card(c)); });
+
+  document.getElementById('theme').addEventListener('click', function () {
+    var r = document.documentElement;
+    var dark = r.dataset.theme ? r.dataset.theme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    r.dataset.theme = dark ? 'light' : 'dark';
+  });
+})();
+</script>
+</body>
+</html>
