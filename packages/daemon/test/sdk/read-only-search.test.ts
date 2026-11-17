@@ -17,7 +17,7 @@ const prot = {
   home: "/home/u",
   worktree: WT,
 };
-const links: Record<string, string> = { [`${WT}/out`]: "/etc" };
+const links: Record<string, string> = { [`${WT}/out`]: "/etc", [`${WT}/st`]: S };
 const resolve = async (p: string) => {
   const { posix } = await import("node:path");
   const r = posix.resolve(p);
@@ -42,6 +42,14 @@ describe("作業ツリーの中を探すコマンドは、範囲が空でも許�
     "git grep -n childAllowList",
     "git ls-files | grep sdk",
     "ls docs && git grep -n x -- packages",
+    "grep -rn -e 'a.*b' docs",
+    "grep -rn 'a.*b' docs",
+    "grep -rn -A3 -C 2 x --include='*.ts' .",
+    "git grep -n -e x --cached -- packages",
+    "find . -maxdepth 2 -type f -name '*.md' -print",
+    "find . -name node_modules -prune -o -type f -print",
+    "git ls-files --others --exclude-standard",
+    "ls -laR docs",
   ])("%s", async (c) => {
     expect(await allowed(c)).toBe(true);
   });
@@ -79,6 +87,38 @@ describe("外・書き込み・コマンドの実行を伴うものは許さな�
     "cd .. && ls",
     "ls && rm -rf x",
     "grep --file=/etc/passwd x .",
+    // リンクをたどる旗（状態の置き場を指すリンクが作業ツリーの中にあっても読ませない）
+    "grep -R token .",
+    "grep -rnR token .",
+    "grep --dereference-recursive token .",
+    "grep -S token .",
+    "find -L . -name token",
+    "find . -follow -name token",
+    "find -H st",
+    "ls st",
+    "grep -r x st",
+    "grep -r x st/",
+    "git grep x -- st",
+    // 長いオプションの略・ugrep の設定
+    "git grep --open=echo x",
+    "git grep --open-files=vi x",
+    "git grep --textc x",
+    "grep --pag x .",
+    "grep ---/tmp/cfg x .",
+    "grep --- x .",
+    // 短い旗に値をくっつけた形
+    "grep -f/home/u/state/token x .",
+    "grep -ftoken x .",
+    "git grep -f/etc/x",
+    "git ls-files -X/etc/passwd",
+    "git ls-files -Xexclude",
+    // 引用符の外のパターン・~（シェルが展開して、リンクの先を指しうる）
+    "grep -r SECRET o?t/",
+    "grep -r SECRET s[t]",
+    "ls st/*",
+    "ls *",
+    "grep -r x {st,docs}",
+    "find . -newer st/token",
   ])("%s", async (c) => {
     expect(await allowed(c)).toBe(false);
   });
