@@ -457,6 +457,11 @@ export interface DecisionRecord {
   readonly closedAt?: string;
   /** 要求を記録したイベントの `seq`。古いスナップショットにはない（0 とみなし、上限の数には入れない）。 */
   readonly requestedSeq?: number;
+  /** 要求を記録した時刻（ISO 8601 UTC）。古いスナップショットにはない。 */
+  readonly requestedAt?: string;
+  /** 採用された回答のイベントの `seq` と時刻（回答済みのとき）。古いスナップショットにはない。 */
+  readonly answeredSeq?: number;
+  readonly answeredAt?: string;
   /** 判断を求める内容（記録されていれば）。 */
   readonly question?: string;
   readonly options?: readonly string[];
@@ -499,6 +504,9 @@ export interface ExtensionRecord {
   readonly status: "open" | "approved" | "rejected" | "split";
   /** 要求のイベントの `seq`。 */
   readonly requestedSeq: number;
+  /** 要求・判定の時刻（ISO 8601 UTC）。古いスナップショットにはない。 */
+  readonly requestedAt?: string;
+  readonly decidedAt?: string;
   /** 判定のイベントの `seq` と判定者（判定済みのとき）。 */
   readonly decidedSeq?: number;
   readonly decidedBy?: Actor;
@@ -1748,6 +1756,7 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
           nodeId,
           status: "open",
           requestedSeq: seq,
+          requestedAt: raw.at as string,
           ...(question === undefined ? {} : { question: question as string }),
           ...(options === undefined ? {} : { options: Object.freeze([...(options as string[])]) }),
           ...(pauseNodeIds === undefined
@@ -1781,7 +1790,14 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
       }
       d.decisions[i] = freezeRecord(
         cur.status === "open"
-          ? { ...cur, status: "answered" as const, answer, answeredBy: actor }
+          ? {
+              ...cur,
+              status: "answered" as const,
+              answer,
+              answeredBy: actor,
+              answeredSeq: seq,
+              answeredAt: raw.at as string,
+            }
           : { ...cur, rejected: Object.freeze([...cur.rejected, { seq, answer, actor }]) },
       );
       return commit();
@@ -2204,6 +2220,7 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
           reason,
           status: "open" as const,
           requestedSeq: seq,
+          requestedAt: raw.at as string,
         }),
       );
       return commit();
@@ -2251,6 +2268,7 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
         status: EXTENSION_STATUS[decision],
         decidedSeq: seq,
         decidedBy: actor,
+        decidedAt: raw.at as string,
         ...(granted === undefined ? {} : { granted }),
       });
       return commit();

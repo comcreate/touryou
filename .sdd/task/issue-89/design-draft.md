@@ -24,7 +24,7 @@ Issue #89 の技術設計の下書き（一時的。実装が終わったら、�
 | 段 | 中身 | 状態 |
 |:--|:--|:--|
 | PR-1 仕様 | 要求・仕様・設計・ADR・`docs/ui.md` に、この下書きの決めを書く | 🟡 この PR |
-| PR-2 表示モデル | `packages/core/src/ui-view.ts` に値を足す（5 節） | 🔴 |
+| PR-2 表示モデル | `packages/core/src/ui-view.ts` に値を足す（5 節） | 🟡 |
 | PR-3 試作 | `/ui/graph.js` の束ね・自前の描き手（R0）・配置を、`ui-assets.ts` に触れずに試す | 🔴 |
 | PR-4 画面の作り直し | `ui-assets.ts`・`ui-assets.test.ts`（「いまあなたがすること」・カード・言葉・管理のたたみ・一覧） | 🔴 |
 | PR-5 関係図 | `/ui/graph.js` を配り、図と一覧の切り替え・動き・試験・画面写し | 🔴 |
@@ -110,7 +110,7 @@ export interface UiExtension {
 export const UI_FLOW_STAGES = ["sent", "delivered", "done"] as const;
 export interface UiFlow {
   readonly id: string;
-  readonly kind: "instruction" | "report" | "done" | "decision" | "extension" | "answer" | "parentRequest";
+  readonly kind: "instruction" | "report" | "done" | "decision" | "extension" | "answer";
   readonly dir: "up" | "down";
   readonly from: string; // ノード ID か "human"
   readonly to: string;
@@ -122,7 +122,8 @@ export interface UiFlow {
   readonly doneInferred?: true;
 }
 // UiView に readonly flows: readonly UiFlow[] を足す。新しい順に UI_LIMITS.flows（200）件まで。
-// 済んでから 24 時間たったものは載せない。本文は載せない（種類・時刻・ID だけ）。
+// 本文は載せない（種類・時刻・ID だけ）。表示モデルは時計を持たない純粋な関数なので、「24 時間たったものを外す」はしない（件数の上限だけ）。
+// 親への依頼（parentRequest）は、画面のやり取りに要らないので載せない。
 ```
 
 - 段の決め方（`flowsOf`）は research.md 9.3 のとおり。子 → 親は `deliveryUnknown`（「届いた」の記録は #102 で足す）。

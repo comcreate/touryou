@@ -30,7 +30,8 @@ const state = (): OrchState => {
         role: "implement",
         parentId: "root",
         dependsOn: [],
-        objective: "SECRET-OBJECTIVE",
+        // 目的は先頭の題（80 コードポイント）だけ載る（#89）。題より後ろの SECRET は載らない
+        objective: `題${"。".repeat(80)}SECRET-OBJECTIVE`,
         acceptanceCriteria: ["x"],
         scope: {
           writableLocations: ["src/secret-dir"],

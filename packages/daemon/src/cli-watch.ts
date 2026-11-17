@@ -14,6 +14,7 @@
  */
 
 import type { EventBody, OrchState } from "@touryou/core";
+import { stallSummary } from "@touryou/core";
 import { appendAtomically, deriveId, type LogPort, summarize } from "./api/handlers/context.js";
 
 export interface WatchSpec {
@@ -151,7 +152,7 @@ export function recordWatchFindings(
     push(
       `stall/${s.nodeId}/${s.lastMs}`,
       s.nodeId,
-      `子 ${s.nodeId} は止まっているかもしれない（${Math.round(spec.stallMs / 60_000)} 分、報告も道具の使用の記録もない）。親は claude agents --json で状態を確かめて parent_report の agentState で報告するか、人に attach を頼む`,
+      stallSummary(s.nodeId, Math.round(spec.stallMs / 60_000)),
     );
   }
   for (const u of f.unread) {

@@ -2,14 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
   type EventBody,
   foldEvents,
+  isStallSummary,
   type OrchEvent,
   type OrchState,
+  stallSummary,
   UI_CUT_MARK,
   UI_LIMITS,
   UI_OPTION_MAX,
   UI_QUESTION_MAX,
   UI_TARGET_MAX,
   UI_TEXT_MAX,
+  UI_TITLE_MAX,
   uiTargetOf,
   uiText,
   uiViewOf,
@@ -74,11 +77,11 @@ describe("uiViewOf（画面の表示モデル）", () => {
     expect(v.truncated).toEqual([]);
   });
 
-  it("ブリーフ（目的・受け入れ基準・作業範囲）・パス・最終コミットは、表示モデルに入らない", () => {
+  it("ブリーフ（受け入れ基準・作業範囲・目的の題より後ろ）・パス・最終コミットは、表示モデルに入らない（目的は先頭の題だけ。#89）", () => {
     const s = must([
       ...base().slice(0, 2),
       created("a", "implement", "root", {
-        objective: "SECRET-OBJECTIVE",
+        objective: `題の部分${"。".repeat(UI_TITLE_MAX)}SECRET-OBJECTIVE`,
         acceptanceCriteria: ["SECRET-CRITERIA"],
         scope: {
           writableLocations: ["src/secret-dir"],
@@ -449,8 +452,9 @@ describe("拡張要求の対象の表示", () => {
         kind: "write",
         target: "src/ok.ts",
         targetHidden: false,
+        at: AT,
       },
-      { id: "x2", nodeId: "a", reason: "外", kind: "write", targetHidden: true },
+      { id: "x2", nodeId: "a", reason: "外", kind: "write", targetHidden: true, at: AT },
     ]);
     expect(JSON.stringify(v)).not.toContain("outside");
   });
@@ -513,5 +517,230 @@ describe("拡張要求の対象の表示", () => {
     expect(v.decisions.map((d) => d.id)).toEqual(["d1", "d2"]);
     expect(v.decisions.find((d) => d.id === "d1")?.closedReason).toBeUndefined();
     expect(v.decisions.find((d) => d.id === "d2")?.closedReason).toBe("discarded");
+  });
+});
+
+describe("uiViewOf の #89 の値（題・最後の動き・人の要対応・段・やり取り）", () => {
+  const start = (id: string) =>
+    ev({ type: "node.stateChanged", payload: { nodeId: id, event: { type: "start" } } } as never);
+  const report = (id: string, nodeId: string, kind: string, at = AT) =>
+    ev({ type: "report.added", payload: { reportId: id, nodeId, kind, text: "t" } } as never, at);
+
+  it("題は目的の先頭を整えて UI_TITLE_MAX で切る。受け入れ基準は載せない。目的がなければ題はない", () => {
+    const long = `${"あ".repeat(UI_TITLE_MAX + 5)}`;
+    const s = must([
+      ...base(),
+      created("b", "implement", "root", {
+        objective: "  集計を直す  ",
+        acceptanceCriteria: ["秘密の基準"],
+        scope: { writableLocations: ["src"], forbiddenLocations: [".git"], allowedCommands: [] },
+      }),
+      created("c", "implement", "root", {
+        objective: long,
+        acceptanceCriteria: ["c"],
+        scope: { writableLocations: ["src"], forbiddenLocations: [".git"], allowedCommands: [] },
+      }),
+    ]);
+    const v = uiViewOf(s);
+    expect(v.nodes.find((x) => x.id === "b")?.title).toBe("  集計を直す  ");
+    expect(v.nodes.find((x) => x.id === "c")?.title).toBe(
+      `${"あ".repeat(UI_TITLE_MAX)}${UI_CUT_MARK}`,
+    );
+    expect(v.nodes.find((x) => x.id === "a")).not.toHaveProperty("title");
+    expect(JSON.stringify(v)).not.toContain("秘密の基準");
+  });
+
+  it("最後の動きは、報告・受信箱・判断の要求のうち、いちばん新しい時刻。記録がなければない", () => {
+    const s = must([
+      ...base(),
+      start("a"),
+      report("r1", "a", "progress", "2026-10-20T01:00:00Z"),
+      added("i1", "info", "a", { summary: "x" }),
+      ev(
+        {
+          type: "decision.requested",
+          payload: { decisionId: "d1", nodeId: "a", question: "q" },
+        } as never,
+        "2026-10-20T02:00:00Z",
+      ),
+    ]);
+    const v = uiViewOf(s);
+    expect(v.nodes.find((x) => x.id === "a")?.lastActivityAt).toBe("2026-10-20T02:00:00Z");
+    expect(v.nodes.find((x) => x.id === "root")).not.toHaveProperty("lastActivityAt");
+  });
+
+  it("人の要対応は、未回答の判断・未判定の拡張・止まっているかも・停止未完了だけを数える（進み具合・完了・知らせは数えない）", () => {
+    const s = must([
+      ...base(),
+      start("a"),
+      added("p1", "progress", "a", { summary: "進んだ" }),
+      added("i1", "info", "a", { summary: "ふつうの知らせ" }),
+      added("s1", "info", "a", { summary: stallSummary("a", 25) }),
+      ev({
+        type: "decision.requested",
+        payload: { decisionId: "d1", nodeId: "a", question: "q" },
+      } as never),
+      ev({
+        type: "scope.extensionRequested",
+        payload: {
+          extensionId: "x1",
+          nodeId: "a",
+          target: { kind: "write", value: "src/x.ts" },
+          reason: "r",
+        },
+      } as never),
+    ]);
+    const v = uiViewOf(s);
+    const a = v.nodes.find((x) => x.id === "a");
+    expect(a?.openItems).toBe(3);
+    expect(a?.needsHuman).toBe(3);
+    expect(a?.band).toBe("turn");
+    expect(v.inbox.find((x) => x.id === "s1")?.stall).toBe(true);
+    expect(v.inbox.find((x) => x.id === "i1")).not.toHaveProperty("stall");
+    expect(isStallSummary(stallSummary("a", 25))).toBe(true);
+    expect(isStallSummary("子 a は元気")).toBe(false);
+  });
+
+  it("段: 人の要対応がなければ、動いている子は running、受理・停止は finished", () => {
+    const s = must([...base(), start("a"), created("b", "implement", "root")]);
+    const v = uiViewOf(s);
+    expect(v.nodes.find((x) => x.id === "a")?.band).toBe("running");
+    expect(v.nodes.find((x) => x.id === "a")?.needsHuman).toBe(0);
+  });
+
+  it("受信箱の項目に、識別子の形の ref だけを載せる", () => {
+    const s = must([
+      ...base(),
+      start("a"),
+      ev({
+        type: "scope.extensionRequested",
+        payload: {
+          extensionId: "x1",
+          nodeId: "a",
+          target: { kind: "write", value: "src/x.ts" },
+          reason: "r",
+        },
+      } as never),
+      added("v1", "violation", "a", { summary: "x", ref: "x1" }),
+    ]);
+    expect(uiViewOf(s).inbox.find((x) => x.id === "v1")?.ref).toBe("x1");
+  });
+
+  it("やり取り: 指示は sent → delivered → done（推定）。本文は載せない", () => {
+    const evs = [
+      ...base(),
+      start("a"),
+      ev({ type: "node.instructed", payload: { nodeId: "a", text: "秘密の本文" } } as never),
+    ];
+    const seq = evs.length;
+    const sent = uiViewOf(must(evs)).flows.find((f) => f.kind === "instruction");
+    expect(sent).toMatchObject({ dir: "down", from: "human", to: "a", stage: "sent", sentAt: AT });
+    const delivered = [
+      ...evs,
+      ev({ type: "node.instructionDelivered", payload: { instructedSeq: seq } } as never),
+    ];
+    expect(uiViewOf(must(delivered)).flows.find((f) => f.kind === "instruction")?.stage).toBe(
+      "delivered",
+    );
+    const done = [...delivered, report("r1", "a", "progress", "2026-10-20T03:00:00Z")];
+    const v = uiViewOf(must(done));
+    expect(v.flows.find((f) => f.kind === "instruction")).toMatchObject({
+      stage: "done",
+      doneInferred: true,
+      doneAt: "2026-10-20T03:00:00Z",
+    });
+    expect(JSON.stringify(v)).not.toContain("秘密の本文");
+  });
+
+  it("やり取り: 子 → 親は届いたかは分からない。判断の頼みは答えで done、答えは子の次の報告で done（推定）", () => {
+    const evs = [
+      ...base(),
+      start("a"),
+      ev({
+        type: "decision.requested",
+        payload: { decisionId: "d1", nodeId: "a", question: "q" },
+      } as never),
+    ];
+    const open = uiViewOf(must(evs)).flows.find((f) => f.kind === "decision");
+    expect(open).toMatchObject({
+      dir: "up",
+      from: "a",
+      to: "root",
+      stage: "sent",
+      deliveryUnknown: true,
+    });
+    const answered = [
+      ...evs,
+      ev(
+        { type: "decision.answered", payload: { decisionId: "d1", answer: "日" } } as never,
+        "2026-10-20T04:00:00Z",
+      ),
+    ];
+    const v = uiViewOf(must(answered));
+    expect(v.flows.find((f) => f.kind === "decision")).toMatchObject({
+      stage: "done",
+      doneAt: "2026-10-20T04:00:00Z",
+    });
+    expect(v.flows.find((f) => f.kind === "answer")).toMatchObject({
+      dir: "down",
+      to: "a",
+      stage: "sent",
+      deliveryUnknown: true,
+    });
+    expect(v.flows[0]?.kind).toBe("answer");
+    const replied = uiViewOf(
+      must([...answered, report("r1", "a", "progress", "2026-10-20T05:00:00Z")]),
+    );
+    expect(replied.flows.find((f) => f.kind === "answer")).toMatchObject({
+      stage: "done",
+      doneInferred: true,
+    });
+    expect(replied.flows.find((f) => f.kind === "report")).toMatchObject({
+      stage: "done",
+      deliveryUnknown: true,
+    });
+  });
+
+  it("やり取り: 完了の報告は受理の前は sent、拡張の頼みは判定で done", () => {
+    const s = must([
+      ...base(),
+      start("a"),
+      ev({
+        type: "scope.extensionRequested",
+        payload: {
+          extensionId: "x1",
+          nodeId: "a",
+          target: { kind: "write", value: "src/x.ts" },
+          reason: "r",
+        },
+      } as never),
+      ev(
+        {
+          type: "scope.extensionDecided",
+          payload: { extensionId: "x1", decision: "reject" },
+        } as never,
+        "2026-10-20T06:00:00Z",
+      ),
+      report("r1", "a", "done"),
+      ev({
+        type: "node.stateChanged",
+        payload: { nodeId: "a", event: { type: "reportDone" } },
+      } as never),
+    ]);
+    const v = uiViewOf(s);
+    expect(v.flows.find((f) => f.kind === "extension")).toMatchObject({
+      stage: "done",
+      doneAt: "2026-10-20T06:00:00Z",
+    });
+    expect(v.flows.find((f) => f.kind === "done")).toMatchObject({ stage: "sent", to: "root" });
+  });
+
+  it("やり取りは UI_LIMITS.flows 件まで。切ったら truncated に flows", () => {
+    const evs = [...base(), start("a"), created("b", "implement", "root"), start("b")];
+    for (let i = 0; i < UI_LIMITS.flows + 1; i++)
+      evs.push(report(`r${i}`, i % 2 === 0 ? "a" : "b", "progress"));
+    const v = uiViewOf(must(evs));
+    expect(v.flows).toHaveLength(UI_LIMITS.flows);
+    expect(v.truncated).toContain("flows");
   });
 });

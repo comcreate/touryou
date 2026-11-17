@@ -2,7 +2,9 @@
  * HTML 画面の表示モデル（FR_021）。I/O を持たない純粋関数。
  *
  * - **含めるもの**: ノードの識別子・役割・親・状態・依存、未解決の受信箱の項目、未回答の判断、未判定の拡張要求。
- * - **含めないもの**: トークン・秘密・パス（作業ツリーの絶対パス・作業範囲の場所・最終コミットなど）。ただし、拡張要求の対象は、`uiTargetOf` の規則を満たすものだけ載せる。ブリーフ（目的・受け入れ基準）も含めない。
+ * - **含めないもの**: トークン・秘密・パス（作業ツリーの絶対パス・作業範囲の場所・最終コミットなど）。ただし、拡張要求の対象は、`uiTargetOf` の規則を満たすものだけ載せる。
+ *   ブリーフは、目的（objective）の先頭を `UI_TITLE_MAX` で切った題（`title`）だけ載せる（#89）。受け入れ基準・目的の全文・セッションの識別子は含めない。
+ * - やり取りの段（`flows`。#89）: 記録から、種類・向き・相手・段（`sent`・`delivered`・`done`）・時刻だけを導く。本文は載せない。
  * - 子が書いた文字列（要約・判断の質問・選択肢・拡張の理由）は、制御文字（タブ・改行は残す）と書式制御文字（U+202E など）を除いて、種類ごとの上限（コードポイント）に切る。
  *   切ったときは、末尾に `UI_CUT_MARK`（「…（省略）」）を付ける。画面は、これを `textContent` だけで描く。
  *   上限: 要約・理由 `UI_TEXT_MAX`（200）、判断の質問 `UI_QUESTION_MAX`（2,000）、選択肢 `UI_OPTION_MAX`（500。サーバーの選択肢の上限と同じ）。
@@ -10,9 +12,9 @@
  * - 件数には上限がある（`UI_LIMITS`）。切ったときは、`truncated` に種類を入れる。
  */
 
-import type { OrchState } from "./events.js";
+import type { Actor, OrchState } from "./events.js";
 import { ID_PATTERN } from "./ids.js";
-import { PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
+import { isStallSummary, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
 import type { NodeRole, NodeState } from "./index.js";
 
 export const UI_TEXT_MAX = 200;
@@ -22,6 +24,8 @@ export const UI_QUESTION_MAX = 2000;
 export const UI_OPTION_MAX = 500;
 /** 拡張要求の対象の上限（コードポイント）。超えたものは、切らずに隠す（切った値を承認させない）。 */
 export const UI_TARGET_MAX = 200;
+/** 題（目的の先頭）の上限（コードポイント）。 */
+export const UI_TITLE_MAX = 80;
 /** 上限で切ったときに、末尾に付ける印。 */
 export const UI_CUT_MARK = "…（省略）";
 export const UI_LIMITS = {
@@ -30,6 +34,7 @@ export const UI_LIMITS = {
   decisions: 100,
   extensions: 100,
   options: 10,
+  flows: 200,
 } as const;
 
 export interface UiNode {
@@ -47,7 +52,21 @@ export interface UiNode {
    * 画面は、停止未完了のこのノードに、停止の宣言（`node.confirmStopped`）を出す。
    */
   readonly stopDelegated?: true;
+  /** 題: 目的（objective）の先頭を整えて `UI_TITLE_MAX` で切ったもの。目的がなければ、なし。 */
+  readonly title?: string;
+  /** そのノードの最後の動き（報告・受信箱の項目・指示と受け取り・判断と拡張の要求）の時刻。記録がなければ、なし。 */
+  readonly lastActivityAt?: string;
+  /**
+   * 人の操作が要る数: 未回答の判断・未判定の拡張要求・未解決の「止まっているかも」と停止未完了の項目。
+   * `openItems`（未解決の項目すべて）と違い、進み具合・完了・知らせを数えない。
+   */
+  readonly needsHuman: number;
+  /** 作業の状態の 3 段。`turn`: 人の出番（`needsHuman` が 1 以上・停止未完了・未解決の失敗）、`finished`: 終わった、`running`: 進んでいる。 */
+  readonly band: UiBand;
 }
+
+export const UI_BANDS = ["turn", "running", "finished"] as const;
+export type UiBand = (typeof UI_BANDS)[number];
 
 /** 表示モデルを作るときの、状態の外の情報（daemon が渡す）。 */
 export interface UiViewOptions {
@@ -62,6 +81,10 @@ export interface UiInboxItem {
   readonly at: string;
   readonly priority: Priority;
   readonly summary?: string;
+  /** 全文の参照（報告の ID・判断の ID・拡張要求の ID）。識別子の形のものだけ。 */
+  readonly ref?: string;
+  /** 「止まっているかもしれない子」の知らせ（`isStallSummary`）。 */
+  readonly stall?: true;
 }
 
 export interface UiOption {
@@ -94,6 +117,42 @@ export interface UiExtension {
   readonly target?: string;
   /** 対象を隠した（絶対パス・`..`・制御文字・長すぎる、など）。画面は、承認・切り出しをさせない。 */
   readonly targetHidden: boolean;
+  /** 要求の時刻。古い記録にはない。 */
+  readonly at?: string;
+}
+
+export const UI_FLOW_STAGES = ["sent", "delivered", "done"] as const;
+/** やり取りの段。`sent`: 送った・まだ届いていない、`delivered`: 届いた・返事を待っている、`done`: 済んだ。 */
+export type UiFlowStage = (typeof UI_FLOW_STAGES)[number];
+export const UI_FLOW_KINDS = [
+  "instruction",
+  "report",
+  "done",
+  "decision",
+  "extension",
+  "answer",
+] as const;
+export type UiFlowKind = (typeof UI_FLOW_KINDS)[number];
+/** 人（ノードでない相手）。 */
+export const UI_HUMAN = "human";
+
+/** やり取り 1 件（#89）。本文は載せない。 */
+export interface UiFlow {
+  readonly id: string;
+  readonly kind: UiFlowKind;
+  /** `up`: 子 → 親（または人）、`down`: 親（または人）→ 子。 */
+  readonly dir: "up" | "down";
+  /** ノードの ID か `UI_HUMAN`。 */
+  readonly from: string;
+  readonly to: string;
+  readonly stage: UiFlowStage;
+  readonly sentAt: string;
+  readonly deliveredAt?: string;
+  readonly doneAt?: string;
+  /** 「届いた」の記録がない種類（子 → 親。#102 で足す）。画面は「届いたかは分からない」を示す。 */
+  readonly deliveryUnknown?: true;
+  /** 「済んだ」を推定で出した（届いたあとの、相手の最初の報告）。 */
+  readonly doneInferred?: true;
 }
 
 export interface UiView {
@@ -102,7 +161,9 @@ export interface UiView {
   readonly inbox: readonly UiInboxItem[];
   readonly decisions: readonly UiDecision[];
   readonly extensions: readonly UiExtension[];
-  /** 上限で切った種類（nodes・inbox・decisions・extensions）。 */
+  /** やり取り（新しい順。`UI_LIMITS.flows` 件まで）。 */
+  readonly flows: readonly UiFlow[];
+  /** 上限で切った種類（nodes・inbox・decisions・extensions・flows）。 */
   readonly truncated: readonly string[];
 }
 
@@ -194,8 +255,18 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
     if (i.kind === "digest") continue;
     counts.set(i.nodeId, (counts.get(i.nodeId) ?? 0) + 1);
   }
-  const nodes = cap("nodes", state.nodes, UI_LIMITS.nodes).map(
-    (n): UiNode => ({
+  const human = humanCounts(state);
+  const last = lastActivity(state);
+  const failing = new Set(
+    unresolved
+      .filter((i) => priorityOf(i) === "failed" && !isStallSummary(i.summary))
+      .map((i) => i.nodeId),
+  );
+  const nodes = cap("nodes", state.nodes, UI_LIMITS.nodes).map((n): UiNode => {
+    const title = uiText(n.objective, UI_TITLE_MAX);
+    const needsHuman = human.get(n.id) ?? 0;
+    const at = last.get(n.id);
+    return {
       id: idOf(n.id),
       role: n.role,
       parentId: n.parentId === null ? null : idOf(n.parentId),
@@ -204,8 +275,12 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       openItems: counts.get(n.id) ?? 0,
       discarded: n.discarded !== undefined,
       ...(options.stopDelegated?.(n.id) === true ? { stopDelegated: true as const } : {}),
-    }),
-  );
+      ...(title === "" ? {} : { title }),
+      ...(at === undefined ? {} : { lastActivityAt: uiText(at) }),
+      needsHuman,
+      band: bandOf(n.state, needsHuman, failing.has(n.id)),
+    };
+  });
 
   const rank = (p: Priority): number => PRIORITIES.indexOf(p);
   const ranked = unresolved
@@ -216,6 +291,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
     );
   const inbox = cap("inbox", ranked, UI_LIMITS.inbox).map(({ i, p }): UiInboxItem => {
     const summary = uiText(i.summary);
+    const ref = idOf(i.ref);
     return {
       id: idOf(i.id),
       kind: i.kind,
@@ -223,6 +299,8 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       at: uiText(i.at),
       priority: p,
       ...(summary === "" ? {} : { summary }),
+      ...(ref === "" ? {} : { ref }),
+      ...(i.kind === "info" && isStallSummary(i.summary) ? { stall: true as const } : {}),
     };
   });
 
@@ -256,8 +334,197 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       nodeId: idOf(x.nodeId),
       reason: uiText(x.reason),
       ...uiTargetOf(x.target),
+      ...(x.requestedAt === undefined ? {} : { at: uiText(x.requestedAt) }),
     }),
   );
 
-  return { lastSeq: state.lastSeq, nodes, inbox, decisions, extensions, truncated };
+  const flows = cap("flows", flowsOf(state), UI_LIMITS.flows);
+
+  return { lastSeq: state.lastSeq, nodes, inbox, decisions, extensions, flows, truncated };
+}
+
+/** 終わった状態（人の決めが残らないもの）。停止（stopped）は、人の要対応がなければ終わった扱い。 */
+const FINISHED_STATES: ReadonlySet<string> = new Set([
+  "verified",
+  "reclaimable",
+  "archived",
+  "stopped",
+]);
+
+function bandOf(state: NodeState, needsHuman: number, failing: boolean): UiBand {
+  if (needsHuman > 0 || state === "stopIncomplete" || (failing && !FINISHED_STATES.has(state)))
+    return "turn";
+  return FINISHED_STATES.has(state) ? "finished" : "running";
+}
+
+/** ノードごとの、人の操作が要る数（`UiNode.needsHuman`）。 */
+export function humanCounts(state: OrchState): Map<string, number> {
+  const m = new Map<string, number>();
+  const add = (id: string): void => {
+    m.set(id, (m.get(id) ?? 0) + 1);
+  };
+  for (const d of state.decisions) if (d.status === "open") add(d.nodeId);
+  for (const x of state.extensions) if (x.status === "open") add(x.nodeId);
+  for (const i of state.inbox) {
+    if (i.resolved !== undefined) continue;
+    if (i.kind === "stopIncomplete" || (i.kind === "info" && isStallSummary(i.summary)))
+      add(i.nodeId);
+  }
+  return m;
+}
+
+/** ノードごとの最後の動きの時刻。ISO 8601 UTC の文字列は、辞書順で時刻順になる。 */
+function lastActivity(state: OrchState): Map<string, string> {
+  const m = new Map<string, string>();
+  const see = (id: string, at: string | undefined): void => {
+    if (typeof at !== "string" || at === "") return;
+    const cur = m.get(id);
+    if (cur === undefined || at > cur) m.set(id, at);
+  };
+  for (const r of state.reports) see(r.nodeId, r.at);
+  for (const i of state.inbox) see(i.nodeId, i.at);
+  for (const i of state.instructions) {
+    see(i.nodeId, i.at);
+    see(i.nodeId, i.deliveredAt);
+  }
+  for (const d of state.decisions) see(d.nodeId, d.requestedAt);
+  for (const x of state.extensions) see(x.nodeId, x.requestedAt);
+  return m;
+}
+
+const actorOf = (a: Actor | undefined): string =>
+  a !== undefined && "nodeId" in a ? idOf(a.nodeId) || UI_HUMAN : UI_HUMAN;
+
+/**
+ * やり取りの段（#89。research.md 9.3）。新しい順（送った時刻、同じなら記録の順）。
+ * - 指示（親 → 子）: 受け取りの記録（`deliveredAt`）で `delivered`、そのあとの子の最初の報告で `done`（推定）。
+ * - 報告（子 → 親）: 進み具合・範囲外・失敗は、答えを待たないので `done`（届いたかは分からない）。完了の報告は、受理か差し戻しまで `sent`。
+ * - 判断・拡張の頼み（子 → 親）: 未回答・未判定は `sent`（届いたかは分からない）、答え・判定・閉じたら `done`。
+ * - 答え（人か親 → 子）: そのあとの子の最初の報告で `done`（推定）。それまでは `sent`（届いたかは分からない）。
+ */
+export function flowsOf(state: OrchState): UiFlow[] {
+  const parentOf = new Map<string, string>();
+  for (const n of state.nodes)
+    parentOf.set(n.id, n.parentId === null ? UI_HUMAN : idOf(n.parentId) || UI_HUMAN);
+  const stateOf = new Map(state.nodes.map((n) => [n.id, n.state] as const));
+  // 子の報告（review は人・親の書いたものなので除く）を、ノードごとに記録の順で
+  const reportsBy = new Map<string, { seq: number; at: string }[]>();
+  for (const r of state.reports) {
+    if (r.kind === "review") continue;
+    const xs = reportsBy.get(r.nodeId) ?? [];
+    xs.push({ seq: r.seq, at: r.at });
+    reportsBy.set(r.nodeId, xs);
+  }
+  const firstReportAfter = (nodeId: string, seq: number): { seq: number; at: string } | undefined =>
+    reportsBy.get(nodeId)?.find((r) => r.seq > seq);
+  const lastDone = new Map<string, number>();
+  for (const r of state.reports) if (r.kind === "done") lastDone.set(r.nodeId, r.seq);
+
+  const out: { flow: UiFlow; seq: number }[] = [];
+  const push = (flow: UiFlow, seq: number): void => {
+    if (flow.from === "" || flow.to === "" || flow.sentAt === "") return;
+    out.push({ flow, seq });
+  };
+  const t = (x: string | undefined): string => uiText(x);
+
+  for (const i of state.instructions) {
+    const to = idOf(i.nodeId);
+    const reply =
+      i.deliveredSeq === undefined ? undefined : firstReportAfter(i.nodeId, i.deliveredSeq);
+    push(
+      {
+        id: `f-${i.seq}`,
+        kind: "instruction",
+        dir: "down",
+        from: actorOf(i.actor),
+        to,
+        stage: reply !== undefined ? "done" : i.deliveredSeq !== undefined ? "delivered" : "sent",
+        sentAt: t(i.at),
+        ...(i.deliveredAt === undefined ? {} : { deliveredAt: t(i.deliveredAt) }),
+        ...(reply === undefined ? {} : { doneAt: t(reply.at), doneInferred: true as const }),
+      },
+      i.seq,
+    );
+  }
+  for (const r of state.reports) {
+    if (r.kind === "review") continue;
+    const from = idOf(r.nodeId);
+    const done = r.kind === "done";
+    // 完了の報告は、最後のもので、ノードがまだ完了の報告の状態（受理・差し戻しの前）なら、返事を待っている
+    const waiting = done && lastDone.get(r.nodeId) === r.seq && stateOf.get(r.nodeId) === "done";
+    push(
+      {
+        id: `f-${r.seq}`,
+        kind: done ? "done" : "report",
+        dir: "up",
+        from,
+        to: parentOf.get(r.nodeId) ?? UI_HUMAN,
+        stage: waiting ? "sent" : "done",
+        sentAt: t(r.at),
+        ...(waiting || done ? {} : { doneAt: t(r.at) }),
+        deliveryUnknown: true,
+      },
+      r.seq,
+    );
+  }
+  for (const d of state.decisions) {
+    const from = idOf(d.nodeId);
+    const seq = d.requestedSeq ?? 0;
+    if (d.requestedAt === undefined) continue;
+    const doneAt =
+      d.status === "answered" ? d.answeredAt : d.status === "closed" ? d.closedAt : undefined;
+    push(
+      {
+        id: `f-${seq}`,
+        kind: "decision",
+        dir: "up",
+        from,
+        to: parentOf.get(d.nodeId) ?? UI_HUMAN,
+        stage: d.status === "open" ? "sent" : "done",
+        sentAt: t(d.requestedAt),
+        ...(doneAt === undefined ? {} : { doneAt: t(doneAt) }),
+        deliveryUnknown: true,
+      },
+      seq,
+    );
+    if (d.status === "answered" && d.answeredSeq !== undefined && d.answeredAt !== undefined) {
+      const reply = firstReportAfter(d.nodeId, d.answeredSeq);
+      push(
+        {
+          id: `f-${d.answeredSeq}`,
+          kind: "answer",
+          dir: "down",
+          from: actorOf(d.answeredBy),
+          to: from,
+          stage: reply === undefined ? "sent" : "done",
+          sentAt: t(d.answeredAt),
+          ...(reply === undefined
+            ? { deliveryUnknown: true as const }
+            : { doneAt: t(reply.at), doneInferred: true as const }),
+        },
+        d.answeredSeq,
+      );
+    }
+  }
+  for (const x of state.extensions) {
+    if (x.requestedAt === undefined) continue;
+    push(
+      {
+        id: `f-${x.requestedSeq}`,
+        kind: "extension",
+        dir: "up",
+        from: idOf(x.nodeId),
+        to: parentOf.get(x.nodeId) ?? UI_HUMAN,
+        stage: x.status === "open" ? "sent" : "done",
+        sentAt: t(x.requestedAt),
+        ...(x.decidedAt === undefined ? {} : { doneAt: t(x.decidedAt) }),
+        deliveryUnknown: true,
+      },
+      x.requestedSeq,
+    );
+  }
+  out.sort((a, b) =>
+    a.flow.sentAt < b.flow.sentAt ? 1 : a.flow.sentAt > b.flow.sentAt ? -1 : b.seq - a.seq,
+  );
+  return out.map((x) => x.flow);
 }

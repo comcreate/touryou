@@ -52,3 +52,13 @@ export const priorityOf = (item: {
 
 /** 受信箱の項目の要約（`summary`）の最大文字数。短い要約だけを載せ、全文は参照先（`ref`）で読む。 */
 export const INBOX_SUMMARY_MAX = 200;
+
+/**
+ * 「止まっているかもしれない子」の知らせ（daemon の CLI の見張り）の要約。画面は、この形で「止まっているかも」を見分ける
+ * （`isStallSummary`。種類は `info` のまま）。文を変えるときは、両方をここで変える。
+ */
+export const stallSummary = (nodeId: string, minutes: number): string =>
+  `子 ${nodeId} は止まっているかもしれない（${minutes} 分、報告も道具の使用の記録もない）。親は claude agents --json で状態を確かめて parent_report の agentState で報告するか、人に attach を頼む`;
+const STALL_SUMMARY = /^子 [A-Za-z0-9._:-]+ は止まっているかもしれない（/;
+export const isStallSummary = (summary: unknown): boolean =>
+  typeof summary === "string" && STALL_SUMMARY.test(summary);
