@@ -190,6 +190,54 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     await page.waitForSelector("#graph .gnode");
   });
 
+  it("作業ごとのようすのカードは見本の形：札は状態 1 つと答えの数、題は h3、棒は 12 区切り、やり取りは 3 件まで、知らせ・ID はたたむ", async () => {
+    const shape = await page.evaluate(() =>
+      [...document.querySelectorAll("#cards .card, #finished-cards .card")].map((c) => ({
+        id: c.id,
+        chips: [...(c.children[0]?.querySelectorAll(".chip") ?? [])].map(
+          (x) => x.textContent ?? "",
+        ),
+        need: c.classList.contains("need"),
+        h3: c.querySelector(":scope > h3")?.textContent ?? "",
+        slots: c.querySelectorAll(":scope > .spark > .slot").length,
+        flows: c.querySelectorAll(":scope > .flowlist > .fl").length,
+        // カードの表（たたみの外）に、ID の行・受信箱の項目がない
+        idOutside: [...c.children].some((x) => x.classList.contains("idline")),
+        entryOutside: [...c.children].some((x) => x.classList.contains("entry")),
+        folds: [...c.querySelectorAll(":scope > details > summary")].map(
+          (x) => x.textContent ?? "",
+        ),
+        attach: c.querySelector(":scope > .cmd code")?.textContent ?? "",
+      })),
+    );
+    expect(shape.length).toBeGreaterThan(0);
+    for (const c of shape) {
+      expect(c.chips.length, c.id).toBeLessThanOrEqual(2);
+      expect(
+        c.chips.some((t) => t === "あなたの出番" || t === "進んでいる"),
+        c.id,
+      ).toBe(false);
+      expect(c.h3, c.id).not.toBe("");
+      expect(c.slots, c.id).toBe(12);
+      expect(c.flows, c.id).toBeLessThanOrEqual(3);
+      expect(c.idOutside, c.id).toBe(false);
+      expect(c.entryOutside, c.id).toBe(false);
+      expect(
+        c.folds.some((t) => t === "この子への操作" || t === "この子の ID"),
+        c.id,
+      ).toBe(true);
+    }
+    const b = shape.find((c) => c.id === "card-ui-b");
+    expect(b?.chips).toEqual(["● あなたの答え待ち", "あなたの答え 1 件"]);
+    expect(b?.need).toBe(true);
+    const stall = shape.find((c) => c.id === `card-${LONG}`);
+    expect(stall?.chips[0]).toBe("‖ 止まっているかも");
+    expect(stall?.attach).toBe(`claude attach ${LONG}`);
+    expect(stall?.folds.some((t) => /^知らせ \d+ 件（たたんでいます）$/.test(t))).toBe(true);
+    const old = shape.find((c) => c.id === "card-ui-old");
+    expect(old?.chips[0]).toBe("済んだ");
+  });
+
   it("箱は見本の形：状態の言葉と印・左の縁の段・役割の印・列の見出し。止まっているかもは、くすんだ黄（カードも）", async () => {
     const box = (id: string) => page.locator(`#graph .gnode[data-id="${id}"]`);
     expect(await box("root").getAttribute("class")).toContain("t-go");

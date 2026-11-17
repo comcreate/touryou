@@ -237,7 +237,7 @@ describe("束ねた graph.js（禁止の API の不在）", async () => {
     expect(js).toMatch(/\*\/\n(?:"use strict";)?var touryouGraph=/);
     expect(js).not.toMatch(/\b(window|globalThis|self)\.[A-Za-z_$][\w$]*\s*=[^=]/); // ほかの名前を大域に置かない
     const g = runInNewContext(`${js};touryouGraph`, {}) as Record<string, unknown>;
-    expect(Object.keys(g).sort()).toEqual(["destroy", "draw"]);
+    expect(Object.keys(g).sort()).toEqual(["destroy", "draw", "statuses"]);
     expect(js).not.toContain("rete-connection-plugin");
     expect(gzipSync(js).length).toBeLessThanOrEqual(20 * 1024);
   });
