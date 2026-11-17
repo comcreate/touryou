@@ -474,7 +474,11 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
         const bottom = Math.max(...boxes.map((b) => b.bottom), ...texts.map((t) => t.bottom));
         const top = Math.min(...boxes.map((b) => b.top));
         const right = boxes.filter((b) => b.right > hb.right - 280);
+        const k = Number(
+          /scale\(([\d.]+)\)/.exec((host.firstElementChild as HTMLElement).style.transform)?.[1],
+        );
         return {
+          k,
           below: hb.bottom - bottom,
           above: hb.top - top,
           rightTop: Math.min(...right.map((b) => b.top)) - hb.top,
@@ -489,14 +493,17 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
       return { first, fitted };
     }, width);
 
-  it("初めの形と「全体を見る」で、高い木のいちばん下の箱と札が枠に収まって下に余白があり、右上の箱はボタンの下に隠れない", async () => {
+  it("高い木：初めの形は読める大きさ（0.5 倍）で止まり、「全体を見る」は全部を枠に収めて下に余白をとる。右上の箱はボタンの下に隠れない", async () => {
     for (const width of [1100, 600]) {
       const r = await fitShape(width);
-      for (const m of [r.first, r.fitted]) {
-        expect(m.below, `${width}px: 下の余白`).toBeGreaterThanOrEqual(12);
-        // ボタンは枠の上から 10px・高さ 34px。右上の箱は、その下（44px より下）から始まる
+      // 初めの形は 0.5 倍より小さくしない（収まらない分は、図を動かして見る）
+      expect(r.first.k, `${width}px: 初めの倍率`).toBe(0.5);
+      // 全体を見るは、0.5 倍より小さくしてでも、全部を収める
+      expect(r.fitted.k, `${width}px: 全体を見るの倍率`).toBeLessThan(0.5);
+      expect(r.fitted.below, `${width}px: 下の余白`).toBeGreaterThanOrEqual(12);
+      // ボタンは枠の上から 10px・高さ 34px。右上の箱は、その下（44px より下）から始まる
+      for (const m of [r.first, r.fitted])
         expect(m.rightTop, `${width}px: 右上の箱`).toBeGreaterThanOrEqual(44);
-      }
     }
     // 後の試験のために、試験のページの図を描き直す
     await page.evaluate(async () => {
