@@ -1650,7 +1650,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     if (d.allow) {
       // 起動のときの許可の一覧（ブリーフの範囲から作る。dontAsk）にない、承認済みの拡張でだけ通る Bash は、明示の許可を返す（#91）
       const brief = log.state().nodes.find((n) => n.id === nodeId)?.scope;
-      if (brief !== undefined && grantedOnlyByExtension(brief, scope, toolName, toolInput)) {
+      if (brief !== undefined && grantedOnlyByExtension(brief, scope, toolName, toolInput, wt)) {
         return { allow: true, permit: "extension" };
       }
       return { allow: true };

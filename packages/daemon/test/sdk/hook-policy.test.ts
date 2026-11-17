@@ -680,7 +680,7 @@ describe("grantedOnlyByExtension（#91: 承認済みの拡張にだけ、明示�
     allowedCommands: ["pnpm test", "git ls-files docs .sdd", grep, "git grep", ...risky],
   };
   const permit = (command: string, tool = "Bash") =>
-    grantedOnlyByExtension(brief, effective, tool, { command });
+    grantedOnlyByExtension(brief, effective, tool, { command }, "/w");
 
   it("承認した形そのもの（引用符の付け方だけ違う形を含む）だけが真", () => {
     expect(permit("git ls-files docs .sdd")).toBe(true);
@@ -693,6 +693,27 @@ describe("grantedOnlyByExtension（#91: 承認済みの拡張にだけ、明示�
     expect(permit("git grep -O sh x")).toBe(false);
     expect(permit("git grep --open-files-in-pager=sh x")).toBe(false);
   });
+  it("前方一致で通るだけの、リンクをたどる旗・略した長いオプションは偽", () => {
+    const e2: Scope = { ...brief, allowedCommands: ["pnpm test", "git grep", "find", "grep"] };
+    for (const c of ["git grep --open=echo x", "find -L .", "grep -R x ."])
+      expect(grantedOnlyByExtension(brief, e2, "Bash", { command: c }, "/w"), c).toBe(false);
+  });
+  it("書き込み: 承認した場所だけが真。ブリーフの場所・承認していない場所・禁じる場所は偽", () => {
+    const e3: Scope = {
+      ...brief,
+      writableLocations: ["src", "docs"],
+      forbiddenLocations: [".git", "docs/secret"],
+    };
+    const w = (tool: string, input: Record<string, unknown>) =>
+      grantedOnlyByExtension(brief, e3, tool, input, "/w");
+    expect(w("Write", { file_path: "/w/docs/a.md" })).toBe(true);
+    expect(w("Edit", { file_path: "docs/b.md" })).toBe(true);
+    expect(w("NotebookEdit", { notebook_path: "/w/docs/n.ipynb" })).toBe(true);
+    expect(w("Write", { file_path: "/w/src/a.ts" })).toBe(false);
+    expect(w("Write", { file_path: "/w/other/a.ts" })).toBe(false);
+    expect(w("Write", { file_path: "/w/docs/secret/k" })).toBe(false);
+    expect(w("Write", {})).toBe(false);
+  });
   it("任意のコードが動く形・1 語・cd 始まりの承認には、明示の許可を付けない（起動のときの一覧と同じ規則）", () => {
     for (const c of risky) expect(permit(c), c).toBe(false);
   });
@@ -703,6 +724,6 @@ describe("grantedOnlyByExtension（#91: 承認済みの拡張にだけ、明示�
     expect(permit(`${grep}; rm -rf /`)).toBe(false);
     expect(permit("pnpm test && git ls-files docs .sdd")).toBe(false);
     expect(permit(grep, "Read")).toBe(false);
-    expect(grantedOnlyByExtension(brief, effective, "Bash", {})).toBe(false);
+    expect(grantedOnlyByExtension(brief, effective, "Bash", {}, "/w")).toBe(false);
   });
 });

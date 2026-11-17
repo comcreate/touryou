@@ -851,6 +851,8 @@ export async function decideToolUse(
  * Claude Code の判定に任せる）。
  * - 命令を区切りで分けた各部分が、承認済みの拡張だけにある項目（ブリーフにない項目）と、語の数まで同じ（完全一致）
  * - その項目が、起動のときの一覧と同じ規則（`commandEntryProblem`: `cd` 始まり・1 語だけ・任意のコードが動く形の禁止）を通る
+ * 書き込みの道具（Write・Edit・MultiEdit・NotebookEdit）は、対象の場所がブリーフでは断られ、有効な範囲では通るときだけ真。
+ * 禁じる場所の `Edit` の deny は、明示の許可のあとも Claude Code の側で効く。
  * フックの判定（`decideToolUse`）で許可されたあとにだけ呼ぶ（これだけで許可を決めない）。純粋関数。
  */
 export function grantedOnlyByExtension(
@@ -858,7 +860,18 @@ export function grantedOnlyByExtension(
   effective: Scope,
   toolName: string,
   toolInput: unknown,
+  cwd: string,
 ): boolean {
+  const key = WRITE_TOOLS[toolName];
+  if (key !== undefined) {
+    // 書き込み: ブリーフでは断られ、有効な範囲（承認した書き込みの場所を足したもの）では通る場所。比べられなければ偽（フェイルクローズ）
+    const path = isRec(toolInput) ? toolInput[key] : undefined;
+    if (typeof path !== "string") return false;
+    return (
+      !evaluateScope(brief, cwd, { kind: "write", path }).allowed &&
+      evaluateScope(effective, cwd, { kind: "write", path }).allowed
+    );
+  }
   if (toolName !== "Bash") return false;
   const command = (toolInput as { command?: unknown } | null)?.command;
   if (typeof command !== "string") return false;
