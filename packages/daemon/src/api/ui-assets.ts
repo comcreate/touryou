@@ -224,8 +224,10 @@ export const UI_JS = `'use strict';
   var THROTTLE_MS = 1000;
   var BACKOFF_MIN = 1000;
   var BACKOFF_MAX = 300000;
-  // 裏のタブ: 隠れてこの時間たったら購読を閉じ（ほかのタブに枠を空ける）、ポーリングも間を空ける
-  var HIDE_CLOSE_MS = 30000;
+  // 裏のタブ: 隠れてこの時間たったら購読を閉じ（ほかのタブに枠を空ける）、ポーリングも間を空ける。
+  // 利用者の決めで、枠が埋まったときは裏のタブを先に譲る。そのため、裏のタブはすぐに（チラつかない程度の短い待ちで）閉じ、
+  // 枠を持たないようにする。枠が埋まって外れるのは、表のタブのうちいちばん古いもの（daemon の作りは #114 のまま）
+  var HIDE_CLOSE_MS = 4000;
   var HIDDEN_POLL_MS = 30000;
   // 429 がこの回数続いたら、購読の再試行をやめる（見えたとき・フォーカスが来たときだけ試す。コンソールを埋めない）
   var TOO_MANY_MAX = 3;
@@ -1701,7 +1703,7 @@ export const UI_JS = `'use strict';
     (due ? refresh() : Promise.resolve()).then(function () { timer = window.setTimeout(function () { loop(gen); }, every); });
   }
 
-  // 裏に回って HIDE_CLOSE_MS たったら、購読を閉じる（ほかのタブに枠を空ける）。張り直しの待ちも取り消す
+  // 裏に回って HIDE_CLOSE_MS（4 秒）たったら、購読を閉じる（ほかのタブに枠を空ける）。張り直しの待ちも取り消す
   function pauseEvents() {
     hideTimer = null;
     if (!token || !document.hidden) return;
