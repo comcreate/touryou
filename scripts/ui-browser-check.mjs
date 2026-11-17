@@ -447,7 +447,8 @@ state = {
 };
 const t0 = Date.now();
 await page.waitForFunction(
-  () => document.getElementById("view").innerText.includes("新しい項目"),
+  // 受信箱の項目は、カードのたたんだ欄の中（#115 のあと）。描き直しを見るので、文字は textContent で見る
+  () => (document.getElementById("view").textContent ?? "").includes("新しい項目"),
   null,
   { timeout: 5000 },
 );
