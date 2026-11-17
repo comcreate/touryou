@@ -50,6 +50,16 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       ...created("ui-b", "review", "root", "関係図のレビュー"),
       ...created("ui-c", "implement", "root", "一覧の見せ方を直す"),
       ev({ type: "node.instructed", payload: { nodeId: "ui-a", text: "x" } }, { nodeId: "root" }),
+      // 長い進み具合の報告（カードのやり取りでは、たたむ）
+      ev({
+        type: "report.added",
+        payload: {
+          reportId: "rp1",
+          nodeId: "ui-a",
+          kind: "progress",
+          text: "関係図の箱を見本の形にそろえ、線の色と玉の動きを確かめているところです",
+        },
+      }),
       // 人からの指示（人の箱は描かない。親 root から子への下りの線で表す）
       ev({ type: "node.instructed", payload: { nodeId: "ui-c", text: "x" } }),
       // 人から子への、範囲の頼みの却下（札は「指示」でなく「却下」。#115）と、範囲の頼みの知らせ（内部の言葉を言い換える）
@@ -286,6 +296,40 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       ).toBe(true);
     }
     expect(pairs.find((p) => p.id === "ui-d")?.card).not.toBe("● あなたの答え待ち");
+  });
+
+  it("カードの meta は 1 行、親の題は 12 字、やり取りの相手の題は 10 字で切る。短い文は 1 行、長い文はたたむ", async () => {
+    const c = await page.evaluate(() => {
+      const card = (id: string) => document.getElementById(`card-${id}`);
+      const meta = card("ui-b")?.querySelector(".meta") as HTMLElement | null;
+      const spans = [...(meta?.children ?? [])] as HTMLElement[];
+      const a = card("ui-a");
+      return {
+        metaText: meta?.textContent ?? "",
+        // 見本の .meta と同じく、flex で並べ、足りなければ折り返す。それぞれの欄は、中で折れない（1 行の高さ）
+        oneLine:
+          spans.length === 2 &&
+          spans.every(
+            (x) =>
+              x.getBoundingClientRect().height <
+              1.5 * (Number.parseFloat(getComputedStyle(x).lineHeight) || 18),
+          ),
+        bLines: [...(card("ui-b")?.querySelectorAll(".flowlist .fl") ?? [])].map(
+          (x) => x.textContent ?? "",
+        ),
+        aFolded: [...(a?.querySelectorAll(".flowlist details.fbody > summary") ?? [])].map(
+          (x) => x.textContent ?? "",
+        ),
+        aBody: a?.querySelector(".flowlist details.fbody > p")?.textContent ?? "",
+      };
+    });
+    expect(c.metaText).toContain("（親：状態画面の作り直しをまと…）");
+    expect(c.oneLine).toBe(true);
+    expect(
+      c.bLines.some((t) => t.includes("→ 状態画面の作り直しを…　判断を求む：どちらにしますか")),
+    ).toBe(true);
+    expect(c.aFolded.some((t) => t.startsWith("→ 状態画面の作り直しを…　報告"))).toBe(true);
+    expect(c.aBody).toContain("関係図の箱を見本の形にそろえ");
   });
 
   it("箱は見本の形：状態の言葉と印・左の縁の段・役割の印・列の見出し。止まっているかもは、くすんだ黄（カードも）", async () => {

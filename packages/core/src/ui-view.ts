@@ -4,7 +4,9 @@
  * - **含めるもの**: ノードの識別子・役割・親・状態・依存、未解決の受信箱の項目、未回答の判断、未判定の拡張要求。
  * - **含めないもの**: トークン・秘密・パス（作業ツリーの絶対パス・作業範囲の場所・最終コミットなど）。ただし、拡張要求の対象は、`uiTargetOf` の規則を満たすものだけ載せる。
  *   ブリーフは、目的（objective）の先頭を `UI_TITLE_MAX` で切った題（`title`）だけ載せる（#89）。受け入れ基準・目的の全文・セッションの識別子は含めない。
- * - やり取りの段（`flows`。#89）: 記録から、種類・向き・相手・段（`sent`・`delivered`・`done`）・時刻だけを導く。本文は載せない。
+ * - やり取りの段（`flows`。#89）: 記録から、種類・向き・相手・段（`sent`・`delivered`・`done`）・時刻を導く。利用者の決めで、短い本文（`text`。
+ *   上限 `UI_FLOW_TEXT_MAX`）を載せる。載せるのは、画面のほかの所で既に見える文だけ（報告〔受信箱の要約〕・判断の問い・範囲の頼みの理由）。
+ *   追加指示・判断の答えの文は載せない（いまは画面のどこにも出していないため）。
  * - 子が書いた文字列（要約・判断の質問・選択肢・拡張の理由）は、制御文字（タブ・改行は残す）と書式制御文字（U+202E など）を除いて、種類ごとの上限（コードポイント）に切る。
  *   切ったときは、末尾に `UI_CUT_MARK`（「…（省略）」）を付ける。画面は、これを `textContent` だけで描く。
  *   上限: 要約・理由 `UI_TEXT_MAX`（200）、判断の質問 `UI_QUESTION_MAX`（2,000）、選択肢 `UI_OPTION_MAX`（500。サーバーの選択肢の上限と同じ）。
@@ -154,7 +156,10 @@ function instructionKind(kind: string | undefined): UiFlowKind | null {
   return INSTRUCTION_FLOW[kind] ?? null;
 }
 
-/** やり取り 1 件（#89）。本文は載せない。 */
+/** やり取りの短い本文の上限（コードポイント）。 */
+export const UI_FLOW_TEXT_MAX = 200;
+
+/** やり取り 1 件（#89）。本文は、画面のほかの所で既に見える文だけ、短く（`UI_FLOW_TEXT_MAX`）載せる。 */
 export interface UiFlow {
   readonly id: string;
   readonly kind: UiFlowKind;
@@ -171,6 +176,8 @@ export interface UiFlow {
   readonly deliveryUnknown?: true;
   /** 「済んだ」を推定で出した（届いたあとの、相手の最初の報告）。 */
   readonly doneInferred?: true;
+  /** 短い本文（報告・判断の問い・範囲の頼みの理由だけ。`UI_FLOW_TEXT_MAX` で切る）。空なら、なし。 */
+  readonly text?: string;
 }
 
 export interface UiView {
@@ -457,6 +464,10 @@ export function flowsOf(state: OrchState): UiFlow[] {
     out.push({ flow, seq });
   };
   const t = (x: string | undefined): string => uiText(x);
+  const body = (x: string | undefined): { text?: string } => {
+    const s = uiText(x, UI_FLOW_TEXT_MAX);
+    return s.trim() === "" ? {} : { text: s };
+  };
 
   for (const i of state.instructions) {
     const kind = instructionKind(i.kind);
@@ -501,6 +512,7 @@ export function flowsOf(state: OrchState): UiFlow[] {
         sentAt: t(r.at),
         ...(waiting || doneAt === undefined ? {} : { doneAt: t(doneAt) }),
         deliveryUnknown: true,
+        ...body(r.text),
       },
       r.seq,
     );
@@ -522,6 +534,7 @@ export function flowsOf(state: OrchState): UiFlow[] {
         sentAt: t(d.requestedAt),
         ...(doneAt === undefined ? {} : { doneAt: t(doneAt) }),
         deliveryUnknown: true,
+        ...body(d.question),
       },
       seq,
     );
@@ -557,6 +570,7 @@ export function flowsOf(state: OrchState): UiFlow[] {
         sentAt: t(x.requestedAt),
         ...(x.decidedAt === undefined ? {} : { doneAt: t(x.decidedAt) }),
         deliveryUnknown: true,
+        ...body(x.reason),
       },
       x.requestedSeq,
     );

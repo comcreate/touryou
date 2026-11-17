@@ -123,7 +123,7 @@ export interface UiFlow {
   readonly doneInferred?: true;
 }
 // UiView に readonly flows: readonly UiFlow[] を足す。新しい順に UI_LIMITS.flows（200）件まで。
-// 本文は載せない（種類・時刻・ID だけ）。表示モデルは時計を持たない純粋な関数なので、「24 時間たったものを外す」はしない（件数の上限だけ）。
+// 利用者の決めで、短い本文（text。上限 UI_FLOW_TEXT_MAX＝200 字）を載せる。載せるのは、画面のほかの所で既に見える文だけ（報告・判断の問い・範囲の頼みの理由）。追加指示・判断の答えの文は載せない。表示モデルは時計を持たない純粋な関数なので、「24 時間たったものを外す」はしない（件数の上限だけ）。
 // 親への依頼（parentRequest）は、画面のやり取りに要らないので載せない。
 // 完了の報告の doneAt は、受理・差し戻しの時刻（NodeRecord.reviewedAt。最後の 1 回だけ記録する。それより前の完了の報告には doneAt を付けない）。
 ```

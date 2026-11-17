@@ -7,6 +7,7 @@ import {
   type OrchState,
   stallSummary,
   UI_CUT_MARK,
+  UI_FLOW_TEXT_MAX,
   UI_LIMITS,
   UI_OPTION_MAX,
   UI_QUESTION_MAX,
@@ -523,8 +524,8 @@ describe("拡張要求の対象の表示", () => {
 describe("uiViewOf の #89 の値（題・最後の動き・人の要対応・段・やり取り）", () => {
   const start = (id: string) =>
     ev({ type: "node.stateChanged", payload: { nodeId: id, event: { type: "start" } } } as never);
-  const report = (id: string, nodeId: string, kind: string, at = AT) =>
-    ev({ type: "report.added", payload: { reportId: id, nodeId, kind, text: "t" } } as never, at);
+  const report = (id: string, nodeId: string, kind: string, at = AT, text = "t") =>
+    ev({ type: "report.added", payload: { reportId: id, nodeId, kind, text } } as never, at);
 
   it("題は目的の先頭を整えて UI_TITLE_MAX で切る。受け入れ基準は載せない。目的がなければ題はない", () => {
     const long = `${"あ".repeat(UI_TITLE_MAX + 5)}`;
@@ -624,6 +625,38 @@ describe("uiViewOf の #89 の値（題・最後の動き・人の要対応・�
       added("v1", "violation", "a", { summary: "x", ref: "x1" }),
     ]);
     expect(uiViewOf(s).inbox.find((x) => x.id === "v1")?.ref).toBe("x1");
+  });
+
+  it("やり取り: 報告・判断の問い・範囲の頼みの理由だけ、短い本文（text。上限 UI_FLOW_TEXT_MAX）を載せる。指示・答えの文は載せない", () => {
+    const long = "長".repeat(UI_FLOW_TEXT_MAX + 50);
+    const evs = [
+      ...base(),
+      start("a"),
+      report("r1", "a", "progress", "2026-10-20T03:00:00Z", long),
+      ev({
+        type: "decision.requested",
+        payload: { decisionId: "d1", nodeId: "a", question: "どちらにしますか" },
+      } as never),
+      ev({
+        type: "scope.extensionRequested",
+        payload: {
+          extensionId: "x1",
+          nodeId: "a",
+          target: { kind: "write", value: "src/x.ts" },
+          reason: "テストを足したい",
+        },
+      } as never),
+      ev({ type: "node.instructed", payload: { nodeId: "a", text: "秘密の指示" } } as never),
+    ];
+    const v = uiViewOf(must(evs));
+    const of = (k: string) => v.flows.find((f) => f.kind === k);
+    expect(of("decision")?.text).toBe("どちらにしますか");
+    expect(of("extension")?.text).toBe("テストを足したい");
+    const r = of("report")?.text ?? "";
+    expect(Array.from(r).length).toBe(UI_FLOW_TEXT_MAX + Array.from(UI_CUT_MARK).length);
+    expect(r.endsWith(UI_CUT_MARK)).toBe(true);
+    expect(of("instruction")?.text).toBeUndefined();
+    expect(JSON.stringify(v.flows)).not.toContain("秘密の指示");
   });
 
   it("やり取り: 指示は sent → delivered → done（推定）。本文は載せない", () => {

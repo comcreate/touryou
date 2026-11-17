@@ -99,13 +99,14 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .spark{display:grid;grid-template-columns:repeat(12,1fr);gap:3px;align-items:end;height:34px;border-bottom:1px solid var(--line);padding:0 2px}
 .spark .slot{display:flex;align-items:end;justify-content:center;gap:2px;height:100%}
 .spark .bar{width:7px;border-radius:2px 2px 0 0;background:var(--ai);transform-origin:bottom;animation:grow .7s cubic-bezier(.2,.9,.3,1.2) both}
-.spark .bar.h{background:var(--kaki)}.spark .bar.l1{height:35%}.spark .bar.l2{height:55%}.spark .bar.l3{height:75%}.spark .bar.l4{height:95%}
+.spark .bar.h{background:var(--kaki)}.spark .bar.l1{height:56%}.spark .bar.l2{height:70%}.spark .bar.l3{height:85%}.spark .bar.l4{height:100%}
 .flowlist{display:grid;gap:4px;font-size:13.5px}
 .flowlist .fl{display:grid;grid-template-columns:20px 1fr auto;gap:6px;align-items:start}
 .flowlist .ar{font-weight:800;text-align:center}.flowlist .ar.u{color:var(--ai)}.flowlist .ar.d{color:var(--ai-2)}.flowlist .ar.h{color:var(--kaki)}
 .flowlist .t{color:var(--muted);font-size:12px;white-space:nowrap}
+.flowlist .fbody{min-width:0;overflow-wrap:anywhere}.flowlist details.fbody>p{margin:4px 0 0;white-space:pre-wrap;overflow-wrap:anywhere}
 @keyframes grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
-.meta{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:12.5px;color:var(--muted)}
+.meta{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:12.5px;color:var(--muted)}.meta>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 .idline{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .chip{display:inline-block;font-size:12px;font-weight:700;padding:0 8px;border-radius:999px;line-height:1.8;margin-right:4px;background:var(--grid);color:var(--muted)}
 .chip.turn{background:var(--kaki-soft);color:var(--kaki)}.chip.stall{background:var(--kiiro-soft);color:var(--kiiro)}.chip.failed,.chip.blocking{background:var(--shu-soft);color:var(--shu)}
@@ -775,8 +776,8 @@ export const UI_JS = `'use strict';
     for (var j = 0; j < SPARK_SLOTS; j += 1) {
       var cell = el('div', 'slot');
       if (plain[j] > 0) cell.appendChild(el('span', 'bar l' + Math.min(4, plain[j])));
-      // 答え待ちは、同じ数でも 1 段高くする（あなたの出番を目立たせるため。数と高さは 1 段ずれる）
-      if (waits[j] > 0) cell.appendChild(el('span', 'bar h l' + Math.min(4, waits[j] + 1)));
+      // 答え待ちは、同じ数でも 2 段高くする（見本の高さ: 普通 19・答え待ち 29（34 の中）。あなたの出番を目立たせるため）
+      if (waits[j] > 0) cell.appendChild(el('span', 'bar h l' + Math.min(4, waits[j] + 2)));
       box.appendChild(cell);
     }
     return box;
@@ -801,7 +802,7 @@ export const UI_JS = `'use strict';
     card.appendChild(el('h3', '', nodeLabel(n, 200)));
     var meta = el('div', 'meta');
     var parent = n.parentId === null ? null : byId.get(n.parentId);
-    meta.appendChild(el('span', '', name(ROLE_NAMES, n.role) + (n.parentId === null ? '（いちばん上）' : '（親：' + (parent ? nodeLabel(parent, 24) : n.parentId) + '）')));
+    meta.appendChild(el('span', '', name(ROLE_NAMES, n.role) + (n.parentId === null ? '（いちばん上）' : '（親：' + (parent ? nodeLabel(parent, 13) : n.parentId) + '）')));
     // 最後の動き。表示モデルに時刻がない（いちばん上の統合が、指示を出しただけ など）ときは、その子のいちばん新しいやり取りの時刻
     var last = n.lastActivityAt || latestFlowAt(n.id, flows);
     if (last) meta.appendChild(el('span', 'when', '最後の動き ' + timeText(last, Date.now())));
@@ -834,14 +835,25 @@ export const UI_JS = `'use strict';
   }
   // 答え待ちのやり取り（判断・範囲の頼みで、まだ済んでいないもの）だけ、柿色にする
   function isAwaiting(f) { return f.stage !== 'done' && (f.kind === 'decision' || f.kind === 'extension'); }
+  // やり取りの短い本文が、この字数までなら 1 行に続けて出す（見本の flowlist）。長ければ、たたむ
+  var FLOW_INLINE_MAX = 18;
   function flowLine(f, selfId, byId) {
     var up = f.dir === 'up';
     var other = f.from === selfId ? f.to : f.from;
-    // 人とのやり取りは「あなた」（画面のほかの所の「あなたの答え」「あなたの出番」とそろえる）
-    var who = other === 'human' ? 'あなた' : byId.has(other) ? nodeLabel(byId.get(other), 16) : other;
+    // 人とのやり取りは「あなた」（画面のほかの所の「あなたの答え」「あなたの出番」とそろえる）。相手の題は 10 字で切る（見本の short(題, 10)）
+    var who = other === 'human' ? 'あなた' : byId.has(other) ? nodeLabel(byId.get(other), 11) : other;
     var line = el('div', 'fl');
     line.appendChild(el('span', 'ar ' + (isAwaiting(f) ? 'h' : up ? 'u' : 'd'), up ? '↑' : '↓'));
-    line.appendChild(el('span', '', (f.from === selfId ? '→ ' : '← ') + who + '　' + name(FLOW_KIND_NAMES, f.kind)));
+    var sum = (f.from === selfId ? '→ ' : '← ') + who + '　' + name(FLOW_KIND_NAMES, f.kind);
+    var text = typeof f.text === 'string' ? cleanText(f.text, 400) : '';
+    if (text && Array.from(text).length > FLOW_INLINE_MAX) {
+      var d = el('details', 'fbody');
+      d.appendChild(el('summary', '', sum));
+      d.appendChild(el('p', '', text));
+      line.appendChild(d);
+    } else {
+      line.appendChild(el('span', 'fbody', text ? sum + '：' + text : sum));
+    }
     line.appendChild(el('span', 't', clockText(f.sentAt)));
     return line;
   }
