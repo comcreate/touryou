@@ -28,8 +28,8 @@
     上り・下りは色で分けない（落ち着いた藍 1 色。新しいほど濃く、古いほど灰色に近い。終わった作業の線は薄い灰。背景との明るさの差は明暗とも 3 対 1 以上）。柿色の線は、あなたの答え待ちだけ。
   - 箱は「作業の状態」だけ：3 つの段にまとめる。
     あなたの出番（答え待ち＝柿・止まっているかも＝くすんだ黄・失敗＝赤。印と文字を必ず添える）／進んでいる（ふつう）／終わった（済んだ・止めた。薄い）。
-  - 動きは「変化があったとき」だけ：開いたときと、新しいやり取りが来たときに、玉がその線を 1 回だけ走る。
-    いつも動いているのは、あなたの出番の箱のゆっくりした脈打ちだけ。
+  - 動きは「やり取りの進み具合」と結びつける。線はすべて破線。送った・まだ届いていない＝速く流れ、玉が繰り返し走る／
+    届いた・返事待ち＝ゆっくり流れる／済んだ＝止まる。終わった作業の線は動かさない。
   - 「静か」と「滞り」を混ぜない：時間がたっただけなら線が薄くなるだけ。「止まっているかも」は daemon の知らせがあるときだけ。
   - 図は、いちばん上の「いまあなたがすること」の補助。図で強く目立つのは、上の欄に出ているものと同じもの。
 -->
@@ -106,7 +106,7 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .legend span::before{content:"";display:inline-block;width:22px;height:0;border-top:3px solid currentColor;vertical-align:middle;margin-right:6px}
 .legend .u{color:var(--ai)}.legend .d{color:var(--murasaki)}.legend .h{color:var(--kaki)}
 .legend .p{color:var(--ink-2)}
-.zoom{position:absolute;right:10px;top:10px;display:flex;gap:4px}
+.zoom{position:absolute;right:10px;top:40px;display:flex;gap:4px}
 .zoom button{width:34px;height:34px;padding:0;border-radius:50%;font-size:18px;background:var(--sheet)}
 .zoom button.fit{width:auto;padding:0 12px;border-radius:999px;font-size:13px}
 
@@ -204,6 +204,22 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .role-ic{fill:none;stroke:var(--ink-2);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .alive{fill:var(--matsu);animation:alive 3s ease-in-out infinite}
 @keyframes alive{0%,100%{opacity:1}50%{opacity:.55}}
+/* 破線とやり取りの段 */
+.line{stroke-dasharray:8 6!important;stroke-dashoffset:0;animation:none}
+.line.g-sent{animation:dashflow .55s linear infinite!important}
+.line.g-recv{animation:dashflow 2.2s linear infinite!important}
+.line.g-done{animation:none!important;stroke-opacity:.75}
+.line.over.g-done{stroke-opacity:1}
+.tip.g-done{fill-opacity:.75}
+.stg{font-size:11px;font-weight:700}.stg.g-sent{fill:var(--wire)}.stg.g-recv{fill:var(--wire-2)}.stg.g-done{fill:var(--ink-2);font-weight:400}
+.mlabel.human .stg{fill:var(--kaki)}
+.pip.loop{width:9px;height:9px;background:var(--wire);animation:travel 1.3s cubic-bezier(.45,0,.55,1) infinite}
+.pip.loop.h{background:var(--kaki)}
+.dash{height:0;border-top:3px dashed var(--wire)}.dash.g-recv{border-top-color:var(--wire-2)}.dash.g-done{border-top-color:var(--wire-4)}
+.knote{margin:2px 0 0;font-size:12px}
+.legend2{grid-template-columns:1fr 1fr 1fr}
+@keyframes dashflow{to{stroke-dashoffset:-14}}
+@media (max-width:900px){.legend2{grid-template-columns:1fr}}
 .piplayer{position:absolute;left:0;top:0;transform-origin:0 0;pointer-events:none}
 
 .wire{fill:none;stroke-linecap:round}
@@ -325,14 +341,14 @@ const VIEW = {
   ],
   // dir: up（子 → 親）・down（親 → 子）。human：人の操作が要る
   messages: [
-    { from: "n-a1", to: "n-root", dir: "up", kind: "判断を求める", at: min(3), human: true, text: "振り込みの期限の文を「3 日以内」と「7 日以内」のどちらにしますか。" },
-    { from: "n-root", to: "n-a1", dir: "down", kind: "頼み", at: min(20), text: "支払い方法の選び方の画面を作ってください。" },
-    { from: "n-b2", to: "n-root", dir: "up", kind: "進み", at: min(6), text: "雛形の二つめまでできました。" },
-    { from: "n-root", to: "n-b2", dir: "down", kind: "頼み", at: min(30), text: "確認のメールを見直してください。" },
-    { from: "n-b3", to: "n-b2", dir: "up", kind: "入力待ちの知らせ", at: min(42), notice: true, text: "42 分、動きがありません。" },
-    { from: "n-b2", to: "n-b3", dir: "down", kind: "答え", at: min(44), text: "宛先は試験用のものだけにしてください。" },
-    { from: "n-root", to: "n-d5", dir: "down", kind: "頼み", at: min(40), text: "ありがとうの画面の文を直してください。" },
-    { from: "n-d5", to: "n-root", dir: "up", kind: "失敗の知らせ", at: min(14), text: "試験が通りません。文の長さの決まりに合いません。" },
+    { from: "n-a1", to: "n-root", dir: "up", stage: "recv", kind: "判断を求める", at: min(3), human: true, text: "振り込みの期限の文を「3 日以内」と「7 日以内」のどちらにしますか。" },
+    { from: "n-root", to: "n-a1", dir: "down", stage: "done", kind: "頼み", at: min(20), text: "支払い方法の選び方の画面を作ってください。" },
+    { from: "n-b2", to: "n-root", dir: "up", stage: "done", kind: "進み", at: min(6), text: "雛形の二つめまでできました。" },
+    { from: "n-root", to: "n-b2", dir: "down", stage: "recv", kind: "頼み", at: min(30), text: "確認のメールを見直してください。" },
+    { from: "n-b3", to: "n-b2", dir: "up", stage: "recv", kind: "入力待ちの知らせ", at: min(42), notice: true, text: "42 分、動きがありません。" },
+    { from: "n-b2", to: "n-b3", dir: "down", stage: "sent", kind: "答え", at: min(44), text: "宛先は試験用のものだけにしてください。" },
+    { from: "n-root", to: "n-d5", dir: "down", stage: "done", kind: "頼み", at: min(40), text: "ありがとうの画面の文を直してください。" },
+    { from: "n-d5", to: "n-root", dir: "up", stage: "recv", kind: "失敗の知らせ", at: min(14), text: "試験が通りません。文の長さの決まりに合いません。" },
     { from: "n-c4", to: "n-root", dir: "up", kind: "済んだ", at: min(55), text: "新しい順に並べ替えました。試験は通っています。" },
     { from: "n-root", to: "n-c4", dir: "down", kind: "頼み", at: min(70), text: "一覧の並び順を直してください。" }
   ],
@@ -464,8 +480,8 @@ const BIG = {
   ],
   messages: [
     ...VIEW.messages,
-    { from: "n-root", to: "n-f8", dir: "down", kind: "頼み", at: min(30), text: "管理の画面にまとめを足してください。" },
-    { from: "n-f8", to: "n-root", dir: "up", kind: "進み", at: min(4), text: "表の枠ができました。" },
+    { from: "n-root", to: "n-f8", dir: "down", stage: "recv", kind: "頼み", at: min(30), text: "管理の画面にまとめを足してください。" },
+    { from: "n-f8", to: "n-root", dir: "up", stage: "sent", kind: "進み", at: min(4), text: "表の枠ができました。" },
     { from: "n-f8", to: "n-g9", dir: "down", kind: "止める", at: min(70), text: "CSV は取りやめます。止めてください。" }
   ]
 };
@@ -483,13 +499,13 @@ function seg(label, items, onPick) {
 const st = { view: "graph", data: "small" };
 const sView = seg("見せ方：", [["graph", "図"], ["list", "一覧"]], (k) => { st.view = k; render(); });
 const sData = seg("値：", [["small", "いまの値（子 4・孫 2）"], ["big", "子 5・孫 3"]], (k) => { st.data = k; render(); });
-const tryBox = el("div", "shape"); tryBox.append(el("span", "", "動き："), tryBtn, el("span", "", "（新しいやり取りが来たとき、玉がその線を 1 回だけ走ります）"));
+const tryBox = el("div", "shape"); tryBox.append(el("span", "", "動き："), tryBtn, el("span", "", "（1 本のやり取りが「送っています」→「返事待ち」→「済んだ」と進みます）"));
 ctl.append(sView.box, sData.box, tryBox);
 g.append(ctl, el("p", "judge", "親子のつながりの線はなくしました。上りと下りの線と、幹からの枝分かれで親子が分かるからです。やり取りがまだない子（起こしたばかり）だけ、薄い点線の枝で親を示します。図に出す子は親ごとに 6 までで、超えると済んだ子をまとめます。"));
 const board = el("div", "board");
 const listView = el("div", "tlist");
 g.append(board, listView);
-const BW = 176, BH = 80, COL = 400, LEAF = 108, TRUNK = 26, GAP = 8, ARROW = 9;
+const BW = 176, BH = 80, COL = 460, LEAF = 108, TRUNK = 26, GAP = 8, ARROW = 9;
 const svg = svgEl("svg", { viewBox: "0 0 10 10", role: "img", "aria-label": "作業の木と、親子のやり取りの図" });
 const world = svgEl("g", {});
 svg.append(world); board.append(svg);
@@ -528,12 +544,19 @@ function laneLook(child, m) {
   return age <= 5 ? "a1" : age <= 30 ? "a2" : age <= 60 ? "a3" : "a4";
 }
 let runners = [];
-function runPip(r, delay) {          // 玉を 1 回だけ走らせる
-  const dot = el("span", "pip once" + (r.human ? " h" : ""));
-  dot.style.offsetPath = "path('" + r.d + "')";      // D8 は未決定。本番で使うなら 1 か所に閉じる
-  dot.style.animationDelay = delay + "s";
-  dot.addEventListener("animationend", () => dot.remove());
-  pipLayer.append(dot);
+// やり取りの段：sent（送った・まだ届いていない）／recv（届いた・返事を待っている）／done（済んだ）
+const STAGE = { sent: "送っています", recv: "返事待ち", done: "済んだ" };
+function setStage(r, stage) {
+  r.stage = stage;
+  for (const e of [r.line, r.tip]) { e.classList.remove("g-sent", "g-recv", "g-done"); e.classList.add("g-" + stage); }
+  r.stageEl.textContent = "　" + STAGE[stage];
+  r.stageEl.setAttribute("class", "stg g-" + stage);
+  if (r.pip) { r.pip.remove(); r.pip = null; }
+  if (stage === "sent") {           // 届くまで、玉が受け取る側へ向かって繰り返し走る
+    const dot = el("span", "pip loop" + (r.human ? " h" : ""));
+    dot.style.offsetPath = "path('" + r.d + "')";      // D8 は未決定。本番で使うなら 1 か所に閉じる
+    pipLayer.append(dot); r.pip = dot;
+  }
 }
 function drawGraph(nodes, msgs) {
   const L = layout(nodes); W = L.W; H = L.H;
@@ -568,18 +591,22 @@ function drawGraph(nodes, msgs) {
         const y = C.cy + (dir === "up" ? -GAP : GAP);
         const look = laneLook(child, m);
         const d = dir === "up" ? "M" + cl + " " + y + " H" + (tx + ARROW) : "M" + tx + " " + y + " H" + (cl - ARROW);
-        const line = svgEl("path", { class: "line " + look, d, pathLength: 1 });
-        line.style.animationDelay = (li * 0.05) + "s";   // 開いたときに 1 回だけ線が描かれる（本番は CSS の :nth-child で決める）
+        const line = svgEl("path", { class: "line " + look, d });   // 破線。流れる向き＝送る向き（上りは子 → 親、下りは親 → 子）
         line.append(svgEl("title", {}, m.kind + "：" + m.text));
         const tip = dir === "up" ? "M" + tx + " " + y + " L" + (tx + ARROW + 2) + " " + (y - 5) + " L" + (tx + ARROW + 2) + " " + (y + 5) + " Z"
                                  : "M" + cl + " " + y + " L" + (cl - ARROW - 2) + " " + (y - 5) + " L" + (cl - ARROW - 2) + " " + (y + 5) + " Z";
-        parts.push(line, svgEl("path", { class: "tip " + look, d: tip }), svgEl("circle", { class: "port " + look, cx: cl, cy: y, r: 3.5 }));
+        const tipEl = svgEl("path", { class: "tip " + look, d: tip });
+        parts.push(line, tipEl, svgEl("circle", { class: "port " + look, cx: cl, cy: y, r: 3.5 }));
         // ラベル：幹と子の箱のあいだの、その線だけの上（上り）か下（下り）。縁取りで線に重なっても読める
         const lab = svgEl("text", { class: "mlabel " + look, x: tx + 18, y: dir === "up" ? y - 6 : y + 15 });
         lab.append(svgEl("tspan", { class: "k" }, (dir === "up" ? "← " : "→ ") + m.kind), svgEl("tspan", { class: "when" }, "　" + ago(m.at)));
+        const stageEl = svgEl("tspan", { class: "stg" }, "");
+        lab.append(stageEl);
         if (look === "human") lab.classList.add("keep");
         parts.push(lab);
-        if (look !== "over") runners.push({ d, human: look === "human", line, lab, m, kid, live: child.state === "run" && look === "a1" });
+        const r = { d, human: look === "human", line, tip: tipEl, lab, stageEl, m, kid };
+        runners.push(r);
+        r.initial = look === "over" ? "done" : (m.stage || "done");   // 終わった作業の線は動かさない
         li++;
       }
       parts.forEach(p => world.append(p));
@@ -587,7 +614,7 @@ function drawGraph(nodes, msgs) {
     }
   }
   for (const n of nodes) if (L.pos[n.id]) drawNode(n, L.pos[n.id]);
-  runners.forEach((r, i) => runPip(r, 1.0 + i * 0.12));     // 開いたときに 1 回
+  runners.forEach(r => setStage(r, r.initial));
   for (const pid in L.groups) { const f = L.pos["fold-" + pid]; if (f) drawFold(L.groups[pid], f); }
   svg.setAttribute("viewBox", "0 0 " + W + " " + H);
   pipLayer.style.width = W + "px"; pipLayer.style.height = H + "px";
@@ -678,7 +705,7 @@ new ResizeObserver(applyVB).observe(svg);
 const legend = el("div", "legend2");
 const lineKey = el("div", "lkey");
 lineKey.append(el("b", "", "線（やり取りの流れ）"));
-for (const [cls, t] of [["a1", "← 上の線：子 → 親の報告　→ 下の線：親 → 子の頼み"], ["a1", "新しい（5 分以内）：濃い藍で太い。動いている子なら、10 秒に 1 回そっと玉が走る"], ["a4", "古い（1 時間より前）：灰色に近く細い"], ["human", "柿色：あなたの答え待ちのやり取り"]]) {
+for (const [cls, t] of [["a1", "← 上の線：子 → 親の報告　→ 下の線：親 → 子の頼み"], ["a1", "新しい（5 分以内）：濃い藍で太い"], ["a4", "古い（1 時間より前）：灰色に近く細い"], ["human", "柿色：あなたの答え待ちのやり取り"]]) {
   const r = el("div", "krow"); r.append(el("span", "sw " + cls), el("span", "", t)); lineKey.append(r);
 }
 const boxKey = el("div", "lkey");
@@ -686,21 +713,25 @@ boxKey.append(el("b", "", "箱（作業の状態）"));
 for (const [cls, name, t] of [["t-turn", "あなたの出番", "● 答え待ち（柿）・‖ 止まっているかも（くすんだ黄）・✕ 失敗（赤）。ゆっくり脈打つ"], ["t-go", "進んでいる", "動いている。右上の緑の点がゆっくり光る"], ["t-over", "終わった", "済んだ・■ 止めた。箱も線も薄い"]]) {
   const r = el("div", "krow"); r.append(el("span", "bx " + cls), el("b", "", name), el("span", "", t)); boxKey.append(r);
 }
-legend.append(lineKey, boxKey);
+const stageKey = el("div", "lkey");
+stageKey.append(el("b", "", "やり取りの進み（破線の動き）"));
+for (const [cls, name, t] of [["g-sent", "送っています", "まだ相手に届いていない。破線が速く流れ、玉が受け取る側へ繰り返し走る"], ["g-recv", "返事待ち", "相手は受け取った。破線がゆっくり流れ続ける（答え待ちは柿色）"], ["g-done", "済んだ", "答えが返った・頼みが済んだ。破線は止まる。終わった作業の線も止まる"]]) {
+  const r = el("div", "krow"); r.append(el("span", "dash " + cls), el("b", "", name), el("span", "", t)); stageKey.append(r);
+}
+stageKey.append(el("p", "knote", "動きを止めているときは、ラベルの「送っています」「返事待ち」「済んだ」と、破線の濃さで分かります。"));
+legend.append(lineKey, stageKey, boxKey);
 board.append(legend);
 const byIdNow = (id) => ((st.data === "big" ? BIG : VIEW).nodes.find(n => n.id === id) || {}).state;
-// 最後のやり取りが 5 分以内で、子が動いている線だけ、10 秒に 1 回そっと玉が走る（動きを止めている間は走らない）
-setInterval(() => {
-  if (document.documentElement.classList.contains("still") || matchMedia("(prefers-reduced-motion: reduce)").matches || st.view !== "graph") return;
-  runners.filter(r => r.live).forEach((r, i) => runPip(r, i * 0.4));
-}, 10000);
-tryBtn.addEventListener("click", () => {
+let trying = null;
+tryBtn.addEventListener("click", () => {     // 1 本のやり取りが「送っています → 返事待ち → 済んだ」と進む
   if (st.view !== "graph") { st.view = "graph"; render(); }
-  const r = runners.find(x => !x.human && x.m.dir === "up" && x.kid !== "n-b3") || runners[0];
+  const r = runners.find(x => !x.human && x.m.dir === "down" && byIdNow(x.kid) === "run" && x.kid !== "n-root") || runners[0];
   if (!r) return;
-  r.line.classList.remove("a2", "a3", "a4"); r.line.classList.add("a1"); r.live = byIdNow(r.kid) === "run";
-  r.lab.lastChild.textContent = "　いま";
-  runPip(r, 0);
+  clearTimeout(trying);
+  r.line.classList.remove("a2", "a3", "a4"); r.line.classList.add("a1");
+  r.lab.querySelector(".when").textContent = "　いま";
+  setStage(r, "sent");
+  trying = setTimeout(() => { setStage(r, "recv"); trying = setTimeout(() => setStage(r, "done"), 4000); }, 4000);
 });
 function render() {
   const data = st.data === "big" ? BIG : VIEW;
