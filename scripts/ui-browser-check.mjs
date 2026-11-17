@@ -386,7 +386,8 @@ for (const scheme of ["light", "dark"]) {
   await openUi(page, url);
   await page.waitForSelector("#view:not([hidden])", { timeout: 8000 });
   out[scheme] = {
-    urlAfter: page.url(),
+    // 読み込んだあと、アドレスにチケットが残らない（チケットは出さない。残ったかどうかだけ）
+    ticketGoneFromUrl: !page.url().includes("#ticket"),
     xss: await page.evaluate(() => window.__xss ?? null),
     imgCount: await page.locator("#view img, #view script").count(),
     treeText: await page.locator("#view").innerText(),
@@ -1392,7 +1393,10 @@ out.throttleWindowMs = Date.now() - tt;
   ux.stoppedShowsItems =
     (await row("s2").innerText()).includes("止まったノードの情報") &&
     (await row("s2").getByRole("button", { name: "破棄して回収を指示…" }).count()) === 1;
-  ux.externalCheckNotFailed = !(await chipClass("daemon 再起動後")).includes("failed");
+  ux.externalCheckNotFailed =
+    (await chipClass("daemon 再起動後")).includes("request") &&
+    (await card("daemon 再起動後").innerText()).includes("停止の代行依頼") &&
+    !(await chipClass("daemon 再起動後")).includes("failed");
   ux.archivedNoCount = await pageU.evaluate(
     () => !(document.getElementById("card-arch2")?.textContent ?? "").includes("あなたの答え"),
   );
