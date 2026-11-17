@@ -1236,10 +1236,32 @@ export async function runCommand(
 
   if (command === "stop") {
     if (!flags.has("--yes")) {
+      // 止める子を取り違えないよう、いまの状態と役割を出す（読めなければ ID だけで案内する。#115）
+      const listed = await invoke(deps.client, deps.newRequestId(), "tree.list", {}, isTreeList);
+      const node =
+        listed.kind === "ok" ? listed.value.nodes.find((n) => n.id === nodeId) : undefined;
+      if (listed.kind === "ok" && node === undefined) {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: `ノードが見つからない: ${terminalSafe(nodeId, 128)}（"$HOME/.touryou/current/bin/touryou" tree で一覧を確認する）\n`,
+        };
+      }
+      if (node !== undefined && node.state !== "done") {
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: `止められない: ${nodeId} の状態は ${terminalSafe(node.state, 40)}（人が止められるのは、済んだと報告した done の子だけ。動いている子は、親の統合が止める）\n`,
+        };
+      }
+      const seen =
+        node === undefined
+          ? ""
+          : `いまの状態: ${terminalSafe(node.state, 40)}・役割: ${terminalSafe(node.role, 40)}・親: ${terminalSafe(node.parentId ?? "なし", 128)}\n`;
       return {
         exitCode: 2,
         stdout: "",
-        stderr: `済んだと報告した（done）子 ${nodeId} を、受理せずに止める。止めると、その子は受理できなくなる（成果は作業ツリーに残り、捨てるかは reclaim で決める）。\nよければ、--yes を付けて再実行する: "$HOME/.touryou/current/bin/touryou" stop ${nodeId} --yes\n`,
+        stderr: `${seen}済んだと報告した（done）子 ${nodeId} を、受理せずに止める。止めると、その子は受理できなくなる（成果は作業ツリーに残り、捨てるかは reclaim で決める）。\nよければ、--yes を付けて再実行する: "$HOME/.touryou/current/bin/touryou" stop ${nodeId} --yes\n`,
       };
     }
     const res = await invoke(

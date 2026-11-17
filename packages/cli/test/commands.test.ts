@@ -1152,12 +1152,45 @@ describe("accept（人間の受理）", () => {
 });
 
 describe("stop（済んだと報告した子を、受理せずに止める。#115）", () => {
+  const tree = (state: string) =>
+    ok({
+      table: "",
+      nodes: [
+        {
+          id: "a",
+          role: "worker",
+          state,
+          parentId: "root",
+          dependsOn: [],
+          openItems: 0,
+          discarded: false,
+        },
+      ],
+    });
+  it("--yes がなければ、いまの状態・役割・親を出す。done でない子・ない子は、その場で断る", async () => {
+    const done = fakeClient({ "tree.list": tree("done") });
+    const r = await runCommand(["stop", "a"], deps(done.client));
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toContain("いまの状態: done・役割: worker・親: root");
+    expect(done.sent.map((x) => x.operation)).toEqual(["tree.list"]);
+    const running = fakeClient({ "tree.list": tree("running") });
+    const r2 = await runCommand(["stop", "a"], deps(running.client));
+    expect(r2.exitCode).toBe(1);
+    expect(r2.stderr).toContain("止められない: a の状態は running");
+    const missing = await runCommand(
+      ["stop", "b"],
+      deps(fakeClient({ "tree.list": tree("done") }).client),
+    );
+    expect(missing.exitCode).toBe(1);
+    expect(missing.stderr).toContain("ノードが見つからない: b");
+  });
   it("--yes がなければ、何も送らずに説明と再実行のコマンドを出す。--yes で node.stop（即時）を送る", async () => {
+    // 一覧が読めなくても、ID だけで案内する（止める要求は送らない）
     const none = fakeClient({});
     const shown = await runCommand(["stop", "a"], deps(none.client));
     expect(shown.exitCode).toBe(2);
     expect(shown.stderr).toContain('"$HOME/.touryou/current/bin/touryou" stop a --yes');
-    expect(none.sent).toEqual([]);
+    expect(none.sent.map((x) => x.operation)).toEqual(["tree.list"]);
     const { client, sent } = fakeClient({ "node.stop": ok({ state: "stopping" }) });
     const r = await runCommand(["stop", "a", "--yes"], deps(client));
     expect(sent).toEqual([
