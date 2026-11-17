@@ -25,7 +25,7 @@ export const UI_HTML = `<!doctype html>
 <link rel="stylesheet" href="/ui/app.css">
 </head>
 <body>
-<header><h1>touryou 状態画面</h1><span id="status" class="status">未接続</span></header>
+<header class="top"><h1>touryou 状態画面</h1><span id="status" class="status">未接続</span><span class="tools"><button id="still" class="quiet sm" type="button">動きを止める</button></span></header>
 <main>
 <section id="auth" hidden>
 <h2>人間のトークン</h2>
@@ -36,11 +36,14 @@ export const UI_HTML = `<!doctype html>
 <section id="confirm" class="confirm" hidden></section>
 <p id="notice" class="notice" hidden></p>
 <section id="view" hidden>
-<h2>判断待ち</h2><div id="decisions"></div>
-<h2>受信箱</h2><div id="inbox"></div>
-<h2>木</h2><div id="tree"></div>
-<h2>最終削除（アーカイブ済みの木）</h2><div id="purge"></div>
-<h2>破棄した成果の保管</h2><div id="kept"></div>
+<section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h2 id="now-title">いまあなたがすること</h2><p id="now-lead" class="lead"></p></section>
+<div id="todo" class="todo"></div>
+<section class="sec"><h2>やり取り</h2><p class="lead">親子の並びと、いちばん新しい上り（子 → 親）・下り（親・人 → 子）です。</p><div id="graph" class="board" hidden></div><div id="list" class="tlist"></div></section>
+<section class="sec"><h2>作業ごとのようす</h2><p class="lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。</p><div id="cards" class="cards"></div>
+<details id="finished" class="finished"><summary id="finished-summary">終わった作業</summary><div id="finished-cards" class="cards"></div></details></section>
+<details class="admin"><summary>管理（まれに使う操作）</summary><p class="warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
+<h2>アーカイブした作業の最終削除と、自動の削除の保留</h2><div id="purge"></div>
+<h2>捨てた作業の保管</h2><div id="kept"></div></details>
 </section>
 </main>
 <script src="/ui/app.js"></script>
@@ -48,31 +51,95 @@ export const UI_HTML = `<!doctype html>
 </html>
 `;
 
-export const UI_CSS = `:root{color-scheme:light dark;--bg:#fff;--fg:#1b1f24;--muted:#59636e;--line:#d0d7de;--card:#f6f8fa;--blocking:#cf222e;--failed:#bc4c00;--ok:#1a7f37}
-@media (prefers-color-scheme: dark){:root{--bg:#0d1117;--fg:#e6edf3;--muted:#8b949e;--line:#30363d;--card:#161b22;--blocking:#ff7b72;--failed:#ffa657;--ok:#3fb950}}
+export const UI_CSS = `:root{color-scheme:light dark;--bg:#f3efe6;--sheet:#fbf9f4;--fg:#22201c;--muted:#5b5650;--line:#d8d0c0;--card:#fbf9f4;--blocking:#a3261c;--failed:#a3261c;--ok:#2f6b45;--ai:#2a4f8f;--ai-2:#4b6492;--ai-3:#6b7891;--kaki:#b85200;--kaki-soft:#fbe6d2;--kiiro:#7a6000;--kiiro-soft:#f4ecc8;--shu:#a3261c;--shu-soft:#f7dfdb;--matsu:#2f6b45;--matsu-soft:#dcebdf;--grid:#e7e0d1;--on-strong:#fff}
+@media (prefers-color-scheme: dark){:root{--bg:#16181c;--sheet:#1e2126;--fg:#ebe6dc;--muted:#a39d93;--line:#363a42;--card:#1e2126;--blocking:#ff8c80;--failed:#ff8c80;--ok:#7fc495;--ai:#8fb0ea;--ai-2:#8aa2cc;--ai-3:#8d97aa;--kaki:#ff9a3c;--kaki-soft:#3b2614;--kiiro:#d9b84a;--kiiro-soft:#332b10;--shu:#ff8c80;--shu-soft:#3d1b18;--matsu:#7fc495;--matsu-soft:#18301f;--grid:#23262c;--on-strong:#16181c}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
-header{display:flex;align-items:baseline;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)}
-h1{font-size:18px;margin:0}h2{font-size:15px;margin:20px 0 8px}
-main{padding:0 16px 32px;max-width:960px;margin:0 auto}
+html{background:var(--bg)}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 "Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif}
+:focus-visible{outline:3px solid var(--ai);outline-offset:2px;border-radius:4px}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.top h1{font-size:17px;margin:0;letter-spacing:.04em}
+.top .tools{margin-left:auto}
 .status{color:var(--muted);font-size:13px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:8px 12px;margin:6px 0;overflow-wrap:anywhere}
+.status.live::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--matsu);margin-right:6px;vertical-align:middle;animation:breathe 2.4s ease-in-out infinite}
+main{padding:0 16px 48px;max-width:1040px;margin:0 auto}
+h2{font-size:17px;margin:28px 0 6px}
+.lead{margin:0 0 12px;color:var(--muted);font-size:14px}
+button{font:inherit;font-size:14px;line-height:1.4;padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:var(--sheet);color:var(--fg);cursor:pointer;transition:transform .12s,border-color .2s}
+button:hover{border-color:var(--muted)}button:active{transform:scale(.96)}
+button:disabled{opacity:.5;cursor:not-allowed}
+button.primary,button.go{background:var(--kaki);border-color:var(--kaki);color:var(--on-strong);font-weight:700}
+button.quiet{background:transparent}
+button.sm{font-size:12.5px;padding:2px 10px}
+button.danger{border-color:var(--shu);color:var(--shu);background:transparent}
+button.done{background:var(--matsu);border-color:var(--matsu);color:var(--on-strong)}
+code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word-break:break-all}
+.now{margin:24px 0 8px;display:grid;grid-template-columns:auto 1fr;gap:2px 18px;align-items:end}
+.now .count{grid-row:span 2;font-size:56px;line-height:1;font-weight:800;color:var(--kaki);min-width:1.2ch;text-align:center;font-variant-numeric:tabular-nums}
+.now .count.zero{color:var(--matsu)}
+.now .count.bump-a{animation:bump-a .6s cubic-bezier(.3,1.6,.5,1)}.now .count.bump-b{animation:bump-b .6s cubic-bezier(.3,1.6,.5,1)}
+.now h2{margin:0;font-size:21px}.now .lead{margin:0}
+.todo{display:grid;gap:10px;margin:12px 0 0}
+.task{background:var(--sheet);border:1px solid var(--line);border-left:5px solid var(--kaki);border-radius:4px 12px 12px 4px;padding:12px 16px;overflow-wrap:anywhere}
+.task.stall{border-left-color:var(--kiiro)}.task.request{border-left-color:var(--muted)}.task.closed{border-left-color:var(--line);opacity:.75}
+.task.new,.entry.new{animation:arrive .5s ease-out both}
+.who{font-size:13px;color:var(--muted)}.strong{font-weight:700;color:var(--fg)}
+.ask{font-size:16px;font-weight:700;margin:2px 0 4px;white-space:pre-wrap}
+.cmd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--bg);border:1px dashed var(--line);border-radius:8px;padding:6px 10px;margin:6px 0}
+.empty{padding:14px 16px;border:1px dashed var(--line);border-radius:12px;color:var(--muted);background:var(--sheet);margin:6px 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 16px;margin:6px 0;overflow-wrap:anywhere}
 .card.blocking{border-left:4px solid var(--blocking)}.card.request{border-left:4px solid var(--muted)}.card.failed{border-left:4px solid var(--failed)}
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:start}
+.cards .card{margin:0;display:grid;gap:6px;scroll-margin-top:16px}
+.card.turn{border-color:var(--kaki);border-left:5px solid var(--kaki)}.card.finished{opacity:.8}
+.card.flash{animation:flash 1.6s ease-out}
+.ctitle{font-weight:700;font-size:15.5px;line-height:1.5}
+.meta{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:12.5px;color:var(--muted)}
+.idline{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.chip{display:inline-block;font-size:12px;font-weight:700;padding:0 8px;border-radius:999px;line-height:1.8;margin-right:4px;background:var(--grid);color:var(--muted)}
+.chip.turn{background:var(--kaki-soft);color:var(--kaki)}.chip.stall{background:var(--kiiro-soft);color:var(--kiiro)}.chip.failed,.chip.blocking{background:var(--shu-soft);color:var(--shu)}
+.chip.running{background:var(--matsu-soft);color:var(--matsu)}.chip.running::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:4px;vertical-align:middle;animation:breathe 1.6s infinite}
+.chip.request{background:var(--grid);color:var(--fg)}
+.entry{border-top:1px solid var(--line);padding:6px 0 0;font-size:13.5px}
+.when{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.flows{font-size:13px;display:grid;gap:2px}
+.up{color:var(--ai)}.down{color:var(--ai-2)}.await{color:var(--kaki);font-weight:700}
+details>summary{cursor:pointer;font-size:13px;color:var(--muted)}
+details[open]>:not(summary){animation:open .3s ease-out both}
+.finished{margin-top:12px}
+.tlist{border:1px solid var(--line);border-radius:12px;background:var(--sheet);overflow-x:auto}
+.trow{display:grid;grid-template-columns:minmax(200px,1.6fr) 140px 1fr 1fr;gap:8px;align-items:center;padding:6px 14px;border-top:1px solid var(--line);font-size:13.5px;min-width:640px}
+.trow.thead{border-top:0;font-size:12.5px;color:var(--muted);font-weight:700}
+.trow.turn{background:var(--kaki-soft)}.trow.finished{opacity:.7}
+.tname{display:flex;align-items:center;gap:6px}
+.node{padding:2px 0;overflow-wrap:anywhere}.state{color:var(--muted);margin-left:8px;font-size:13px}.count{color:var(--blocking)}
 .tag{display:inline-block;font-size:12px;color:var(--muted);margin-right:8px}
 .tag.blocking{color:var(--blocking);font-weight:600}.tag.request{font-weight:600}.tag.failed{color:var(--failed);font-weight:600}
-.node button{margin-left:8px;padding:2px 8px;font-size:13px}.node{padding:2px 0;overflow-wrap:anywhere}.state{color:var(--muted);margin-left:8px;font-size:13px}.count{color:var(--blocking);margin-left:8px;font-size:13px}
-.empty{color:var(--muted)}
-button{cursor:pointer}button:disabled{opacity:.5;cursor:not-allowed}
-.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.opts{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
-button.primary{background:var(--blocking);color:#fff;border-color:var(--blocking)}
-textarea{display:block;width:100%;min-height:64px;margin:6px 0;font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
-.approvals{position:sticky;top:0;z-index:2;border:2px solid var(--blocking);border-radius:6px;padding:4px 12px 12px;margin:12px 0;background:var(--bg)}.approvals textarea{width:12em;min-height:0;height:2.2em;font:inherit;letter-spacing:.1em;text-transform:uppercase}
-.confirm{border:2px solid var(--blocking);border-radius:6px;padding:4px 12px 12px;margin:16px 0;background:var(--card)}
+.desc{font-size:12.5px;color:var(--muted);margin:2px 0 6px}.irreversible{font-size:12.5px;color:var(--shu);margin:2px 0 6px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.opts{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0;align-items:center}
+textarea{display:block;width:100%;min-height:64px;margin:6px 0;font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
+.approvals{position:sticky;top:0;z-index:2;border:2px solid var(--blocking);border-radius:12px;padding:4px 12px 12px;margin:12px 0;background:var(--bg)}.approvals textarea{width:12em;min-height:0;height:2.2em;font:inherit;letter-spacing:.1em;text-transform:uppercase}
+.confirm{border:2px solid var(--blocking);border-radius:12px;padding:4px 12px 12px;margin:16px 0;background:var(--card)}
 .typed-value{font-family:ui-monospace,monospace;user-select:all;-webkit-user-select:all;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:0 4px;overflow-wrap:anywhere}
 .confirm-title{font-weight:600;margin:10px 0 6px}.confirm-line{margin:4px 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .error{color:var(--blocking);margin:6px 0;white-space:pre-wrap;overflow-wrap:anywhere}.notice{color:var(--ok);margin:12px 0}.notice.bad{color:var(--blocking)}
-input,button{font:inherit;padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+.admin{margin-top:40px;border:2px solid var(--shu);border-radius:14px;padding:4px 16px 12px;background:var(--sheet)}
+.admin>summary{font-size:16px;font-weight:700;color:var(--shu);padding:10px 0}
+.admin .warn{margin:0 0 12px;font-size:14px;color:var(--shu);background:var(--shu-soft);border-radius:8px;padding:8px 12px}
+.admin h2{font-size:15px}
+input,button{font:inherit}
+input{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
 form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
+[hidden]{display:none!important}
+@keyframes breathe{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes bump-a{0%{transform:scale(.6)}100%{transform:scale(1)}}
+@keyframes bump-b{0%{transform:scale(.6)}100%{transform:scale(1)}}
+@keyframes arrive{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes flash{0%{box-shadow:0 0 0 0 var(--kaki)}30%{box-shadow:0 0 0 6px var(--kaki-soft)}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes open{from{opacity:0;transform:translateY(-4px)}}
+.still *,.still *::before{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion: reduce){*,*::before{animation:none!important;transition:none!important}}
+@media (max-width:640px){.now .count{font-size:44px}.now h2{font-size:18px}.top .tools{margin-left:0}}
 `;
 
 // 根に出る、Desktop の子を人が確かめる依頼（daemon の再起動のあとの整合。external-check.ts）の文面の先頭。画面は、これを「停止の代行依頼」と同じ扱いにする
@@ -94,12 +161,16 @@ export const UI_JS = `'use strict';
     window.history.replaceState(null, '', window.location.pathname + window.location.search);
   }
 
-  var TAGS = { div: true, span: true, p: true, button: true, textarea: true };
+  var TAGS = { div: true, span: true, p: true, button: true, textarea: true, details: true, summary: true, code: true };
   var TEXT_MAX = 4000;
   var FORBIDDEN = /[\\p{Cc}\\p{Cf}]/u;
-  var STATE_NAMES = { pending: '未起動', running: '実行', waiting: '待機', done: '完了報告', verified: '受理', stopping: '停止中', stopIncomplete: '停止未完了', stopped: '停止', reclaimable: '回収可', archived: 'アーカイブ' };
-  // 対応が終わった状態（受理・回収可・アーカイブ）。要対応の数を出さない。停止（stopped）は、回答して再開・破棄して回収など、人が決めることが残りうるので含めない
-  var SETTLED_STATES = { verified: true, reclaimable: true, archived: true };
+  var STATE_NAMES = { pending: '起動を待っている', running: '動いている', waiting: '待っている', done: '済んだと報告（確かめ待ち）', verified: '受け入れた', stopping: '止めている', stopIncomplete: '止まりきっていない', stopped: '止めた', reclaimable: '片付けられる', archived: 'アーカイブした' };
+  var ROLE_NAMES = { integrator: '統合', implement: '作業', review: 'レビュー', investigate: '調べ', merge: 'まとめ' };
+  // 受信箱の項目の種類（利用者の言葉）。「止まっているかも」は、daemon の知らせ（stall）があるときだけ（画面で推し量らない）
+  var KIND_NAMES = { decision: '判断を求む', answer: '答え', violation: '止められた操作', failure: 'うまくいかなかった', stopIncomplete: '止まりきっていない', done: '済んだ', progress: '進み具合', info: '知らせ', digest: 'まとめ' };
+  var BAND_NAMES = { turn: 'あなたの出番', running: '進んでいる', finished: '終わった' };
+  var FLOW_KIND_NAMES = { instruction: '指示', report: '報告', done: '済んだの報告', decision: '判断を求む', extension: '範囲の頼み', answer: '答え' };
+  var ENTRY_MAX = 5;
   var EXTERNAL_CHECK_PREFIXES = ${EXTERNAL_CHECK_PREFIXES};
   var PRIORITY_NAMES = { blocking: '要判断', failed: '失敗', completed: '完了', progress: '進捗', info: '情報' };
   var POLL_MS = 2000;
@@ -126,6 +197,38 @@ export const UI_JS = `'use strict';
   var retryMs = 0;
 
   function name(table, key) { return Object.hasOwn(table, key) ? table[key] : key; }
+  // 時刻（ISO 8601）を、手元の時刻と経過で出す。今日なら「14:05（3 分前）」、ほかの日は「11/16 14:05（1 日前）」。読めなければ ''。
+  function timeText(iso, nowMs) {
+    var t = typeof iso === 'string' ? Date.parse(iso) : NaN;
+    if (!(t === t)) return '';
+    var d = new Date(t);
+    var today = new Date(nowMs);
+    var hm = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+    var sameDay = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
+    return (sameDay ? '' : (d.getMonth() + 1) + '/' + d.getDate() + ' ') + hm + '（' + agoText(nowMs - t) + '）';
+  }
+  function agoText(ms) {
+    var m = Math.floor(ms / 60000);
+    if (m < 1) return 'いま';
+    if (m < 60) return m + ' 分前';
+    if (m < 1440) return Math.floor(m / 60) + ' 時間前';
+    return Math.floor(m / 1440) + ' 日前';
+  }
+  // やり取りの段の言葉。届いたかの記録がない（deliveryUnknown）・推定（doneInferred）は、そう言う
+  function stageText(f) {
+    if (f.stage === 'sent') return f.deliveryUnknown ? '送った（届いたかは分からない）' : '送った（まだ届いていない）';
+    if (f.stage === 'delivered') return '届いた（返事を待っている）';
+    if (f.stage === 'done') return f.doneInferred ? '済んだ（推定）' : '済んだ';
+    return '';
+  }
+  // 止まっているかもしれない子を開くコマンド。CLI の子は --name <ノード ID> で起動しているので、claude attach で開ける。
+  // Desktop の子（stopDelegated）と、ID の形でないものは ''（コマンドを出さない）
+  function attachCommand(n) {
+    if (!n || n.stopDelegated === true || typeof n.id !== 'string' || !ID_RE.test(n.id)) return '';
+    return 'claude attach ' + n.id;
+  }
+  // ノードの呼び名（題がなければ ID）。
+  function nodeLabel(n, max) { return n && typeof n.title === 'string' && n.title !== '' ? cleanText(n.title, max) : n ? n.id : ''; }
   function el(tag, cls, text) {
     if (!Object.hasOwn(TAGS, tag)) throw new Error('tag');
     var e = document.createElement(tag);
@@ -143,7 +246,7 @@ export const UI_JS = `'use strict';
     return e;
   }
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
-  function setStatus(text) { statusEl.textContent = text; }
+  function setStatus(text) { statusEl.textContent = text; statusEl.className = 'status'; }
   function showAuth(show) { authEl.hidden = !show; viewEl.hidden = show; }
 
   // ---- 操作（判断への回答）----
@@ -334,22 +437,19 @@ export const UI_JS = `'use strict';
       });
   }
 
-  function renderDecisions(list) {
-    var box = document.getElementById('decisions');
+  // 判断の頼み（いまあなたがすること）。box は呼び出し側が空にしてから渡す。byId: ノード ID から表示モデルのノード
+  function renderDecisions(list, box, byId) {
     var active = document.activeElement;
     var keep = active && active.dataset ? active.dataset.draft : '';
     var areas = new Map();
-    clear(box);
     var live = new Set();
     var CLOSED_REASON = { discarded: '破棄を決めた子のため、答えても届きません' };
     list.forEach(function (d) {
       live.add(d.id);
       var closed = d.closedReason;
-      var card = el('div', closed ? 'card' : 'card blocking');
-      card.appendChild(el('span', closed ? 'tag' : 'tag blocking', closed ? '閉じた判断' : '判断待ち'));
-      card.appendChild(el('span', 'tag', d.nodeId));
+      var card = taskCard(closed ? 'task closed' : 'task', 'd-' + d.id, closed ? '閉じた判断' : '判断を求む', closed ? '' : 'turn', byId.get(d.nodeId), d.nodeId);
       var question = d.question || '（質問の記録なし）';
-      card.appendChild(el('div', '', question));
+      card.appendChild(el('div', 'ask', question));
       // 閉じた判断は、理由を示し、回答の操作を出さない（答えても届かないため）。
       if (closed) {
         card.appendChild(el('p', 'error', CLOSED_REASON[closed] || '閉じています'));
@@ -406,13 +506,11 @@ export const UI_JS = `'use strict';
   var DECISION_LABELS = { approve: '承認', reject: '却下', split: '切り出し' };
   var DECISION_NOTES = { split: 'この対象は許可しない。子には、作業を切り出して進めるよう通知される' };
   var KIND_LABELS = { write: '書き込みの場所', command: 'コマンド' };
-  function renderExtensions(list, box) {
+  function renderExtensions(list, box, byId) {
     list.forEach(function (x) {
-      var card = el('div', 'card');
-      card.appendChild(el('span', 'tag', '拡張要求'));
-      card.appendChild(el('span', 'tag', x.nodeId));
-      if (x.kind) card.appendChild(el('span', 'tag', name(KIND_LABELS, x.kind)));
-      card.appendChild(el('div', '', x.reason));
+      var card = taskCard('task', 'x-' + x.id, '範囲を広げる頼み', 'turn', byId.get(x.nodeId), x.nodeId);
+      card.appendChild(el('div', 'ask', (x.kind ? name(KIND_LABELS, x.kind) + 'を広げたい: ' : '') + x.reason));
+      card.appendChild(el('p', 'desc', '承認すると、子はこの対象を使えるようになります。却下すると、子には範囲の外と伝わり、別のやり方を考えます。切り出すと、別の作業として分けます。'));
       card.appendChild(el('div', 'confirm-line', x.targetHidden ? '対象: （表示できない）' : '対象: ' + x.target));
       var opts = el('div', 'opts');
       ['approve', 'reject', 'split'].forEach(function (decision) {
@@ -449,30 +547,244 @@ export const UI_JS = `'use strict';
     var cls = i.priority === 'blocking' || i.priority === 'failed' ? i.priority : '';
     return { cls: cls, label: name(PRIORITY_NAMES, i.priority) };
   }
-  function renderInbox(list, nodes) {
-    var box = document.getElementById('inbox');
-    clear(box);
-    if (!list.length) { box.appendChild(el('p', 'empty', '未解決の項目はありません')); return; }
-    var delegated = new Set();
-    (nodes || []).forEach(function (n) { if (n.stopDelegated === true) delegated.add(n.id); });
-    list.forEach(function (i) {
-      var band = inboxBand(i, delegated);
-      var card = el('div', 'card ' + band.cls);
-      card.appendChild(el('span', 'tag ' + band.cls, band.label));
-      card.appendChild(el('span', 'tag', i.kind));
-      card.appendChild(el('span', 'tag', i.nodeId));
-      card.appendChild(el('span', 'tag', i.at));
-      if (i.summary) card.appendChild(el('div', '', i.summary));
-      if (isStopRequest(i, delegated)) card.appendChild(el('div', '', delegated.has(i.nodeId) ? 'daemon は、このノードを直接止められません。親（または人）が止めてから、木の「止めたと宣言…」で知らせてください。' : 'daemon は、Desktop の子の状態を確かめられません。Desktop で子ごとに確かめ、止まっていれば、木の「止めたと宣言…」で知らせてください（手順は、docs の「Desktop の子」の説明）。'));
-      box.appendChild(card);
+  // 前に描いた項目の印（新しく来たものだけ、入ってくる動きを付ける。最初の描画では付けない）
+  var seenItems = null;
+  var nextSeen = new Set();
+  function markNew(e, key) {
+    nextSeen.add(key);
+    if (seenItems !== null && !seenItems.has(key)) e.className += ' new';
+  }
+  // たたむ欄。描き直しても、開いた欄は開いたままにする（key ごとに覚える）
+  var openFolds = new Set();
+  function fold(key, label) {
+    var d = el('details', '');
+    d.open = openFolds.has(key);
+    d.addEventListener('toggle', function () { if (d.open) openFolds.add(key); else openFolds.delete(key); });
+    d.appendChild(el('summary', '', label));
+    return d;
+  }
+  // いまあなたがすることの 1 件の枠。誰からか（題・役割・最後の動き）を先頭に出す
+  function taskCard(cls, key, label, chip, n, nodeId) {
+    var card = el('div', cls);
+    markNew(card, key);
+    var who = el('div', 'who');
+    who.appendChild(el('span', 'chip ' + chip, label));
+    who.appendChild(el('span', 'strong', n ? nodeLabel(n, 60) : nodeId));
+    if (n) who.appendChild(el('span', '', '（' + name(ROLE_NAMES, n.role) + '）' + (n.lastActivityAt ? '・最後の動き ' + timeText(n.lastActivityAt, Date.now()) : '')));
+    card.appendChild(who);
+    return card;
+  }
+  // 写すボタン。写せないとき（クリップボードが使えない）は、そう言う（文字は欄にあるので、手で選べる）
+  function copyButton(text) {
+    var b = el('button', 'sm', '写す');
+    b.addEventListener('click', function () {
+      var said = function (ok) { b.textContent = ok ? '写しました' : '写せません（文字を選んでコピーしてください）'; b.className = ok ? 'sm done' : 'sm'; };
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { said(true); }, function () { said(false); });
+      else said(false);
     });
+    return b;
+  }
+  function delegatedOf(nodes) {
+    var delegated = new Set();
+    nodes.forEach(function (n) { if (n.stopDelegated === true) delegated.add(n.id); });
+    return delegated;
+  }
+  // いまあなたがすること: 判断の頼み・範囲の頼み・止まっているかも（daemon の知らせだけ）・停止の代行依頼。数と一覧
+  var countFlip = false;
+  var lastCount = -1;
+  function renderTodo(view, byId) {
+    var box = document.getElementById('todo');
+    clear(box);
+    var open = view.decisions.filter(function (d) { return !d.closedReason; });
+    var closed = view.decisions.filter(function (d) { return d.closedReason; });
+    renderDecisions(open, box, byId);
+    renderExtensions(view.extensions, box, byId);
+    var delegated = delegatedOf(view.nodes);
+    var n = open.length + view.extensions.length;
+    view.inbox.forEach(function (i) {
+      var node = byId.get(i.nodeId);
+      if (i.stall === true) {
+        n += 1;
+        var card = taskCard('task stall', 'i-' + i.id, '止まっているかも', 'stall', node, i.nodeId);
+        card.appendChild(el('div', 'ask', 'daemon が、この子は入力を待って止まっているかもしれないと知らせています。子の画面を開いて確かめてください。'));
+        if (i.at) card.appendChild(el('div', 'when', '知らせ: ' + timeText(i.at, Date.now())));
+        var cmd = attachCommand(node);
+        if (cmd) {
+          var row = el('div', 'cmd');
+          row.appendChild(el('span', '', '端末に貼って、子の画面を開きます:'));
+          row.appendChild(el('code', '', cmd));
+          row.appendChild(copyButton(cmd));
+          card.appendChild(row);
+        } else {
+          card.appendChild(el('p', 'desc', 'この子は Desktop で動いています。Desktop で、この題の子を開いて確かめてください。'));
+        }
+        box.appendChild(card);
+      } else if (isStopRequest(i, delegated)) {
+        n += 1;
+        var req = taskCard('task request', 'i-' + i.id, '停止の代行依頼', 'request', node, i.nodeId);
+        req.appendChild(el('div', 'ask', delegated.has(i.nodeId) ? 'daemon は、この子を直接止められません。親（または人）が止めてから、「止めたと宣言…」で知らせてください。' : 'daemon は、Desktop の子の状態を確かめられません。Desktop で子ごとに確かめ、止まっていれば、その子の「止めたと宣言…」で知らせてください（手順は、docs の「Desktop の子」の説明）。'));
+        if (node && node.state === 'stopIncomplete' && node.stopDelegated === true && ID_RE.test(node.id)) req.appendChild(confirmStoppedBox(node.id));
+        box.appendChild(req);
+      }
+    });
+    renderDecisions(closed, box, byId);
+    if (n === 0) box.appendChild(el('p', 'empty', '子は自分で進めています。新しい問いや頼みが来ると、ここに出ます。'));
+    var countEl = document.getElementById('now-count');
+    countEl.textContent = String(n);
+    var cls = n === 0 ? 'count zero' : 'count';
+    if (lastCount !== -1 && n !== lastCount) { countFlip = !countFlip; cls += countFlip ? ' bump-a' : ' bump-b'; }
+    countEl.className = cls;
+    lastCount = n;
+    document.getElementById('now-title').textContent = n ? 'いまあなたがすること（' + n + ' 件）' : 'いま、あなたがすることはありません';
+    document.getElementById('now-lead').textContent = n ? '答えると、その子の作業が先へ進みます。' : '';
   }
 
-  // 描いたノードの数を返す（木にならない・深すぎるもので、描けなかった分は、呼び出し側が「一部省略」にする）。
-  function renderTree(nodes) {
-    var box = document.getElementById('tree');
+  // 作業ごとのようす: 子 1 つを 1 枚のカードに。あなたの出番を先に、ほかは最後に動いた順。終わった作業は、たたんだ欄へ
+  function byActivity(a, b) {
+    var ta = a.lastActivityAt || '';
+    var tb = b.lastActivityAt || '';
+    return ta < tb ? 1 : ta > tb ? -1 : 0;
+  }
+  function renderCards(view, byId) {
+    var box = document.getElementById('cards');
+    var fin = document.getElementById('finished-cards');
     clear(box);
-    if (!nodes.length) { box.appendChild(el('p', 'empty', 'ノードはありません')); return 0; }
+    clear(fin);
+    var delegated = delegatedOf(view.nodes);
+    var items = new Map();
+    view.inbox.forEach(function (i) {
+      if (!items.has(i.nodeId)) items.set(i.nodeId, []);
+      items.get(i.nodeId).push(i);
+    });
+    var turn = view.nodes.filter(function (n) { return n.band === 'turn'; }).sort(byActivity);
+    var running = view.nodes.filter(function (n) { return n.band !== 'turn' && n.band !== 'finished'; }).sort(byActivity);
+    var finished = view.nodes.filter(function (n) { return n.band === 'finished'; }).sort(byActivity);
+    turn.concat(running).forEach(function (n) { box.appendChild(nodeCard(n, byId, items.get(n.id) || [], view.flows, delegated)); });
+    finished.forEach(function (n) { fin.appendChild(nodeCard(n, byId, items.get(n.id) || [], view.flows, delegated)); });
+    if (!turn.length && !running.length) box.appendChild(el('p', 'empty', view.nodes.length ? '動いている作業はありません' : '作業はまだありません'));
+    document.getElementById('finished').hidden = finished.length === 0;
+    document.getElementById('finished-summary').textContent = '終わった作業（' + finished.length + ' 件。たたんでいます）';
+  }
+  function nodeCard(n, byId, list, flows, delegated) {
+    var band = n.band === 'turn' || n.band === 'finished' ? n.band : 'running';
+    var card = el('div', 'card ' + band);
+    if (ID_RE.test(n.id)) card.id = 'card-' + n.id;
+    var head = el('div', '');
+    head.appendChild(el('span', 'chip ' + band, name(BAND_NAMES, band)));
+    head.appendChild(el('span', 'chip', name(STATE_NAMES, n.state)));
+    // 「あなたの答え」の数は、人の操作が要るものだけ（needsHuman。進み具合・済んだ・知らせは数えない）
+    if (n.needsHuman > 0) head.appendChild(el('span', 'chip turn', 'あなたの答え ' + n.needsHuman + ' 件'));
+    card.appendChild(head);
+    card.appendChild(el('div', 'ctitle', nodeLabel(n, 200)));
+    var meta = el('div', 'meta');
+    var parent = n.parentId === null ? null : byId.get(n.parentId);
+    meta.appendChild(el('span', '', name(ROLE_NAMES, n.role) + (n.parentId === null ? '（いちばん上）' : '（親: ' + (parent ? nodeLabel(parent, 24) : n.parentId) + '）')));
+    if (n.lastActivityAt) meta.appendChild(el('span', 'when', '最後の動き ' + timeText(n.lastActivityAt, Date.now())));
+    card.appendChild(meta);
+    var idl = el('div', 'idline', 'ID ' + n.id);
+    if (ID_RE.test(n.id)) idl.appendChild(copyButton(n.id));
+    card.appendChild(idl);
+    // やり取り（新しい順に 3 件）
+    var mine = flows.filter(function (f) { return f.from === n.id || f.to === n.id; }).slice(0, 3);
+    if (mine.length) {
+      var fl = el('div', 'flows');
+      mine.forEach(function (f) { fl.appendChild(flowLine(f, n.id, byId)); });
+      card.appendChild(fl);
+    }
+    // 受信箱の項目（新しい順）。多いときは、ENTRY_MAX 件のほかを、たたむ
+    var sorted = list.slice().sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });
+    var rest = null;
+    sorted.forEach(function (i, k) {
+      var row = entryRow(i, delegated);
+      if (k < ENTRY_MAX) { card.appendChild(row); return; }
+      if (rest === null) { rest = fold('rest-' + n.id, 'ほか ' + (sorted.length - ENTRY_MAX) + ' 件の知らせ'); card.appendChild(rest); }
+      rest.appendChild(row);
+    });
+    var ops = nodeOps(n);
+    if (ops) card.appendChild(ops);
+    return card;
+  }
+  // 答え待ちのやり取り（判断・範囲の頼みで、まだ済んでいないもの）だけ、柿色にする
+  function isAwaiting(f) { return f.stage !== 'done' && (f.kind === 'decision' || f.kind === 'extension'); }
+  function flowLine(f, selfId, byId) {
+    var up = f.dir === 'up';
+    var other = f.from === selfId ? f.to : f.from;
+    var who = other === 'human' ? '人' : byId.has(other) ? nodeLabel(byId.get(other), 16) : other;
+    var line = el('div', isAwaiting(f) ? 'await' : up ? 'up' : 'down', (up ? '↑ ' : '↓ ') + (f.from === selfId ? 'へ ' : 'から ') + who + '　' + name(FLOW_KIND_NAMES, f.kind) + '・' + stageText(f));
+    line.appendChild(el('span', 'when', '　' + timeText(f.sentAt, Date.now())));
+    return line;
+  }
+  function entryRow(i, delegated) {
+    var band = inboxBand(i, delegated);
+    var row = el('div', 'entry');
+    markNew(row, 'e-' + i.id);
+    var head = el('div', '');
+    head.appendChild(el('span', 'chip ' + (i.stall === true ? 'stall' : band.cls), i.stall === true ? '止まっているかも' : isStopRequest(i, delegated) ? band.label : name(KIND_NAMES, i.kind)));
+    head.appendChild(el('span', 'when', timeText(i.at, Date.now())));
+    row.appendChild(head);
+    var text = typeof i.summary === 'string' ? i.summary : '';
+    if (Array.from(text).length > 60) {
+      var d = fold('text-' + i.id, cleanText(text, 60));
+      d.appendChild(el('div', 'confirm-line', text));
+      row.appendChild(d);
+    } else if (text) {
+      row.appendChild(el('div', 'confirm-line', text));
+    }
+    return row;
+  }
+  // この子への操作（たたむ）。ボタンごとに、何をするか・取り消せるかを添える
+  function nodeOps(n) {
+    var box = el('div', 'opts');
+    var any = false;
+    // 停止したノードだけ、破棄の判断（回収の指示）ができる。指示済みなら、もう一度は出さない
+    if (n.state === 'stopped') {
+      if (n.discarded) { box.appendChild(el('span', 'tag', '破棄を指示済み（回収は統合ノードが行う）')); any = true; }
+      else if (ID_RE.test(n.id)) {
+        var reclaim = el('button', 'danger', '破棄して回収を指示…');
+        reclaim.addEventListener('click', function () { startReclaim(n.id); });
+        box.appendChild(reclaim);
+        box.appendChild(el('p', 'irreversible', '取り消せません。止めた子の作業ツリーとブランチを消すよう、統合に指示します。'));
+        any = true;
+      }
+    }
+    // 停止を親に代行してもらうノード（stopDelegated。Desktop の子）が停止未完了なら、止めたと宣言できる
+    if (n.state === 'stopIncomplete' && n.stopDelegated === true && ID_RE.test(n.id)) {
+      box.appendChild(confirmStoppedBox(n.id));
+      box.appendChild(el('p', 'irreversible', '取り消せません。親が Desktop でこの子を止めたと記録し、停止済みに進めます。'));
+      any = true;
+    }
+    // 動いている子だけ、フックの結び付けを外せる。止まったノードにはフックが来ない。結び付けの有無は出さない（docs/ui.md）
+    if (n.role !== 'integrator' && (n.state === 'running' || n.state === 'waiting') && ID_RE.test(n.id)) {
+      box.appendChild(hookUnbindButton(n.id));
+      box.appendChild(el('p', 'desc', '取り消せます。子のセッションを入れ直して、フックが拒まれ続けるときだけ使います。次に来たセッションに結び直します。'));
+      any = true;
+    }
+    if (!any) return null;
+    var d = fold('ops-' + n.id, 'この子への操作');
+    d.appendChild(box);
+    return d;
+  }
+
+  // 一覧（木の字下げと、最後の上り・下り）。描いたノードの数を返す（木にならない・深すぎるもので、描けなかった分は、呼び出し側が「一部省略」にする）。
+  // 関係図（#89 の PR-5）は、#graph に描く。それまでは一覧だけ
+  function lastFlow(flows, from, to) {
+    for (var k = 0; k < flows.length; k += 1) if (flows[k].from === from && flows[k].to === to) return flows[k];
+    return null;
+  }
+  function flowCell(f, up, n) {
+    if (!f) return el('span', 'when', n.parentId === null ? '（いちばん上）' : 'まだない');
+    var c = el('span', isAwaiting(f) ? 'await' : up ? 'up' : 'down', (up ? '↑ ' : '↓ ') + name(FLOW_KIND_NAMES, f.kind) + '・' + stageText(f));
+    c.appendChild(el('span', 'when', '　' + timeText(f.sentAt, Date.now())));
+    return c;
+  }
+  function renderList(view) {
+    var box = document.getElementById('list');
+    clear(box);
+    var nodes = view.nodes;
+    if (!nodes.length) { box.appendChild(el('p', 'empty', '作業はまだありません')); return 0; }
+    var head = el('div', 'trow thead');
+    ['作業', '状態', '↑ 最後の上り（子 → 親）', '↓ 最後の下り（親・人 → 子）'].forEach(function (t) { head.appendChild(el('span', '', t)); });
+    box.appendChild(head);
     var kids = new Map();
     nodes.forEach(function (n) {
       var k = n.parentId === null ? '' : n.parentId;
@@ -484,31 +796,36 @@ export const UI_JS = `'use strict';
       (kids.get(parent) || []).forEach(function (n) {
         if (seen.has(n.id) || depth > 64) return;
         seen.add(n.id);
-        var row = el('div', 'node');
-        row.style.paddingLeft = (depth * 20) + 'px';
-        row.appendChild(el('span', '', n.id));
-        row.appendChild(el('span', 'state', n.role + ' / ' + name(STATE_NAMES, n.state)));
-        // 止まった・終わったノードには、もう対応することがないので、「要対応」の数を出さない（受信箱の項目は、受信箱に残る）
-        if (n.openItems > 0 && !Object.hasOwn(SETTLED_STATES, n.state)) row.appendChild(el('span', 'count', '要対応 ' + n.openItems));
-        // 停止したノードだけ、破棄の判断（回収の指示）ができる。指示済みなら、もう一度は出さない
-        if (n.state === 'stopped') {
-          if (n.discarded) row.appendChild(el('span', 'tag', '破棄を指示済み（回収は統合ノードが行う）'));
-          else if (ID_RE.test(n.id)) {
-            var reclaim = el('button', '', '破棄して回収を指示…');
-            reclaim.addEventListener('click', function () { startReclaim(n.id); });
-            row.appendChild(reclaim);
-          }
+        var band = n.band === 'turn' || n.band === 'finished' ? n.band : 'running';
+        var row = el('div', 'trow ' + band);
+        var t = el('span', 'tname');
+        t.style.paddingLeft = (depth * 18) + 'px';
+        if (depth) t.appendChild(el('span', 'when', '└'));
+        t.appendChild(el('span', 'strong', nodeLabel(n, 28)));
+        if (ID_RE.test(n.id)) {
+          var go = el('button', 'sm quiet', '詳しく');
+          go.addEventListener('click', function () { openCard(n.id); });
+          t.appendChild(go);
         }
-        // 停止を親に代行してもらうノード（stopDelegated。Desktop の子）が停止未完了なら、止めたと宣言できる
-        if (n.state === 'stopIncomplete' && n.stopDelegated === true && ID_RE.test(n.id)) row.appendChild(confirmStoppedBox(n.id));
-        // 動いている子だけ、フックの結び付けを外せる。止まったノードにはフックが来ない。結び付けの有無は出さない（docs/ui.md）
-        if (n.role !== 'integrator' && (n.state === 'running' || n.state === 'waiting') && ID_RE.test(n.id)) row.appendChild(hookUnbindButton(n.id));
+        row.appendChild(t);
+        row.appendChild(el('span', 'chip ' + band, name(STATE_NAMES, n.state) + (n.needsHuman > 0 ? '・答え ' + n.needsHuman : '')));
+        row.appendChild(flowCell(n.parentId === null ? null : lastFlow(view.flows, n.id, n.parentId), true, n));
+        row.appendChild(flowCell(n.parentId === null ? null : lastFlow(view.flows, n.parentId, n.id), false, n));
         box.appendChild(row);
         walk(n.id, depth + 1);
       });
     }
     walk('', 0);
     return seen.size;
+  }
+  // 一覧の「詳しく」: その子のカードまで動かして、光らせる（終わった作業なら、たたんだ欄を開く）
+  function openCard(id) {
+    var c = document.getElementById('card-' + id);
+    if (!c) return;
+    if (c.parentNode && c.parentNode.id === 'finished-cards') document.getElementById('finished').open = true;
+    c.scrollIntoView({ block: 'center' });
+    c.className = c.className.replace(' flash', '');
+    window.setTimeout(function () { c.className += ' flash'; }, 0);
   }
 
   // ---- 回収の指示（人間による破棄の判断。取り消せない）----
@@ -1016,11 +1333,15 @@ export const UI_JS = `'use strict';
 
   function render(view) {
     renderApprovals(view.confirmations);
-    renderDecisions(view.decisions);
-    renderExtensions(view.extensions, document.getElementById('decisions'));
-    if (!view.decisions.length && !view.extensions.length) document.getElementById('decisions').appendChild(el('p', 'empty', '判断待ちはありません'));
-    renderInbox(view.inbox, view.nodes);
-    var drawn = renderTree(view.nodes);
+    var flows = Array.isArray(view.flows) ? view.flows : [];
+    var v = { nodes: view.nodes, inbox: view.inbox, decisions: view.decisions, extensions: view.extensions, flows: flows };
+    var byId = new Map();
+    view.nodes.forEach(function (n) { byId.set(n.id, n); });
+    nextSeen = new Set();
+    renderTodo(v, byId);
+    renderCards(v, byId);
+    var drawn = renderList(v);
+    seenItems = nextSeen;
     renderPurge(view.nodes);
     showAuth(false);
     var partial = view.truncated.length > 0 || drawn < view.nodes.length;
@@ -1032,7 +1353,8 @@ export const UI_JS = `'use strict';
 
   function showConnected() {
     if (!lastView) return;
-    setStatus('接続中（' + (sseUp ? 'SSE' : 'ポーリング') + '・seq ' + lastView.seq + (lastView.partial ? '・一部省略' : '') + '）');
+    setStatus('つながっています（' + (sseUp ? '変わるとすぐ更新' : '2 秒ごとに確かめて更新') + (lastView.partial ? '。数が多いので一部を省いています' : '') + '）');
+    statusEl.className = 'status live';
   }
   function rejectToken(message) {
     if (viaSession) {
@@ -1183,6 +1505,13 @@ export const UI_JS = `'use strict';
       })
       .catch(function () {});
   }
+
+  // 動きを止める（OS の「視差効果を減らす」でも止まる。CSS の prefers-reduced-motion）
+  var stillBtn = document.getElementById('still');
+  stillBtn.addEventListener('click', function () {
+    var on = document.documentElement.classList.toggle('still');
+    stillBtn.textContent = on ? '動きを戻す' : '動きを止める';
+  });
 
   renderKept();
   if (ticket) {

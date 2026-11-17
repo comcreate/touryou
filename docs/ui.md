@@ -118,21 +118,29 @@ daemon の窓口が、状態を見るための HTML 画面を配る。**状態�
 
 入力欄（`textarea`）は、すべて `field(name)` で作り、`name` と、ページの中で一意な `id` を付ける（ブラウザの自動入力・支援技術が欄を区別できるように。トークンの欄は `name="token"`）。
 
-## 画面の作り直し（#89。実装中）
+## 画面の組み立て（#89）
 
-次の形に作り直している（決めは `.sdd/task/issue-89/research.md` の 7 節、設計は `design-draft.md`、見た目は `mock.html`）。入ったものから、この文書の各節に移す。
+上から順に、次のとおり（決めは `.sdd/task/issue-89/research.md` の 7 節、設計は `design-draft.md`、見た目は `mock.html`）。
 
-- いちばん上に「いまあなたがすること」（人の操作が要るものの数と一覧、その場の操作）。作業（子）ごとのカード（題・役割・状態・最後の動き・人の要対応の数・受信箱の項目）。まれな操作は、たたんだ「管理」の欄。
-- 「要対応」の数は、人の操作が要るものだけ（いまは、解決していない受信箱の項目すべてを数えている）。
-- daemon が止まっているかもしれないと知らせた CLI の子（だけ）に、`claude attach <ノード ID>` と写すボタン（時刻の経過などから画面で推し量らない）。
+- **上の 1 行**: 題と、つながりのようす（「つながっています（変わるとすぐ更新）」・「2 秒ごとに確かめて更新」・数が多くて一部を省いたとき）。「動きを止める」のボタン。
+- **確認待ち**（いちばん上に固定）と、操作の確認の欄（今までどおり）。
+- **いまあなたがすること**: 人の操作が要るものの数（大きな数字）と一覧。判断の頼み（選択肢のボタン・自由入力）、範囲を広げる頼み（承認・却下・切り出し。押すとどうなるかの説明つき）、**daemon が止まっているかもしれないと知らせた子**（受信箱の `stall` があるときだけ。時刻の経過などから画面で推し量らない）、停止の代行依頼（止めたと宣言…）。それぞれに、誰から（題・役割・最後の動き）を添える。止まっているかもしれない CLI の子には、`claude attach <ノード ID>` と写すボタンを出す（CLI の子は `--name <ノード ID>` で起動している。セッションの ID は出さない）。Desktop の子には、Desktop で開いて確かめる文を出す。なければ「いま、あなたがすることはありません」。答えても届かない閉じた判断は、理由を示して最後に出す（数えない）。
+- **やり取り**: 木の字下げの一覧と、それぞれの子の最後の上り（子 → 親）・下り（親・人 → 子）。段は「送った（まだ届いていない）」「送った（届いたかは分からない）」「届いた（返事を待っている）」「済んだ」「済んだ（推定）」。答え待ち（判断・範囲の頼みで済んでいないもの）だけ柿色。「詳しく」で、その子のカードへ移る。関係図は `#graph` の場所に描く（PR-5）。
+- **作業ごとのようす**: 子 1 つを 1 枚のカードにする。あなたの出番（`band: turn`）を先に、ほかは最後に動いた順。カードには、段・状態・「あなたの答え N 件」（`needsHuman`。進み具合・済んだ・知らせは数えない）・題・役割と親・最後の動き（手元の時刻と経過）・ID（小さく、写すボタンつき）・最近のやり取り 3 件・受信箱の項目（新しい順。種類は利用者の言葉。長い文は開いて全文を読む。5 件より多いぶんはたたむ）・「この子への操作」（たたむ。ボタンごとに、何をするか・取り消せるかを添える）。終わった作業（`band: finished`）は、たたんだ「終わった作業」の欄へ。
+- **管理**（たたんだ欄）: アーカイブした作業の最終削除と、自動の削除の保留、捨てた作業の保管。取り消せない操作は、今までどおり対象の ID を打ち込ませる。
+- **動き**: CSS の `@keyframes` とクラスの付け外しだけ。新しく来た項目が入ってくる動き・数が変わったときの動き・動いている印の点滅・カードへ移ったときの光り。最初の描画と、変わらない項目には動きを付けない。OS の「視差効果を減らす」（`prefers-reduced-motion`）と「動きを止める」で止まる。止めても、色・印・文字で読める。
+- **言葉**: 状態は「動いている」「待っている」「止めた」「受け入れた」など、種類は「判断を求む」「止められた操作」「進み具合」「済んだ」「知らせ」など。SSE・seq・墓標などの内部の言葉は、画面の通常の表示からは外した（取り消せない操作の確認の欄は、今までどおり詳しく出す）。
+
+まだ入っていないもの:
+
 - 表示モデルに足す値：ノードの `title`（目的の先頭を約 80 字に整えて切る）・`lastActivityAt`・`needsHuman`（人の要対応の数）・`band`（出番・進んでいる・終わった）、受信箱の `ref`・`stall`、拡張要求の `at`、やり取りの `flows`（種類・向き・from・to・段・時刻・`deliveryUnknown`・`doneInferred`）。
 - 関係図（横向きの木・子ごとの端子・角丸の折れ線・枝の上の道が上り〔←〕・下の道が下り〔→〕・やり取りの段 `sent`・`delivered`・`done`）と、木の一覧の切り替え。線は藍 1 色の破線（新しいほど濃い。柿色は答え待ちだけ）、箱は作業の状態の 3 段（印と文字を添える）、動きは段に結びつける（`sent` 速く・玉が走る／`delivered` ゆっくり／`done` 止まる）。子の数の上限はない。
 - あとで足す：受信箱の片付け（#99）、統合の受け取りの記録（#102。それまで子 → 親の「届いた」は分からないと示す）。
-- 守りの変更（下の「XSS・CSP」は、入るまで今のまま）：`/ui/graph.js` を足す（`rete`・`rete-area-plugin`・`rete-readonly-plugin` を束ね、描画のプラグインは使わない）。CSP は変えない。タグに `details`・`summary`・`code` を足す。SVG を作るのは `svgEl` の 1 か所、動く玉の `offset-path` も 1 か所。自前のコードはいまの走査に、束ねたライブラリは禁止の API の不在の試験にかける。
+- 守りの変更のうち、図の分（PR-5）：`/ui/graph.js` を足す（`rete`・`rete-area-plugin`・`rete-readonly-plugin` を束ね、描画のプラグインは使わない）。CSP は変えない。SVG を作るのは `svgEl` の 1 か所、動く玉の `offset-path` も 1 か所。自前のコードはいまの走査に、束ねたライブラリは禁止の API の不在の試験にかける。
 
 ## XSS・CSP
 
-- 画面は、`textContent` と `createElement`（タグは `div`・`span`・`p` の許可リストだけ。実行時にも拒む）だけで描く。`innerHTML`・`outerHTML`・`insertAdjacentHTML`・`document.write`・`eval`・`new Function`・`setAttribute`・`on*` への代入・`location` への代入・`srcdoc`・storage・cookie・`postMessage`・`window.open`・動的 import は使わない（`ui-assets.test.ts` が走査で守らせる）。ブラケット記法の文字列キー、HTML を解釈する API（`setHTMLUnsafe`・`parseHTMLUnsafe`・`setHTML`・`createContextualFragment`・`DOMParser`）、`.href`・`.src`・`.action`・`.formAction` への代入、危ないタグ（`script`・`iframe`・`a`・`img`・`link`・`object`・`embed`・`form` など）の生成も禁じる。さらに、**許可リスト**として、`.` の後ろのプロパティ名を抜き出し、安全な集合にあるものだけを許す（新しい API を使うと、試験が落ちるので、意識して足す）。HTML にインラインの script・style・イベント属性を置かない。
+- 画面は、`textContent` と `createElement`（タグは `div`・`span`・`p`・`button`・`textarea`・`details`・`summary`・`code` の許可リストだけ。#89 で `details`・`summary`・`code` を足した。どれも属性を付けない。実行時にも拒む）だけで描く。`innerHTML`・`outerHTML`・`insertAdjacentHTML`・`document.write`・`eval`・`new Function`・`setAttribute`・`on*` への代入・`location` への代入・`srcdoc`・storage・cookie・`postMessage`・`window.open`・動的 import は使わない（`ui-assets.test.ts` が走査で守らせる）。ブラケット記法の文字列キー、HTML を解釈する API（`setHTMLUnsafe`・`parseHTMLUnsafe`・`setHTML`・`createContextualFragment`・`DOMParser`）、`.href`・`.src`・`.action`・`.formAction` への代入、危ないタグ（`script`・`iframe`・`a`・`img`・`link`・`object`・`embed`・`form` など）の生成も禁じる。さらに、**許可リスト**として、`.` の後ろのプロパティ名を抜き出し、安全な集合にあるものだけを許す（新しい API を使うと、試験が落ちるので、意識して足す）。HTML にインラインの script・style・イベント属性を置かない。
 - 応答のヘッダー: `Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Cache-Control: no-store`、`X-Frame-Options: DENY`、`Cross-Origin-Resource-Policy: same-origin`（資産と `/v1/ui/state`）。HTML には、さらに `Cross-Origin-Opener-Policy: same-origin` と `Permissions-Policy`（カメラ・マイクなどを許さない）。
 
 ## 更新（SSE。NFR_008）

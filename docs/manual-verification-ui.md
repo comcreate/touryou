@@ -7,6 +7,8 @@ pnpm build
 TOURYOU_PLAYWRIGHT=$(npm root -g)/playwright TOURYOU_OUT=/tmp/ui node scripts/ui-browser-check.mjs
 ```
 
+> **注意（2026-11-17）**: `scripts/ui-browser-check.mjs` は、いま通らない。#88 で画面が `/ui#token=` を受け取らなくなったのに、script がまだ `#token=` で開いているため（最初の接続で止まる）。また #89 の PR-4 で、画面の組み立て（判断の頼みは `#todo`、木は `#list` と `#cards` の子ごとのカード、ノードへの操作は各カードの「この子への操作」、最終削除・保管はたたんだ「管理」の欄）と言葉（状態の名前など）を変えたので、選び方（`#decisions .card`・`#tree .node`・`#inbox .card`）も合わせ直しが要る。直すまでは、下の表の確かめを、`docs/manual-verification-checklist.md` の U・V で手で行う。
+
 スクリーンショットは `TOURYOU_OUT` のディレクトリに書かれる（指定しないと、今のディレクトリ）。リポジトリの外の一時ディレクトリを指定する（`/ui-*.png`・`/ux-*.png` は `.gitignore` にある）。
 
 `TOURYOU_CHROMIUM` で実行ファイルを変えられる（既定 `/opt/pw-browsers/chromium`）。スクリプトは、daemon の窓口を、種になる状態（子の報告・判断要求に、スクリプトタグと `onerror` の文字列を入れる）で立てて、明・暗の両方で開く。
@@ -15,7 +17,7 @@ TOURYOU_PLAYWRIGHT=$(npm root -g)/playwright TOURYOU_OUT=/tmp/ui node scripts/ui
 
 | 項目 | 期待 |
 | --- | --- |
-| `/ui#ticket=…` で開く（`touryou ui`） | 読み込み後、アドレスにチケットが残らない。「接続中」になる |
+| `/ui#ticket=…` で開く（`touryou ui`） | 読み込み後、アドレスにチケットが残らない。「つながっています」になる（#89 の前は「接続中」） |
 | `/ui#token=…` で開く | 接続しない（受け口を外した）。アドレスからは消える |
 | 子が書いた文字列に `<img onerror>`・`<script>` | 実行されず、文字として表示される。`window.__xss` が立たない |
 | コンソールのエラー・ダイアログ | なし（CSP に違反しない） |

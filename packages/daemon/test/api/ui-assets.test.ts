@@ -237,6 +237,34 @@ describe("画面の資産（走査）", () => {
       "Math",
       "AbortController",
       "TextDecoder",
+      // #89: 画面の作り直し（表示モデルの値・時刻・写すボタン・動きを止める・たたむ欄）
+      "title",
+      "lastActivityAt",
+      "needsHuman",
+      "band",
+      "stall",
+      "flows",
+      "dir",
+      "to",
+      "stage",
+      "sentAt",
+      "deliveryUnknown",
+      "doneInferred",
+      "parse",
+      "getHours",
+      "getMinutes",
+      "getFullYear",
+      "getMonth",
+      "getDate",
+      "concat",
+      "parentNode",
+      "open",
+      "navigator",
+      "clipboard",
+      "writeText",
+      "classList",
+      "toggle",
+      "documentElement",
     ]);
     const code = UI_JS.replace(/'(?:[^'\\\n]|\\.)*'/g, "''").replace(/\/\/[^\n]*/g, "");
     const used = new Set([...code.matchAll(/\.\s*([A-Za-z_$][\w$]*)/g)].map((m) => m[1] as string));
@@ -256,10 +284,16 @@ describe("画面の資産（走査）", () => {
     expect(UI_JS).not.toContain("granted");
   });
 
-  it("el に渡すタグは、div・span・p・button・textarea だけ（実行時にも、許可リストで拒む）", () => {
+  it("el に渡すタグは、div・span・p・button・textarea・details・summary・code だけ（実行時にも、許可リストで拒む。#89 で details・summary・code を足した）", () => {
     const calls = [...UI_JS.matchAll(/\bel\(\s*'([^']*)'/g)].map((m) => m[1]);
     expect(calls.length).toBeGreaterThan(5);
-    for (const tag of calls) expect(["div", "span", "p", "button", "textarea"]).toContain(tag);
+    for (const tag of calls)
+      expect(["div", "span", "p", "button", "textarea", "details", "summary", "code"]).toContain(
+        tag,
+      );
+    expect(UI_JS).toContain(
+      "var TAGS = { div: true, span: true, p: true, button: true, textarea: true, details: true, summary: true, code: true };",
+    );
     expect(UI_JS).toContain("Object.hasOwn(TAGS, tag)");
   });
 
@@ -1017,21 +1051,32 @@ describe("画面の使い勝手（#13）", () => {
   const api = runInNewContext(
     [
       lineOf("var PRIORITY_NAMES ="),
-      lineOf("var SETTLED_STATES ="),
       lineOf("var EXTERNAL_CHECK_PREFIXES ="),
       lineOf("var UNREACHABLE_TEXT ="),
+      lineOf("var ID_RE ="),
+      lineOf("var FORBIDDEN ="),
       lineOf("function name("),
       fnOf("isStopRequest"),
       fnOf("inboxBand"),
       fnOf("fetchFailureText"),
-      "({ inboxBand: inboxBand, fetchFailureText: fetchFailureText, SETTLED_STATES: SETTLED_STATES, UNREACHABLE_TEXT: UNREACHABLE_TEXT })",
+      fnOf("timeText"),
+      fnOf("agoText"),
+      fnOf("stageText"),
+      fnOf("attachCommand"),
+      fnOf("cleanText"),
+      lineOf("function nodeLabel("),
+      "({ inboxBand: inboxBand, fetchFailureText: fetchFailureText, UNREACHABLE_TEXT: UNREACHABLE_TEXT, timeText: timeText, agoText: agoText, stageText: stageText, attachCommand: attachCommand, nodeLabel: nodeLabel })",
     ].join("\n"),
     {},
   ) as {
     inboxBand(i: Record<string, unknown>, delegated: Set<string>): { cls: string; label: string };
     fetchFailureText(status: number): string;
-    SETTLED_STATES: Record<string, boolean>;
     UNREACHABLE_TEXT: string;
+    timeText(iso: unknown, nowMs: number): string;
+    agoText(ms: number): string;
+    stageText(f: Record<string, unknown>): string;
+    attachCommand(n: unknown): string;
+    nodeLabel(n: unknown, max: number): string;
   };
 
   it("(4) 停止を代行してもらうノードの停止未完了は、赤の「失敗」でなく「停止の代行依頼」。直接止めるノードは、これまでどおり失敗", () => {
@@ -1079,20 +1124,74 @@ describe("画面の使い勝手（#13）", () => {
     ).toBe("failed");
   });
 
-  it("(6) 終わったノード（受理・回収可・アーカイブ）には、要対応の数を出さない。停止（人が決めることが残りうる）・完了報告・動いているノードには出す", () => {
-    for (const s of ["verified", "reclaimable", "archived"])
-      expect(Object.hasOwn(api.SETTLED_STATES, s), s).toBe(true);
-    for (const s of [
-      "stopped",
-      "running",
-      "waiting",
-      "pending",
-      "done",
-      "stopping",
-      "stopIncomplete",
-    ])
-      expect(Object.hasOwn(api.SETTLED_STATES, s), s).toBe(false);
-    expect(UI_JS).toContain("n.openItems > 0 && !Object.hasOwn(SETTLED_STATES, n.state)");
+  it("(6) 「あなたの答え」の数は、人の操作が要るもの（needsHuman）だけ。未解決の項目すべて（openItems）は使わない（#89）", () => {
+    expect(UI_JS).toContain(
+      "if (n.needsHuman > 0) head.appendChild(el('span', 'chip turn', 'あなたの答え ' + n.needsHuman + ' 件'))",
+    );
+    expect(UI_JS).not.toContain("openItems");
+  });
+
+  it("(#89) 時刻は手元の時刻と経過で出す。今日でない日は日付も。読めない値は空", () => {
+    const now = new Date(2026, 10, 17, 15, 0, 0).getTime();
+    expect(api.timeText(new Date(2026, 10, 17, 14, 57, 0).toISOString(), now)).toBe(
+      "14:57（3 分前）",
+    );
+    expect(api.timeText(new Date(2026, 10, 16, 9, 5, 0).toISOString(), now)).toBe(
+      "11/16 09:05（1 日前）",
+    );
+    expect(api.timeText("壊れた", now)).toBe("");
+    expect(api.timeText(undefined, now)).toBe("");
+    expect(api.agoText(30_000)).toBe("いま");
+    expect(api.agoText(2 * 3_600_000)).toBe("2 時間前");
+  });
+
+  it("(#89) やり取りの段の言葉。届いたかの記録がない・推定は、そう言う", () => {
+    expect(api.stageText({ stage: "sent" })).toBe("送った（まだ届いていない）");
+    expect(api.stageText({ stage: "sent", deliveryUnknown: true })).toBe(
+      "送った（届いたかは分からない）",
+    );
+    expect(api.stageText({ stage: "delivered" })).toBe("届いた（返事を待っている）");
+    expect(api.stageText({ stage: "done" })).toBe("済んだ");
+    expect(api.stageText({ stage: "done", doneInferred: true })).toBe("済んだ（推定）");
+    expect(api.stageText({ stage: "x" })).toBe("");
+  });
+
+  it("(#89) 止まっているかもの子を開くコマンドは claude attach <ノード ID>。Desktop の子・ID の形でないものには出さない。セッションの ID は使わない", () => {
+    expect(api.attachCommand({ id: "n-a1" })).toBe("claude attach n-a1");
+    expect(api.attachCommand({ id: "n-a1", stopDelegated: true })).toBe("");
+    expect(api.attachCommand({ id: "a b; rm -rf" })).toBe("");
+    expect(api.attachCommand(undefined)).toBe("");
+    expect(UI_JS).not.toContain("sessionId");
+  });
+
+  it("(#89) 「止まっているかも」は、daemon の知らせ（stall）があるときだけ出す（時刻から推し量らない）", () => {
+    expect(UI_JS).toContain("if (i.stall === true) {");
+    expect(UI_JS).not.toMatch(/lastActivityAt[^\n]*(stall|止まっているかも)/);
+  });
+
+  it("(#89) 呼び名は題（整えて切る）。題がなければ ID", () => {
+    expect(api.nodeLabel({ id: "a", title: "集計を直す" }, 10)).toBe("集計を直す");
+    expect(api.nodeLabel({ id: "a", title: "あ".repeat(20) }, 10)).toBe(`${"あ".repeat(9)}…`);
+    expect(api.nodeLabel({ id: "a" }, 10)).toBe("a");
+  });
+
+  it("(#89) 動きは CSS の keyframes とクラスだけ。prefers-reduced-motion と「動きを止める」で止まる", () => {
+    expect(UI_CSS).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\{\*,\*::before\{animation:none!important;transition:none!important\}\}/,
+    );
+    expect(UI_CSS).toContain(
+      ".still *,.still *::before{animation:none!important;transition:none!important}",
+    );
+    expect(UI_JS).toContain("document.documentElement.classList.toggle('still')");
+    expect(UI_JS).not.toMatch(/\.animate\(|requestAnimationFrame/);
+  });
+
+  it("(#89) 管理（最終削除・保留・保管）は、たたんだ欄の中にある", () => {
+    const admin = UI_HTML.indexOf('<details class="admin">');
+    expect(admin).toBeGreaterThan(-1);
+    expect(UI_HTML.indexOf('id="purge"')).toBeGreaterThan(admin);
+    expect(UI_HTML.indexOf('id="kept"')).toBeGreaterThan(admin);
+    expect(UI_HTML.indexOf('id="todo"')).toBeLessThan(admin);
   });
 
   it("(3) 接続できない・取得に失敗したときは、理由と確かめることを言う", () => {
