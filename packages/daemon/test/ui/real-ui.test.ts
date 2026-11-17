@@ -4,13 +4,14 @@
  * 図と一覧を切り替えられること、「動きを止める」と OS の `prefers-reduced-motion` で図の動きが止まることを確かめる。
  * 画面写し（`docs/images/ui-light.png`・`ui-dark.png`）は、`TOURYOU_UI_SHOTS=<ディレクトリ>` のときだけ撮る（値は作り物）。
  */
-import { foldEvents, type OrchEvent } from "@touryou/core";
+import { foldEvents, type OrchEvent, stallSummary } from "@touryou/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createCredentialStore } from "../../src/api/credentials.js";
 import { type ApiServer, createApiServer } from "../../src/api/server.js";
 import { type Browser, type Page, type Pw, pw, type Win } from "./playwright.js";
 
 const HUMAN = "human-token-human-token-human-token-1234";
+const LONG = "investigate-graph-fidelity-check-with-a-long-node-id-0001";
 let n = 0;
 const ev = (body: unknown, actor: unknown = { system: true }): OrchEvent =>
   ({
@@ -51,6 +52,18 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       ev({ type: "node.instructed", payload: { nodeId: "ui-a", text: "x" } }, { nodeId: "root" }),
       // 人からの指示（段を飛ばす。木の外の「人」の箱から）
       ev({ type: "node.instructed", payload: { nodeId: "ui-c", text: "x" } }),
+      // 止まっているかもの子（長い ID。狭い窓で、はみ出さないことも見る）と、済んだ子
+      ...created(LONG, "investigate", "root", "関係図の見た目を見本と比べる"),
+      ev({
+        type: "inbox.added",
+        payload: { id: "st1", kind: "info", nodeId: LONG, summary: stallSummary(LONG, 12) },
+      }),
+      ...created("ui-old", "implement", "root", "前の画面を片付ける"),
+      ev({
+        type: "node.stateChanged",
+        payload: { nodeId: "ui-old", event: { type: "reportDone" } },
+      }),
+      ev({ type: "node.stateChanged", payload: { nodeId: "ui-old", event: { type: "accept" } } }),
       ev({
         type: "decision.requested",
         payload: { decisionId: "d1", nodeId: "ui-b", question: "どちらにしますか" },
@@ -105,12 +118,51 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   });
 
   it("画面が graph.js を読み、#graph に図を描く。CSP の違反もエラーもない", async () => {
-    expect(await page.locator("#graph .gnode").count()).toBe(5); // 4 つのノードと「人」の箱
+    expect(await page.locator("#graph .gnode").count()).toBe(7); // 6 つのノードと「人」の箱
     expect(await page.locator("#graph svg.glink path.line").count()).toBeGreaterThan(0);
     expect(await page.evaluate(() => document.getElementById("list")?.hidden)).toBe(true);
     expect(await page.evaluate(() => document.getElementById("view-switch")?.hidden)).toBe(false);
     expect(await csp()).toEqual([]);
     expect(problems).toEqual([]);
+  });
+
+  it("箱は見本の形：状態の言葉と印・左の縁の段・役割の印・列の見出し。止まっているかもは、くすんだ黄（カードも）", async () => {
+    const box = (id: string) => page.locator(`#graph .gnode[data-id="${id}"]`);
+    expect(await box("root").getAttribute("class")).toContain("t-go");
+    expect(await box("root").locator(".gst").textContent()).toBe("動いている");
+    expect(await box("ui-b").getAttribute("class")).toContain("s-wait");
+    expect(await box("ui-b").locator(".gst").textContent()).toBe("● あなたの答え待ち");
+    expect(await box("ui-b").locator(".gbadge").textContent()).toBe("1");
+    expect(await box(LONG).getAttribute("class")).toContain("s-stall");
+    expect(await box(LONG).locator(".gst").textContent()).toBe("‖ 止まっているかも");
+    expect(await box("ui-old").getAttribute("class")).toContain("t-over");
+    expect(await box("ui-a").locator(".galive").count()).toBe(1);
+    expect(await box("ui-a").locator(".gs").textContent()).toMatch(/^作業　\d+ 分前$/);
+    const colors = await page.evaluate((id: string) => {
+      const c = (sel: string) => getComputedStyle(document.querySelector(sel) as Element);
+      return {
+        stall: c(`#graph .gnode[data-id="${id}"]`).borderTopColor,
+        wait: c('#graph .gnode[data-id="ui-b"]').borderTopColor,
+        card: c(`#card-${id}`).borderLeftColor,
+      };
+    }, LONG);
+    expect(colors.stall).not.toBe(colors.wait);
+    expect(colors.card).toBe(colors.stall);
+    expect(await page.locator("#graph text.colhead").allTextContents()).toEqual([
+      "いちばん上の統合",
+      "子",
+    ]);
+    expect(await page.locator("#graph text.mstage").count()).toBeGreaterThan(0);
+  });
+
+  it("箱を押すと、その子のカードへ移って光る（一覧の「詳しく」と同じ）。凡例は図のときだけ出る", async () => {
+    expect(await page.evaluate(() => document.getElementById("graph-legend")?.hidden)).toBe(false);
+    await page.click('#graph .gnode[data-id="ui-c"]');
+    await page.waitForSelector("#card-ui-c.flash"); // 光らせるのは次の番（setTimeout 0）
+    await page.click("#show-list");
+    expect(await page.evaluate(() => document.getElementById("graph-legend")?.hidden)).toBe(true);
+    await page.click("#show-graph");
+    await page.waitForSelector("#graph .gnode");
   });
 
   it("図と一覧を切り替えられる。一覧にすると図は片付き、図に戻すと描き直す", async () => {
@@ -121,7 +173,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(await page.locator("#show-list[aria-pressed=true]").count()).toBe(1);
     await page.click("#show-graph");
     await page.waitForSelector("#graph .gnode");
-    expect(await page.locator("#graph .gnode").count()).toBe(5);
+    expect(await page.locator("#graph .gnode").count()).toBe(7);
     expect(await page.locator("#show-graph[aria-pressed=true]").count()).toBe(1);
   });
 
@@ -143,9 +195,28 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
 
   it.runIf(process.env.TOURYOU_UI_SHOTS !== undefined)("画面写し（明・暗）", async () => {
     const dir = process.env.TOURYOU_UI_SHOTS as string;
+    await page.mouse.move(1, 1); // 箱の上に指を残さない（線が薄くならないように）
+    await page.evaluate(() => window.scrollTo(0, 0));
     for (const scheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
       await page.screenshot({ path: `${dir}/ui-${scheme}.png`, fullPage: true });
     }
+  });
+
+  it("狭い窓でも、横にはみ出さない。いちばん上の帯の「動きを止める」が切れない", async () => {
+    for (const width of [1280, 900, 600, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      const r = await page.evaluate(() => {
+        const b = (document.getElementById("still") as HTMLElement).getBoundingClientRect();
+        return {
+          over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          right: b.right,
+          vw: document.documentElement.clientWidth,
+        };
+      });
+      expect(r.over, `幅 ${width}`).toBeLessThanOrEqual(0);
+      expect(r.right, `幅 ${width}`).toBeLessThanOrEqual(r.vw);
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
   });
 });
