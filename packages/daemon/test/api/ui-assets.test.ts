@@ -291,15 +291,23 @@ describe("画面の資産（走査）", () => {
     expect(UI_JS).not.toContain("granted");
   });
 
-  it("el に渡すタグは、div・span・p・button・textarea・details・summary・code だけ（実行時にも、許可リストで拒む。#89 で details・summary・code を足した）", () => {
+  it("el に渡すタグは、div・span・p・button・textarea・details・summary・code・h3 だけ（実行時にも、許可リストで拒む。#89 で details・summary・code を、カードの題で h3 を足した）", () => {
     const calls = [...UI_JS.matchAll(/\bel\(\s*'([^']*)'/g)].map((m) => m[1]);
     expect(calls.length).toBeGreaterThan(5);
     for (const tag of calls)
-      expect(["div", "span", "p", "button", "textarea", "details", "summary", "code"]).toContain(
-        tag,
-      );
+      expect([
+        "div",
+        "span",
+        "p",
+        "button",
+        "textarea",
+        "details",
+        "summary",
+        "code",
+        "h3",
+      ]).toContain(tag);
     expect(UI_JS).toContain(
-      "var TAGS = { div: true, span: true, p: true, button: true, textarea: true, details: true, summary: true, code: true };",
+      "var TAGS = { div: true, span: true, p: true, button: true, textarea: true, details: true, summary: true, code: true, h3: true };",
     );
     expect(UI_JS).toContain("Object.hasOwn(TAGS, tag)");
   });
@@ -1134,7 +1142,7 @@ describe("画面の使い勝手（#13）", () => {
 
   it("(6) 「あなたの答え」の数は、人の操作が要るもの（needsHuman）だけ。未解決の項目すべて（openItems）は使わない（#89）", () => {
     expect(UI_JS).toContain(
-      "if (n.needsHuman > 0) head.appendChild(el('span', 'chip ' + (stallOnly ? 'stall' : 'turn'), 'あなたの答え ' + n.needsHuman + ' 件'))",
+      "if (n.needsHuman > 0) head.appendChild(el('span', 'chip turn', 'あなたの答え ' + n.needsHuman + ' 件'))",
     );
     expect(UI_JS).not.toContain("openItems");
   });
@@ -1264,5 +1272,18 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
       /prefers-reduced-motion: reduce\)\{\*,\*::before\{animation:none!important/,
     );
     expect(UI_CSS).toContain(".line.g-sent{animation:gflow");
+  });
+});
+
+describe("カードの状態の札（図の箱と同じ言葉）", () => {
+  it("app.js の STATUS_TEXT・RUN_TEXT は、graph-model.ts と同じ言葉", async () => {
+    const { STATUS_TEXT, RUN_TEXT } = await import("../../src/ui/graph-model.js");
+    const pick = (name: string): Record<string, string> => {
+      const m = new RegExp(`var ${name} = (\\{[^\\n]*\\});`).exec(UI_JS);
+      if (m === null) throw new Error(name);
+      return Function(`return (${m[1]})`)() as Record<string, string>;
+    };
+    expect(pick("STATUS_TEXT")).toEqual(STATUS_TEXT);
+    expect(pick("RUN_TEXT")).toEqual(RUN_TEXT);
   });
 });

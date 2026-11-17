@@ -81,6 +81,21 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
         type: "inbox.added",
         payload: { id: "st1", kind: "info", nodeId: LONG, summary: stallSummary(LONG, 12) },
       }),
+      // 閉じた判断だけが残る子（止めて破棄を決めた。閉じた判断は答え待ちに数えない。カードと図で同じ札になる）
+      ...created("ui-d", "implement", "root", "閉じた判断だけが残る子"),
+      ev({
+        type: "decision.requested",
+        payload: { decisionId: "d9", nodeId: "ui-d", question: "閉じる問い" },
+      }),
+      ev({
+        type: "node.stateChanged",
+        payload: { nodeId: "ui-d", event: { type: "stop", mode: "immediate" } },
+      }),
+      ev({
+        type: "node.stateChanged",
+        payload: { nodeId: "ui-d", event: { type: "confirmStopped" } },
+      }),
+      ev({ type: "node.discardDecided", payload: { nodeId: "ui-d", noTip: true } }),
       ...created("ui-old", "implement", "root", "前の画面を片付ける"),
       ev({
         type: "node.stateChanged",
@@ -141,7 +156,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   });
 
   it("画面が graph.js を読み、#graph に図を描く。CSP の違反もエラーもない", async () => {
-    expect(await page.locator("#graph .gnode").count()).toBe(6); // 6 つのノードだけ（「人」の箱は描かない）
+    expect(await page.locator("#graph .gnode").count()).toBe(7); // 7 つのノードだけ（「人」の箱は描かない）
     expect(await page.locator('#graph .gnode[data-id="human"]').count()).toBe(0);
     expect(await page.locator("#graph svg.glink path.line").count()).toBeGreaterThan(0);
     expect(await page.evaluate(() => document.getElementById("list")?.hidden)).toBe(true);
@@ -191,6 +206,88 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     await page.waitForSelector("#graph .gnode");
   });
 
+  it("作業ごとのようすのカードは見本の形：札は状態 1 つと答えの数、題は h3、棒は 12 区切り、やり取りは 3 件まで、知らせ・ID はたたむ", async () => {
+    const shape = await page.evaluate(() =>
+      [...document.querySelectorAll("#cards .card, #finished-cards .card")].map((c) => ({
+        id: c.id,
+        chips: [...(c.children[0]?.querySelectorAll(".chip") ?? [])].map(
+          (x) => x.textContent ?? "",
+        ),
+        need: c.classList.contains("need"),
+        h3: c.querySelector(":scope > h3")?.textContent ?? "",
+        slots: c.querySelectorAll(":scope > .spark > .slot").length,
+        flows: c.querySelectorAll(":scope > .flowlist > .fl").length,
+        // カードの表（たたみの外）に、ID の行・受信箱の項目がない
+        idOutside: [...c.children].some((x) => x.classList.contains("idline")),
+        entryOutside: [...c.children].some((x) => x.classList.contains("entry")),
+        folds: [...c.querySelectorAll(":scope > details > summary")].map(
+          (x) => x.textContent ?? "",
+        ),
+        attach: c.querySelector(":scope > .cmd code")?.textContent ?? "",
+      })),
+    );
+    expect(shape.length).toBeGreaterThan(0);
+    for (const c of shape) {
+      expect(c.chips.length, c.id).toBeLessThanOrEqual(2);
+      expect(
+        c.chips.some((t) => t === "あなたの出番" || t === "進んでいる"),
+        c.id,
+      ).toBe(false);
+      expect(c.h3, c.id).not.toBe("");
+      expect(c.slots, c.id).toBe(12);
+      expect(c.flows, c.id).toBeLessThanOrEqual(3);
+      expect(c.idOutside, c.id).toBe(false);
+      expect(c.entryOutside, c.id).toBe(false);
+      expect(
+        c.folds.some((t) => t === "この子への操作" || t === "この子の ID"),
+        c.id,
+      ).toBe(true);
+    }
+    const b = shape.find((c) => c.id === "card-ui-b");
+    expect(b?.chips).toEqual(["● あなたの答え待ち", "あなたの答え 1 件"]);
+    expect(b?.need).toBe(true);
+    const stall = shape.find((c) => c.id === `card-${LONG}`);
+    expect(stall?.chips[0]).toBe("‖ 止まっているかも");
+    expect(stall?.attach).toBe(`claude attach ${LONG}`);
+    expect(stall?.folds.some((t) => /^知らせ \d+ 件（たたんでいます）$/.test(t))).toBe(true);
+    // いちばん上の統合にも「最後の動き」。人とのやり取りの相手は「あなた」
+    const meta = await page.evaluate(
+      () => document.querySelector("#card-root .meta")?.textContent ?? "",
+    );
+    expect(meta).toContain("最後の動き");
+    const flowsC = await page.evaluate(() =>
+      [...document.querySelectorAll("#card-ui-c .flowlist .fl")].map((x) => x.textContent ?? ""),
+    );
+    expect(flowsC.some((t) => t.includes("← あなた　却下"))).toBe(true);
+    expect(flowsC.some((t) => t.includes("人　"))).toBe(false);
+    const old = shape.find((c) => c.id === "card-ui-old");
+    expect(old?.chips[0]).toBe("済んだ");
+  });
+
+  it("同じ表示モデルから、カードの状態の札と、図の箱の状態の言葉が、子ごとに同じ（閉じた判断だけが残る子も）", async () => {
+    const pairs = await page.evaluate(() =>
+      [...document.querySelectorAll("#cards .card, #finished-cards .card")].map((c) => {
+        const id = c.id.replace(/^card-/, "");
+        const box = document.querySelector(`#graph .gnode[data-id="${CSS.escape(id)}"] .gst`);
+        return {
+          id,
+          card: c.children[0]?.querySelector(".chip")?.textContent ?? "",
+          graph: box?.textContent ?? null,
+        };
+      }),
+    );
+    expect(pairs.some((p) => p.id === "ui-d")).toBe(true);
+    for (const p of pairs) {
+      expect(p.graph, p.id).not.toBeNull();
+      // 図の箱は、止まっているかもの子に「　N 分」を足す。頭の言葉が同じこと
+      expect(
+        (p.graph ?? "").startsWith(p.card),
+        `${p.id}: カード「${p.card}」図「${p.graph}」`,
+      ).toBe(true);
+    }
+    expect(pairs.find((p) => p.id === "ui-d")?.card).not.toBe("● あなたの答え待ち");
+  });
+
   it("箱は見本の形：状態の言葉と印・左の縁の段・役割の印・列の見出し。止まっているかもは、くすんだ黄（カードも）", async () => {
     const box = (id: string) => page.locator(`#graph .gnode[data-id="${id}"]`);
     expect(await box("root").getAttribute("class")).toContain("t-go");
@@ -238,7 +335,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(await page.locator("#show-list[aria-pressed=true]").count()).toBe(1);
     await page.click("#show-graph");
     await page.waitForSelector("#graph .gnode");
-    expect(await page.locator("#graph .gnode").count()).toBe(6);
+    expect(await page.locator("#graph .gnode").count()).toBe(7);
     expect(await page.locator("#show-graph[aria-pressed=true]").count()).toBe(1);
   });
 

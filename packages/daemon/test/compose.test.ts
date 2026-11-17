@@ -2376,7 +2376,8 @@ describe("Desktop の子（childRuntime: desktop・仮置き）", () => {
     await vi.waitFor(() => expect(notices()).toHaveLength(1), { timeout: 5000, interval: 100 });
     await new Promise((res) => setTimeout(res, 1500));
     expect(notices()).toHaveLength(1);
-  });
+    // 待ちは 1.5 秒 + 最大 5 秒 + 1.5 秒。既定の 5 秒では、遅い機械（CI）で、待ちの途中で時間切れになる
+  }, 15_000);
 
   it("相対の CLAUDE_CONFIG_DIR・ない claudeConfigDirs・作業ツリーと重なる場所は、起動時に警告（場所は書かない）", async () => {
     const r = desktopRig();

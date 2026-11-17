@@ -38,8 +38,8 @@ export const UI_HTML = `<!doctype html>
 <section id="view" hidden>
 <section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h2 id="now-title">いまあなたがすること</h2><p id="now-lead" class="lead"></p></section>
 <div id="todo" class="todo"></div>
-<section class="sec"><h2>やり取り</h2><p class="lead">親子の並びと、いちばん新しい上り（子 → 親）・下り（親・人 → 子）です。</p><div id="view-switch" class="seg" role="group" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button">図</button><button id="show-list" class="quiet sm" type="button">一覧</button></div><div id="graph" class="board" hidden></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span>← 上り（子 → 親）</span><span class="lg"><span class="sw down"></span>→ 下り（親・人 → 子）</span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span>新しいほど濃い</span><span class="lg"><span class="sw wait"></span>あなたの答え待ちのやり取り</span><span class="lg"><span class="edge go"></span>進んでいる</span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span>あなたの出番（答え待ち・止まっているかも・失敗）</span><span class="lg"><span class="edge over"></span>終わった</span><span class="lg">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
-<section class="sec"><h2>作業ごとのようす</h2><p class="lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。</p><div id="cards" class="cards"></div>
+<section class="sec"><h2>やり取り</h2><p class="lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出し、上りは、あなたの答えを待つ頼みがあれば、それを出します。</p><div id="view-switch" class="seg" role="group" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button">図</button><button id="show-list" class="quiet sm" type="button">一覧</button></div><div id="graph" class="board" hidden></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span>← 上り（子 → 親。答え待ちの頼みがあれば、それ）</span><span class="lg"><span class="sw down"></span>→ 下り（親・人 → 子）</span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span>新しいほど濃い</span><span class="lg"><span class="sw wait"></span>あなたの答え待ちのやり取り</span><span class="lg"><span class="edge go"></span>進んでいる</span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span>あなたの出番（答え待ち・止まっているかも・失敗）</span><span class="lg"><span class="edge over"></span>終わった</span><span class="lg">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
+<section class="sec"><h2>作業ごとのようす</h2><p class="lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
 <details id="finished" class="finished"><summary id="finished-summary">終わった作業</summary><div id="finished-cards" class="cards"></div></details></section>
 <details class="admin"><summary>管理（まれに使う操作）</summary><p class="warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
 <h2>アーカイブした作業の最終削除と、自動の削除の保留</h2><div id="purge"></div>
@@ -94,7 +94,17 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .cards .card{margin:0;display:grid;gap:6px;scroll-margin-top:16px}
 .card.turn{border-color:var(--kaki);border-left:5px solid var(--kaki)}.card.turn.stall{border-color:var(--kiiro);border-left-color:var(--kiiro)}.card.finished{opacity:.8}
 .card.flash{animation:flash 1.6s ease-out}
-.ctitle{font-weight:700;font-size:15.5px;line-height:1.5}
+.ctitle,.card h3{font-weight:700;font-size:15.5px;line-height:1.5;margin:0}
+.card.need{border-color:var(--kaki)}
+.spark{display:grid;grid-template-columns:repeat(12,1fr);gap:3px;align-items:end;height:34px;border-bottom:1px solid var(--line);padding:0 2px}
+.spark .slot{display:flex;align-items:end;justify-content:center;gap:2px;height:100%}
+.spark .bar{width:7px;border-radius:2px 2px 0 0;background:var(--ai);transform-origin:bottom;animation:grow .7s cubic-bezier(.2,.9,.3,1.2) both}
+.spark .bar.h{background:var(--kaki)}.spark .bar.l1{height:35%}.spark .bar.l2{height:55%}.spark .bar.l3{height:75%}.spark .bar.l4{height:95%}
+.flowlist{display:grid;gap:4px;font-size:13.5px}
+.flowlist .fl{display:grid;grid-template-columns:20px 1fr auto;gap:6px;align-items:start}
+.flowlist .ar{font-weight:800;text-align:center}.flowlist .ar.u{color:var(--ai)}.flowlist .ar.d{color:var(--ai-2)}.flowlist .ar.h{color:var(--kaki)}
+.flowlist .t{color:var(--muted);font-size:12px;white-space:nowrap}
+@keyframes grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
 .meta{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:12.5px;color:var(--muted)}
 .idline{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .chip{display:inline-block;font-size:12px;font-weight:700;padding:0 8px;border-radius:999px;line-height:1.8;margin-right:4px;background:var(--grid);color:var(--muted)}
@@ -198,7 +208,7 @@ export const UI_JS = `'use strict';
     window.history.replaceState(null, '', window.location.pathname + window.location.search);
   }
 
-  var TAGS = { div: true, span: true, p: true, button: true, textarea: true, details: true, summary: true, code: true };
+  var TAGS = { div: true, span: true, p: true, button: true, textarea: true, details: true, summary: true, code: true, h3: true };
   var TEXT_MAX = 4000;
   var FORBIDDEN = /[\\p{Cc}\\p{Cf}]/u;
   var STATE_NAMES = { pending: '起動を待っている', running: '動いている', waiting: '待っている', done: '済んだと報告（確かめ待ち）', verified: '受け入れた', stopping: '止めている', stopIncomplete: '止まりきっていない', stopped: '止めた', reclaimable: '片付けられる', archived: 'アーカイブした' };
@@ -207,7 +217,6 @@ export const UI_JS = `'use strict';
   var KIND_NAMES = { decision: '判断を求む', answer: '答え', violation: '止められた操作', failure: 'うまくいかなかった', stopIncomplete: '止まりきっていない', done: '済んだ', progress: '進み具合', info: '知らせ', digest: 'まとめ' };
   var BAND_NAMES = { turn: 'あなたの出番', running: '進んでいる', finished: '終わった' };
   var FLOW_KIND_NAMES = { instruction: '指示', report: '報告', done: '済んだの報告', decision: '判断を求む', extension: '範囲の頼み', answer: '答え', approved: '許可', rejected: '却下', split: '切り出し' };
-  var ENTRY_MAX = 5;
   var EXTERNAL_CHECK_PREFIXES = ${EXTERNAL_CHECK_PREFIXES};
   var PRIORITY_NAMES = { blocking: '要判断', failed: '失敗', completed: '完了', progress: '進捗', info: '情報' };
   var POLL_MS = 2000;
@@ -713,46 +722,114 @@ export const UI_JS = `'use strict';
     document.getElementById('finished').hidden = finished.length === 0;
     document.getElementById('finished-summary').textContent = '終わった作業（' + finished.length + ' 件。たたんでいます）';
   }
+  // 子ごとの状態の札（図の箱の 3 行目と同じ印と言葉。graph-model.ts の STATUS_TEXT・RUN_TEXT と同じ決め方・同じ言葉。試験で照らす）。
+  // 図の束（/ui/graph.js）には頼らない（束が読めなくても、カードは同じ言葉を出す）
+  var STATUS_CHIP = { run: 'running', wait: 'turn', stall: 'stall', fail: 'failed', done: 'finished', stopped: 'finished' };
+  var STATUS_TEXT = { run: '動いている', wait: '● あなたの答え待ち', stall: '‖ 止まっているかも', fail: '✕ 失敗', done: '済んだ', stopped: '■ 止めた' };
+  var RUN_TEXT = { pending: '起動を待っている', running: '動いている', waiting: '待っている', done: '済んだと報告（確かめ待ち）', stopping: '止めている', stopIncomplete: '■ 止まりきっていない' };
+  var cardStatus = new Map();
+  function statusesOf(view) {
+    var waits = new Set();
+    var stalls = new Set();
+    var fails = new Set();
+    view.decisions.forEach(function (d) { if (!d.closedReason) waits.add(d.nodeId); });
+    view.extensions.forEach(function (x) { waits.add(x.nodeId); });
+    view.inbox.forEach(function (i) {
+      if (i.stall === true) stalls.add(i.nodeId);
+      else if (i.priority === 'failed') fails.add(i.nodeId);
+    });
+    var m = new Map();
+    view.nodes.forEach(function (n) {
+      var st = n.band === 'finished' ? (n.state === 'stopped' ? 'stopped' : 'done') : fails.has(n.id) ? 'fail' : waits.has(n.id) ? 'wait' : stalls.has(n.id) ? 'stall' : 'run';
+      // 言葉は、図と同じく、止まりきっていないを失敗の札にする前に決める（動いている扱いなら「■ 止まりきっていない」）
+      var text = st === 'run' && Object.hasOwn(RUN_TEXT, n.state) ? RUN_TEXT[n.state] : STATUS_TEXT[st];
+      if (n.state === 'stopIncomplete' && st === 'run') st = 'fail';
+      m.set(n.id, { status: st, text: text });
+    });
+    return m;
+  }
+  // 時刻だけ（14:05）。読めなければ ''
+  function clockText(iso) {
+    var t = Date.parse(iso || '');
+    if (!(t > 0)) return '';
+    var d = new Date(t);
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+  }
+  // この 1 時間のやり取りの棒（5 分ずつ 12 区切り。藍はやり取り、柿は答え待ち）。高さは数の段（1〜4）
+  var SPARK_SLOTS = 12;
+  var SPARK_SLOT_MS = 5 * 60000;
+  function sparkOf(id, flows, now) {
+    var plain = [];
+    var waits = [];
+    for (var k = 0; k < SPARK_SLOTS; k += 1) { plain.push(0); waits.push(0); }
+    flows.forEach(function (f) {
+      if (f.from !== id && f.to !== id) return;
+      var t = Date.parse(f.sentAt || '');
+      if (!(t > 0) || t > now) return;
+      var slot = SPARK_SLOTS - 1 - Math.floor((now - t) / SPARK_SLOT_MS);
+      if (slot < 0) return;
+      if (isAwaiting(f)) waits[slot] += 1;
+      else plain[slot] += 1;
+    });
+    var box = el('div', 'spark');
+    for (var j = 0; j < SPARK_SLOTS; j += 1) {
+      var cell = el('div', 'slot');
+      if (plain[j] > 0) cell.appendChild(el('span', 'bar l' + Math.min(4, plain[j])));
+      // 答え待ちは、同じ数でも 1 段高くする（あなたの出番を目立たせるため。数と高さは 1 段ずれる）
+      if (waits[j] > 0) cell.appendChild(el('span', 'bar h l' + Math.min(4, waits[j] + 1)));
+      box.appendChild(cell);
+    }
+    return box;
+  }
+  function latestFlowAt(id, flows) {
+    var best = '';
+    flows.forEach(function (f) { if ((f.from === id || f.to === id) && typeof f.sentAt === 'string' && f.sentAt > best) best = f.sentAt; });
+    return best;
+  }
   function nodeCard(n, byId, list, flows, delegated) {
     var band = n.band === 'turn' || n.band === 'finished' ? n.band : 'running';
-    // 出番が「止まっているかも」だけのときは、柿色（答え待ち）でなく、くすんだ黄（関係図の箱とそろえる）
-    var stalls = list.filter(function (i) { return i.stall === true; }).length;
-    var stallOnly = band === 'turn' && stalls > 0 && n.needsHuman <= stalls && n.state !== 'stopIncomplete';
-    var card = el('div', 'card ' + band + (stallOnly ? ' stall' : ''));
+    var st = cardStatus.get(n.id);
+    var status = st ? st.status : band === 'finished' ? 'done' : 'run';
+    var stall = status === 'stall';
+    var card = el('div', 'card ' + band + (n.needsHuman > 0 ? ' need' : '') + (stall ? ' stall' : ''));
     if (ID_RE.test(n.id)) card.id = 'card-' + n.id;
+    // 頭の札: 状態の札 1 つと、答えがあれば「あなたの答え N 件」
     var head = el('div', '');
-    head.appendChild(el('span', 'chip ' + (stallOnly ? 'stall' : band), name(BAND_NAMES, band)));
-    head.appendChild(el('span', 'chip', name(STATE_NAMES, n.state)));
-    // 「あなたの答え」の数は、人の操作が要るものだけ（needsHuman。進み具合・済んだ・知らせは数えない）
-    if (n.needsHuman > 0) head.appendChild(el('span', 'chip ' + (stallOnly ? 'stall' : 'turn'), 'あなたの答え ' + n.needsHuman + ' 件'));
+    head.appendChild(el('span', 'chip ' + STATUS_CHIP[status], st ? cleanText(st.text, 40) : name(STATE_NAMES, n.state)));
+    if (n.needsHuman > 0) head.appendChild(el('span', 'chip turn', 'あなたの答え ' + n.needsHuman + ' 件'));
     card.appendChild(head);
-    card.appendChild(el('div', 'ctitle', nodeLabel(n, 200)));
+    card.appendChild(el('h3', '', nodeLabel(n, 200)));
     var meta = el('div', 'meta');
     var parent = n.parentId === null ? null : byId.get(n.parentId);
-    meta.appendChild(el('span', '', name(ROLE_NAMES, n.role) + (n.parentId === null ? '（いちばん上）' : '（親: ' + (parent ? nodeLabel(parent, 24) : n.parentId) + '）')));
-    if (n.lastActivityAt) meta.appendChild(el('span', 'when', '最後の動き ' + timeText(n.lastActivityAt, Date.now())));
+    meta.appendChild(el('span', '', name(ROLE_NAMES, n.role) + (n.parentId === null ? '（いちばん上）' : '（親：' + (parent ? nodeLabel(parent, 24) : n.parentId) + '）')));
+    // 最後の動き。表示モデルに時刻がない（いちばん上の統合が、指示を出しただけ など）ときは、その子のいちばん新しいやり取りの時刻
+    var last = n.lastActivityAt || latestFlowAt(n.id, flows);
+    if (last) meta.appendChild(el('span', 'when', '最後の動き ' + timeText(last, Date.now())));
     card.appendChild(meta);
-    var idl = el('div', 'idline', 'ID ' + n.id);
-    if (ID_RE.test(n.id)) idl.appendChild(copyButton(n.id));
-    card.appendChild(idl);
-    // やり取り（新しい順に 3 件）
+    card.appendChild(sparkOf(n.id, flows, Date.now()));
+    // 最近のやり取り（新しい順に 3 件）
     var mine = flows.filter(function (f) { return f.from === n.id || f.to === n.id; }).slice(0, 3);
     if (mine.length) {
-      var fl = el('div', 'flows');
+      var fl = el('div', 'flowlist');
       mine.forEach(function (f) { fl.appendChild(flowLine(f, n.id, byId)); });
       card.appendChild(fl);
     }
-    // 受信箱の項目（新しい順）。多いときは、ENTRY_MAX 件のほかを、たたむ
-    var sorted = list.slice().sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });
-    var rest = null;
-    sorted.forEach(function (i, k) {
-      var row = entryRow(i, delegated);
-      if (k < ENTRY_MAX) { card.appendChild(row); return; }
-      if (rest === null) { rest = fold('rest-' + n.id, 'ほか ' + (sorted.length - ENTRY_MAX) + ' 件の知らせ'); card.appendChild(rest); }
-      rest.appendChild(row);
-    });
-    var ops = nodeOps(n);
-    if (ops) card.appendChild(ops);
+    // 止まっているかもしれない CLI の子は、開くコマンドを出す
+    var cmd = stall ? attachCommand(n) : '';
+    if (cmd) {
+      var row = el('div', 'cmd');
+      row.appendChild(el('code', '', cmd));
+      row.appendChild(copyButton(cmd));
+      card.appendChild(row);
+    }
+    // 受信箱の項目は、たたむ（新しい順）
+    if (list.length) {
+      var sorted = list.slice().sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });
+      var d = fold('inbox-' + n.id, (band === 'finished' ? '済んだ作業の知らせ ' : '知らせ ') + sorted.length + ' 件（たたんでいます）');
+      sorted.forEach(function (i) { d.appendChild(entryRow(i, delegated)); });
+      card.appendChild(d);
+    }
+    card.appendChild(nodeOps(n));
     return card;
   }
   // 答え待ちのやり取り（判断・範囲の頼みで、まだ済んでいないもの）だけ、柿色にする
@@ -760,9 +837,12 @@ export const UI_JS = `'use strict';
   function flowLine(f, selfId, byId) {
     var up = f.dir === 'up';
     var other = f.from === selfId ? f.to : f.from;
-    var who = other === 'human' ? '人' : byId.has(other) ? nodeLabel(byId.get(other), 16) : other;
-    var line = el('div', isAwaiting(f) ? 'await' : up ? 'up' : 'down', (up ? '↑ ' : '↓ ') + (f.from === selfId ? 'へ ' : 'から ') + who + '　' + name(FLOW_KIND_NAMES, f.kind) + '・' + stageText(f));
-    line.appendChild(el('span', 'when', '　' + timeText(f.sentAt, Date.now())));
+    // 人とのやり取りは「あなた」（画面のほかの所の「あなたの答え」「あなたの出番」とそろえる）
+    var who = other === 'human' ? 'あなた' : byId.has(other) ? nodeLabel(byId.get(other), 16) : other;
+    var line = el('div', 'fl');
+    line.appendChild(el('span', 'ar ' + (isAwaiting(f) ? 'h' : up ? 'u' : 'd'), up ? '↑' : '↓'));
+    line.appendChild(el('span', '', (f.from === selfId ? '→ ' : '← ') + who + '　' + name(FLOW_KIND_NAMES, f.kind)));
+    line.appendChild(el('span', 't', clockText(f.sentAt)));
     return line;
   }
   // 受信箱の知らせの文を、利用者の言葉にする（#115）。daemon の文にあるノード ID は子の題に、内部の言葉は言い換える。
@@ -827,17 +907,25 @@ export const UI_JS = `'use strict';
       box.appendChild(el('p', 'desc', '取り消せます。子のセッションを入れ直して、フックが拒まれ続けるときだけ使います。次に来たセッションに結び直します。'));
       any = true;
     }
-    if (!any) return null;
-    var d = fold('ops-' + n.id, 'この子への操作');
-    d.appendChild(box);
+    // ID と「写す」は、いつも、この中に出す（カードの表には出さない）
+    var idl = el('div', 'idline', 'ID ' + n.id);
+    if (ID_RE.test(n.id)) idl.appendChild(copyButton(n.id));
+    var d = fold('ops-' + n.id, any ? 'この子への操作' : 'この子の ID');
+    d.appendChild(idl);
+    if (any) d.appendChild(box);
     return d;
   }
 
-  // 一覧（木の字下げと、最後の上り・下り）。描いたノードの数を返す（木にならない・深すぎるもので、描けなかった分は、呼び出し側が「一部省略」にする）。
+  // 一覧（木の字下げと、上り・下り）。描いたノードの数を返す（木にならない・深すぎるもので、描けなかった分は、呼び出し側が「一部省略」にする）。
   // 関係図（#89 の PR-5）は、#graph に描く。それまでは一覧だけ
   function lastFlow(flows, from, to) {
     for (var k = 0; k < flows.length; k += 1) if (flows[k].from === from && flows[k].to === to) return flows[k];
     return null;
+  }
+  // 上り（子 → 親）は、答えを待つ頼み（判断・範囲の頼みで、まだ済んでいないもの）があれば、新しい報告より先にそれ（図と同じ決め方）
+  function upFlow(flows, from, to) {
+    for (var k = 0; k < flows.length; k += 1) if (flows[k].from === from && flows[k].to === to && isAwaiting(flows[k])) return flows[k];
+    return lastFlow(flows, from, to);
   }
   function flowCell(f, up, n) {
     if (!f) return el('span', 'when', n.parentId === null ? '（いちばん上）' : 'まだない');
@@ -905,7 +993,7 @@ export const UI_JS = `'use strict';
     var nodes = view.nodes;
     if (!nodes.length) { box.appendChild(el('p', 'empty', '作業はまだありません')); return 0; }
     var head = el('div', 'trow thead');
-    ['作業', '状態', '↑ 最後の上り（子 → 親）', '↓ 最後の下り（親・人 → 子）'].forEach(function (t) { head.appendChild(el('span', '', t)); });
+    ['作業', '状態', '↑ 上り（子 → 親。答え待ちの頼みがあれば、それ）', '↓ 最後の下り（親・人 → 子）'].forEach(function (t) { head.appendChild(el('span', '', t)); });
     box.appendChild(head);
     var kids = new Map();
     nodes.forEach(function (n) {
@@ -931,7 +1019,7 @@ export const UI_JS = `'use strict';
         }
         row.appendChild(t);
         row.appendChild(el('span', 'chip ' + band, name(STATE_NAMES, n.state) + (n.needsHuman > 0 ? '・答え ' + n.needsHuman : '')));
-        row.appendChild(flowCell(n.parentId === null ? null : lastFlow(view.flows, n.id, n.parentId), true, n));
+        row.appendChild(flowCell(n.parentId === null ? null : upFlow(view.flows, n.id, n.parentId), true, n));
         row.appendChild(flowCell(n.parentId === null ? null : lastFlow(view.flows, n.parentId, n.id), false, n));
         box.appendChild(row);
         walk(n.id, depth + 1);
@@ -1463,6 +1551,7 @@ export const UI_JS = `'use strict';
     view.nodes.forEach(function (n) { if (typeof n.title === 'string') titleById.set(n.id, n.title); });
     nextSeen = new Set();
     renderTodo(v, byId);
+    cardStatus = statusesOf(v);
     renderCards(v, byId);
     var drawn = renderList(v);
     graphView = v;

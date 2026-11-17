@@ -351,6 +351,38 @@ describe("上りの線は、答え待ちの頼みを優先する（利用者の�
   });
 });
 
+describe("画面の一覧の上りの列も、答え待ちの頼みを優先する（図と同じ）", () => {
+  it("upFlow：答えを待つ頼みがあれば、新しい報告より先にそれ。なければ、いちばん新しいもの", () => {
+    // 画面の app.js から、関数の 1 つ分（`function 名前(` から、字下げ 2 の閉じかっこまで）を切り出す
+    const pick = (name: string): string => {
+      const i = UI_JS.indexOf(`function ${name}(`);
+      expect(i).toBeGreaterThan(-1);
+      const line = UI_JS.slice(i, UI_JS.indexOf("\n", i));
+      return line.trimEnd().endsWith("}") ? line : UI_JS.slice(i, UI_JS.indexOf("\n  }\n", i) + 4);
+    };
+    const src = `${pick("isAwaiting")}\n${pick("lastFlow")}\n${pick("upFlow")}\nupFlow;`;
+    const upFlow = runInNewContext(src) as (
+      f: unknown[],
+      from: string,
+      to: string,
+    ) => { id: string } | null;
+    const flows = [
+      { id: "r", from: "a", to: "root", kind: "report", stage: "done" },
+      { id: "x", from: "a", to: "root", kind: "extension", stage: "sent" },
+      { id: "d", from: "a", to: "root", kind: "decision", stage: "done" },
+    ];
+    expect(upFlow(flows, "a", "root")?.id).toBe("x");
+    expect(
+      upFlow(
+        flows.filter((f) => f.id !== "x"),
+        "a",
+        "root",
+      )?.id,
+    ).toBe("r");
+    expect(upFlow([], "a", "root")).toBe(null);
+  });
+});
+
 describe("閉じた判断は、答え待ちに数えない（カードと同じ）", () => {
   it("閉じた判断（closedReason）だけが残る子は、答え待ちの箱にならず、柿色の線も丸い数も出ない", () => {
     const m = graphModelOf({
