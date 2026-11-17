@@ -73,17 +73,45 @@ let listening: AbortController | null = null;
 let currentHost: HTMLElement | null = null;
 /** 描きの番号（世代）。`draw`・`destroy` のたびに進む。古い `draw` の続きは、番号が違えば黙って抜ける。 */
 let generation = 0;
+/**
+ * 指を置いている箱・キーボードで focus している箱の ID と、図の上の指の位置（画面の座標）。描き直しをまたいで覚えておき、
+ * 描き直したあと、同じ ID の箱があれば浮かびをすぐに付け直す（描き直しのたびに図が元の明るさに戻って点滅しないため）。
+ */
+let hoverId: string | null = null;
+let focusId: string | null = null;
+let pointer: { readonly x: number; readonly y: number } | null = null;
+/** 描き直しで残す、拡大・移動（同じ器に描き直すときだけ使う）。 */
+let kept: {
+  readonly host: HTMLElement;
+  readonly k: number;
+  readonly x: number;
+  readonly y: number;
+} | null = null;
 
 /** いまの図を消す（描いていなければ何もしない）。描いている途中の `draw` も、そこで止まる。 */
 export function destroy(): void {
+  teardown();
+  currentHost?.classList.remove("hot");
+  currentHost = null;
+  hoverId = null;
+  focusId = null;
+  pointer = null;
+  kept = null;
+}
+
+/** 図を片付ける。器の浮かびの印（hot）と、覚えた ID・指の位置・拡大・移動は残す（描き直しの前に使う）。 */
+function teardown(): void {
   generation += 1;
-  listening?.abort(); // 箱に付けた合図の受け手を、すべて外す
+  // 先に合図の受け手を外す（器を空にしたときの blur などで、覚えた ID を消さないため）
+  listening?.abort();
   listening = null;
+  if (current !== null && currentHost !== null) {
+    const t = current.area.transform;
+    kept = { host: currentHost, k: t.k, x: t.x, y: t.y };
+  }
   current?.destroy();
   current = null;
   currentHost?.replaceChildren(); // area の器も片付ける
-  currentHost?.classList.remove("hot");
-  currentHost = null;
 }
 
 /** 描いた図の、画面での大きさ（拡大のあと。枠の高さを中身に合わせるのに使う）。 */
@@ -108,17 +136,38 @@ export async function draw(
   view: unknown,
   options: DrawOptions = {},
 ): Promise<Drawn> {
-  destroy();
+  if (currentHost !== host) destroy();
+  else teardown();
   const mine = generation;
   const ac = new AbortController();
   listening = ac;
+  const opt = { signal: ac.signal };
   const onPick = typeof options.onPick === "function" ? options.onPick : null;
   /** つながりの器と、その両端のノード ID（指を置いた箱の線だけ浮かべる）。 */
   const wires: { el: HTMLElement; a: string; b: string }[] = [];
-  const hot = (id: string | null): void => {
+  const litId = (): string | null => hoverId ?? focusId;
+  const touches = (w: { a: string; b: string }, id: string | null): boolean =>
+    id !== null && (w.a === id || w.b === id);
+  const hot = (): void => {
+    const id = litId();
     host.classList.toggle("hot", id !== null);
-    for (const w of wires) w.el.classList.toggle("lit", id !== null && (w.a === id || w.b === id));
+    for (const w of wires) w.el.classList.toggle("lit", touches(w, id));
   };
+  // 図の上の指の位置を覚える（描き直したあと、どの箱の上にいるかを決めるため）
+  host.addEventListener(
+    "pointermove",
+    (e) => {
+      pointer = { x: e.clientX, y: e.clientY };
+    },
+    opt,
+  );
+  host.addEventListener(
+    "pointerleave",
+    () => {
+      pointer = null;
+    },
+    opt,
+  );
   const live = (): boolean => mine === generation;
   const none: Drawn = { width: 0, height: 0 };
   const now = Date.now();
@@ -195,19 +244,49 @@ export async function draw(
     } else if (type === "connection") {
       const c = payload as ReteConn;
       drawShape(element, shapes[c.shape], width, height);
-      wires.push({ el: element, a: c.source, b: c.target });
+      const w = { el: element, a: c.source, b: c.target };
+      // 描き直しの最中も、覚えた箱の線は浮かべたまま（器の hot は残してある）
+      if (touches(w, litId())) element.classList.add("lit");
+      wires.push(w);
     }
     return ctx;
   });
 
   /** 箱の合図の受け手（`addEventListener` だけ。`destroy` で `ac` ごと外れる）。 */
   function listen(box: HTMLElement, id: string): void {
-    const opt = { signal: ac.signal };
     box.tabIndex = 0;
-    box.addEventListener("pointerenter", () => hot(id), opt);
-    box.addEventListener("pointerleave", () => hot(null), opt);
-    box.addEventListener("focus", () => hot(id), opt);
-    box.addEventListener("blur", () => hot(null), opt);
+    box.addEventListener(
+      "pointerenter",
+      () => {
+        hoverId = id;
+        hot();
+      },
+      opt,
+    );
+    box.addEventListener(
+      "pointerleave",
+      () => {
+        if (hoverId === id) hoverId = null;
+        hot();
+      },
+      opt,
+    );
+    box.addEventListener(
+      "focus",
+      () => {
+        focusId = id;
+        hot();
+      },
+      opt,
+    );
+    box.addEventListener(
+      "blur",
+      () => {
+        if (focusId === id) focusId = null;
+        hot();
+      },
+      opt,
+    );
     if (onPick === null) return;
     box.addEventListener("click", () => onPick(id), opt);
     box.addEventListener(
@@ -241,10 +320,41 @@ export async function draw(
   readonly.enable(); // 置いたあとは、つなぐ・動かす・消すを止める（拡大・移動は残る）
   // 枠の幅に合わせて縮める（読める大きさを保つため、大きくはしない。小さすぎる木は 0.5 倍まで）
   const k = Math.max(0.5, Math.min(1, host.clientWidth / width));
-  await area.area.zoom(k, 0, 0);
+  // 同じ器への描き直しなら、人が変えた拡大・移動をそのまま残す（初めて描くときだけ、枠に合わせる）
+  const keep = kept !== null && kept.host === host ? kept : null;
+  kept = null;
+  await area.area.zoom(keep?.k ?? k, 0, 0);
   if (!live()) return none;
-  await area.area.translate(0, 0);
+  await area.area.translate(keep?.x ?? 0, keep?.y ?? 0);
+  if (!live()) return none;
+  relight(host, byId, hot);
   return { width: width * k, height: height * k };
+}
+
+/**
+ * 描き直したあとの浮かびを決め直して、`transition` なしで付ける（1 枚も元の明るさに戻さない）。
+ * 指の位置の下の箱を指を置いた箱とし、focus していた箱があれば focus を戻す。その箱がなくなっていれば外す。
+ */
+function relight(host: HTMLElement, byId: ReadonlyMap<string, unknown>, hot: () => void): void {
+  const under =
+    pointer === null
+      ? null
+      : (document.elementFromPoint(pointer.x, pointer.y)?.closest<HTMLElement>(".gnode[data-id]") ??
+        null);
+  const id = under?.dataset.id;
+  hoverId = id !== undefined && byId.has(id) && host.contains(under) ? id : null;
+  if (focusId !== null) {
+    const was = focusId;
+    const box = byId.has(was)
+      ? [...host.querySelectorAll<HTMLElement>(".gnode[data-id]")].find((b) => b.dataset.id === was)
+      : undefined;
+    focusId = null;
+    if (box !== undefined) box.focus({ preventScroll: true }); // focus の合図で focusId が戻る
+  }
+  host.classList.add("g-instant");
+  hot();
+  void host.offsetWidth; // 印を付けた見た目を先に確定させてから、transition を戻す
+  host.classList.remove("g-instant");
 }
 
 /** 線 1 本の形と見え方。終わった作業の線は止める。人の答えを待つものだけ柿色（`wait`）。 */
