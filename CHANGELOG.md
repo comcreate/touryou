@@ -10,7 +10,7 @@
 
 ### 内部の変更
 
-- **project 設定の marketplace の参照を、変わらない tag `marketplace-v<版>` に固定した**（#90）: `.claude/settings.json` の `extraKnownMarketplaces` に `ref: marketplace-v0.1.2` を足した（これまでは `main` に追従していた）。`release.yml` の `marketplace-self` の PR が、`marketplace.json` と一緒に `ref` も新しい版に書き換え、マージのあとに管理者が手元から tag を付ける（`docs/release.md` の 5-a）。tag の決まり（ruleset `release-tags`）の対象に `refs/tags/marketplace-v*` を足し、管理者だけが作れ、付け直し・削除できないようにする。PR の CI で `ref` の名前が版と合うかを、`marketplace-ref.yml`（`main` への push と日に 1 回）で tag があり中の版が合うかを照らす（`scripts/check-marketplace-ref.sh`）。
+- **project 設定の marketplace の参照を、変わらない tag `marketplace-v<版>` に固定した**（#90）: `.claude/settings.json` の `extraKnownMarketplaces` に `ref: marketplace-v0.1.2` を足した（これまでは `main` に追従していた）。`release.yml` の `marketplace-self` の PR が、`marketplace.json` と一緒に `ref` も新しい版に書き換え、マージのあとに管理者が手元から tag を付ける（`docs/release.md` の 5-a）。tag の決まり（ruleset `release-tags`）の対象に `refs/tags/marketplace-v*` を足し、管理者だけが作れ、付け直し・削除できないようにする。PR の CI で `ref` の名前が版と合うかを、`marketplace-ref.yml` で、tag の push のときは tag の中の版が tag 名と合うかを、日に 1 回は `main` の `ref` の tag があり中の版が合うかを照らす（`scripts/check-marketplace-ref.sh`）。
 - **PR ごとの macOS のジョブを 1 つにまとめ、機械が割り当てられなかったときは 1 回だけ自動で走らせ直す**（#84・#85）: `dist-smoke.yml` を `ci-macos.yml` にまとめ、1 つのジョブで `scripts/check.sh` と配布物の確かめを続けて行うようにした（Mac の機械を 1 台だけ待つ）。`macos-capacity-rerun.yml` を足し、`CI (macOS)`・`Release` が「was not acquired by Runner」だけで落ちたとき、落ちたジョブを 1 回だけ走らせ直す（試験の失敗は走らせ直さない）。
 - **手順書に、tag を付けるのは決まりを越えてよい管理者で、手元から push すると書く**（#80）: `docs/release.md` の 3 に、ruleset で tag を作れる人が限られていること、「Bypassed rule violations … creations being restricted」の行のあとに `* [new tag]` が出れば成功であること、クラウドのセッションからの push は 403 で断られるので管理者に頼むことを書き足した。
 

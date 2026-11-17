@@ -1,13 +1,13 @@
 name: marketplace ref
 
-# project の .claude/settings.json の ref（marketplace-v<版>）の tag が上流にあり、中の marketplace.json の版が合うかを照らす（#90。docs/release.md の 5-a）。
-# tag は marketplace-self の PR のマージのあとに管理者が付けるので、PR では照らさない（PR の CI は ci.yml で名前の一致だけ）。
-# main への push（マージのあと）と、日に 1 回（付け忘れに気づくため）。必須の check にはしない。
-# push のときは、tag がまだないことは警告に留める（tag はマージのあとに付けるので、版上げのたびに必ず落ちてしまい、本当の付け忘れの知らせが埋もれるため）。
-# 付け忘れは、日に 1 回と手動の実行が失敗して知らせる。tag の中の版の食い違いは、どのきっかけでも失敗にする。
+# project の .claude/settings.json の ref（marketplace-v<版>）の tag を照らす（#90。docs/release.md の 5-a）。
+# - marketplace-v* の tag の push：push された tag の中の marketplace.json の版が、tag 名の版と同じか（付ける先の間違いに、その場で気づく）。
+# - 日に 1 回・手動：main の ref の tag が上流にあり、中の版が合うか（付け忘れに気づく）。marketplace-self の PR のマージから tag までの短い間に当たると失敗するが、
+#   付け忘れの知らせなので、それは許す。
+# PR では照らさない（PR の CI は ci.yml で名前の一致だけ）。main への push も、きっかけにしない（tag はマージのあとに付けるので、版上げのたびに必ず落ちるため）。必須の check にはしない。
 on:
   push:
-    branches: [main]
+    tags: ["marketplace-v*"]
   schedule:
     - cron: "17 3 * * *"
   workflow_dispatch:
@@ -23,7 +23,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: ref の tag があり、中の marketplace.json の版が合う
-        env:
-          MISSING_TAG_OK: ${{ github.event_name == 'push' && '1' || '' }}
+      - name: push された tag の中の marketplace.json の版が、tag 名の版と同じ
+        if: github.event_name == 'push'
+        run: bash scripts/check-marketplace-ref.sh pushed "${GITHUB_REF_NAME}"
+      - name: main の ref の tag があり、中の marketplace.json の版が合う
+        if: github.event_name != 'push'
         run: bash scripts/check-marketplace-ref.sh tag
