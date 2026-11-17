@@ -28,8 +28,9 @@
     上り・下りは色で分けない（落ち着いた藍 1 色。新しいほど濃く、古いほど灰色に近い。終わった作業の線は薄い灰。背景との明るさの差は明暗とも 3 対 1 以上）。柿色の線は、あなたの答え待ちだけ。
   - 箱は「作業の状態」だけ：3 つの段にまとめる。
     あなたの出番（答え待ち＝柿・止まっているかも＝くすんだ黄・失敗＝赤。印と文字を必ず添える）／進んでいる（ふつう）／終わった（済んだ・止めた。薄い）。
-  - 動きは「やり取りの進み具合」と結びつける。線はすべて破線。送った・まだ届いていない＝速く流れ、玉が繰り返し走る／
-    届いた・返事待ち＝ゆっくり流れる／済んだ＝止まる。終わった作業の線は動かさない。
+  - 動きは「やり取りの進み具合」と結びつける。線はすべて破線。段の名前は本番と同じ sent・delivered・done（research.md 9 節）。sent＝速く流れ、玉が繰り返し走る／
+    delivered＝ゆっくり流れる／done＝止まる。子 → 親は「届いた」の記録がないので「届いたか分からない」（細かい破線）。
+    頼みの done は推定（「済んだ（推定）」）。終わった作業の線は動かさない。
   - 「静か」と「滞り」を混ぜない：時間がたっただけなら線が薄くなるだけ。「止まっているかも」は daemon の知らせがあるときだけ。
   - 図は、いちばん上の「いまあなたがすること」の補助。図で強く目立つのは、上の欄に出ているものと同じもの。
 -->
@@ -207,17 +208,21 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 /* 破線とやり取りの段 */
 .line{stroke-dasharray:8 6!important;stroke-dashoffset:0;animation:none}
 .line.g-sent{animation:dashflow .55s linear infinite!important}
-.line.g-recv{animation:dashflow 2.2s linear infinite!important}
+.line.g-delivered{animation:dashflow 2.2s linear infinite!important}
+.line.g-unknown{animation:dashflow 3s linear infinite!important;stroke-dasharray:3 6!important}
+.stg.g-unknown{fill:var(--ink-2);font-style:normal}
+.dash.g-unknown{border-top:3px dotted var(--wire-2)}
 .line.g-done{animation:none!important;stroke-opacity:.75}
 .line.over.g-done{stroke-opacity:1}
 .tip.g-done{fill-opacity:.75}
-.stg{font-size:11px;font-weight:700}.stg.g-sent{fill:var(--wire)}.stg.g-recv{fill:var(--wire-2)}.stg.g-done{fill:var(--ink-2);font-weight:400}
+.stg{font-size:11px;font-weight:700}.stg.g-sent{fill:var(--wire)}.stg.g-delivered{fill:var(--wire-2)}.stg.g-done{fill:var(--ink-2);font-weight:400}
 .mlabel.human .stg{fill:var(--kaki)}
 .pip.loop{width:9px;height:9px;background:var(--wire);animation:travel 1.3s cubic-bezier(.45,0,.55,1) infinite}
 .pip.loop.h{background:var(--kaki)}
-.dash{height:0;border-top:3px dashed var(--wire)}.dash.g-recv{border-top-color:var(--wire-2)}.dash.g-done{border-top-color:var(--wire-4)}
+.dash{height:0;border-top:3px dashed var(--wire)}.dash.g-delivered{border-top-color:var(--wire-2)}.dash.g-done{border-top-color:var(--wire-4)}
 .knote{margin:2px 0 0;font-size:12px}
-.legend2{grid-template-columns:1fr 1fr 1fr}
+.legend2{grid-template-columns:1fr 1.5fr 1fr}
+.lkey .krow:has(.dash){grid-template-columns:34px 11em 1fr}
 @keyframes dashflow{to{stroke-dashoffset:-14}}
 @media (max-width:900px){.legend2{grid-template-columns:1fr}}
 .piplayer{position:absolute;left:0;top:0;transform-origin:0 0;pointer-events:none}
@@ -341,16 +346,16 @@ const VIEW = {
   ],
   // dir: up（子 → 親）・down（親 → 子）。human：人の操作が要る
   messages: [
-    { from: "n-a1", to: "n-root", dir: "up", stage: "recv", kind: "判断を求める", at: min(3), human: true, text: "振り込みの期限の文を「3 日以内」と「7 日以内」のどちらにしますか。" },
-    { from: "n-root", to: "n-a1", dir: "down", stage: "done", kind: "頼み", at: min(20), text: "支払い方法の選び方の画面を作ってください。" },
-    { from: "n-b2", to: "n-root", dir: "up", stage: "done", kind: "進み", at: min(6), text: "雛形の二つめまでできました。" },
-    { from: "n-root", to: "n-b2", dir: "down", stage: "recv", kind: "頼み", at: min(30), text: "確認のメールを見直してください。" },
-    { from: "n-b3", to: "n-b2", dir: "up", stage: "recv", kind: "入力待ちの知らせ", at: min(42), notice: true, text: "42 分、動きがありません。" },
+    { from: "n-a1", to: "n-root", dir: "up", stage: "sent", deliveryUnknown: true, kind: "判断を求める", at: min(3), human: true, text: "振り込みの期限の文を「3 日以内」と「7 日以内」のどちらにしますか。" },
+    { from: "n-root", to: "n-a1", dir: "down", stage: "done", doneInferred: true, kind: "頼み", at: min(20), text: "支払い方法の選び方の画面を作ってください。" },
+    { from: "n-b2", to: "n-root", dir: "up", stage: "done", deliveryUnknown: true, kind: "進み", at: min(6), text: "雛形の二つめまでできました。" },
+    { from: "n-root", to: "n-b2", dir: "down", stage: "delivered", kind: "頼み", at: min(30), text: "確認のメールを見直してください。" },
+    { from: "n-b3", to: "n-b2", dir: "up", stage: "sent", deliveryUnknown: true, kind: "入力待ちの知らせ", at: min(42), notice: true, text: "42 分、動きがありません。" },
     { from: "n-b2", to: "n-b3", dir: "down", stage: "sent", kind: "答え", at: min(44), text: "宛先は試験用のものだけにしてください。" },
-    { from: "n-root", to: "n-d5", dir: "down", stage: "done", kind: "頼み", at: min(40), text: "ありがとうの画面の文を直してください。" },
-    { from: "n-d5", to: "n-root", dir: "up", stage: "recv", kind: "失敗の知らせ", at: min(14), text: "試験が通りません。文の長さの決まりに合いません。" },
+    { from: "n-root", to: "n-d5", dir: "down", stage: "done", doneInferred: true, kind: "頼み", at: min(40), text: "ありがとうの画面の文を直してください。" },
+    { from: "n-d5", to: "n-root", dir: "up", stage: "done", deliveryUnknown: true, kind: "失敗の知らせ", at: min(14), text: "試験が通りません。文の長さの決まりに合いません。" },
     { from: "n-c4", to: "n-root", dir: "up", kind: "済んだ", at: min(55), text: "新しい順に並べ替えました。試験は通っています。" },
-    { from: "n-root", to: "n-c4", dir: "down", kind: "頼み", at: min(70), text: "一覧の並び順を直してください。" }
+    { from: "n-root", to: "n-c4", dir: "down", stage: "done", doneInferred: true, kind: "頼み", at: min(70), text: "一覧の並び順を直してください。" }
   ],
   // 人が答える／確かめること
   todo: [
@@ -480,8 +485,8 @@ const BIG = {
   ],
   messages: [
     ...VIEW.messages,
-    { from: "n-root", to: "n-f8", dir: "down", stage: "recv", kind: "頼み", at: min(30), text: "管理の画面にまとめを足してください。" },
-    { from: "n-f8", to: "n-root", dir: "up", stage: "sent", kind: "進み", at: min(4), text: "表の枠ができました。" },
+    { from: "n-root", to: "n-f8", dir: "down", stage: "delivered", kind: "頼み", at: min(30), text: "管理の画面にまとめを足してください。" },
+    { from: "n-f8", to: "n-root", dir: "up", stage: "done", deliveryUnknown: true, kind: "進み", at: min(4), text: "表の枠ができました。" },
     { from: "n-f8", to: "n-g9", dir: "down", kind: "止める", at: min(70), text: "CSV は取りやめます。止めてください。" }
   ]
 };
@@ -499,7 +504,7 @@ function seg(label, items, onPick) {
 const st = { view: "graph", data: "small" };
 const sView = seg("見せ方：", [["graph", "図"], ["list", "一覧"]], (k) => { st.view = k; render(); });
 const sData = seg("値：", [["small", "いまの値（子 4・孫 2）"], ["big", "子 5・孫 3"]], (k) => { st.data = k; render(); });
-const tryBox = el("div", "shape"); tryBox.append(el("span", "", "動き："), tryBtn, el("span", "", "（1 本のやり取りが「送っています」→「返事待ち」→「済んだ」と進みます）"));
+const tryBox = el("div", "shape"); tryBox.append(el("span", "", "動き："), tryBtn, el("span", "", "（1 本の頼みが「送った」→「届いた・返事待ち」→「済んだ（推定）」と進みます）"));
 ctl.append(sView.box, sData.box, tryBox);
 g.append(ctl, el("p", "judge", "親子のつながりの線はなくしました。上りと下りの線と、幹からの枝分かれで親子が分かるからです。やり取りがまだない子（起こしたばかり）だけ、薄い点線の枝で親を示します。図に出す子は親ごとに 6 までで、超えると済んだ子をまとめます。"));
 const board = el("div", "board");
@@ -544,15 +549,23 @@ function laneLook(child, m) {
   return age <= 5 ? "a1" : age <= 30 ? "a2" : age <= 60 ? "a3" : "a4";
 }
 let runners = [];
-// やり取りの段：sent（送った・まだ届いていない）／recv（届いた・返事を待っている）／done（済んだ）
-const STAGE = { sent: "送っています", recv: "返事待ち", done: "済んだ" };
+// やり取りの段（research.md 9.4。本番と同じ名前）：sent（送った・まだ届いていない）／delivered（届いた・返事を待っている）／done（済んだ）
+// deliveryUnknown：子 → 親は「届いた」の記録がまだない（別の Issue で足す）。送ったあとは「届いたか分からない」と見せる。
+// doneInferred：親 → 子の頼みの「済んだ」は、届いたあとの子の最初の報告で推定する。ラベルに「推定」と添える。
+function stageText(stage, m) {
+  if (stage === "sent") return m.deliveryUnknown ? "届いたか分からない" : "送った・まだ届いていない";
+  if (stage === "delivered") return "届いた・返事待ち";
+  return m.doneInferred ? "済んだ（推定）" : "済んだ";
+}
 function setStage(r, stage) {
   r.stage = stage;
-  for (const e of [r.line, r.tip]) { e.classList.remove("g-sent", "g-recv", "g-done"); e.classList.add("g-" + stage); }
-  r.stageEl.textContent = "　" + STAGE[stage];
-  r.stageEl.setAttribute("class", "stg g-" + stage);
+  const look = stage === "sent" && r.m.deliveryUnknown ? "unknown" : stage;
+  for (const e of [r.line, r.tip]) { e.classList.remove("g-sent", "g-delivered", "g-done", "g-unknown"); e.classList.add("g-" + look); }
+  r.line.dataset.stage = stage;
+  r.stageEl.textContent = "　" + stageText(stage, r.m);
+  r.stageEl.setAttribute("class", "stg g-" + look);
   if (r.pip) { r.pip.remove(); r.pip = null; }
-  if (stage === "sent") {           // 届くまで、玉が受け取る側へ向かって繰り返し走る
+  if (look === "sent") {            // 届くまで、玉が受け取る側へ向かって繰り返し走る
     const dot = el("span", "pip loop" + (r.human ? " h" : ""));
     dot.style.offsetPath = "path('" + r.d + "')";      // D8 は未決定。本番で使うなら 1 か所に閉じる
     pipLayer.append(dot); r.pip = dot;
@@ -600,7 +613,7 @@ function drawGraph(nodes, msgs) {
         // ラベル：幹と子の箱のあいだの、その線だけの上（上り）か下（下り）。縁取りで線に重なっても読める
         const lab = svgEl("text", { class: "mlabel " + look, x: tx + 18, y: dir === "up" ? y - 6 : y + 15 });
         lab.append(svgEl("tspan", { class: "k" }, (dir === "up" ? "← " : "→ ") + m.kind), svgEl("tspan", { class: "when" }, "　" + ago(m.at)));
-        const stageEl = svgEl("tspan", { class: "stg" }, "");
+        const stageEl = svgEl("tspan", { class: "stg", x: tx + 18, dy: dir === "up" ? -14 : 14 }, "");
         lab.append(stageEl);
         if (look === "human") lab.classList.add("keep");
         parts.push(lab);
@@ -715,10 +728,15 @@ for (const [cls, name, t] of [["t-turn", "あなたの出番", "● 答え待ち
 }
 const stageKey = el("div", "lkey");
 stageKey.append(el("b", "", "やり取りの進み（破線の動き）"));
-for (const [cls, name, t] of [["g-sent", "送っています", "まだ相手に届いていない。破線が速く流れ、玉が受け取る側へ繰り返し走る"], ["g-recv", "返事待ち", "相手は受け取った。破線がゆっくり流れ続ける（答え待ちは柿色）"], ["g-done", "済んだ", "答えが返った・頼みが済んだ。破線は止まる。終わった作業の線も止まる"]]) {
+for (const [cls, name, t] of [
+  ["g-sent", "送った・まだ届いていない", "破線が速く流れ、玉が受け取る側へ繰り返し走る"],
+  ["g-delivered", "届いた・返事待ち", "相手は受け取った。破線がゆっくり流れ続ける（答え待ちは柿色）"],
+  ["g-unknown", "届いたか分からない", "子 → 親のやり取り。届いた記録がまだないので、細かい破線がゆっくり流れる"],
+  ["g-done", "済んだ", "破線は止まる。頼みの「済んだ」は子の報告からの推定で、「済んだ（推定）」と出す"]
+]) {
   const r = el("div", "krow"); r.append(el("span", "dash " + cls), el("b", "", name), el("span", "", t)); stageKey.append(r);
 }
-stageKey.append(el("p", "knote", "動きを止めているときは、ラベルの「送っています」「返事待ち」「済んだ」と、破線の濃さで分かります。"));
+stageKey.append(el("p", "knote", "動きを止めているときは、ラベルの文字（送った・届いた・届いたか分からない・済んだ）と、破線の形と濃さで分かります。"));
 legend.append(lineKey, stageKey, boxKey);
 board.append(legend);
 const byIdNow = (id) => ((st.data === "big" ? BIG : VIEW).nodes.find(n => n.id === id) || {}).state;
@@ -731,7 +749,8 @@ tryBtn.addEventListener("click", () => {     // 1 本のやり取りが「送っ
   r.line.classList.remove("a2", "a3", "a4"); r.line.classList.add("a1");
   r.lab.querySelector(".when").textContent = "　いま";
   setStage(r, "sent");
-  trying = setTimeout(() => { setStage(r, "recv"); trying = setTimeout(() => setStage(r, "done"), 4000); }, 4000);
+  r.m = Object.assign({}, r.m, { doneInferred: true, deliveryUnknown: false });
+  trying = setTimeout(() => { setStage(r, "delivered"); trying = setTimeout(() => setStage(r, "done"), 4000); }, 4000);
 });
 function render() {
   const data = st.data === "big" ? BIG : VIEW;
