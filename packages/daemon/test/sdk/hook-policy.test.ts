@@ -694,8 +694,11 @@ describe("grantedOnlyByExtension（#91: 承認済みの拡張にだけ、明示�
     expect(permit("git grep --open-files-in-pager=sh x")).toBe(false);
   });
   it("前方一致で通るだけの、リンクをたどる旗・略した長いオプションは偽", () => {
-    const e2: Scope = { ...brief, allowedCommands: ["pnpm test", "git grep", "find", "grep"] };
-    for (const c of ["git grep --open=echo x", "find -L .", "grep -R x ."])
+    const e2: Scope = {
+      ...brief,
+      allowedCommands: ["pnpm test", "git grep", "find", "grep", "grep -R", "find -L ."],
+    };
+    for (const c of ["git grep --open=echo x", "grep -R x .", "find -L . -name a"])
       expect(grantedOnlyByExtension(brief, e2, "Bash", { command: c }, "/w"), c).toBe(false);
   });
   it("書き込み: 承認した場所だけが真。ブリーフの場所・承認していない場所・禁じる場所は偽", () => {
