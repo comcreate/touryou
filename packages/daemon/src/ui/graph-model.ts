@@ -35,20 +35,20 @@ const KIND_NAMES: Readonly<Record<string, string>> = {
 export type NodeStatus = "run" | "wait" | "stall" | "fail" | "done" | "stopped";
 export type Tier = "go" | "turn" | "over";
 export const STATUS_TEXT: Readonly<Record<NodeStatus, string>> = {
-  run: "動いています",
+  run: "動いている",
   wait: "● あなたの答え待ち",
   stall: "‖ 止まっているかも",
   fail: "✕ 失敗",
   done: "済んだ",
   stopped: "■ 止めた",
 };
-/** 動いている（run）ときの、状態ごとの言葉（画面の `STATE_NAMES` とそろえる）。 */
-const RUN_TEXT: Readonly<Record<string, string>> = {
-  pending: "起動を待っています",
-  running: "動いています",
-  waiting: "待っています",
+/** 動いている（run）ときの、状態ごとの言葉。画面の `STATE_NAMES` と同じ言葉（試験で照らす）。 */
+export const RUN_TEXT: Readonly<Record<string, string>> = {
+  pending: "起動を待っている",
+  running: "動いている",
+  waiting: "待っている",
   done: "済んだと報告（確かめ待ち）",
-  stopping: "止めています",
+  stopping: "止めている",
   stopIncomplete: "■ 止まりきっていない",
 };
 export const tierOf = (s: NodeStatus): Tier =>

@@ -129,7 +129,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   it("箱は見本の形：状態の言葉と印・左の縁の段・役割の印・列の見出し。止まっているかもは、くすんだ黄（カードも）", async () => {
     const box = (id: string) => page.locator(`#graph .gnode[data-id="${id}"]`);
     expect(await box("root").getAttribute("class")).toContain("t-go");
-    expect(await box("root").locator(".gst").textContent()).toBe("動いています");
+    expect(await box("root").locator(".gst").textContent()).toBe("動いている");
     expect(await box("ui-b").getAttribute("class")).toContain("s-wait");
     expect(await box("ui-b").locator(".gst").textContent()).toBe("● あなたの答え待ち");
     expect(await box("ui-b").locator(".gbadge").textContent()).toBe("1");

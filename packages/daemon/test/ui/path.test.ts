@@ -1,6 +1,15 @@
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
+import { UI_JS } from "../../src/api/ui-assets.js";
 import { BOX_H, BOX_W, COL_GAP, layoutOf, MARGIN, ROW_H } from "../../src/ui/graph-layout.js";
-import { ageClassOf, agoText, graphModelOf, stageText } from "../../src/ui/graph-model.js";
+import {
+  ageClassOf,
+  agoText,
+  graphModelOf,
+  RUN_TEXT,
+  STATUS_TEXT,
+  stageText,
+} from "../../src/ui/graph-model.js";
 import {
   gapRowAbove,
   humanColumnOf,
@@ -219,13 +228,13 @@ describe("箱の状態（見本の STATE・TIER。画面の言葉とそろえる
   });
   const by = new Map(m.nodes.map((n) => [n.id, n]));
   it.each([
-    ["run", "run", "go", "動いています", true],
+    ["run", "run", "go", "動いている", true],
     ["ask", "wait", "turn", "● あなたの答え待ち", false],
     ["stall", "stall", "turn", "‖ 止まっているかも", false],
     ["fail", "fail", "turn", "✕ 失敗", false],
     ["arch", "done", "over", "済んだ", false],
     ["stop", "stopped", "over", "■ 止めた", false],
-    ["pend", "run", "go", "起動を待っています", false],
+    ["pend", "run", "go", "起動を待っている", false],
   ] as const)("%s → %s・%s・「%s」", (id, status, tier, text, alive) => {
     const n = must(by.get(id));
     expect([n.status, n.tier, n.statusText, n.alive]).toEqual([status, tier, text, alive]);
@@ -362,5 +371,16 @@ describe("人とのやり取り（段を飛ばす。木の外の「人」の箱�
       expect(y).toBeLessThanOrEqual(H.y + BOX_H - 10);
     }
     expect(humanEndY(H, 0, 1)).toBe(H.cy);
+  });
+});
+
+describe("箱の状態の言葉は、画面（app.js）の STATE_NAMES と同じ", () => {
+  it("RUN_TEXT の値は、STATE_NAMES の同じキーの値と同じ（「■ 」の印つきの止まりきっていないは、印を除いて）", () => {
+    const i = UI_JS.indexOf("var STATE_NAMES = {");
+    const names = runInNewContext(
+      `(${UI_JS.slice(UI_JS.indexOf("{", i), UI_JS.indexOf("};", i) + 1)})`,
+    ) as Record<string, string>;
+    for (const [k, v] of Object.entries(RUN_TEXT)) expect(v.replace(/^■ /, ""), k).toBe(names[k]);
+    expect(STATUS_TEXT.run).toBe(names.running);
   });
 });
