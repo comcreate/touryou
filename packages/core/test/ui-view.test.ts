@@ -627,7 +627,7 @@ describe("uiViewOf の #89 の値（題・最後の動き・人の要対応・�
     expect(uiViewOf(s).inbox.find((x) => x.id === "v1")?.ref).toBe("x1");
   });
 
-  it("やり取り: 報告・判断の問い・範囲の頼みの理由だけ、短い本文（text。上限 UI_FLOW_TEXT_MAX）を載せる。指示・答えの文は載せない", () => {
+  it("やり取り: 画面のほかの所で、いま見える・かつて見えた文（報告・判断の問い・範囲の頼みの理由）だけ、短い本文（text。上限 UI_FLOW_TEXT_MAX）を載せる。指示・答えの文は載せない", () => {
     const long = "長".repeat(UI_FLOW_TEXT_MAX + 50);
     const evs = [
       ...base(),

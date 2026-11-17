@@ -38,7 +38,7 @@ export const UI_HTML = `<!doctype html>
 <section id="view" hidden>
 <section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h2 id="now-title">いまあなたがすること</h2><p id="now-lead" class="lead"></p></section>
 <div id="todo" class="todo"></div>
-<section class="sec"><h2>やり取り</h2><p class="lead">親子の並びと、いちばん新しい上り（子 → 親）・下り（親・人 → 子）です。</p><div id="view-switch" class="seg" role="group" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button">図</button><button id="show-list" class="quiet sm" type="button">一覧</button></div><div id="graph" class="board" hidden></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span>← 上り（子 → 親）</span><span class="lg"><span class="sw down"></span>→ 下り（親・人 → 子）</span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span>新しいほど濃い</span><span class="lg"><span class="sw wait"></span>あなたの答え待ちのやり取り</span><span class="lg"><span class="edge go"></span>進んでいる</span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span>あなたの出番（答え待ち・止まっているかも・失敗）</span><span class="lg"><span class="edge over"></span>終わった</span><span class="lg">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
+<section class="sec"><h2>やり取り</h2><p class="lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button">図</button><button id="show-list" class="quiet sm" type="button">一覧</button></div><div id="graph" class="board" hidden></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span>← 上り（子 → 親。答え待ちの頼みを先に）</span><span class="lg"><span class="sw down"></span>→ 下り（親・人 → 子）</span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span>新しいほど濃い</span><span class="lg"><span class="sw wait"></span>あなたの答え待ちのやり取り</span><span class="lg"><span class="edge go"></span>進んでいる</span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span>あなたの出番（答え待ち・止まっているかも・失敗）</span><span class="lg"><span class="edge over"></span>終わった</span><span class="lg">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
 <section class="sec"><h2>作業ごとのようす</h2><p class="lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
 <details id="finished" class="finished"><summary id="finished-summary">終わった作業</summary><div id="finished-cards" class="cards"></div></details></section>
 <details class="admin"><summary>管理（まれに使う操作）</summary><p class="warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
@@ -103,7 +103,8 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:start}
 .cards .card{margin:0;display:grid;gap:6px;scroll-margin-top:16px}
 .card.turn{border-color:var(--kaki);border-left:5px solid var(--kaki)}.card.turn.stall{border-color:var(--kiiro);border-left-color:var(--kiiro)}.card.finished{opacity:.8}
-.card.flash{animation:flash 1.6s ease-out}
+.card.picked{outline:3px solid var(--ai);outline-offset:2px}.card.picked:focus{outline:3px solid var(--ai)}
+.card.picked.pa{animation:pickA 1.5s ease-out}.card.picked.pb{animation:pickB 1.5s ease-out}
 .ctitle,.card h3{font-weight:700;font-size:15.5px;line-height:1.5;margin:0}
 .card.need{border-color:var(--kaki)}
 .spark{display:grid;grid-template-columns:repeat(12,1fr);gap:3px;align-items:end;height:34px;border-bottom:1px solid var(--line);padding:0 2px}
@@ -156,7 +157,8 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 @keyframes bump-a{0%{transform:scale(.6)}100%{transform:scale(1)}}
 @keyframes bump-b{0%{transform:scale(.6)}100%{transform:scale(1)}}
 @keyframes arrive{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-@keyframes flash{0%{box-shadow:0 0 0 0 var(--kaki)}30%{box-shadow:0 0 0 6px var(--kaki-soft)}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes pickA{0%{box-shadow:0 0 0 0 var(--ai)}35%{box-shadow:0 0 0 8px var(--ai-3)}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes pickB{0%{box-shadow:0 0 0 0 var(--ai)}35%{box-shadow:0 0 0 8px var(--ai-3)}100%{box-shadow:0 0 0 0 transparent}}
 @keyframes open{from{opacity:0;transform:translateY(-4px)}}
 .seg{display:inline-flex;gap:4px;margin:0 0 8px}.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
 .board{position:relative;height:420px;min-height:180px;max-height:720px;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:var(--sheet);user-select:none;-webkit-user-select:none;touch-action:none}
@@ -819,7 +821,7 @@ export const UI_JS = `'use strict';
     var st = cardStatus.get(n.id);
     var status = st ? st.status : band === 'finished' ? 'done' : 'run';
     var stall = status === 'stall';
-    var card = el('div', 'card ' + band + (n.needsHuman > 0 ? ' need' : '') + (stall ? ' stall' : ''));
+    var card = el('div', 'card ' + band + (n.needsHuman > 0 ? ' need' : '') + (stall ? ' stall' : '') + pickedClass(n.id));
     if (ID_RE.test(n.id)) card.id = 'card-' + n.id;
     // 頭の札: 状態の札 1 つと、答えがあれば「あなたの答え N 件」
     var head = el('div', '');
@@ -955,11 +957,16 @@ export const UI_JS = `'use strict';
     return d;
   }
 
-  // 一覧（木の字下げと、最後の上り・下り）。描いたノードの数を返す（木にならない・深すぎるもので、描けなかった分は、呼び出し側が「一部省略」にする）。
+  // 一覧（木の字下げと、上り・下り）。描いたノードの数を返す（木にならない・深すぎるもので、描けなかった分は、呼び出し側が「一部省略」にする）。
   // 関係図（#89 の PR-5）は、#graph に描く。それまでは一覧だけ
   function lastFlow(flows, from, to) {
     for (var k = 0; k < flows.length; k += 1) if (flows[k].from === from && flows[k].to === to) return flows[k];
     return null;
+  }
+  // 上り（子 → 親）は、答えを待つ頼み（判断・範囲の頼みで、まだ済んでいないもの）があれば、新しい報告より先にそれ（図と同じ決め方）
+  function upFlow(flows, from, to) {
+    for (var k = 0; k < flows.length; k += 1) if (flows[k].from === from && flows[k].to === to && isAwaiting(flows[k])) return flows[k];
+    return lastFlow(flows, from, to);
   }
   function flowCell(f, up, n) {
     if (!f) return el('span', 'when', n.parentId === null ? '（いちばん上）' : 'まだない');
@@ -1027,7 +1034,7 @@ export const UI_JS = `'use strict';
     var nodes = view.nodes;
     if (!nodes.length) { box.appendChild(el('p', 'empty', '作業はまだありません')); return 0; }
     var head = el('div', 'trow thead');
-    ['作業', '状態', '↑ 最後の上り（子 → 親）', '↓ 最後の下り（親・人 → 子）'].forEach(function (t) { head.appendChild(el('span', '', t)); });
+    ['作業', '状態', '↑ 上り（子 → 親。答え待ちの頼みを先に）', '↓ 最後の下り（親・人 → 子）'].forEach(function (t) { head.appendChild(el('span', '', t)); });
     box.appendChild(head);
     var kids = new Map();
     nodes.forEach(function (n) {
@@ -1053,7 +1060,7 @@ export const UI_JS = `'use strict';
         }
         row.appendChild(t);
         row.appendChild(el('span', 'chip ' + band, name(STATE_NAMES, n.state) + (n.needsHuman > 0 ? '・答え ' + n.needsHuman : '')));
-        row.appendChild(flowCell(n.parentId === null ? null : lastFlow(view.flows, n.id, n.parentId), true, n));
+        row.appendChild(flowCell(n.parentId === null ? null : upFlow(view.flows, n.id, n.parentId), true, n));
         row.appendChild(flowCell(n.parentId === null ? null : lastFlow(view.flows, n.parentId, n.id), false, n));
         box.appendChild(row);
         walk(n.id, depth + 1);
@@ -1063,13 +1070,37 @@ export const UI_JS = `'use strict';
     return seen.size;
   }
   // 一覧の「詳しく」: その子のカードまで動かして、光らせる（終わった作業なら、たたんだ欄を開く）
+  // 移った先のカードを、1.5 秒、藍の縁で光らせる（どのカードに移ったか分かるように）。同じ子を続けて押したら、はじめから。
+  // 光らせている途中にカードを作り直しても、残りの時間は縁を付けたままにする（子の ID と終わりの時刻を覚えておく）。
+  // 動きを止める・OS の「視差効果を減らす」では、動きなしで縁の色だけを出す（CSS の animation:none）
+  var PICK_MS = 1500;
+  var pickId = '';
+  var pickUntil = 0;
+  var pickTimer = null;
+  var pickFlip = false;
+  function pickedClass(id) {
+    return pickId === id && Date.now() < pickUntil ? ' picked' : '';
+  }
   function openCard(id) {
     var c = document.getElementById('card-' + id);
     if (!c) return;
     if (c.parentNode && c.parentNode.id === 'finished-cards') document.getElementById('finished').open = true;
     c.scrollIntoView({ block: 'center' });
-    c.className = c.className.replace(' flash', '');
-    window.setTimeout(function () { c.className += ' flash'; }, 0);
+    pickId = id;
+    pickUntil = Date.now() + PICK_MS;
+    pickFlip = !pickFlip;
+    // 動きのクラスを入れ替えて、続けて押したときも、はじめから動かす
+    c.className = c.className.replace(/ picked( pa| pb)?/g, '') + ' picked ' + (pickFlip ? 'pa' : 'pb');
+    if (pickTimer !== null) window.clearTimeout(pickTimer);
+    pickTimer = window.setTimeout(function () {
+      pickTimer = null;
+      pickId = '';
+      var now = document.getElementById('card-' + id);
+      if (now) now.className = now.className.replace(/ picked( pa| pb)?/g, '');
+    }, PICK_MS);
+    // キーボード・読み上げのために、移った先へ focus も移す（ページは動かさない。上の scrollIntoView で見せてある）
+    c.tabIndex = -1;
+    c.focus({ preventScroll: true });
   }
 
   // ---- 回収の指示（人間による破棄の判断。取り消せない）----

@@ -49,6 +49,8 @@ describe("画面の資産（走査）", () => {
   it("許可リスト: `.` の後ろのプロパティ名は、安全な集合にあるものだけ（文字列・コメントを除く）", () => {
     const SAFE = new Set([
       // 要素・文字列・集合・配列・Promise の、安全な操作
+      // 移った先のカードへ focus を移すため（tabIndex = -1。カードを Tab の並びには入れない）
+      "tabIndex",
       "textContent",
       "className",
       "hidden",
