@@ -7,98 +7,184 @@
 <!--
   Issue #89 の画面の案（見本）。値はすべて作り物。
   外のファイル・CDN は使わない。描画は textContent と createElement だけ（本番の決まりに合わせた書き方）。
-  関係図は、形だけを示す静的な SVG（本番の作りは research.md の「関係図の道」で決める）。
+  関係図は、形を示す静的な SVG。上り（子 → 親）は図の上半分、下り（親 → 子）は図の下半分に分けて描く。
+  動き：線の流れ・動く点・要対応の脈打ち・カードと項目の出入り。「動きを止める」と、OS の「視差効果を減らす」で止まる。
 -->
 <style>
-:root{--bg:#fff;--fg:#1d1f23;--muted:#5d6470;--line:#d9dde3;--card:#f6f7f9;--accent:#2457c5;--warn:#a65b00;--warn-bg:#fff4e0;--danger:#b3261e;--danger-bg:#fdecea;--ok:#1e7a3c;--ok-bg:#e6f4ea;--chip:#eceff3}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171b;--fg:#e6e8eb;--muted:#9aa3ae;--line:#30353d;--card:#1d2026;--accent:#7aa2ff;--warn:#f0b35a;--warn-bg:#3a2a10;--danger:#ff8a80;--danger-bg:#3d1714;--ok:#7bd88f;--ok-bg:#16301f;--chip:#2a2e35}}
-:root[data-theme="dark"]{--bg:#15171b;--fg:#e6e8eb;--muted:#9aa3ae;--line:#30353d;--card:#1d2026;--accent:#7aa2ff;--warn:#f0b35a;--warn-bg:#3a2a10;--danger:#ff8a80;--danger-bg:#3d1714;--ok:#7bd88f;--ok-bg:#16301f;--chip:#2a2e35}
+:root{--bg:#fff;--fg:#1d1f23;--muted:#5d6470;--line:#d9dde3;--card:#f6f7f9;--accent:#2457c5;--up:#2457c5;--up-bg:#eef3fd;--down:#7a3fb8;--down-bg:#f5effc;--warn:#a65b00;--warn-bg:#fff4e0;--danger:#b3261e;--danger-bg:#fdecea;--ok:#1e7a3c;--ok-bg:#e6f4ea;--chip:#eceff3}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171b;--fg:#e6e8eb;--muted:#9aa3ae;--line:#30353d;--card:#1d2026;--accent:#7aa2ff;--up:#7aa2ff;--up-bg:#18223a;--down:#c39bf0;--down-bg:#251b33;--warn:#f0b35a;--warn-bg:#3a2a10;--danger:#ff8a80;--danger-bg:#3d1714;--ok:#7bd88f;--ok-bg:#16301f;--chip:#2a2e35}}
+:root[data-theme="dark"]{--bg:#15171b;--fg:#e6e8eb;--muted:#9aa3ae;--line:#30353d;--card:#1d2026;--accent:#7aa2ff;--up:#7aa2ff;--up-bg:#18223a;--down:#c39bf0;--down-bg:#251b33;--warn:#f0b35a;--warn-bg:#3a2a10;--danger:#ff8a80;--danger-bg:#3d1714;--ok:#7bd88f;--ok-bg:#16301f;--chip:#2a2e35}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif}
-main{max-width:960px;margin:0 auto;padding:16px}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;transition:background .3s,color .3s}
+main{max-width:980px;margin:0 auto;padding:16px}
 header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
 h1{font-size:18px;margin:0}h2{font-size:16px;margin:24px 0 8px}
-.conn{font-size:13px;color:var(--muted)}.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px}
+.conn{font-size:13px;color:var(--muted)}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;animation:beat 2s ease-in-out infinite}
 .note{font-size:13px;color:var(--muted)}
-button{font:inherit;font-size:14px;padding:5px 12px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);cursor:pointer}
+.tools{display:flex;gap:6px}
+button{font:inherit;font-size:14px;padding:5px 12px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);cursor:pointer;transition:transform .12s,background .2s,box-shadow .2s}
+button:hover{box-shadow:0 1px 4px rgba(0,0,0,.15)}button:active{transform:scale(.96)}
 button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 button.danger{border-color:var(--danger);color:var(--danger)}
 button.small{font-size:12px;padding:1px 8px}
-.todo{border:2px solid var(--warn);background:var(--warn-bg);border-radius:10px;padding:12px 16px}
-.todo h2{margin:0 0 8px;font-size:17px}
-.todo-item{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line)}
+
+/* --- いまあなたがすること --- */
+.todo{border:2px solid var(--warn);background:var(--warn-bg);border-radius:10px;padding:12px 16px;animation:glow 3s ease-in-out infinite}
+.todo h2{margin:0 0 8px;font-size:17px;display:flex;align-items:center;gap:8px}
+.badge{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;border-radius:13px;background:var(--warn);color:var(--bg);font-size:14px;animation:pop .6s cubic-bezier(.3,1.6,.5,1) both}
+.todo-item{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line);animation:slideIn .45s ease-out both}
 .todo-item:first-of-type{border-top:none}
+.todo-item.leaving{animation:slideOut .4s ease-in both}
 .todo-what{flex:1 1 320px}
+.done-msg{color:var(--ok);animation:fadeUp .4s ease-out both}
 .chip{display:inline-block;font-size:12px;padding:0 8px;border-radius:10px;background:var(--chip);color:var(--fg);margin-right:4px}
 .chip.warn{background:var(--warn);color:var(--bg)}.chip.danger{background:var(--danger);color:var(--bg)}.chip.ok{background:var(--ok);color:var(--bg)}
+.chip.up{background:var(--up);color:var(--bg)}.chip.down{background:var(--down);color:var(--bg)}
 .cmd{display:flex;gap:6px;align-items:center;margin-top:4px}
 code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:4px;padding:1px 6px;overflow-wrap:anywhere}
+
+/* --- カード --- */
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;animation:fadeUp .5s ease-out both;transition:box-shadow .3s,transform .3s}
+.card:hover{transform:translateY(-2px);box-shadow:0 4px 14px rgba(0,0,0,.12)}
 .card.needs{border-left:4px solid var(--warn)}
+.card.flash{animation:flashCard 1.6s ease-out}
 .card-title{font-weight:600;margin:0 0 4px}
 .meta{font-size:13px;color:var(--muted)}
 .id{font-size:11px;color:var(--muted);font-family:ui-monospace,Menlo,monospace}
+.state-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;background:var(--muted)}
+.state-dot.run{background:var(--ok);animation:beat 1.4s ease-in-out infinite}
+.state-dot.warn{background:var(--warn);animation:beat .9s ease-in-out infinite}
 .entry{border-top:1px solid var(--line);padding:6px 0;font-size:14px}
+.entry.new{animation:newEntry 2.4s ease-out}
 .entry .when{font-size:12px;color:var(--muted)}
-details>summary{cursor:pointer;color:var(--accent);font-size:13px}
+.dir{font-size:11px;margin-left:4px}.dir.up{color:var(--up)}.dir.down{color:var(--down)}
+details>summary{cursor:pointer;color:var(--accent);font-size:13px;list-style:none}
+details>summary::before{content:"▸";display:inline-block;margin-right:4px;transition:transform .2s}
+details[open]>summary::before{transform:rotate(90deg)}
+details[open]>:not(summary){animation:fadeUp .3s ease-out both}
 .actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
 .desc{font-size:12px;color:var(--muted)}
 .irreversible{font-size:12px;color:var(--danger)}
 .blocked{background:var(--danger-bg);border-radius:6px;padding:8px;margin:6px 0}
 .admin{border:1px solid var(--line);border-radius:10px;padding:8px 16px;margin-top:24px}
 .admin>summary{font-size:16px;font-weight:600;color:var(--fg)}
-.graph{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px;overflow-x:auto}
-.graph svg{display:block;min-width:620px;width:100%;height:auto}
-.g-node rect{fill:var(--bg);stroke:var(--line);stroke-width:1.5}
-.g-node.warn rect{stroke:var(--warn);stroke-width:2.5}
-.g-node text{fill:var(--fg);font-size:13px}.g-node text.sub{fill:var(--muted);font-size:11px}
-.g-edge{stroke:var(--muted);stroke-width:1.5;fill:none}
-.g-msg{stroke:var(--accent);stroke-width:1.5;fill:none;stroke-dasharray:5 4}
-.g-msg.warn{stroke:var(--warn)}
-.g-label{fill:var(--accent);font-size:11px}.g-label.warn{fill:var(--warn)}
-.legend{font-size:12px;color:var(--muted);margin-top:4px}
-.toggle{font-size:12px}
 .callout{font-size:12px;color:var(--muted);border-left:3px solid var(--line);padding-left:8px;margin:4px 0}
+
+/* --- 関係図 --- */
+.graph{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px;overflow-x:auto}
+.graph svg{display:block;min-width:760px;width:100%;height:auto}
+.lane-up{fill:var(--up-bg)}.lane-down{fill:var(--down-bg)}
+.lane-label{font-size:12px;font-weight:600}.lane-label.up{fill:var(--up)}.lane-label.down{fill:var(--down)}
+.g-node{cursor:pointer}
+.g-node rect{fill:var(--bg);stroke:var(--line);stroke-width:1.5;transition:stroke .2s,transform .2s}
+.g-node:hover rect{stroke:var(--accent);stroke-width:2.5}
+.g-node.root rect{stroke:var(--fg)}
+.g-node.warn rect.ring{fill:none;stroke:var(--warn);stroke-width:2.5;transform-box:fill-box;transform-origin:center;animation:ring 1.8s ease-out infinite}
+.g-node.warn rect.body{stroke:var(--warn);stroke-width:2.5}
+.g-node text{fill:var(--fg);font-size:13px;pointer-events:none}.g-node text.sub{fill:var(--muted);font-size:11px}
+.g-tree{stroke:var(--muted);stroke-width:1.2;fill:none;stroke-dasharray:2 3;opacity:.7}
+.msg{fill:none;stroke-width:2;stroke-dasharray:7 7;animation:flow 1.2s linear infinite;transition:opacity .25s}
+.msg.up{stroke:var(--up)}.msg.down{stroke:var(--down)}
+.msg.warn{stroke:var(--warn);stroke-width:2.6;animation-duration:.7s}
+.msg.draw{animation:draw 1.2s ease-out both,flow 1.2s linear 1.2s infinite}
+.m-label{font-size:11px;transition:opacity .25s}.m-label.up{fill:var(--up)}.m-label.down{fill:var(--down)}.m-label.warn{fill:var(--warn);font-weight:600}
+.packet.up{fill:var(--up)}.packet.down{fill:var(--down)}.packet.warn{fill:var(--warn)}
+svg.focus .msg,svg.focus .m-label,svg.focus .packet{opacity:.12}
+svg.focus .on{opacity:1}
+.legend{font-size:12px;color:var(--muted);margin-top:4px;display:flex;flex-wrap:wrap;gap:12px}
+.sw{display:inline-block;width:22px;height:0;border-top:2px dashed;vertical-align:middle;margin-right:4px}
+.sw.up{border-color:var(--up)}.sw.down{border-color:var(--down)}.sw.warn{border-color:var(--warn)}
+
+/* --- 動き --- */
+@keyframes flow{to{stroke-dashoffset:-28}}
+@keyframes draw{from{stroke-dasharray:600 600;stroke-dashoffset:600}to{stroke-dasharray:600 600;stroke-dashoffset:0}}
+@keyframes ring{0%{transform:scale(1);opacity:.9}100%{transform:scale(1.18,1.5);opacity:0}}
+@keyframes beat{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.5);opacity:.55}}
+@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(240,160,40,0)}50%{box-shadow:0 0 0 6px rgba(240,160,40,.18)}}
+@keyframes pop{0%{transform:scale(.3)}100%{transform:scale(1)}}
+@keyframes slideIn{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:none}}
+@keyframes slideOut{to{opacity:0;transform:translateX(30px);height:0;padding:0}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes newEntry{0%{background:var(--warn-bg)}100%{background:transparent}}
+@keyframes flashCard{0%{box-shadow:0 0 0 4px var(--accent)}100%{box-shadow:0 0 0 0 transparent}}
+.still *,.still *::before{animation:none!important;transition:none!important}
+@media (prefers-reduced-motion:reduce){*,*::before{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 <header>
   <h1>touryou 状態画面 <span class="note">（見本・値は作り物）</span></h1>
   <span class="conn"><span class="dot"></span>つながっています（更新は自動）<span class="note">・接続の作りは #88 で変わる</span></span>
-  <button class="toggle" id="theme" type="button">明暗を切り替える</button>
+  <span class="tools"><button id="motion" type="button">動きを止める</button><button id="theme" type="button">明暗を切り替える</button></span>
 </header>
 <main>
   <section class="todo" aria-labelledby="todo-h">
-    <h2 id="todo-h">いまあなたがすること（<span id="todo-count"></span> 件）</h2>
+    <h2 id="todo-h">いまあなたがすること <span class="badge" id="todo-count"></span></h2>
     <div id="todo"></div>
   </section>
 
-  <h2>作業ごとのようす</h2>
-  <p class="note">子 1 つを 1 枚にまとめています。人の操作が要る子を先に出します。済んだ子は下の「済んだ作業」にたたんでいます。</p>
-  <div class="cards" id="cards"></div>
-  <details style="margin-top:12px"><summary>済んだ作業（2 件）</summary><div class="cards" id="done-cards" style="margin-top:8px"></div></details>
+  <h2>関係図（やり取りの向き）</h2>
+  <div class="graph" role="img" aria-label="統合と子の関係と、上りと下りのメッセージの図">
+    <svg id="graph" viewBox="0 0 900 430" xmlns="http://www.w3.org/2000/svg">
+      <rect class="lane-up" x="0" y="0" width="900" height="182" rx="8"/>
+      <rect class="lane-down" x="0" y="248" width="900" height="182" rx="8"/>
+      <text class="lane-label up" x="12" y="20">▲ 上り（子 → 親）：報告・判断の求め・頼み</text>
+      <text class="lane-label down" x="12" y="420">▼ 下り（親 → 子）：答え・指示・依頼</text>
 
-  <h2>関係図（案）</h2>
-  <div class="graph" role="img" aria-label="統合と子の関係と、メッセージの流れの図">
-    <svg viewBox="0 0 680 300" xmlns="http://www.w3.org/2000/svg">
-      <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
-      <path class="g-edge" d="M340 62 C340 110 120 100 120 160"/>
-      <path class="g-edge" d="M340 62 L340 160"/>
-      <path class="g-edge" d="M340 62 C340 110 560 100 560 160"/>
-      <path class="g-msg warn" d="M150 160 C150 120 300 110 320 66" style="color:var(--warn)" marker-end="url(#arr)"/>
-      <text class="g-label warn" x="168" y="112">判断を求む · 4 分前</text>
-      <path class="g-msg" d="M530 160 C530 120 380 110 360 66" style="color:var(--accent)" marker-end="url(#arr)"/>
-      <text class="g-label" x="440" y="112">済んだ · 1 時間前</text>
-      <g class="g-node"><rect x="250" y="20" width="180" height="44" rx="8"/><text x="262" y="40">統合（あなたの親）</text><text class="sub" x="262" y="56">実行中</text></g>
-      <g class="g-node warn"><rect x="30" y="160" width="190" height="50" rx="8"/><text x="42" y="181">ログの集計を直す</text><text class="sub" x="42" y="198">調べ役 · 判断待ち · 要対応 2</text></g>
-      <g class="g-node warn"><rect x="245" y="160" width="190" height="50" rx="8"/><text x="257" y="181">設定の読み込みを調べる</text><text class="sub" x="257" y="198">作業役 · 止まっているかも</text></g>
-      <g class="g-node"><rect x="465" y="160" width="190" height="50" rx="8"/><text x="477" y="181">文書の誤字を直す</text><text class="sub" x="477" y="198">作業役 · 済んだ</text></g>
-      <path class="g-edge" d="M340 210 L340 240"/>
-      <g class="g-node"><rect x="255" y="240" width="170" height="44" rx="8"/><text x="267" y="260">試験を足す（孫）</text><text class="sub" x="267" y="276">作業役 · 実行中</text></g>
+      <!-- 親子（点線・細）。ノードの並びの真ん中を通す -->
+      <path class="g-tree" d="M180 215 L200 215"/>
+      <path class="g-tree" d="M340 215 L380 215"/>
+      <path class="g-tree" d="M520 215 L560 215"/>
+      <path class="g-tree" d="M520 226 C600 238 680 238 740 226"/>
+
+      <!-- 上り（上の帯） -->
+      <path id="u-a" class="msg up warn draw" data-a="a" data-b="p" d="M630 190 Q550 70 470 190"/>
+      <text class="m-label warn" data-a="a" data-b="p" x="502" y="118">判断を求む · 4 分前</text>
+      <path id="u-b" class="msg up warn draw" data-a="b" data-b="p" d="M270 190 Q350 70 430 190"/>
+      <text class="m-label warn" data-a="b" data-b="p" x="296" y="118">止まっているかも · 2 分前</text>
+      <path id="u-c" class="msg up draw" data-a="c" data-b="p" d="M810 190 Q650 0 490 190"/>
+      <text class="m-label up" data-a="c" data-b="p" x="610" y="80">済んだ · 1 時間前</text>
+      <path id="u-d" class="msg up draw" data-a="d" data-b="b" d="M110 190 Q190 110 255 190"/>
+      <text class="m-label up" data-a="d" data-b="b" x="128" y="140">進み具合 · 1 分前</text>
+
+      <!-- 下り（下の帯） -->
+      <path id="d-a" class="msg down draw" data-a="p" data-b="a" d="M470 240 Q550 350 630 240"/>
+      <text class="m-label down" data-a="p" data-b="a" x="508" y="316">指示 · 20 分前</text>
+      <path id="d-b" class="msg down draw" data-a="p" data-b="b" d="M430 240 Q350 350 270 240"/>
+      <text class="m-label down" data-a="p" data-b="b" x="296" y="316">依頼 · 30 分前</text>
+      <path id="d-d" class="msg down draw" data-a="b" data-b="d" d="M255 240 Q190 320 110 240"/>
+      <text class="m-label down" data-a="b" data-b="d" x="132" y="300">依頼 · 25 分前</text>
+
+      <!-- 動く点（向きが分かる） -->
+      <circle class="packet up warn" data-a="a" data-b="p" r="5"><animateMotion dur="1.6s" repeatCount="indefinite" path="M630 190 Q550 70 470 190"/></circle>
+      <circle class="packet up warn" data-a="b" data-b="p" r="5"><animateMotion dur="1.6s" repeatCount="indefinite" path="M270 190 Q350 70 430 190"/></circle>
+      <circle class="packet up" data-a="c" data-b="p" r="4"><animateMotion dur="3.2s" repeatCount="indefinite" path="M810 190 Q650 0 490 190"/></circle>
+      <circle class="packet up" data-a="d" data-b="b" r="4"><animateMotion dur="2.2s" repeatCount="indefinite" path="M110 190 Q190 110 255 190"/></circle>
+      <circle class="packet down" data-a="p" data-b="a" r="4"><animateMotion dur="2.6s" repeatCount="indefinite" path="M470 240 Q550 350 630 240"/></circle>
+      <circle class="packet down" data-a="p" data-b="b" r="4"><animateMotion dur="2.6s" repeatCount="indefinite" path="M430 240 Q350 350 270 240"/></circle>
+      <circle class="packet down" data-a="b" data-b="d" r="4"><animateMotion dur="2.2s" repeatCount="indefinite" path="M255 240 Q190 320 110 240"/></circle>
+
+      <!-- ノード（真ん中の並び） -->
+      <g class="g-node" data-node="d" data-card="card-d"><rect class="body" x="40" y="190" width="140" height="50" rx="8"/><text x="50" y="210">試験を足す</text><text class="sub" x="50" y="228">孫（左の子の下）· 実行中</text></g>
+      <g class="g-node warn" data-node="b" data-card="card-b"><rect class="ring" x="200" y="190" width="140" height="50" rx="8"/><rect class="body" x="200" y="190" width="140" height="50" rx="8"/><text x="210" y="210">設定の読み込み</text><text class="sub" x="210" y="228">子 · 止まっているかも</text></g>
+      <g class="g-node root" data-node="p"><rect class="body" x="380" y="190" width="140" height="50" rx="8"/><text x="390" y="210">統合</text><text class="sub" x="390" y="228">親 · 実行中</text></g>
+      <g class="g-node warn" data-node="a" data-card="card-a"><rect class="ring" x="560" y="190" width="140" height="50" rx="8"/><rect class="body" x="560" y="190" width="140" height="50" rx="8"/><text x="570" y="210">ログの集計</text><text class="sub" x="570" y="228">子 · 判断待ち</text></g>
+      <g class="g-node" data-node="c" data-card="card-c"><rect class="body" x="740" y="190" width="140" height="50" rx="8"/><text x="750" y="210">文書の誤字</text><text class="sub" x="750" y="228">子 · 済んだ</text></g>
     </svg>
   </div>
-  <p class="legend">実線＝親子。点線の矢印＝メッセージ（誰から誰へ・いつ）。オレンジ＝人の操作が要る。図は見るだけ（動かせない）。子の箱を押すと、そのカードへ移る（案）。</p>
+  <div class="legend">
+    <span><span class="sw up"></span>上り（子 → 親）は上の帯</span>
+    <span><span class="sw down"></span>下り（親 → 子）は下の帯</span>
+    <span><span class="sw warn"></span>オレンジ＝人の操作が要る（速く流れる・枠が脈打つ）</span>
+    <span>細い点線＝親子。箱に指を置くと、その子のやり取りだけが浮かぶ。押すとカードへ移る</span>
+  </div>
+
+  <h2>作業ごとのようす</h2>
+  <p class="note">子 1 つを 1 枚にまとめています。人の操作が要る子を先に出します。項目の ▲ は上り（子から）、▼ は下り（子へ）。</p>
+  <div class="cards" id="cards"></div>
+  <details style="margin-top:12px"><summary>済んだ作業（2 件）</summary><div class="cards" id="done-cards" style="margin-top:8px"></div></details>
 
   <details class="admin">
     <summary>管理（まれに使う操作）</summary>
@@ -132,7 +218,6 @@ details>summary{cursor:pointer;color:var(--accent);font-size:13px}
     if (text !== undefined) e.textContent = text;
     return e;
   }
-  // 作り物の値。分（何分前）で持つ。
   var NOW = Date.now();
   function ago(min) {
     if (min < 1) return 'いま';
@@ -152,37 +237,55 @@ details>summary{cursor:pointer;color:var(--accent);font-size:13px}
     });
     return b;
   }
-  var KIND = { progress: '進み具合', done: '済んだ', violation: '止められた操作', failure: 'うまくいかなかった', info: '知らせ', decision: '判断を求む', stall: '止まっているかも' };
+  var KIND = { progress: '進み具合', done: '済んだ', violation: '止められた操作', info: '知らせ', decision: '判断を求む', stall: '止まっているかも', instruct: '指示', request: '依頼' };
+  // dir: up（子 → 親）か down（親 → 子）
   var CHILDREN = [
-    { title: 'ログの集計を直す', role: '調べ役', state: '判断待ち', last: 4, id: 'n-sample-a1', needs: 2, entries: [
-      { kind: 'decision', min: 4, text: '集計の単位を「日」と「時」のどちらにしますか。日にすると古い記録とそろいます。時にすると細かく見られますが、出力が長くなります。' },
-      { kind: 'violation', min: 9, text: '書き込みが止められました：scripts/report.sh（作業の範囲の外）', blocked: true },
-      { kind: 'progress', min: 15, text: '集計の関数を 2 つに分けた。試験は通る。' }
+    { key: 'a', title: 'ログの集計を直す', role: '調べ役', state: '判断待ち', dot: 'warn', last: 4, id: 'n-sample-a1', needs: 2, entries: [
+      { kind: 'decision', dir: 'up', min: 4, text: '集計の単位を「日」と「時」のどちらにしますか。日にすると古い記録とそろいます。時にすると細かく見られますが、出力が長くなります。' },
+      { kind: 'violation', dir: 'up', min: 9, text: '書き込みが止められました：scripts/report.sh（作業の範囲の外）', blocked: true },
+      { kind: 'instruct', dir: 'down', min: 20, text: '集計の関数を分けてから、試験を足す。' }
     ] },
-    { title: '設定の読み込みを調べる', role: '作業役', state: '止まっているかも', last: 27, id: 'n-sample-b2', needs: 1, entries: [
-      { kind: 'stall', min: 2, text: '25 分、報告も道具の使用もありません。入力を待って止まっているかもしれません。', attach: true },
-      { kind: 'progress', min: 27, text: '読み込みの順を調べ始めた。' }
+    { key: 'b', title: '設定の読み込みを調べる', role: '作業役', state: '止まっているかも', dot: 'warn', last: 27, id: 'n-sample-b2', needs: 1, entries: [
+      { kind: 'stall', dir: 'up', min: 2, text: '25 分、報告も道具の使用もありません。入力を待って止まっているかもしれません。', attach: true },
+      { kind: 'request', dir: 'down', min: 30, text: '設定の読み込みの順を調べる。' }
     ] },
-    { title: '試験を足す（孫）', role: '作業役', state: '実行中', last: 1, id: 'n-sample-c3', needs: 0, entries: [
-      { kind: 'progress', min: 1, text: '境界の試験を 3 つ足した。' }
+    { key: 'd', title: '試験を足す（孫）', role: '作業役', state: '実行中', dot: 'run', last: 1, id: 'n-sample-c3', needs: 0, entries: [
+      { kind: 'progress', dir: 'up', min: 1, text: '境界の試験を 3 つ足した。' },
+      { kind: 'request', dir: 'down', min: 25, text: '読み込みの境界の試験を足す。' }
     ] }
   ];
   var DONE = [
-    { title: '文書の誤字を直す', role: '作業役', state: '済んだ（受け入れ済み）', last: 62, id: 'n-sample-d4', needs: 0, entries: [{ kind: 'done', min: 62, text: '誤字を 4 か所直した。根拠：差分と試験の結果。' }] },
-    { title: '先週の調べもの', role: '調べ役', state: 'アーカイブ済み', last: 4320, id: 'n-sample-e5', needs: 0, entries: [{ kind: 'info', min: 4320, text: '前の日の知らせ（アーカイブした子のもの）。' }] }
+    { key: 'c', title: '文書の誤字を直す', role: '作業役', state: '済んだ（受け入れ済み）', dot: '', last: 62, id: 'n-sample-d4', needs: 0, entries: [{ kind: 'done', dir: 'up', min: 62, text: '誤字を 4 か所直した。根拠：差分と試験の結果。' }] },
+    { key: 'e', title: '先週の調べもの', role: '調べ役', state: 'アーカイブ済み', dot: '', last: 4320, id: 'n-sample-e5', needs: 0, entries: [{ kind: 'info', dir: 'up', min: 4320, text: '前の日の知らせ（アーカイブした子のもの）。' }] }
   ];
 
-  // --- いまあなたがすること ---
+  // --- いまあなたがすること（答えると、行がすべって消え、数が減る） ---
   var todo = document.getElementById('todo');
+  var count = document.getElementById('todo-count');
+  var left = 0;
+  function setCount(n) {
+    left = n;
+    count.textContent = String(n);
+    count.style.animation = 'none';
+    void count.offsetWidth;
+    count.style.animation = '';
+    if (n === 0) {
+      todo.appendChild(el('p', 'done-msg', 'いまはありません。子が動いているあいだ、ここは空のままです。'));
+    }
+  }
+  function resolve(row) {
+    row.className = 'todo-item leaving';
+    setTimeout(function () { todo.removeChild(row); setCount(left - 1); }, 400);
+  }
   var todos = [
-    { chip: '判断を求む', cls: 'warn', what: '「ログの集計を直す」が、集計の単位を聞いています。', act: function (box) {
+    { chip: '判断を求む', cls: 'warn', what: '「ログの集計を直す」が、集計の単位を聞いています。', act: function (box, row) {
       var a = el('div', 'actions');
-      ['日にする', '時にする', '自由に答える…'].forEach(function (t, i) { var b = el('button', i === 0 ? 'primary' : '', t); b.type = 'button'; a.appendChild(b); });
+      ['日にする', '時にする', '自由に答える…'].forEach(function (t, i) { var b = el('button', i === 0 ? 'primary' : '', t); b.type = 'button'; if (i < 2) b.addEventListener('click', function () { resolve(row); }); a.appendChild(b); });
       box.appendChild(a);
     } },
-    { chip: '範囲を広げる頼み', cls: 'danger', what: '「ログの集計を直す」が、scripts/report.sh への書き込みを頼んでいます。', act: function (box) {
+    { chip: '範囲を広げる頼み', cls: 'danger', what: '「ログの集計を直す」が、scripts/report.sh への書き込みを頼んでいます。', act: function (box, row) {
       var a = el('div', 'actions');
-      [['広げる（この 1 つだけ許す）…', 'primary'], ['断る（そのままにする）', ''], ['子に別の道を伝える…', '']].forEach(function (p) { var b = el('button', p[1], p[0]); b.type = 'button'; a.appendChild(b); });
+      [['広げる（この 1 つだけ許す）…', 'primary'], ['断る（そのままにする）', ''], ['子に別の道を伝える…', '']].forEach(function (p, i) { var b = el('button', p[1], p[0]); b.type = 'button'; if (i === 1) b.addEventListener('click', function () { resolve(row); }); a.appendChild(b); });
       box.appendChild(a);
       box.appendChild(el('p', 'desc', '広げると、子はこの場所に書けるようになります。断ると、子には「範囲の外」と伝わり、子は別のやり方を考えます。'));
     } },
@@ -195,57 +298,69 @@ details>summary{cursor:pointer;color:var(--accent);font-size:13px}
       box.appendChild(el('p', 'desc', '端末にこのコマンドを貼って開きます（コマンドの形は仮。実装の段で決める）。'));
     } }
   ];
-  document.getElementById('todo-count').textContent = String(todos.length);
-  todos.forEach(function (t) {
+  todos.forEach(function (t, i) {
     var row = el('div', 'todo-item');
+    row.style.animationDelay = (i * 0.12) + 's';
     row.appendChild(el('span', 'chip ' + t.cls, t.chip));
     var box = el('div', 'todo-what');
     box.appendChild(el('div', '', t.what));
-    t.act(box);
+    t.act(box, row);
     row.appendChild(box);
     todo.appendChild(row);
   });
+  setCount(todos.length);
 
   // --- 子のカード ---
-  function card(c) {
+  function entryRow(e) {
+    var row = el('div', 'entry');
+    var head = el('div');
+    head.appendChild(el('span', 'chip' + (e.blocked ? ' danger' : ''), KIND[e.kind]));
+    head.appendChild(el('span', 'when', clock(e.min) + '（' + ago(e.min) + '）'));
+    head.appendChild(el('span', 'dir ' + e.dir, e.dir === 'up' ? '▲ 子から' : '▼ 子へ'));
+    row.appendChild(head);
+    if (e.text.length > 40) {
+      var d = el('details');
+      d.appendChild(el('summary', '', e.text.slice(0, 40) + '…（全文を開く）'));
+      d.appendChild(el('div', '', e.text));
+      row.appendChild(d);
+    } else {
+      row.appendChild(el('div', '', e.text));
+    }
+    if (e.blocked) {
+      var b = el('div', 'blocked');
+      b.appendChild(el('div', '', '子は範囲を広げる頼みを出しています。答えは上の「いまあなたがすること」でも出せます。'));
+      var a = el('div', 'actions');
+      ['広げる…', '断る', '子に別の道を伝える…'].forEach(function (t) { var x = el('button', 'small', t); x.type = 'button'; a.appendChild(x); });
+      b.appendChild(a);
+      row.appendChild(b);
+    }
+    if (e.attach) row.appendChild(el('p', 'callout', '開き方は上の「いまあなたがすること」に、コマンドと写すボタンがあります。'));
+    return row;
+  }
+  var lastLabels = {};
+  function card(c, i) {
     var k = el('div', 'card' + (c.needs > 0 ? ' needs' : ''));
+    k.id = 'card-' + c.key;
+    k.style.animationDelay = (i * 0.08) + 's';
     k.appendChild(el('p', 'card-title', c.title));
     var m = el('div', 'meta');
     m.appendChild(el('span', 'chip', c.role));
-    m.appendChild(el('span', 'chip' + (c.needs > 0 ? ' warn' : ''), c.state));
-    m.appendChild(el('span', '', '最後の動き ' + ago(c.last)));
+    var st = el('span', 'chip' + (c.needs > 0 ? ' warn' : ''));
+    st.appendChild(el('span', 'state-dot ' + c.dot));
+    st.appendChild(document.createTextNode(c.state));
+    m.appendChild(st);
+    var last = el('span', '', '最後の動き ' + ago(c.last));
+    lastLabels[c.key] = last;
+    m.appendChild(last);
     if (c.needs > 0) m.appendChild(el('span', '', ' · 要対応 ' + c.needs));
     k.appendChild(m);
     var idl = el('div', 'id', 'ID ' + c.id + ' ');
     idl.appendChild(copyButton(c.id));
     k.appendChild(idl);
-    c.entries.forEach(function (e) {
-      var row = el('div', 'entry');
-      var head = el('div');
-      head.appendChild(el('span', 'chip' + (e.blocked ? ' danger' : ''), KIND[e.kind]));
-      head.appendChild(el('span', 'when', clock(e.min) + '（' + ago(e.min) + '）'));
-      row.appendChild(head);
-      if (e.text.length > 40) {
-        var d = el('details');
-        d.appendChild(el('summary', '', e.text.slice(0, 40) + '…（全文を開く）'));
-        d.appendChild(el('div', '', e.text));
-        row.appendChild(d);
-      } else {
-        row.appendChild(el('div', '', e.text));
-      }
-      if (e.blocked) {
-        var b = el('div', 'blocked');
-        b.appendChild(el('div', '', '子は範囲を広げる頼みを出しています。答えは上の「いまあなたがすること」でも出せます。'));
-        var a = el('div', 'actions');
-        ['広げる…', '断る', '子に別の道を伝える…'].forEach(function (t) { var x = el('button', 'small', t); x.type = 'button'; a.appendChild(x); });
-        b.appendChild(a);
-        row.appendChild(b);
-      }
-      if (e.attach) {
-        row.appendChild(el('p', 'callout', '開き方は上の「いまあなたがすること」に、コマンドと写すボタンがあります。'));
-      }
-      k.appendChild(row);
-    });
+    var list = el('div');
+    list.id = 'list-' + c.key;
+    c.entries.forEach(function (e) { list.appendChild(entryRow(e)); });
+    k.appendChild(list);
     var more = el('details');
     more.appendChild(el('summary', '', 'この子への操作'));
     var acts = el('div', 'actions');
@@ -258,10 +373,57 @@ details>summary{cursor:pointer;color:var(--accent);font-size:13px}
     return k;
   }
   var cards = document.getElementById('cards');
-  CHILDREN.slice().sort(function (a, b) { return b.needs - a.needs; }).forEach(function (c) { cards.appendChild(card(c)); });
+  CHILDREN.slice().sort(function (a, b) { return b.needs - a.needs; }).forEach(function (c, i) { cards.appendChild(card(c, i)); });
   var dc = document.getElementById('done-cards');
-  DONE.forEach(function (c) { dc.appendChild(card(c)); });
+  DONE.forEach(function (c, i) { dc.appendChild(card(c, i)); });
 
+  // --- 関係図：指を置くと、そのノードのやり取りだけが浮かぶ。押すとカードへ ---
+  var svg = document.getElementById('graph');
+  var marks = svg.querySelectorAll('.msg, .m-label, .packet');
+  svg.querySelectorAll('.g-node').forEach(function (g) {
+    var key = g.dataset.node;
+    g.addEventListener('mouseenter', function () {
+      svg.classList.add('focus');
+      marks.forEach(function (m) { m.classList.toggle('on', m.dataset.a === key || m.dataset.b === key); });
+    });
+    g.addEventListener('mouseleave', function () { svg.classList.remove('focus'); });
+    g.addEventListener('click', function () {
+      var t = document.getElementById(g.dataset.card || '');
+      if (!t) return;
+      var det = t.closest('details');
+      if (det) det.open = true;
+      t.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash');
+    });
+  });
+
+  // --- 生きている感じ：孫から、ときどき進み具合が上ってくる（作り物） ---
+  var n = 0;
+  var steps = ['読み込みの失敗の試験を足した。', '境界の試験が通った。', '試験の名前をそろえた。'];
+  var live = setInterval(function () {
+    if (document.body.classList.contains('still')) return;
+    var list = document.getElementById('list-d');
+    var row = entryRow({ kind: 'progress', dir: 'up', min: 0, text: steps[n % steps.length] });
+    row.className = 'entry new';
+    list.insertBefore(row, list.firstChild);
+    lastLabels.d.textContent = '最後の動き いま';
+    var path = document.getElementById('u-d');
+    path.classList.remove('draw'); void path.getBBox(); path.classList.add('draw');
+    n += 1;
+    if (n >= 6) clearInterval(live);
+  }, 7000);
+
+  // --- 動きを止める・明暗 ---
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var motion = document.getElementById('motion');
+  function setStill(on) {
+    document.body.classList.toggle('still', on);
+    if (on) svg.pauseAnimations(); else svg.unpauseAnimations();
+    svg.querySelectorAll('.packet').forEach(function (p) { p.style.display = on ? 'none' : ''; });
+    motion.textContent = on ? '動きを戻す' : '動きを止める';
+  }
+  setStill(reduce.matches);
+  motion.addEventListener('click', function () { setStill(!document.body.classList.contains('still')); });
   document.getElementById('theme').addEventListener('click', function () {
     var r = document.documentElement;
     var dark = r.dataset.theme ? r.dataset.theme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
