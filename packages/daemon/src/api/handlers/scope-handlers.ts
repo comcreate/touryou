@@ -320,8 +320,18 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
           : `範囲の拡張の要求（${what}）は、作業を切り出して別に進めることになった。範囲の内側で進める`;
     const notifyId = `${requestId}/notify`;
     const before = alreadyApplied(log.state(), actor, notifyId);
+    // 種類（状態画面のやり取りの札。#115）
+    const kind =
+      decision === "approve"
+        ? ("extensionApproved" as const)
+        : decision === "reject"
+          ? ("extensionRejected" as const)
+          : ("extensionSplit" as const);
     const r = appendAtomically(log, deps.clock, notifyId, actor, [
-      { type: "node.instructed", payload: { nodeId: ext.nodeId, text } },
+      {
+        type: "node.instructed",
+        payload: { nodeId: ext.nodeId, text, kind },
+      },
     ]);
     if (!r.ok) {
       note(ext.nodeId, `判定の通知を記録できない: ${r.error.code}: ${r.error.cause}`);

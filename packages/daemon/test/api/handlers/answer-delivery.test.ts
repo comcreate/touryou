@@ -9,7 +9,11 @@ import {
   stateOf,
 } from "@touryou/core";
 import { describe, expect, it } from "vitest";
-import { answerText, recoverAnswerDeliveries } from "../../../src/api/handlers/answer-delivery.js";
+import {
+  answerRequestId,
+  answerText,
+  recoverAnswerDeliveries,
+} from "../../../src/api/handlers/answer-delivery.js";
 import {
   createInstructionDelivery,
   wasNotified,
@@ -415,6 +419,47 @@ describe("判断の回答の配送: 重なり・再送・回復", () => {
     expect(fake?.deliveredSeq).toBeUndefined();
   });
 
+  it("回答の指示には kind: answer を付ける（状態画面で答えと重ねない。#115）", async () => {
+    const r = rig();
+    const id = await r.decide();
+    await r.answer(id, { choice: "YAML" }, "x");
+    const real = r.log.state().instructions.find((i) => "system" in i.actor);
+    expect(real?.kind).toBe("answer");
+  });
+
+  it("種類を足す前に記録した回答の指示（kind なし）も、回復で同じ要求として引き、配送する（要求の番号のぶつかりにしない）", async () => {
+    const r = rig();
+    const id = await r.decide();
+    // 古い daemon が書いた形: 回答と、kind のない回答の指示（同じ requestId）。配送はまだ
+    expect(
+      r.log.append({
+        requestId: "old-answer",
+        actor: { human: true },
+        body: { type: "decision.answered", payload: { decisionId: id, answer: "YAML" } },
+      } as never).ok,
+    ).toBe(true);
+    const d = r.log.state().decisions[0];
+    if (d === undefined) throw new Error("no decision");
+    expect(
+      r.log.append({
+        requestId: answerRequestId(id),
+        actor: SYS,
+        body: { type: "node.instructed", payload: { nodeId: "a", text: answerText(d, "YAML") } },
+      }).ok,
+    ).toBe(true);
+    const out = await recoverAnswerDeliveries({
+      log: r.log,
+      clock,
+      deliver: r.delivery.deliver,
+      canDeliver: r.delivery.available,
+    });
+    // 種類を付けて再追記すると、要求の番号のぶつかり（requestIdConflict）になり、failed になる
+    expect(out.filter((o) => o.result === "failed")).toEqual([]);
+    const sys = r.log.state().instructions.filter((i) => "system" in i.actor);
+    expect(sys).toHaveLength(1);
+    expect(sys[0]?.kind).toBeUndefined();
+  });
+
   it("canDeliver を渡さないときは、届けない（安全側）", async () => {
     const r = rig({ withCanDeliver: false });
     const id = await r.decide();
@@ -489,5 +534,15 @@ describe("decision.answer の結果の delivery（回答を子に届けたか）
     const id = await r.decide();
     const res = await r.answer(id, { choice: "YAML" });
     expect(res.value).toMatchObject({ accepted: true, delivery: "skipped" });
+  });
+});
+
+describe("判断の答えの追加指示と状態画面（#115）", () => {
+  it("answerText の文は変えない（種類は payload の kind で持つ）", () => {
+    const text = answerText(
+      { decisionId: "d1", nodeId: "a", question: "q", options: ["x"] } as never,
+      "x",
+    );
+    expect(text.startsWith("【人間からの回答】判断 d1")).toBe(true);
   });
 });

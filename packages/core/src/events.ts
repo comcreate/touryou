@@ -176,7 +176,15 @@ export type EventBody =
   | {
       /** 追加指示の記録（`node.send`）。記録のみ。届ける操作はアダプタが別に行う。本文は `LIMITS.reportText` 以下。 */
       readonly type: "node.instructed";
-      readonly payload: { readonly nodeId: string; readonly text: string };
+      /**
+       * `kind`: daemon が、判断の答え・範囲の頼みの判定を子に届けるために書いた追加指示の種類（#115。状態画面のやり取りの札に使う）。
+       * daemon だけが付ける（親・人の追加指示の受け口 `node.send` は受け取らない）。ない（ふつうの指示・古い記録）は、ふつうの指示。
+       */
+      readonly payload: {
+        readonly nodeId: string;
+        readonly text: string;
+        readonly kind?: InstructionKind;
+      };
     }
   | {
       /** 受信箱の項目を解決済みにする（記録のみ。項目は消えない）。解決した者は封筒の `actor`。 */
@@ -544,12 +552,23 @@ export interface ToolDenialRecord {
 }
 
 /** 追加指示の記録。 */
+/** daemon が付ける追加指示の種類（`node.instructed` の `kind`。#115）。 */
+export const INSTRUCTION_KINDS = [
+  "answer",
+  "extensionApproved",
+  "extensionRejected",
+  "extensionSplit",
+] as const;
+export type InstructionKind = (typeof INSTRUCTION_KINDS)[number];
+
 export interface InstructionRecord {
   readonly seq: number;
   readonly at: string;
   readonly nodeId: string;
   readonly text: string;
   readonly actor: Actor;
+  /** daemon が付けた種類（`node.instructed` の `kind`）。ふつうの指示・古い記録には、ない。 */
+  readonly kind?: InstructionKind;
   /** 配送を記録したイベント（`node.instructionDelivered`）の `seq` と時刻。ある指示が配送済み。 */
   readonly deliveredSeq?: number;
   readonly deliveredAt?: string;
@@ -1810,15 +1829,27 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
     }
 
     case "node.instructed": {
-      const { nodeId, text } = p;
+      const { nodeId, text, kind } = p;
       if (!isId(nodeId)) return invalid(seq, "node.instructed の nodeId");
+      if (kind !== undefined && !(INSTRUCTION_KINDS as readonly unknown[]).includes(kind)) {
+        return invalid(seq, "node.instructed の kind");
+      }
       if (!isBoundedText(text, LIMITS.reportText) || text.trim() === "") {
         return invalid(seq, `node.instructed の text（空でない ${LIMITS.reportText} 文字以下）`);
       }
       const node = nodeAt(d, nodeId);
       if (node === undefined) return unknownNode(seq, nodeId);
       if (!RECORDABLE_STATES.has(node.state)) return notRecordable(seq, node, "追加指示");
-      d.instructions.push(freezeRecord({ seq, at: raw.at as string, nodeId, text, actor }));
+      d.instructions.push(
+        freezeRecord({
+          seq,
+          at: raw.at as string,
+          nodeId,
+          text,
+          actor,
+          ...(kind === undefined ? {} : { kind: kind as InstructionKind }),
+        }),
+      );
       return commit();
     }
 

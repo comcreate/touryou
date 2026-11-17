@@ -25,6 +25,9 @@ const KIND_NAMES: Readonly<Record<string, string>> = {
   decision: "判断を求む",
   extension: "範囲の頼み",
   answer: "答え",
+  approved: "許可",
+  rejected: "却下",
+  split: "切り出し",
 };
 
 /**

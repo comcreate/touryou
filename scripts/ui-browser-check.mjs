@@ -602,7 +602,7 @@ const extConfirm = await confirmText();
 ops.ext1ConfirmShowsTarget = extConfirm.includes("src/ok.ts") && extConfirm.includes("承認");
 await pageO.getByRole("button", { name: "この内容で送る" }).click();
 await pageO.waitForFunction(
-  () => document.getElementById("notice").innerText.includes("拡張要求を承認しました"),
+  () => document.getElementById("notice").innerText.includes("範囲の頼みを承認しました"),
   null,
   { timeout: 5000 },
 );
@@ -629,7 +629,7 @@ const sendBtn = () => pageO.locator("#confirm button.primary");
 const typedArea = () => pageO.locator("#confirm textarea");
 const arch1 = pageO.locator("#purge .card", { hasText: "arch1" }).first();
 await arch1.waitFor();
-await arch1.getByRole("button", { name: "最終削除…（墓標は既定）" }).click();
+await arch1.getByRole("button", { name: "最終削除…（消した跡は設定の既定）" }).click();
 await pageO.locator("#confirm").waitFor();
 const purgeConfirm = await confirmText();
 ops.purgeConfirmShowsPreview =
@@ -689,7 +689,7 @@ ops.reasonDraftKeptAfterRerender =
 await pageO.route("**/v1/request", (route) => route.abort());
 await pageO
   .locator("#purge .card", { hasText: "arch2" })
-  .getByRole("button", { name: "最終削除…（墓標は既定）" })
+  .getByRole("button", { name: "最終削除…（消した跡は設定の既定）" })
   .click();
 await pageO.waitForFunction(
   () => document.getElementById("notice").className === "notice bad",
@@ -703,7 +703,7 @@ await pageO.unroute("**/v1/request");
 // 実行できない木（arch2）: 理由が出て、打ち込みの欄もなく、送れない
 await pageO
   .locator("#purge .card", { hasText: "arch2" })
-  .getByRole("button", { name: "最終削除…（墓標は既定）" })
+  .getByRole("button", { name: "最終削除…（消した跡は設定の既定）" })
   .click();
 await pageO.locator("#confirm").waitFor();
 const blockedText = await confirmText();
