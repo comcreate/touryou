@@ -476,13 +476,13 @@ export function createSpawner(deps: SpawnHandlerDeps) {
         return fail(
           "scopeNotSubset",
           "子の範囲が、根の範囲（設定ファイル config.json の rootScope）に収まらない（コマンド・書き込み可能な場所・禁止の場所）",
-          "子の範囲を、根の範囲の内側に絞って指定し直す",
+          "子の範囲を、根の範囲の内側に絞って指定し直す（forbiddenLocations には、根の禁止の場所をすべて含める。禁止は根から引き継ぐ）",
           "根の範囲を広げるなら、人に確かめてから config.json の rootScope（allowedCommands・writableLocations）を直し、daemon を起動し直す（起動し直すまで、変更は効かない）",
         );
       return fail(
         "scopeNotSubset",
         "子の範囲が、親の範囲に収まらない（コマンド・書き込み可能な場所・禁止の場所）",
-        "親の範囲の内側に絞って指定し直す",
+        "親の範囲の内側に絞って指定し直す（forbiddenLocations には、親の禁止の場所をすべて含める。禁止は親から引き継ぐ）",
       );
     }
 

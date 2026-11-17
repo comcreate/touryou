@@ -66,7 +66,7 @@ const USAGE = `使い方:
       --expect <digest>  表示した先端の照合用の値（表示に出る 12 桁の 16 進）。指示の時点の先端から計算し直した値と違えば、何も指示しない
   touryou purge-hold <nodeId> [--until <日時> | --days <日数>] [--reason <理由>] [--request-id <id>]
       自動の最終削除（autoPurge）を、この木について保留する。nodeId は、予告に出ている木の根（アーカイブ済みで、親がアーカイブされていないノード）。
-      有効な予告は、その場で取り下げる。人間の touryou purge は、保留に関係なく実行できる（保留を無視したことは監査に残る）。
+      有効な予告は、その場で取り下げる。人間の "$HOME/.touryou/current/bin/touryou" purge は、保留に関係なく実行できる（保留を無視したことは監査に残る）。
       --until   保留の期限（ISO 8601 UTC。例: 2026-12-01T00:00:00Z。現在より後、365 日先まで）。省略すると無期限
       --days    保留の日数（1〜365 の整数。いまから数える。--until とは同時に指定できない。期限は daemon の時計で計算し、365 日のときは 1 秒短くなる。実際の期限は、結果に出る）
       --reason  理由（200 文字まで）
@@ -78,13 +78,13 @@ const USAGE = `使い方:
       --note  根拠（200 文字まで。例: 「Desktop でアーカイブした」）
   touryou accept <nodeId> [--request-id <id>]
       完了報告済み（done）の子を、人間が受理する（done → verified。取り消せない）。確認のために作った子の片付けに使う。
-      受理すると、子のトークン・フック専用のトークンが失効し、Desktop の子の引き出しが消える。そのあとは touryou reclaim で回収できる。
+      受理すると、子のトークン・フック専用のトークンが失効し、Desktop の子の引き出しが消える。そのあとは "$HOME/.touryou/current/bin/touryou" reclaim で回収できる。
       差し戻しは、親の統合ノードだけができる。done 以外の子は invalidTransition（受理できない）
   touryou hook-unbind <nodeId> [--request-id <id>]
       子のフック（plugin のファイルで設定するフック）の session_id の結び付けを外す。/clear・--resume で session_id が変わって、
       フックが拒否され続けるときに使う。次に来たセッションに結び直す。外した者（人間）が記録に残る。
       トークンが漏れた疑いがあるときは、外さずに、子を止めてトークンを失効させる
-  eval "$(touryou hook-env <nodeId>)"
+  eval "$("$HOME/.touryou/current/bin/touryou" hook-env <nodeId>)"
       手動の CLI セッション用に、その子のフック専用のトークンを発行し、環境変数 TOURYOU_DAEMON_URL・TOURYOU_NODE_TOKEN を設定する
       （eval で使うときだけ。標準出力が端末なら、トークンを出さずに失敗する）。そのあと、子の作業ツリーで plugin つきの claude を起動する。
       発行し直すと、古いフック用トークンは無効になり、フックの結び付けも外れる。CLI の子（childRuntime: cli）の、動作中の子だけ
@@ -92,9 +92,9 @@ const USAGE = `使い方:
       木のノードを一覧で表示する（読み取りだけ。tree.list の人間版）。ID・役割・状態・親・依存・未解決の数を表で出す。
       <nodeId> を付けると、そのノード 1 つの詳しい状態を出す。--json で機械可読の JSON。
   touryou state <nodeId> [--json]
-      1 つのノードの詳しい状態を表示する（touryou tree <nodeId> と同じ。読み取りだけ）。
+      1 つのノードの詳しい状態を表示する（"$HOME/.touryou/current/bin/touryou" tree <nodeId> と同じ。読み取りだけ）。
   touryou decisions [--json]
-      未解決の判断要求の一覧を表示する（読み取りだけ）。答えるには touryou answer <decisionId>。--json で JSON。
+      未解決の判断要求の一覧を表示する（読み取りだけ）。答えるには "$HOME/.touryou/current/bin/touryou" answer <decisionId>。--json で JSON。
   touryou answer <decisionId> [(--text <文> | --choice <選択肢>) --yes --expect <digest>] [--request-id <id>]
       判断要求に答える（decision.answer の人間版）。--yes がなければ、判断の中身（ノード・子の状態・問い・選択肢）を表示するだけで答えない。
       --text    自由記述で答える（選択肢のない判断、または選択肢以外で答えるとき）
@@ -110,7 +110,7 @@ const USAGE = `使い方:
       --since    この seq より後の項目だけ（差分。既定 0）
   touryou discarded list
       強制の回収で破棄した成果の保管（refs/touryou/discarded/*）の一覧: 名前・ノード・先端の SHA・日時・件名（コミットメッセージ由来の、信頼できない入力）。孤立（ノードがもうない）も出る。
-      保管は、最終削除（touryou purge）のときに、その木のノードの分が消える。数の上限（daemon の設定 discardedRefsMax）に達すると、強制の回収は失敗する
+      保管は、最終削除（"$HOME/.touryou/current/bin/touryou" purge）のときに、その木のノードの分が消える。数の上限（daemon の設定 discardedRefsMax）に達すると、強制の回収は失敗する
   touryou discarded restore <nodeId|key> [--branch <名前>] [--request-id <id>]
       保管している先端から、新しいブランチを作る（作成だけ。既存のブランチは上書きしない。保管は残る）。既定の名前は touryou/restored/<key>
   touryou discarded drop <nodeId|key> [--yes] [--request-id <id>]
@@ -558,7 +558,7 @@ function describePreview(p: Preview, tombstone: boolean | undefined): string {
       : `  自動の最終削除は保留中（${p.hold.until === undefined ? "無期限" : `${terminalSafe(p.hold.until, 40)} まで`}${p.hold.reason === undefined ? "" : `。理由: 「${terminalSafe(p.hold.reason, 200)}」`}）。人間のこのコマンドは、保留を無視して削除する（無視したことは監査に残る）\n`) +
     (p.discardedRefs === undefined || p.discardedRefs === 0
       ? ""
-      : `  保管している、破棄した成果（refs/touryou/discarded/*）: ${p.discardedRefs} 件が、一緒に消える。取り出すなら、先に touryou discarded restore（touryou discarded list で確かめる）\n`) +
+      : `  保管している、破棄した成果（refs/touryou/discarded/*）: ${p.discardedRefs} 件が、一緒に消える。取り出すなら、先に "$HOME/.touryou/current/bin/touryou" discarded restore（"$HOME/.touryou/current/bin/touryou" discarded list で確かめる）\n`) +
     "  物理削除の範囲: 対象のノードに関するイベントの行（本文を含む）を、ログのファイルから消す（取り消せない）。バックアップ・OS のコピーには残りうる\n" +
     blockers
   );
@@ -667,7 +667,7 @@ async function runTree(
       return {
         exitCode: 1,
         stdout: "",
-        stderr: `ノードが見つからない: ${terminalSafe(target, 128)}（touryou tree で一覧を確認する）\n`,
+        stderr: `ノードが見つからない: ${terminalSafe(target, 128)}（"$HOME/.touryou/current/bin/touryou" tree で一覧を確認する）\n`,
       };
     }
     return json
@@ -725,7 +725,8 @@ async function runDecisions(
     (v): v is { items: readonly unknown[] } => isRecord(v) && Array.isArray(v.items),
   );
   if (res.kind === "failure") return failed(res.failure);
-  if (res.kind === "unconfirmed") return readUnconfirmed(res.reason, "touryou decisions");
+  if (res.kind === "unconfirmed")
+    return readUnconfirmed(res.reason, '"$HOME/.touryou/current/bin/touryou" decisions');
   const decisions = res.value.items
     .filter(isInboxItem)
     .filter((it) => it.kind === "decision" && it.ref !== undefined);
@@ -776,7 +777,7 @@ async function runDecisions(
   });
   return {
     exitCode: 0,
-    stdout: `未解決の判断要求（${decisions.length} 件）:\n${lines.join("\n")}\n答えるには、まず中身を表示する: touryou answer <decisionId>\n`,
+    stdout: `未解決の判断要求（${decisions.length} 件）:\n${lines.join("\n")}\n答えるには、まず中身を表示する: "$HOME/.touryou/current/bin/touryou" answer <decisionId>\n`,
     stderr: "",
   };
 }
@@ -812,7 +813,7 @@ async function runAnswer(
   );
   if (got.kind === "failure") return failed(got.failure);
   if (got.kind === "unconfirmed") {
-    return readUnconfirmed(got.reason, `touryou answer ${decisionId}`);
+    return readUnconfirmed(got.reason, `"$HOME/.touryou/current/bin/touryou" answer ${decisionId}`);
   }
   const d = got.value;
   if (d.status !== "open") {
@@ -826,7 +827,7 @@ async function runAnswer(
   const digest = decisionDigest(d);
   const state = (await nodeStates(deps))?.get(d.nodeId);
   const preview = `${describeDecision(d)}\n${stateNote(state)}\n照合の値: ${digest}\n`;
-  const how = `touryou answer ${decisionId} --text <文>（または --choice <選択肢>） --yes --expect ${digest}`;
+  const how = `"$HOME/.touryou/current/bin/touryou" answer ${decisionId} --text <文>（または --choice <選択肢>） --yes --expect ${digest}`;
   if (!flags.has("--yes")) {
     return {
       exitCode: 0,
@@ -875,7 +876,7 @@ async function runAnswer(
   if (res.kind === "unconfirmed") {
     return unconfirmed(
       res.reason,
-      `touryou answer ${decisionId} ${choice !== undefined ? `--choice ${shellQuote(choice)}` : `--text ${shellQuote(text as string)}`} --yes --expect ${digest} --request-id ${id}`,
+      `"$HOME/.touryou/current/bin/touryou" answer ${decisionId} ${choice !== undefined ? `--choice ${shellQuote(choice)}` : `--text ${shellQuote(text as string)}`} --yes --expect ${digest} --request-id ${id}`,
       id,
     );
   }
@@ -928,7 +929,7 @@ async function runInbox(
     return {
       exitCode: 1,
       stdout: "",
-      stderr: `結果が確認できない（${res.reason}）。読み取りだけなので、そのまま再実行できる: touryou inbox（requestId: ${id}）\n`,
+      stderr: `結果が確認できない（${res.reason}）。読み取りだけなので、そのまま再実行できる: "$HOME/.touryou/current/bin/touryou" inbox（requestId: ${id}）\n`,
     };
   }
   const valid = res.value.items.filter(isInboxItem);
@@ -951,18 +952,20 @@ async function runInbox(
       }
     }
     if (offset >= sorted.length) {
-      lines.push(`--offset が件数（${sorted.length}）以上。先頭から: touryou inbox`);
+      lines.push(
+        `--offset が件数（${sorted.length}）以上。先頭から: "$HOME/.touryou/current/bin/touryou" inbox`,
+      );
     } else {
       const end = offset + page.length;
       lines.push(`全 ${sorted.length} 件（未解決）のうち ${offset + 1}〜${end} 件目`);
       if (end < sorted.length) {
         lines.push(
-          `続き: touryou inbox --offset ${end}${limit === INBOX_DEFAULT_LIMIT ? "" : ` --limit ${limit}`}${since === 0 ? "" : ` --since ${since}`}${detail ? " --detail" : ""}`,
+          `続き: "$HOME/.touryou/current/bin/touryou" inbox --offset ${end}${limit === INBOX_DEFAULT_LIMIT ? "" : ` --limit ${limit}`}${since === 0 ? "" : ` --since ${since}`}${detail ? " --detail" : ""}`,
         );
       }
     }
     lines.push(
-      "操作は画面（/ui）から: 判断の回答・範囲の承認。完了の受理は touryou accept <nodeId>",
+      '操作は画面（/ui）から: 判断の回答・範囲の承認。完了の受理は "$HOME/.touryou/current/bin/touryou" accept <nodeId>',
     );
   }
   return {
@@ -1036,7 +1039,11 @@ export async function runCommand(
     if (res.kind !== "ok") {
       return res.kind === "failure"
         ? failed(res.failure)
-        : unconfirmed(res.reason, "touryou discarded list", requestId ?? "-");
+        : unconfirmed(
+            res.reason,
+            '"$HOME/.touryou/current/bin/touryou" discarded list',
+            requestId ?? "-",
+          );
     }
     return { exitCode: 0, stdout: describeDiscarded(res.value), stderr: "" };
   }
@@ -1095,7 +1102,9 @@ export async function runCommand(
       return failed({
         code: "multipleKept",
         cause: `ノード ${terminalSafe(nodeId, 128)} の保管が複数ある（${matches.map((m) => terminalSafe(m.key, 128)).join("、")}）`,
-        nextActions: ["touryou discarded list で確かめて、鍵（key）を指定する"],
+        nextActions: [
+          '"$HOME/.touryou/current/bin/touryou" discarded list で確かめて、鍵（key）を指定する',
+        ],
       } as Failure);
     }
     const item = matches[0];
@@ -1103,7 +1112,7 @@ export async function runCommand(
       return failed({
         code: "notFound",
         cause: "その保管はない",
-        nextActions: ["touryou discarded list で名前を確かめる"],
+        nextActions: ['"$HOME/.touryou/current/bin/touryou" discarded list で名前を確かめる'],
       } as Failure);
     }
     const shown = `消す保管: ${terminalSafe(item.key, 128)}（ノード ${item.nodeId === undefined ? "孤立" : terminalSafe(item.nodeId, 128)}。先端 ${item.tip}）\n`;
@@ -1112,7 +1121,7 @@ export async function runCommand(
         exitCode: 2,
         stdout: shown,
         stderr:
-          "保管を消すと、取り戻せない（先に touryou discarded restore で取り出せる）。上の対象でよければ --yes を付けて再実行する\n",
+          '保管を消すと、取り戻せない（先に "$HOME/.touryou/current/bin/touryou" discarded restore で取り出せる）。上の対象でよければ --yes を付けて再実行する\n',
       };
     }
     // 表示した先端を渡す（表示のあとで保管が変わっていたら、消さない）。鍵で指定する（ノード ID だと、複数あるときに曖昧）。
@@ -1158,7 +1167,7 @@ export async function runCommand(
     if (res.kind !== "ok") return fail(res);
     return {
       exitCode: 0,
-      stdout: `自動の最終削除を保留した: ${nodeId}（${res.value.until === undefined ? "無期限" : `${res.value.until} まで`}）\n有効な予告は取り下げた。人間の touryou purge は、保留に関係なく実行できる\nrequestId: ${id}\n`,
+      stdout: `自動の最終削除を保留した: ${nodeId}（${res.value.until === undefined ? "無期限" : `${res.value.until} まで`}）\n有効な予告は取り下げた。人間の "$HOME/.touryou/current/bin/touryou" purge は、保留に関係なく実行できる\nrequestId: ${id}\n`,
       stderr: "",
     };
   }
@@ -1178,7 +1187,7 @@ export async function runCommand(
       return {
         exitCode: 2,
         stdout: "",
-        stderr: `hook-env は eval で使う: eval "$(touryou hook-env ${nodeId})"（標準出力が端末のときは、トークンを出さない）\n`,
+        stderr: `hook-env は eval で使う: eval "$("$HOME/.touryou/current/bin/touryou" hook-env ${nodeId})"（標準出力が端末のときは、トークンを出さない）\n`,
       };
     }
     const res = await invoke(deps.client, id, "node.hookToken", { nodeId }, isHookToken);
@@ -1214,7 +1223,7 @@ export async function runCommand(
     if (res.kind !== "ok") return fail(res);
     return {
       exitCode: 0,
-      stdout: `受理した: ${nodeId}（状態: ${terminalSafe(res.value.state, 40)}）\n子のトークンは失効した。回収は touryou reclaim ${nodeId}\nrequestId: ${id}\n`,
+      stdout: `受理した: ${nodeId}（状態: ${terminalSafe(res.value.state, 40)}）\n子のトークンは失効した。回収は "$HOME/.touryou/current/bin/touryou" reclaim ${nodeId}\nrequestId: ${id}\n`,
       stderr: "",
     };
   }
@@ -1274,7 +1283,7 @@ export async function runCommand(
       return {
         exitCode: 2,
         stdout: shown,
-        stderr: `${values.has("--expect") ? "--expect は、表示だけ（実行には --yes が要る）。" : ""}破棄の判断は取り消せない（停止したノードの作業ツリーとブランチが、強制して消える）。上の内容でよければ、表示の値を付けて再実行する: touryou reclaim ${nodeId} --yes --expect ${digest}\n`,
+        stderr: `${values.has("--expect") ? "--expect は、表示だけ（実行には --yes が要る）。" : ""}破棄の判断は取り消せない（停止したノードの作業ツリーとブランチが、強制して消える）。上の内容でよければ、表示の値を付けて再実行する: "$HOME/.touryou/current/bin/touryou" reclaim ${nodeId} --yes --expect ${digest}\n`,
       };
     }
     if (expect === undefined) {
@@ -1286,7 +1295,7 @@ export async function runCommand(
       return {
         exitCode: 1,
         stdout: shown,
-        stderr: `表示した内容のあとで、先端が変わっている（照合の値が違う）。何も指示していない。上の内容を確かめ直して、よければ再実行する: touryou reclaim ${nodeId} --yes --expect ${digest}\n`,
+        stderr: `表示した内容のあとで、先端が変わっている（照合の値が違う）。何も指示していない。上の内容を確かめ直して、よければ再実行する: "$HOME/.touryou/current/bin/touryou" reclaim ${nodeId} --yes --expect ${digest}\n`,
       };
     }
     // 表示した先端（プレビューの tips）を渡す。daemon が、今の先端と照合する（違えば tipMismatch）。
@@ -1324,7 +1333,7 @@ export async function runCommand(
       nextActions: [
         "画面の木の一覧に、そのノードがないか確かめる。ないなら、前回の最終削除は成功している",
         "墓標を残した場合は、墓標の記録（削除した日時・木の根）が残っている。残さない場合も、標識（削除した日時・ノード数）が記録に残る",
-        "破棄した成果を保管していた木は、touryou discarded list で、その木のノードの保管が（孤立として残っていないか）確かめる",
+        '破棄した成果を保管していた木は、"$HOME/.touryou/current/bin/touryou" discarded list で、その木のノードの保管が（孤立として残っていないか）確かめる',
         ...preview.failure.nextActions,
       ] as unknown as Failure["nextActions"],
     } as Failure);
@@ -1346,7 +1355,7 @@ export async function runCommand(
     return {
       exitCode: 2,
       stdout: shown,
-      stderr: `${values.has("--expect") ? "--expect は、表示だけ（実行には --yes が要る）。" : ""}最終削除は取り消せない。上の対象でよければ、表示の値を付けて再実行する: touryou purge ${nodeId} --yes --expect ${digest}\n`,
+      stderr: `${values.has("--expect") ? "--expect は、表示だけ（実行には --yes が要る）。" : ""}最終削除は取り消せない。上の対象でよければ、表示の値を付けて再実行する: "$HOME/.touryou/current/bin/touryou" purge ${nodeId} --yes --expect ${digest}\n`,
     };
   }
   const expect = values.get("--expect");
@@ -1359,7 +1368,7 @@ export async function runCommand(
     return {
       exitCode: 1,
       stdout: shown,
-      stderr: `表示した内容のあとで、削除される木が変わっている（照合の値が違う）。何も削除していない。上の内容を確かめ直して、よければ再実行する: touryou purge ${nodeId} --yes --expect ${digest}\n`,
+      stderr: `表示した内容のあとで、削除される木が変わっている（照合の値が違う）。何も削除していない。上の内容を確かめ直して、よければ再実行する: "$HOME/.touryou/current/bin/touryou" purge ${nodeId} --yes --expect ${digest}\n`,
     };
   }
 

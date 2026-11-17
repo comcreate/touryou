@@ -21,6 +21,7 @@ export TOURYOU_HUMAN_TOKEN="$(cat /path/to/state/human-token)"   # トークン�
 touryou reclaim <nodeId>
 ```
 
+- CLI が出す案内（「再実行する」など）のコマンドは、本体の場所 `"$HOME/.touryou/current/bin/touryou"` で始まる（PATH に `touryou` がなくても、そのまま貼って動く。#115）。
 - **環境変数は、なくてよい**（#115）。`touryou reclaim` などの人のコマンドは、`touryou ui` と同じく、`$HOME/.touryou/config.json`（`TOURYOU_DAEMON_CONFIG` があればそれ）の `stateDir` から、窓口（`port`）・人間のトークン（`human-token`。自分だけが読める・リンクでないファイルだけ）・身元の確認の秘密を自分で読む。環境変数があれば、それを先に使う。トークンは、引数・標準出力・標準エラー・履歴に出さない。
 - 窓口・人間のトークンが、環境変数にも設定にもない、または `TOURYOU_DAEMON_CONFIG` がない（開発のビルドで `TOURYOU_CLI_ALLOW_UNVERIFIED=1` でない）ときは、何も送らずに終了コード 2。
 - daemon の身元を確かめられないとき（`daemon_identity_failed`）は、トークンを送らずに終了コード 1（操作は実行されていない）。

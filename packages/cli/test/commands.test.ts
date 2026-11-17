@@ -648,7 +648,9 @@ describe("touryou purge の照合（--yes には --expect）", () => {
     const shown = await runCommand(["purge", "n1"], deps(a.client));
     expect(shown.exitCode).toBe(2);
     expect(shown.stdout).toContain(NODES_DG);
-    expect(shown.stderr).toContain(`touryou purge n1 --yes --expect ${NODES_DG}`);
+    expect(shown.stderr).toContain(
+      `"$HOME/.touryou/current/bin/touryou" purge n1 --yes --expect ${NODES_DG}`,
+    );
     const b = happy();
     const dry = await runCommand(["purge", "n1", "--dry-run"], deps(b.client));
     expect(dry.stdout).toContain(NODES_DG);
@@ -734,7 +736,7 @@ describe("touryou purge の照合（--yes には --expect）", () => {
     );
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("前回の実行が成功して");
-    expect(r.stderr).toContain("touryou discarded list");
+    expect(r.stderr).toContain('"$HOME/.touryou/current/bin/touryou" discarded list');
     expect(r.stderr).toContain("ID を確認する");
     expect(ops(a.sent)).toEqual(["node.purgePreview"]); // 事前確認を飛ばす経路はない。node.purge は呼ばない
     const b = fakeClient({ "node.purgePreview": notFound });
@@ -936,7 +938,7 @@ describe("purge-hold・purge-release（自動の最終削除の保留）", () =>
       });
       expect(r.exitCode).toBe(2);
       expect(r.stdout).toBe("");
-      expect(r.stderr).toContain('eval "$(touryou hook-env a)"');
+      expect(r.stderr).toContain('eval "$("$HOME/.touryou/current/bin/touryou" hook-env a)"');
       expect(a.sent).toEqual([]);
     }
   });
@@ -1242,7 +1244,7 @@ describe("touryou inbox（FR_012）", () => {
     expect(lines[1]).toContain("[失敗] failure");
     expect(lines[2]).toContain("[進捗] progress");
     expect(r.stdout).toContain("全 3 件");
-    expect(r.stdout).toContain("touryou accept");
+    expect(r.stdout).toContain('"$HOME/.touryou/current/bin/touryou" accept');
   });
 
   it("空なら『未解決の項目はありません』（終了コード 0）", async () => {
@@ -1255,7 +1257,9 @@ describe("touryou inbox（FR_012）", () => {
     const { client, sent } = inbox([item(1, "info"), item(2, "info"), item(3, "info")]);
     const r = await runCommand(["inbox", "--limit", "2", "--since", "5"], deps(client));
     expect(sent[0]?.params).toEqual({ sinceSeq: 5 });
-    expect(r.stdout).toContain("続き: touryou inbox --offset 2 --limit 2 --since 5");
+    expect(r.stdout).toContain(
+      '続き: "$HOME/.touryou/current/bin/touryou" inbox --offset 2 --limit 2 --since 5',
+    );
     const r2 = await runCommand(
       ["inbox", "--limit", "2", "--offset", "2"],
       deps(inbox([item(1, "info"), item(2, "info"), item(3, "info")]).client),
@@ -1323,7 +1327,9 @@ describe("touryou inbox（FR_012）", () => {
     for (const off of ["3", "10"]) {
       const r = await runCommand(["inbox", "--offset", off], deps(three()));
       expect(r.exitCode).toBe(0);
-      expect(r.stdout).toContain("--offset が件数（3）以上。先頭から: touryou inbox");
+      expect(r.stdout).toContain(
+        '--offset が件数（3）以上。先頭から: "$HOME/.touryou/current/bin/touryou" inbox',
+      );
       expect(r.stdout).not.toContain("0〜");
     }
   });

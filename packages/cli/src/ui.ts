@@ -35,7 +35,7 @@ const fail = (cause: string, ...next: string[]): CommandResult => ({
 
 const NOT_MAC = fail(
   "ブラウザを開けない（この端末では、既定のブラウザを開けない。Claude Code がクラウドで動いている など）",
-  "Mac のターミナルで touryou ui を実行してください（Claude Code では /touryou:ui）",
+  'Mac のターミナルで "$HOME/.touryou/current/bin/touryou" ui を実行してください（Claude Code では /touryou:ui）',
 );
 
 export async function runUi(argv: readonly string[], deps: UiDeps): Promise<CommandResult> {
@@ -43,7 +43,8 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
     return {
       exitCode: 2,
       stdout: "",
-      stderr: "touryou ui は引数を取らない（トークン・URL を引数で渡さない）\n",
+      stderr:
+        '"$HOME/.touryou/current/bin/touryou" ui は引数を取らない（トークン・URL を引数で渡さない）\n',
     };
   }
   const read =
@@ -79,8 +80,8 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
   } catch {
     return fail(
       "daemon のポートが分からない（daemon が動いていない・起動の途中）",
-      "daemon を起動する（/touryou:start、常駐なら touryou launchd status で確かめる）",
-      "起動したら、もう一度 touryou ui を実行する",
+      'daemon を起動する（/touryou:start、常駐なら "$HOME/.touryou/current/bin/touryou" launchd status で確かめる）',
+      '起動したら、もう一度 "$HOME/.touryou/current/bin/touryou" ui を実行する',
     );
   }
   let token: string;
@@ -105,13 +106,13 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
   if (!v.ok && v.kind === "transient") {
     return fail(
       "daemon に届かない（止まっているか、起動し直している途中。トークンは送っていない）",
-      "daemon が動いているか確かめる（/touryou:status）。戻ったら、もう一度 touryou ui を実行する",
+      'daemon が動いているか確かめる（/touryou:status）。戻ったら、もう一度 "$HOME/.touryou/current/bin/touryou" ui を実行する',
     );
   }
   if (!v.ok) {
     return fail(
       "daemon の身元を確かめられない（ポートの相手が、本物の daemon でない恐れ。トークンは送っていない）",
-      "daemon を起動し直してから、もう一度 touryou ui を実行する",
+      'daemon を起動し直してから、もう一度 "$HOME/.touryou/current/bin/touryou" ui を実行する',
       "直らなければ、ポートを使っている別のプログラムがないか確かめる",
     );
   }
@@ -129,11 +130,14 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
     if (id !== v.daemonId) {
       return fail(
         "応答した daemon が、確かめた daemon と違う",
-        "daemon を起動し直してから、もう一度 touryou ui を実行する",
+        'daemon を起動し直してから、もう一度 "$HOME/.touryou/current/bin/touryou" ui を実行する',
       );
     }
     if (res.status === 429) {
-      return fail("要求が多すぎる", "しばらく待ってから、もう一度 touryou ui を実行する");
+      return fail(
+        "要求が多すぎる",
+        'しばらく待ってから、もう一度 "$HOME/.touryou/current/bin/touryou" ui を実行する',
+      );
     }
     if (!res.ok) {
       return fail(
@@ -149,7 +153,7 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
   if (ticket === undefined || !TICKET_SHAPE.test(ticket)) {
     return fail(
       "daemon からチケットを受け取れなかった",
-      "daemon が動いているか確かめてから、もう一度 touryou ui を実行する",
+      'daemon が動いているか確かめてから、もう一度 "$HOME/.touryou/current/bin/touryou" ui を実行する',
     );
   }
   const opened = (deps.openUrl ?? (() => false))(`${daemonUrl}/ui#ticket=${ticket}`);
@@ -157,7 +161,7 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
   return {
     exitCode: 0,
     stdout:
-      "状態画面を、既定のブラウザで開きました（60 秒のうちに開かないと、使えなくなります。そのときは、もう一度 touryou ui を実行してください）。\n画面を再読み込みしたときも、touryou ui で開き直してください。\n",
+      '状態画面を、既定のブラウザで開きました（60 秒のうちに開かないと、使えなくなります。そのときは、もう一度 "$HOME/.touryou/current/bin/touryou" ui を実行してください）。\n画面を再読み込みしたときも、"$HOME/.touryou/current/bin/touryou" ui で開き直してください。\n',
     stderr: "",
   };
 }

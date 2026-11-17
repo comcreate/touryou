@@ -70,7 +70,7 @@ type Sub = (typeof SERVICE_SUBCOMMANDS)[number];
 
 /** apply・restart が途中で止まったときの状態の案内。 */
 const PARTIAL =
-  "daemon は読み込み済みのまま（KeepAlive で動き続けうる）。止めるなら touryou launchd stop、直してからやり直すなら touryou launchd apply --yes";
+  'daemon は読み込み済みのまま（KeepAlive で動き続けうる）。止めるなら "$HOME/.touryou/current/bin/touryou" launchd stop、直してからやり直すなら "$HOME/.touryou/current/bin/touryou" launchd apply --yes';
 
 const fail = (cause: string, exitCode: 1 | 2 = 2, stdout = ""): CommandResult => ({
   exitCode,
@@ -230,7 +230,7 @@ async function statusLines(ctx: Ctx): Promise<{ lines: string[]; ok: boolean }> 
     // 止めた後に restart を案内されないように、戻し方をここで出す（restart は読み込まれていないと使えない）
     lines.push(
       ctx.units.every((u) => lstatOr(u.plistDest) !== undefined)
-        ? "読み込まれていない（stop で止めた後）。次のログインで、また動く。すぐ動かすなら touryou launchd apply --yes（利用者の同意のあとだけ）。restart は、読み込まれていないので使えない"
+        ? '読み込まれていない（stop で止めた後）。次のログインで、また動く。すぐ動かすなら "$HOME/.touryou/current/bin/touryou" launchd apply --yes（利用者の同意のあとだけ）。restart は、読み込まれていないので使えない'
         : "読み込まれていない（常駐にしていない）。常駐にするなら /setup の手順 3-A。restart は、読み込まれていないので使えない",
     );
   }
@@ -367,7 +367,7 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
   const missing = ctx.units.map((u) => u.plistSrc).filter((p) => !isRegular(p));
   if (missing.length > 0) {
     return fail(
-      `touryou launchd init の生成物がない（または通常のファイルでない）:\n${missing.map((p) => `  ${p}`).join("\n")}\n先に touryou launchd init を実行する`,
+      `"$HOME/.touryou/current/bin/touryou" launchd init の生成物がない（または通常のファイルでない）:\n${missing.map((p) => `  ${p}`).join("\n")}\n先に "$HOME/.touryou/current/bin/touryou" launchd init を実行する`,
       1,
     );
   }
@@ -375,13 +375,13 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
     const text = readOr(u.plistSrc) ?? "";
     if (isLegacyPlist(ctx, u, text)) {
       return fail(
-        `${u.plistSrc} が、古い形（run-daemon.sh か bin/node を起こす。v0.1.1 まで）のまま。同じ --org・--path-prefix で touryou launchd init を実行して、新しい形に置き換えてから、やり直す`,
+        `${u.plistSrc} が、古い形（run-daemon.sh か bin/node を起こす。v0.1.1 まで）のまま。同じ --org・--path-prefix で "$HOME/.touryou/current/bin/touryou" launchd init を実行して、新しい形に置き換えてから、やり直す`,
         1,
       );
     }
     if (!isGeneratedPlist(ctx, u, text)) {
       return fail(
-        `${u.plistSrc} が、touryou launchd init の生成するものと違う（--org〔${u.label}〕が違う・手で直した）。同じ --org で touryou launchd init を実行し直す`,
+        `${u.plistSrc} が、"$HOME/.touryou/current/bin/touryou" launchd init の生成するものと違う（--org〔${u.label}〕が違う・手で直した）。同じ --org で "$HOME/.touryou/current/bin/touryou" launchd init を実行し直す`,
         1,
       );
     }
@@ -419,7 +419,7 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
       toReplace.push(u);
     } else if (dest === undefined || dest !== src) {
       return fail(
-        `${u.plistDest} が、生成した plist と違う（または通常のファイルでない）。何も変えずに止めた。中身を確かめ、要らなければ touryou launchd uninstall --yes で外してから、やり直す`,
+        `${u.plistDest} が、生成した plist と違う（または通常のファイルでない）。何も変えずに止めた。中身を確かめ、要らなければ "$HOME/.touryou/current/bin/touryou" launchd uninstall --yes で外してから、やり直す`,
         1,
       );
     }
@@ -503,7 +503,7 @@ async function restart(ctx: Ctx): Promise<CommandResult> {
   for (const u of ctx.units) {
     if (!info(ctx, u).loaded) {
       return fail(
-        `${u.label} が読み込まれていない。先に touryou launchd apply --yes を実行する`,
+        `${u.label} が読み込まれていない。先に "$HOME/.touryou/current/bin/touryou" launchd apply --yes を実行する`,
         1,
         `${out.join("\n")}\n`,
       );
@@ -553,7 +553,7 @@ function stop(ctx: Ctx): CommandResult {
   if (err !== undefined) return fail(err, 1, `${out.join("\n")}\n`);
   out.push(
     "",
-    "plist は LaunchAgents に残っているので、次のログインで、また動く。常駐をやめるなら touryou launchd uninstall --yes",
+    'plist は LaunchAgents に残っているので、次のログインで、また動く。常駐をやめるなら "$HOME/.touryou/current/bin/touryou" launchd uninstall --yes',
   );
   return { exitCode: 0, stdout: `${out.join("\n")}\n`, stderr: "" };
 }
@@ -590,7 +590,7 @@ function uninstall(ctx: Ctx): CommandResult {
         srcOk &&
         (t === src || (isLegacyPlist(ctx, u, t) && pathValueOf(t) === pathValueOf(src ?? ""))),
       src === undefined
-        ? `touryou launchd init の生成物〔${u.plistSrc}〕がないので、apply が置いたものか確かめられない`
+        ? `"$HOME/.touryou/current/bin/touryou" launchd init の生成物〔${u.plistSrc}〕がないので、apply が置いたものか確かめられない`
         : undefined,
     );
     remove(u.plistSrc, (t) => isGeneratedPlist(ctx, u, t) || isLegacyPlist(ctx, u, t));
@@ -634,7 +634,7 @@ export async function runLaunchdService(
     } else if (a === "--yes" && (sub === "apply" || sub === "uninstall")) {
       yes = true;
     } else {
-      return fail(`不明な引数: ${a}（touryou launchd --help）`);
+      return fail(`不明な引数: ${a}（"$HOME/.touryou/current/bin/touryou" launchd --help）`);
     }
   }
   if (org !== undefined && !REVERSE_DOMAIN.test(org))
@@ -642,8 +642,8 @@ export async function runLaunchdService(
   if ((sub === "apply" || sub === "uninstall") && !yes) {
     return fail(
       sub === "apply"
-        ? "touryou launchd apply は、ログイン時に自動で動く設定（永続化）を入れる。利用者の同意を取ってから --yes を付けて実行する。何もしていない"
-        : "touryou launchd uninstall は、常駐を止めて生成物を消す。利用者の同意を取ってから --yes を付けて実行する。何もしていない",
+        ? '"$HOME/.touryou/current/bin/touryou" launchd apply は、ログイン時に自動で動く設定（永続化）を入れる。利用者の同意を取ってから --yes を付けて実行する。何もしていない'
+        : '"$HOME/.touryou/current/bin/touryou" launchd uninstall は、常駐を止めて生成物を消す。利用者の同意を取ってから --yes を付けて実行する。何もしていない',
     );
   }
   const home = deps.env.HOME;
