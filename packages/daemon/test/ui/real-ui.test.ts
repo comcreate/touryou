@@ -234,6 +234,16 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(stall?.chips[0]).toBe("‖ 止まっているかも");
     expect(stall?.attach).toBe(`claude attach ${LONG}`);
     expect(stall?.folds.some((t) => /^知らせ \d+ 件（たたんでいます）$/.test(t))).toBe(true);
+    // いちばん上の統合にも「最後の動き」。人とのやり取りの相手は「あなた」
+    const meta = await page.evaluate(
+      () => document.querySelector("#card-root .meta")?.textContent ?? "",
+    );
+    expect(meta).toContain("最後の動き");
+    const flowsC = await page.evaluate(() =>
+      [...document.querySelectorAll("#card-ui-c .flowlist .fl")].map((x) => x.textContent ?? ""),
+    );
+    expect(flowsC.some((t) => t.includes("← あなた　却下"))).toBe(true);
+    expect(flowsC.some((t) => t.includes("人　"))).toBe(false);
     const old = shape.find((c) => c.id === "card-ui-old");
     expect(old?.chips[0]).toBe("済んだ");
   });

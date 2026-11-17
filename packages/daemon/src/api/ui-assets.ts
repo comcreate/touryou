@@ -775,10 +775,16 @@ export const UI_JS = `'use strict';
     for (var j = 0; j < SPARK_SLOTS; j += 1) {
       var cell = el('div', 'slot');
       if (plain[j] > 0) cell.appendChild(el('span', 'bar l' + Math.min(4, plain[j])));
+      // 答え待ちは、同じ数でも 1 段高くする（あなたの出番を目立たせるため。数と高さは 1 段ずれる）
       if (waits[j] > 0) cell.appendChild(el('span', 'bar h l' + Math.min(4, waits[j] + 1)));
       box.appendChild(cell);
     }
     return box;
+  }
+  function latestFlowAt(id, flows) {
+    var best = '';
+    flows.forEach(function (f) { if ((f.from === id || f.to === id) && typeof f.sentAt === 'string' && f.sentAt > best) best = f.sentAt; });
+    return best;
   }
   function nodeCard(n, byId, list, flows, delegated) {
     var band = n.band === 'turn' || n.band === 'finished' ? n.band : 'running';
@@ -789,14 +795,16 @@ export const UI_JS = `'use strict';
     if (ID_RE.test(n.id)) card.id = 'card-' + n.id;
     // 頭の札: 状態の札 1 つと、答えがあれば「あなたの答え N 件」
     var head = el('div', '');
-    head.appendChild(el('span', 'chip ' + STATUS_CHIP[status], st ? st.text : name(STATE_NAMES, n.state)));
+    head.appendChild(el('span', 'chip ' + STATUS_CHIP[status], st ? cleanText(st.text, 40) : name(STATE_NAMES, n.state)));
     if (n.needsHuman > 0) head.appendChild(el('span', 'chip turn', 'あなたの答え ' + n.needsHuman + ' 件'));
     card.appendChild(head);
     card.appendChild(el('h3', '', nodeLabel(n, 200)));
     var meta = el('div', 'meta');
     var parent = n.parentId === null ? null : byId.get(n.parentId);
     meta.appendChild(el('span', '', name(ROLE_NAMES, n.role) + (n.parentId === null ? '（いちばん上）' : '（親：' + (parent ? nodeLabel(parent, 24) : n.parentId) + '）')));
-    if (n.lastActivityAt) meta.appendChild(el('span', 'when', '最後の動き ' + timeText(n.lastActivityAt, Date.now())));
+    // 最後の動き。表示モデルに時刻がない（いちばん上の統合が、指示を出しただけ など）ときは、その子のいちばん新しいやり取りの時刻
+    var last = n.lastActivityAt || latestFlowAt(n.id, flows);
+    if (last) meta.appendChild(el('span', 'when', '最後の動き ' + timeText(last, Date.now())));
     card.appendChild(meta);
     card.appendChild(sparkOf(n.id, flows, Date.now()));
     // 最近のやり取り（新しい順に 3 件）
@@ -829,7 +837,8 @@ export const UI_JS = `'use strict';
   function flowLine(f, selfId, byId) {
     var up = f.dir === 'up';
     var other = f.from === selfId ? f.to : f.from;
-    var who = other === 'human' ? '人' : byId.has(other) ? nodeLabel(byId.get(other), 16) : other;
+    // 人とのやり取りは「あなた」（画面のほかの所の「あなたの答え」「あなたの出番」とそろえる）
+    var who = other === 'human' ? 'あなた' : byId.has(other) ? nodeLabel(byId.get(other), 16) : other;
     var line = el('div', 'fl');
     line.appendChild(el('span', 'ar ' + (isAwaiting(f) ? 'h' : up ? 'u' : 'd'), up ? '↑' : '↓'));
     line.appendChild(el('span', '', (f.from === selfId ? '→ ' : '← ') + who + '　' + name(FLOW_KIND_NAMES, f.kind)));
