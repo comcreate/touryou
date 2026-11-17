@@ -14,7 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { ok } from "@touryou/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { createDaemon, type DaemonDeps, type WorktreePorts } from "../src/compose.js";
@@ -176,6 +176,9 @@ describe("CLI の子のフック: 作業ツリーの中を探すコマンド（#
       [`ls ${s.linkedTree}/src`, s.tree],
       ["ls src", s.linkedTree],
       [`cd ${s.linkedTree} && git grep foo`, s.tree],
+      [`cd ${s.tree}/src && grep -rn foo .`, s.tree],
+      ["cd src && ls ..", s.tree],
+      ["cd src && ls | head", s.tree],
     ];
     for (const [command, cwd] of cases) {
       expect(await s.hook(command, cwd), `${command}（cwd: ${cwd}）`).toEqual({
@@ -209,6 +212,17 @@ describe("CLI の子のフック: 作業ツリーの中を探すコマンド（#
       "cd .. && ls",
       "cd /etc && ls",
       "cd src",
+      "cd src; ls",
+      "cd src || ls",
+      "cd src | ls",
+      "cd src && cd .. && ls",
+      "cd src && ls ../..",
+      "cd - && ls",
+      "cd ~ && ls",
+      "cd -P src && ls",
+      "cd $HOME && ls",
+      "ls src && cd src && ls",
+      `ls ${join(s.repoRoot, ".git", "worktrees", basename(s.tree))}`,
       "head src/a.ts",
       "find src | tail -f",
       "find src | sort -o out",

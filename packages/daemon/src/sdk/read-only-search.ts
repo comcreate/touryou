@@ -15,7 +15,7 @@
  * - 位置の引数（grep・git grep の最初の引数〔パターン〕と、旗の値を除く）は、作業ツリーの外を指さない（絶対パス・`..`。
  *   実パスにできるものは、リンクを解いても中にあること）。禁じる場所は、これより先に `checkProtected` が拒否する。
  *   禁じる場所が作業ツリーの中にあるときは、使わない（パスを書かない再帰で中まで読めるため）。
- * - 作業ツリーの中への `cd <dir>`（以後の相対パスの基準になる）と、探すコマンドの後ろの `head`・`tail`・`wc`・`sort`・`uniq`
+ * - 先頭の 1 つだけの `cd <作業ツリーの中> &&`（以後の相対パスの基準になる。`;`・`||`・`|` でつないだ cd、2 つ目の cd は使わない）と、探すコマンドの後ろの `head`・`tail`・`wc`・`sort`・`uniq`
  *   （許す旗だけ）は混ぜてよい。エラー出力を捨てるだけの `2>/dev/null`・`2>&1` は除いて見る。
  * - ほかのリダイレクト・置換・サブシェルは、字句解析（core の `commandWords`）が拒否する。ほかのコマンドが混じれば、使わない。
  *
@@ -400,9 +400,11 @@ export async function isReadOnlySearch(
   if (segs === undefined || segs.length === 0) return false;
   let here = toolCwd;
   let searched = false;
-  for (const words of segs) {
-    // `cd <作業ツリーの中>`（Claude Code は `cd <作業ツリー> && …` の形でよく送る）。以後の相対パスは、その場所から解く
+  for (const [i, words] of segs.entries()) {
+    // 先頭の 1 つだけの `cd <作業ツリーの中> && …`（Claude Code はこの形でよく送る）。以後の相対パスは、その場所から解く。
+    // 2 つ目の cd・`;`・`||`・`|` でつないだ cd は使わない（cd に失敗しても後ろが動く・cd が効かない形）
     if (words[0] === "cd") {
+      if (i !== 0 || !/^\s*cd\s+[^\s;|&]+\s*&&/.test(cmd)) return false;
       const next = await cdTarget(words.slice(1), here, worktree, resolve);
       if (next === undefined) return false;
       here = next;
