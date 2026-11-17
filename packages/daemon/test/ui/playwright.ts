@@ -27,6 +27,7 @@ export interface Page {
   on(event: "pageerror", f: (e: Error) => void): void;
   on(event: "request", f: (r: { url(): string }) => void): void;
   clock: { install(): Promise<void>; runFor(ms: number): Promise<void> };
+  context(): { grantPermissions(p: string[], o?: { origin: string }): Promise<void> };
   addInitScript(f: () => void): Promise<void>;
   goto(url: string): Promise<unknown>;
   click(selector: string): Promise<void>;

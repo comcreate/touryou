@@ -25,7 +25,7 @@ export const UI_HTML = `<!doctype html>
 <link rel="stylesheet" href="/ui/app.css">
 </head>
 <body>
-<header class="top"><h1>touryou 状態画面</h1><span id="status" class="status">未接続</span><span class="tools"><button id="still" class="quiet sm" type="button">動きを止める</button></span></header>
+<p id="live" class="sr" aria-live="polite"></p><header class="top"><h1>touryou 状態画面</h1><span id="status" class="status">未接続</span><span class="tools"><button id="still" class="quiet sm" type="button">動きを止める</button></span></header>
 <main>
 <section id="auth" hidden>
 <h2>人間のトークン</h2>
@@ -74,6 +74,16 @@ button.quiet{background:transparent}
 button.sm{font-size:12.5px;padding:2px 10px}
 button.danger{border-color:var(--shu);color:var(--shu);background:transparent}
 button.done{background:var(--matsu);border-color:var(--matsu);color:var(--on-strong)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;margin:-1px;padding:0;border:0}
+button.copy{display:inline-flex;align-items:center;justify-content:center;min-width:32px;min-height:28px;padding:4px 8px}
+.copy-ico{position:relative;display:inline-block;width:14px;height:14px}
+.copy-ico::before,.copy-ico::after{content:"";position:absolute;width:9px;height:10px;border:1.6px solid currentColor;border-radius:2px;box-sizing:border-box}
+.copy-ico::before{left:0;top:4px}
+.copy-ico::after{left:5px;top:0;background:var(--sheet)}
+button.copy:hover .copy-ico::after{background:var(--sheet)}
+button.copy.done .copy-ico::after{display:none}
+button.copy.done .copy-ico::before{content:"✓";border:0;width:14px;height:14px;left:0;top:-2px;font-size:14px;line-height:14px;font-weight:800;text-align:center}
+button.copy.failed{border-color:var(--shu);color:var(--shu)}
 code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word-break:break-all}
 .now{margin:24px 0 8px;display:grid;grid-template-columns:auto 1fr;gap:2px 18px;align-items:end}
 .now .count{grid-row:span 2;font-size:56px;line-height:1;font-weight:800;color:var(--kaki);min-width:1.2ch;text-align:center;font-variant-numeric:tabular-nums}
@@ -633,10 +643,27 @@ export const UI_JS = `'use strict';
     return card;
   }
   // 写すボタン。写せないとき（クリップボードが使えない）は、そう言う（文字は欄にあるので、手で選べる）
+  // 写すボタン（クリップボードのアイコン。四角が 2 つずれて重なった形を CSS で描く。文字は出さず、名前は aria-label と title）。
+  // 押したら、済みの形（✓）にして、読み上げにも伝える（#live。aria-live）。数秒で元に戻す
+  var COPY_BACK_MS = 2500;
+  function announce(msg) {
+    var live = document.getElementById('live');
+    live.textContent = '';
+    live.textContent = msg;
+  }
   function copyButton(text) {
-    var b = el('button', 'sm', '写す');
+    var b = el('button', 'sm copy');
+    b.appendChild(el('span', 'copy-ico'));
+    var name = function (label, cls) { b.ariaLabel = label; b.title = label; b.className = cls; };
+    name('写す', 'sm copy');
+    var back = null;
     b.addEventListener('click', function () {
-      var said = function (ok) { b.textContent = ok ? '写しました' : '写せません（文字を選んでコピーしてください）'; b.className = ok ? 'sm done' : 'sm'; };
+      var said = function (ok) {
+        name(ok ? '写しました' : '写せません（文字を選んでコピーしてください）', ok ? 'sm copy done' : 'sm copy failed');
+        announce(ok ? '写しました' : '写せません。文字を選んでコピーしてください');
+        if (back !== null) window.clearTimeout(back);
+        back = window.setTimeout(function () { back = null; name('写す', 'sm copy'); }, COPY_BACK_MS);
+      };
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { said(true); }, function () { said(false); });
       else said(false);
     });

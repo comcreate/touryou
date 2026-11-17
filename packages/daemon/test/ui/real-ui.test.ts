@@ -332,6 +332,41 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(c.aBody).toContain("関係図の箱を見本の形にそろえ");
   });
 
+  it("「写す」はクリップボードのアイコン。名前（aria-label・title）が付き、押すと済みの形になって読み上げにも伝え、数秒で戻る", async () => {
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], { origin: url });
+    const named = await page.evaluate(() =>
+      [...document.querySelectorAll("button.copy")].map((b) => ({
+        label: b.getAttribute("aria-label"),
+        title: b.getAttribute("title"),
+        text: b.textContent ?? "",
+        icon: b.querySelector(".copy-ico") !== null,
+        h: b.getBoundingClientRect().height,
+      })),
+    );
+    expect(named.length).toBeGreaterThan(0);
+    for (const b of named) {
+      expect(b).toMatchObject({ label: "写す", title: "写す", text: "", icon: true });
+      expect(b.h).toBeGreaterThanOrEqual(26);
+    }
+    await page.click(`#card-${LONG} .cmd button.copy`);
+    await page.waitForFunction(() => document.querySelector(".cmd button.copy.done") !== null);
+    const after = await page.evaluate(() => ({
+      label: document.querySelector(".cmd button.copy.done")?.getAttribute("aria-label"),
+      live: document.getElementById("live")?.textContent,
+    }));
+    expect(after).toEqual({ label: "写しました", live: "写しました" });
+    await page.waitForFunction(
+      () => document.querySelector(".cmd button.copy.done") === null,
+      undefined,
+      { timeout: 6000 },
+    );
+    expect(
+      await page.evaluate(() =>
+        document.querySelector(".cmd button.copy")?.getAttribute("aria-label"),
+      ),
+    ).toBe("写す");
+  });
+
   it("箱は見本の形：状態の言葉と印・左の縁の段・役割の印・列の見出し。止まっているかもは、くすんだ黄（カードも）", async () => {
     const box = (id: string) => page.locator(`#graph .gnode[data-id="${id}"]`);
     expect(await box("root").getAttribute("class")).toContain("t-go");
