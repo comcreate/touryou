@@ -1,0 +1,25 @@
+name: marketplace ref
+
+# project の .claude/settings.json の ref（marketplace-v<版>）の tag が上流にあり、中の marketplace.json の版が合うかを照らす（#90。docs/release.md の 5-a）。
+# tag は marketplace-self の PR のマージのあとに管理者が付けるので、PR では照らさない（PR の CI は ci.yml で名前の一致だけ）。
+# main への push（マージのあと）と、日に 1 回（付け忘れに気づくため）。必須の check にはしない。
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: ref の tag があり、中の marketplace.json の版が合う
+        run: bash scripts/check-marketplace-ref.sh tag

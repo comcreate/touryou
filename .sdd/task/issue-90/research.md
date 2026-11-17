@@ -1,6 +1,6 @@
 # #90 調べ：project 設定の marketplace の参照を固定する（リリース手順の見直し）
 
-- 区分：調べと案（実装しない。workflow・リポジトリの設定は変えていない。tag は作っていない）
+- 区分：調べと案。7 章の決まったことに沿って、同じ PR で実装した（リポジトリの設定の変更と tag は、管理者が行う。このセッションでは行っていない）
 - 調べた日：2026-11-17
 - 関連：Issue #90、PR #87（`.claude/settings.json` の `extraKnownMarketplaces`）、`docs/release.md`、`.github/workflows/release.yml`
 
@@ -114,3 +114,18 @@ jq -c '.plugins[] | {version}' "$(find "$d" -name marketplace.json -path '*toury
 - [ ] `release.yml`・`ci.yml`・`docs/release.md` が、新しい手順に合っている。`bash scripts/check.sh` が通る
 - [ ] PR #87 の `.claude/settings.json` が、固定した参照になる（または、この Issue のあとに更新する旨を PR に書く）
 - （D を採るときは、1 つ目を「`marketplace` の枝が保護され、marketplace の PR のマージでだけ進む」に、3 つ目を「2 つの枝の `marketplace.json` が一致することを CI が照らす」に置き換える）
+
+## 7. 決まったこと（2026-11-17）
+
+1. 案は A'（tag は管理者が手元から付ける）。
+2. 設定の変更はしてよい：`release-tags` の対象に `refs/tags/marketplace-v*` を足す（管理者が手元で行う。コマンドは `docs/release.md` の「公開のリポジトリの設定」）。
+3. `settings.json` の `ref` の変更は、`marketplace-self` の PR に同梱する。
+4. tag の名前は `marketplace-v<版>`。
+
+最初の切り替えの順番（`docs/release.md` の「最初の切り替え」）：ruleset の変更 → `marketplace-v0.1.2` を #78 のマージのコミットに付ける → この PR のマージ。
+
+確かめたこと（実装の段）：
+
+- ruleset のコマンド：作り物の `gh`（読み取りの API で取った本物の ruleset の JSON を返す）で、`y` のときだけ PUT されること、PUT の中身は `include` に 1 つ足しただけで、ほかは同じこと、2 回通しても足されるのは 1 つだけのこと、名前で 1 つに決まらないときは止まることを確かめた。bash で確かめた（このコンテナに zsh はない）。本物の PUT はしていない。
+- tag のコマンド：手元の bare のリポジトリを上流にして、いまの `main` で #78 のマージのコミットに付くこと、上流にすでにあるとき・版が変わらないコミットのとき・手元の tag が別のコミットを指すときに止まることを確かめた。本物の上流には tag を付けていない。
+- 照らし：`scripts/marketplace-ref.test.mjs`（作り物のリポジトリで、name・tag の通る・失敗するの組み合わせ）。

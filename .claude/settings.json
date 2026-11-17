@@ -3,7 +3,8 @@
     "touryou": {
       "source": {
         "source": "github",
-        "repo": "comcreate/touryou"
+        "repo": "comcreate/touryou",
+        "ref": "marketplace-v0.1.2"
       }
     }
   },

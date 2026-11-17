@@ -78,6 +78,9 @@ jobs:
               fi
               ;;
           esac
+      - name: project の settings.json の marketplace の ref が marketplace.json の版の tag 名か（docs だけの変更でも必ず動く。tag の有無は marketplace-ref.yml）
+        if: matrix.node == 22
+        run: bash scripts/check-marketplace-ref.sh name
       - name: コードに関わる変更があるかを見る（docs などだけなら、重い段を飛ばす）
         id: changes
         env:

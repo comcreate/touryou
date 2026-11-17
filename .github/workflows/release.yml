@@ -245,6 +245,11 @@ jobs:
               then .plugins |= map(if .name == $n then .version = $ver | .source = $new.source | del(.headersHelper, .strict) else . end)
               else .plugins += [$new] end' "${file}" > "${file}.new"
           mv "${file}.new" "${file}"
+          # project の settings.json の marketplace の ref も、この版の marketplace の tag にする（tag はマージのあとに管理者が付ける。docs/release.md の 5-a）
+          settings=.claude/settings.json
+          jq --arg ref "marketplace-v${VERSION}" '.extraKnownMarketplaces.touryou.source.ref = $ref' "${settings}" > "${settings}.new"
+          mv "${settings}.new" "${settings}"
+          bash scripts/check-marketplace-ref.sh name
           if [ "$(jq -r --arg n "${name}" '.plugins[] | select(.name == $n) | .version' "${file}")" != "${VERSION}" ]; then
             echo "::error::marketplace.json の version を ${VERSION} にできませんでした"
             exit 1
@@ -254,7 +259,7 @@ jobs:
           git commit -am "${title}"
           git push -u origin "${branch}"
           gh pr create --repo "${GITHUB_REPOSITORY}" --head "${branch}" --base main --title "${title}" \
-            --body "Release: ${RELEASE_URL}（sha256: ${SHA256}）。release.yml から出した PR です（GITHUB_TOKEN の PR なので、CI は release.yml が workflow_dispatch で起こします）。"
+            --body "Release: ${RELEASE_URL}（sha256: ${SHA256}）。release.yml から出した PR です（GITHUB_TOKEN の PR なので、CI は release.yml が workflow_dispatch で起こします）。.claude/settings.json の ref も marketplace-v${VERSION} にしています。マージのあと、管理者がマージのコミットに tag marketplace-v${VERSION} を付けてください（docs/release.md の 5-a）。付けるまで、project の設定での marketplace の取得は失敗します。"
           # 必須の check（ci.yml の check）を、このブランチ（PR の head）で走らせる
           gh api -X POST "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/dispatches" -f ref="${branch}"
           echo "ci.yml を ${branch} で workflow_dispatch しました（PR の check を確かめる）" >> "$GITHUB_STEP_SUMMARY"
