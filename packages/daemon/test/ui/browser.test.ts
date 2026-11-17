@@ -298,6 +298,26 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(problems).toEqual([]);
   });
 
+  it("描いている途中に、ほかの入力の欄へ focus を移したら、描き終えても focus を奪わない", async () => {
+    const r = await page.evaluate(async () => {
+      type G = { draw(h: HTMLElement, v: unknown): Promise<unknown> };
+      const w = window as unknown as { touryouGraph: G; VIEW: unknown };
+      const host = document.getElementById("g") as HTMLElement;
+      const input = document.createElement("input");
+      document.body.append(input);
+      (host.querySelector('.gnode[data-id="c"]') as HTMLElement).focus();
+      const p = w.touryouGraph.draw(host, w.VIEW);
+      input.focus(); // 描いている途中に、答えの欄などへ移る
+      await p;
+      const kept = document.activeElement === input;
+      input.remove();
+      await w.touryouGraph.draw(host, w.VIEW); // 後の試験のために描き直す
+      return kept;
+    });
+    expect(r).toBe(true);
+    expect(problems).toEqual([]);
+  });
+
   it("描き直しで、人が変えた拡大・移動はそのまま残る", async () => {
     await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
     await page.mouse.move(500, 300);

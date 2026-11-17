@@ -295,6 +295,8 @@ export async function draw(
   await area.area.translate(keep?.x ?? 0, keep?.y ?? 0);
   if (!live()) return none;
   relight(host, byId, hot);
+  // 返す大きさは、枠に合わせた倍率（k）のもの。人が拡大・縮小したあとの描き直しでも、枠の高さは初めて描いたときの
+  // 大きさのまま保つ（描き直しのたびに枠の高さが変わって、ページが跳ねないように）
   return { width: width * k, height: height * k };
 }
 
@@ -316,7 +318,11 @@ function relight(host: HTMLElement, byId: ReadonlyMap<string, unknown>, hot: () 
       ? [...host.querySelectorAll<HTMLElement>(".gnode[data-id]")].find((b) => b.dataset.id === was)
       : undefined;
     focusId = null;
-    if (box !== undefined) box.focus({ preventScroll: true }); // focus の合図で focusId が戻る
+    // 描いている途中に、人がほかの所（答えの欄など）へ focus を移していたら、奪わない。
+    // 戻すのは、focus がどこにもない（片付けで箱ごと消えた）か、器の中にあるときだけ
+    const active = document.activeElement;
+    const free = active === null || active === document.body || host.contains(active);
+    if (box !== undefined && free) box.focus({ preventScroll: true }); // focus の合図で focusId が戻る
   }
   host.classList.add("g-instant");
   hot();
