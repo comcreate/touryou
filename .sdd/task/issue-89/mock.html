@@ -10,7 +10,7 @@
   関係図について：
   - 本番は Rete.js で描く（描画のプラグインを使わず自前で描く R0。research.md 6.1・6.5）。
   - この見本には Rete.js を入れていない。R0 の自前の描き手が出す形を、SVG と CSS で示している。
-    箱の並び（木の形。根が上）・上りと下りを別のつながりにすること・拡大と移動のボタンは、
+    箱の並び（木の形。根が左、子は右）・上りと下りを別のつながりにすること・拡大と移動のボタンは、
     area のプラグインの操作（translate・zoom）を見た目で示したもの。
 
   安全の決まり（本番に合わせたところ）：
@@ -346,36 +346,35 @@ for (const t of VIEW.todo) {
 updateCount();
 
 // ---- 関係図（Rete.js R0 の見た目を SVG で示す） ----
-// 木の形：根が上、深さごとに段を下げる。兄弟は横に並べ、親は子の真ん中の上。
-// 親子の 1 本の枝に 3 本の線：真ん中＝親子のつながり（灰）、左＝上り（子 → 親、藍、上向きの矢印）、右＝下り（親 → 子、紫、下向きの矢印）。
+// 木の形：根が左、深さごとに右の列へ。兄弟は縦に並べ、親は子の並びの縦の真ん中。
+// 親子の 1 本の枝に 3 本の線：真ん中＝親子のつながり（灰）、上＝上り（子 → 親、藍、左向きの矢印）、下＝下り（親 → 子、紫、右向きの矢印）。
 // Rete では、上りと下りを別のつながり（connection）として持ち、端子（socket）は線のある所だけに置く。
 const g = el("section", "sec");
-g.append(el("h2", "", "やり取りの図"), el("p", "lead", "根が上、子と孫が下。親子の枝ごとに 3 本の線があります。真ん中の灰色が親子のつながり、左の藍が子から親への報告（↑）、右の紫が親から子への頼み（↓）。オレンジは、あなたの答えを待っているやり取りです。箱を押すと、その作業の詳しいようすへ移ります。"));
+g.append(el("h2", "", "やり取りの図"), el("p", "lead", "左が親、右が子と孫。親子の枝ごとに 3 本の線があります。真ん中の灰色が親子のつながり、上の藍が子から親への報告（←）、下の紫が親から子への頼み（→）。オレンジは、あなたの答えを待っているやり取りです。箱を押すと、その作業の詳しいようすへ移ります。"));
 const shape = el("div", "shape");
 shape.append(el("span", "", "線の形："));
-const bCurve = el("button", "sm", "曲線"), bOrth = el("button", "sm", "折れ線");
+const bCurve = el("button", "sm", "曲線"), bOrth = el("button", "sm", "角丸の折れ線");
 shape.append(bCurve, bOrth);
-const judge = el("p", "judge", "見立て：この値では、折れ線のほうが重なりが少なく見えます。3 本の線が同じ間を保ったまま曲がるので、どの線がどの子の線かを目で追いやすいからです。曲線は、親の近くで兄弟の線が寄り集まります。");
+const judge = el("p", "judge", "見立て：角丸の折れ線のほうが重なりが少なく見えます。3 本の線が同じ間を保ったまま曲がるので、どの線がどの子の線かを目で追いやすいからです。曲線は、親の近くで兄弟の線が寄り集まります。");
 g.append(shape, judge);
 const board = el("div", "board");
-const BW = 176, BH = 80, SLOT = 230, ROW = 190, OFF = 16;
+const BW = 176, BH = 80, COL = 390, LEAF = 130, OFF = 16, R = 12;
 // 配置（research.md 6.1 の layoutOf の形。純粋な計算）
 const kids = (id) => VIEW.nodes.filter(n => n.parentId === id).map(n => n.id);
 const pos = {}; let leaf = 0, maxDepth = 0;
 (function place(id, d) {
   maxDepth = Math.max(maxDepth, d);
   const ks = kids(id);
-  if (!ks.length) { pos[id] = { cx: 30 + SLOT / 2 + leaf++ * SLOT, d }; return; }
+  if (!ks.length) { pos[id] = { cy: 30 + LEAF / 2 + leaf++ * LEAF, d }; return; }
   ks.forEach(k => place(k, d + 1));
-  pos[id] = { cx: (pos[ks[0]].cx + pos[ks[ks.length - 1]].cx) / 2, d };
+  pos[id] = { cy: (pos[ks[0]].cy + pos[ks[ks.length - 1]].cy) / 2, d };
 })("n-root", 0);
-const W = 60 + leaf * SLOT, H = 40 + maxDepth * ROW + BH + 30;
-for (const id in pos) { pos[id].x = pos[id].cx - BW / 2; pos[id].y = 40 + pos[id].d * ROW; }
+const W = 40 + maxDepth * COL + BW + 40, H = 60 + leaf * LEAF;
+for (const id in pos) { pos[id].x = 40 + pos[id].d * COL; pos[id].y = pos[id].cy - BH / 2; }
 const svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "作業の木と、親子のやり取りの図" });
 board.append(svg);
 const world = svgEl("g", {});
 svg.append(world);
-// 枝ごとの線（上り・下りは、その向きのやり取りがあるときだけ）
 const lanes = [];
 for (const n of VIEW.nodes) if (n.parentId) {
   const ms = VIEW.messages.filter(m => (m.from === n.id && m.to === n.parentId) || (m.from === n.parentId && m.to === n.id));
@@ -386,28 +385,37 @@ for (const n of VIEW.nodes) if (n.parentId) {
   }
 }
 const ARROW = 9;
+// 角だけを丸めた折れ線（直線はまっすぐ、角は 2 次ベジェの小さな曲がり）
+function roundPath(pts, r) {
+  let d = "M" + pts[0][0] + " " + pts[0][1];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [ax, ay] = pts[i - 1], [bx, by] = pts[i], [cx, cy] = pts[i + 1];
+    const l1 = Math.hypot(bx - ax, by - ay), l2 = Math.hypot(cx - bx, cy - by);
+    const rr = Math.min(r, l1 / 2, l2 / 2);
+    if (rr < 0.5) { d += " L" + bx + " " + by; continue; }
+    d += " L" + (bx - (bx - ax) / l1 * rr) + " " + (by - (by - ay) / l1 * rr) + " Q" + bx + " " + by + " " + (bx + (cx - bx) / l2 * rr) + " " + (by + (cy - by) / l2 * rr);
+  }
+  const e = pts[pts.length - 1];
+  return d + " L" + e[0] + " " + e[1];
+}
 function laneGeom(l, mode) {
   const P = pos[l.parent], C = pos[l.child];
-  const pb = P.y + BH, ct = C.y, mid = (pb + ct) / 2;
-  const s = Math.sign(C.cx - P.cx);
+  const pr = P.x + BW, cl = C.x, mid = (pr + cl) / 2;
+  const s = Math.sign(C.cy - P.cy);
   const o = l.dir === "up" ? -OFF : l.dir === "down" ? OFF : 0;
-  const px = P.cx + o, cx = C.cx + o;
-  // 折れ線の横の段：交わらないように、上り・下りを少しずらす
-  const y = l.dir === "up" ? mid + 10 * s : l.dir === "down" ? mid - 10 * s : mid;
-  let d, tip;
-  if (l.dir === "up") {           // 子の上 → 親の下（矢印は親で上向き）
-    d = mode === "orth" ? "M" + cx + " " + ct + " V" + y + " H" + px + " V" + (pb + ARROW)
-                        : "M" + cx + " " + ct + " C" + cx + " " + mid + " " + px + " " + mid + " " + px + " " + (pb + ARROW);
-    tip = "M" + px + " " + pb + " L" + (px - 6) + " " + (pb + ARROW + 2) + " L" + (px + 6) + " " + (pb + ARROW + 2) + " Z";
-  } else if (l.dir === "down") {  // 親の下 → 子の上（矢印は子で下向き）
-    d = mode === "orth" ? "M" + px + " " + pb + " V" + y + " H" + cx + " V" + (ct - ARROW)
-                        : "M" + px + " " + pb + " C" + px + " " + mid + " " + cx + " " + mid + " " + cx + " " + (ct - ARROW);
-    tip = "M" + cx + " " + ct + " L" + (cx - 6) + " " + (ct - ARROW - 2) + " L" + (cx + 6) + " " + (ct - ARROW - 2) + " Z";
-  } else {
-    d = mode === "orth" ? "M" + px + " " + pb + " V" + y + " H" + cx + " V" + ct
-                        : "M" + px + " " + pb + " C" + px + " " + mid + " " + cx + " " + mid + " " + cx + " " + ct;
-  }
-  return { d, tip, px, cx, pb, ct };
+  const py = P.cy + o, cy = C.cy + o;
+  // 縦の段：3 本が交わらないように、上り・下りを少しずらす
+  const x = l.dir === "up" ? mid + 10 * s : l.dir === "down" ? mid - 10 * s : mid;
+  const a = pr + (l.dir === "up" ? ARROW : 0), b = cl - (l.dir === "down" ? ARROW : 0);
+  let pts = [[a, py], [x, py], [x, cy], [b, cy]];
+  if (l.dir === "up") pts = pts.reverse();          // 上りは子から親へ（動く点の向き）
+  let d;
+  if (mode === "orth") d = roundPath(pts, R);
+  else { const [s0, , , e0] = pts; d = "M" + s0[0] + " " + s0[1] + " C" + mid + " " + s0[1] + " " + mid + " " + e0[1] + " " + e0[0] + " " + e0[1]; }
+  let tip;
+  if (l.dir === "up") tip = "M" + pr + " " + py + " L" + (pr + ARROW + 2) + " " + (py - 6) + " L" + (pr + ARROW + 2) + " " + (py + 6) + " Z";
+  if (l.dir === "down") tip = "M" + cl + " " + cy + " L" + (cl - ARROW - 2) + " " + (cy - 6) + " L" + (cl - ARROW - 2) + " " + (cy + 6) + " Z";
+  return { d, tip, pr, cl, py, cy };
 }
 let drawn = [];
 const pipLayer = el("div", "piplayer");
@@ -430,9 +438,9 @@ function drawGraph(mode) {
       parts.push(base, flow, tip);
       setTimeout(() => flow.classList.add("on"), 900 + i * 100);
       const up = l.dir === "up";
-      const lab = svgEl("text", { class: "mlabel " + (l.human ? "h" : up ? "u" : "d"), x: gm.cx + (up ? -10 : 10), y: gm.ct - 30, "text-anchor": up ? "end" : "start" });
-      lab.append(svgEl("tspan", { class: "k", x: gm.cx + (up ? -10 : 10), dy: 0 }, (up ? "↑ " : "↓ ") + l.latest.kind));
-      lab.append(svgEl("tspan", { x: gm.cx + (up ? -10 : 10), dy: 15 }, ago(l.latest.at)));
+      const lx = gm.cl - 14, ly = up ? gm.cy - 22 : gm.cy + 20;
+      const lab = svgEl("text", { class: "mlabel " + (l.human ? "h" : up ? "u" : "d"), x: lx, y: ly, "text-anchor": "end" });
+      lab.append(svgEl("tspan", { class: "k" }, (up ? "← " : "→ ") + l.latest.kind), svgEl("tspan", {}, "　" + ago(l.latest.at)));
       lab.style.animationDelay = (0.6 + i * 0.1) + "s";
       parts.push(lab);
       const dot = el("span", "pip " + (l.human ? "h" : up ? "u" : "d"));
@@ -442,7 +450,7 @@ function drawGraph(mode) {
     }
     // 端子：線がつながる所だけ
     const pc = l.dir === "kin" ? "k" : l.dir === "up" ? "u" : "d";
-    parts.push(svgEl("circle", { class: "port " + pc, cx: gm.px, cy: gm.pb, r: 4.5 }), svgEl("circle", { class: "port " + pc, cx: gm.cx, cy: gm.ct, r: 4.5 }));
+    parts.push(svgEl("circle", { class: "port " + pc, cx: gm.pr, cy: gm.py, r: 4.5 }), svgEl("circle", { class: "port " + pc, cx: gm.cl, cy: gm.cy, r: 4.5 }));
     parts.forEach(p => world.append(p));
     drawn.push({ l, parts });
   });
@@ -501,7 +509,7 @@ svg.addEventListener("pointermove", (e) => { if (!drag) return; const s = vb.w /
 svg.addEventListener("pointerup", () => { drag = null; });
 new ResizeObserver(applyVB).observe(svg);
 const legend = el("div", "legend");
-legend.append(el("span", "p", "親子のつながり"), el("span", "u", "↑ 上り：子 → 親"), el("span", "d", "↓ 下り：親 → 子"), el("span", "h", "あなたの答え待ち"));
+legend.append(el("span", "p", "親子のつながり"), el("span", "u", "← 上り：子 → 親（上の線）"), el("span", "d", "→ 下り：親 → 子（下の線）"), el("span", "h", "あなたの答え待ち"));
 board.append(legend);
 g.append(board);
 app.append(g);
