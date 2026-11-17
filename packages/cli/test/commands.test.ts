@@ -1164,14 +1164,15 @@ describe("stop（済んだと報告した子を、受理せずに止める。#11
           dependsOn: [],
           openItems: 0,
           discarded: false,
+          title: "ログインの直し",
         },
       ],
     });
-  it("--yes がなければ、いまの状態・役割・親を出す。done でない子・ない子は、その場で断る", async () => {
+  it("--yes がなければ、題・いまの状態・役割・親を出す。done でない子・ない子は、その場で断る", async () => {
     const done = fakeClient({ "tree.list": tree("done") });
     const r = await runCommand(["stop", "a"], deps(done.client));
     expect(r.exitCode).toBe(2);
-    expect(r.stderr).toContain("いまの状態: done・役割: worker・親: root");
+    expect(r.stderr).toContain("題: ログインの直し\nいまの状態: done・役割: worker・親: root");
     expect(done.sent.map((x) => x.operation)).toEqual(["tree.list"]);
     const running = fakeClient({ "tree.list": tree("running") });
     const r2 = await runCommand(["stop", "a"], deps(running.client));

@@ -344,7 +344,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
 }
 
 /** 題: 改行・タブ・続く空白を空白 1 つにまとめ、前後の空白を除いて 1 行にしてから、`UI_TITLE_MAX` で切る。 */
-function titleOf(objective: unknown): string {
+export function titleOf(objective: unknown): string {
   if (typeof objective !== "string") return "";
   return uiText(objective.replace(/\s+/gu, " ").trim(), UI_TITLE_MAX);
 }

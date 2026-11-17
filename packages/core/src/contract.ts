@@ -118,6 +118,8 @@ export interface TreeListNode {
    * この版以降の daemon が付ける（古い daemon にはない。ないときは、表の列を見る）。
    */
   readonly pendingDecisions?: { readonly undeliverable: number; readonly stopped: number };
+  /** 題（目的の先頭を整えて切ったもの。状態画面と同じ）。目的がなければ、なし。古い daemon にはない（#115）。 */
+  readonly title?: string;
 }
 
 export interface OperationMap {

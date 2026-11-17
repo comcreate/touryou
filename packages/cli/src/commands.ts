@@ -383,6 +383,8 @@ interface TreeNodeView {
   readonly discarded: boolean;
   /** 止まった子の未回答の判断の数（古い daemon にはない）。 */
   readonly pendingDecisions?: { readonly undeliverable: number; readonly stopped: number };
+  /** 題（古い daemon にはない）。 */
+  readonly title?: string;
 }
 const isCount = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0;
 const isPendingDecisions = (v: unknown): boolean =>
@@ -397,7 +399,8 @@ const isTreeNodeView = (v: unknown): v is TreeNodeView =>
   typeof v.openItems === "number" &&
   Number.isInteger(v.openItems) &&
   typeof v.discarded === "boolean" &&
-  isPendingDecisions(v.pendingDecisions);
+  isPendingDecisions(v.pendingDecisions) &&
+  (v.title === undefined || typeof v.title === "string");
 const isTreeList = (v: unknown): v is { table: string; nodes: readonly TreeNodeView[] } =>
   isRecord(v) &&
   typeof v.table === "string" &&
@@ -1257,7 +1260,7 @@ export async function runCommand(
       const seen =
         node === undefined
           ? ""
-          : `いまの状態: ${terminalSafe(node.state, 40)}・役割: ${terminalSafe(node.role, 40)}・親: ${terminalSafe(node.parentId ?? "なし", 128)}\n`;
+          : `${node.title === undefined ? "" : `題: ${terminalSafe(node.title, 80)}\n`}いまの状態: ${terminalSafe(node.state, 40)}・役割: ${terminalSafe(node.role, 40)}・親: ${terminalSafe(node.parentId ?? "なし", 128)}\n`;
       return {
         exitCode: 2,
         stdout: "",

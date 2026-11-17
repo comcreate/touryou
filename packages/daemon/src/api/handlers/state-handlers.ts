@@ -17,6 +17,7 @@ import {
   type OrchState,
   type Result,
   stateOf,
+  titleOf,
   unresolvedInbox,
   visibleState,
 } from "@touryou/core";
@@ -266,6 +267,7 @@ export function createStateHandlers(deps: StateHandlerDeps) {
         openItems: openItems(n.id),
         discarded: n.discarded !== undefined,
         pendingDecisions: countPending(n.id),
+        ...(titleOf(n.objective) === "" ? {} : { title: titleOf(n.objective) }),
       }));
       const rows = v.nodes.map((n) => [
         n.id,
