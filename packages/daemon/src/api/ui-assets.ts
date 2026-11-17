@@ -722,18 +722,30 @@ export const UI_JS = `'use strict';
     document.getElementById('finished').hidden = finished.length === 0;
     document.getElementById('finished-summary').textContent = '終わった作業（' + finished.length + ' 件。たたんでいます）';
   }
-  // 子ごとの状態の札（図の箱の 3 行目と同じ印と言葉。/ui/graph.js の statuses）。読めないときは、状態の名前
+  // 子ごとの状態の札（図の箱の 3 行目と同じ印と言葉。graph-model.ts の STATUS_TEXT・RUN_TEXT と同じ決め方・同じ言葉。試験で照らす）。
+  // 図の束（/ui/graph.js）には頼らない（束が読めなくても、カードは同じ言葉を出す）
   var STATUS_CHIP = { run: 'running', wait: 'turn', stall: 'stall', fail: 'failed', done: 'finished', stopped: 'finished' };
+  var STATUS_TEXT = { run: '動いている', wait: '● あなたの答え待ち', stall: '‖ 止まっているかも', fail: '✕ 失敗', done: '済んだ', stopped: '■ 止めた' };
+  var RUN_TEXT = { pending: '起動を待っている', running: '動いている', waiting: '待っている', done: '済んだと報告（確かめ待ち）', stopping: '止めている', stopIncomplete: '■ 止まりきっていない' };
   var cardStatus = new Map();
   function statusesOf(view) {
+    var waits = new Set();
+    var stalls = new Set();
+    var fails = new Set();
+    view.decisions.forEach(function (d) { if (!d.closedReason) waits.add(d.nodeId); });
+    view.extensions.forEach(function (x) { waits.add(x.nodeId); });
+    view.inbox.forEach(function (i) {
+      if (i.stall === true) stalls.add(i.nodeId);
+      else if (i.priority === 'failed') fails.add(i.nodeId);
+    });
     var m = new Map();
-    var g = graphApi();
-    if (!g || typeof g.statuses !== 'function') return m;
-    try {
-      g.statuses(view).forEach(function (x) { if (x && typeof x.id === 'string') m.set(x.id, x); });
-    } catch (e) {
-      // 図の束が読めない・壊れているときは、札を状態の名前にする
-    }
+    view.nodes.forEach(function (n) {
+      var st = n.band === 'finished' ? (n.state === 'stopped' ? 'stopped' : 'done') : fails.has(n.id) ? 'fail' : waits.has(n.id) ? 'wait' : stalls.has(n.id) ? 'stall' : 'run';
+      // 言葉は、図と同じく、止まりきっていないを失敗の札にする前に決める（動いている扱いなら「■ 止まりきっていない」）
+      var text = st === 'run' && Object.hasOwn(RUN_TEXT, n.state) ? RUN_TEXT[n.state] : STATUS_TEXT[st];
+      if (n.state === 'stopIncomplete' && st === 'run') st = 'fail';
+      m.set(n.id, { status: st, text: text });
+    });
     return m;
   }
   // 時刻だけ（14:05）。読めなければ ''
@@ -771,13 +783,13 @@ export const UI_JS = `'use strict';
   function nodeCard(n, byId, list, flows, delegated) {
     var band = n.band === 'turn' || n.band === 'finished' ? n.band : 'running';
     var st = cardStatus.get(n.id);
-    var status = st && Object.hasOwn(STATUS_CHIP, st.status) ? st.status : band === 'finished' ? 'done' : 'run';
+    var status = st ? st.status : band === 'finished' ? 'done' : 'run';
     var stall = status === 'stall';
     var card = el('div', 'card ' + band + (n.needsHuman > 0 ? ' need' : '') + (stall ? ' stall' : ''));
     if (ID_RE.test(n.id)) card.id = 'card-' + n.id;
     // 頭の札: 状態の札 1 つと、答えがあれば「あなたの答え N 件」
     var head = el('div', '');
-    head.appendChild(el('span', 'chip ' + STATUS_CHIP[status], st && typeof st.text === 'string' ? st.text : name(STATE_NAMES, n.state)));
+    head.appendChild(el('span', 'chip ' + STATUS_CHIP[status], st ? st.text : name(STATE_NAMES, n.state)));
     if (n.needsHuman > 0) head.appendChild(el('span', 'chip turn', 'あなたの答え ' + n.needsHuman + ' 件'));
     card.appendChild(head);
     card.appendChild(el('h3', '', nodeLabel(n, 200)));

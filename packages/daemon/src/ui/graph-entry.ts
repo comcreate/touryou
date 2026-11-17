@@ -1,6 +1,6 @@
 /**
  * 関係図の入口（#89。設計の下書き 4.2・6・7 節。見た目は mock.html の `drawNode`・`drawGraph`）。
- * 外に出すのは `window.touryouGraph` の `draw(host, view)`・`destroy()`・`statuses(view)` だけ（`statuses` は、カードの状態の札を図と同じ言葉にするため。#115 のあと）。`draw` は、表示モデルから「整えた文字・確かめた ID・数」だけを作り直して描く。
+ * 外に出すのは `window.touryouGraph` の `draw(host, view)`・`destroy()` だけ。`draw` は、表示モデルから「整えた文字・確かめた ID・数」だけを作り直して描く。
  * 表示モデルをそのまま rete に渡さない。rete のノード・つながりのデータは、ID と数だけ。
  * 描画のプラグインは使わず、area のプラグインの `render` の合図を受けて、箱は `el`、線は `svgEl` で自前に描く（R0）。
  */
@@ -73,16 +73,6 @@ let listening: AbortController | null = null;
 let currentHost: HTMLElement | null = null;
 /** 描きの番号（世代）。`draw`・`destroy` のたびに進む。古い `draw` の続きは、番号が違えば黙って抜ける。 */
 let generation = 0;
-
-/**
- * 子ごとの状態（図の箱の 3 行目と同じ印と言葉）。画面のカードの札に使う。表示モデルの形は信じず、図と同じ作り直しを通す。
- * 返すのは ID・状態の種類・言葉だけ。
- */
-export function statuses(
-  view: unknown,
-): { readonly id: string; readonly status: string; readonly text: string }[] {
-  return graphModelOf(view).nodes.map((n) => ({ id: n.id, status: n.status, text: n.statusText }));
-}
 
 /** いまの図を消す（描いていなければ何もしない）。描いている途中の `draw` も、そこで止まる。 */
 export function destroy(): void {

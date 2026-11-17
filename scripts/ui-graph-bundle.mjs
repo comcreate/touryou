@@ -1,6 +1,6 @@
 /**
  * 関係図（`/ui/graph.js`）の束ね（#89）。esbuild で、自前の入口（`packages/daemon/src/ui/graph-entry.ts`）と
- * rete・rete-area-plugin・rete-readonly-plugin を 1 つの IIFE にする（グローバルに出す名前は `touryouGraph` の 1 つ。`draw`・`destroy`・`statuses` だけ）。
+ * rete・rete-area-plugin・rete-readonly-plugin を 1 つの IIFE にする（グローバルに出す名前は `touryouGraph` の 1 つ。`draw`・`destroy` だけ）。
  * 束は `UI_GRAPH_JS`（`packages/daemon/src/api/ui-graph-js.ts` の文字列。daemon のビルドに入り、`GET /ui/graph.js` で配る）として置き、試験で、lockfile の版から作り直したものと一致することを確かめる。
  * 使い方: node scripts/ui-graph-bundle.mjs（大きさを出す）／ --write（束を作り直して置く）／ --check（置いてある束と比べ、違えば終了コード 1。release でビルドの前に流す）
  */

@@ -48,8 +48,6 @@ describe("画面の資産（走査）", () => {
 
   it("許可リスト: `.` の後ろのプロパティ名は、安全な集合にあるものだけ（文字列・コメントを除く）", () => {
     const SAFE = new Set([
-      // 図の束の入口の、子ごとの状態（statuses。ID・種類・言葉だけを返す）
-      "statuses",
       // 要素・文字列・集合・配列・Promise の、安全な操作
       "textContent",
       "className",
@@ -1274,5 +1272,18 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
       /prefers-reduced-motion: reduce\)\{\*,\*::before\{animation:none!important/,
     );
     expect(UI_CSS).toContain(".line.g-sent{animation:gflow");
+  });
+});
+
+describe("カードの状態の札（図の箱と同じ言葉）", () => {
+  it("app.js の STATUS_TEXT・RUN_TEXT は、graph-model.ts と同じ言葉", async () => {
+    const { STATUS_TEXT, RUN_TEXT } = await import("../../src/ui/graph-model.js");
+    const pick = (name: string): Record<string, string> => {
+      const m = new RegExp(`var ${name} = (\\{[^\\n]*\\});`).exec(UI_JS);
+      if (m === null) throw new Error(name);
+      return Function(`return (${m[1]})`)() as Record<string, string>;
+    };
+    expect(pick("STATUS_TEXT")).toEqual(STATUS_TEXT);
+    expect(pick("RUN_TEXT")).toEqual(RUN_TEXT);
   });
 });
