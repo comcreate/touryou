@@ -10,6 +10,8 @@
  *   --live     数秒ごとに作り物のやり取りを 1 つ足し、段を sent → delivered → done と進める
  * Ctrl+C で止めると、一時の stateDir を消す。
  *
+ * 画面の操作（答え・承認など）は、どれも「ui-preview は見るための道具なので、操作は試せません」で断る。
+ * 試験だけ、TOURYOU_PREVIEW_TOKEN で自分のトークンを渡せる（入れるだけで、出さない）。
  * トークン・チケットは、画面・ログ・引数に出さない（チケットは `touryou ui` と同じく `/usr/bin/open` の引数にだけ渡す）。
  */
 import { execFile } from "node:child_process";
@@ -240,11 +242,28 @@ const tick = () => {
 const stateDir = mkdtempSync(join(tmpdir(), "touryou-ui-preview-"));
 // どの終わり方でも（例外で落ちたときも）一時の場所を消す。exit の中は同期の処理だけ
 process.on("exit", () => rmSync(stateDir, { recursive: true, force: true }));
-const token = randomBytes(32).toString("base64url");
+// 試験だけが、自分で決めたトークンを渡せる（入れるだけ。画面・ログ・引数には出さない）
+const TOKEN_ENV = process.env.TOURYOU_PREVIEW_TOKEN;
+const token =
+  typeof TOKEN_ENV === "string" && /^[A-Za-z0-9_-]{32,}$/.test(TOKEN_ENV)
+    ? TOKEN_ENV
+    : randomBytes(32).toString("base64url");
+// 画面の操作（答え・承認・却下・回収・止める など）は、どれも平易な文で断る（内部の言葉「未実装」を出さない）
+const PREVIEW_ONLY = core.failure(
+  "previewOnly",
+  "ui-preview は見るための道具なので、操作は試せません。操作は本物の daemon で試してください。",
+  "本物の daemon で状態画面を開く（/touryou:ui）",
+);
+const previewHandlers = Object.fromEntries(
+  [...new Set(Object.values(core.ROLE_OPERATIONS).flat())].map((op) => [
+    op,
+    () => ({ ok: false, error: PREVIEW_ONLY }),
+  ]),
+);
 const server = api.createApiServer({
   credentials: creds.createCredentialStore({ humanToken: token }),
   getState: () => state,
-  handlers: {},
+  handlers: previewHandlers,
   // 停止の代行依頼（本物の daemon は、アダプタの能力表で決める。ここでは g5 だけ親に代行してもらう）
   stopDelegated: (id) => id === "g5",
 });

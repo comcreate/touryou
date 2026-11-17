@@ -22,6 +22,7 @@
 
 ### 内部の変更
 
+- **`scripts/ui-preview.mjs` で画面の操作を押したときの文を、平易にした**: 「notImplemented: 操作 … は未実装」でなく、「ui-preview は見るための道具なので、操作は試せません。操作は本物の daemon で試してください。」と出す（本物の daemon と画面の app.js は変えていない）。
 - **手動の画面の確かめ（`scripts/ui-browser-check.mjs`）を、今の画面で通るようにした**（#108）: 画面を `#token=` でなく使い捨てのチケット（`/ui#ticket=…`）で開き、#89 の作り直しのあとの要素（`#todo .task`・`#card-<ID>`・カードの中の `.entry`・たたんだ欄）と言葉（「変わるとすぐ更新」「2 秒ごとに確かめて更新」）に合わせた。`docs/manual-verification-ui.md` の手順と期待も合わせた。
 - **状態画面を手元で作り物のデータで見る `scripts/ui-preview.mjs` を足した**: 本物の API サーバーを一時の stateDir と空いたポートで立て、関係図の形をひととおり見られる種を入れて既定のブラウザで開く（`--no-open`・`--live`。常駐の daemon には触らない）。起動・資産・止めたときの片付けの試験を足した。
 
