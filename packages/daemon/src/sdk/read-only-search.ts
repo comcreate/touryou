@@ -15,8 +15,9 @@
  * - 位置の引数（grep・git grep の最初の引数〔パターン〕と、旗の値を除く）は、作業ツリーの外を指さない（絶対パス・`..`。
  *   実パスにできるものは、リンクを解いても中にあること）。禁じる場所は、これより先に `checkProtected` が拒否する。
  *   禁じる場所が作業ツリーの中にあるときは、使わない（パスを書かない再帰で中まで読めるため）。
- * - 先頭の 1 つだけの `cd <作業ツリーの中> &&`（以後の相対パスの基準になる。`;`・`||`・`|` でつないだ cd、2 つ目の cd は使わない）と、探すコマンドの後ろの `head`・`tail`・`wc`・`sort`・`uniq`
- *   （許す旗だけ）は混ぜてよい。エラー出力を捨てるだけの `2>/dev/null`・`2>&1` は除いて見る。
+ * - 先頭の 1 つだけの `cd <作業ツリーの中> &&`（以後の相対パスの基準になる。`;`・`||`・`|` でつないだ cd、2 つ目の cd、
+ *   行き先に `..` を含む cd は使わない）と、`|` の直後の `head`・`tail`・`wc`・`sort`・`uniq`（旗だけ。位置の引数は許さない）は
+ *   混ぜてよい。エラー出力を捨てるだけの `2>/dev/null`・`2>&1` は除いて見る。
  * - ほかのリダイレクト・置換・サブシェルは、字句解析（core の `commandWords`）が拒否する。ほかのコマンドが混じれば、使わない。
  *
  * 子の permissions（`--settings` の allow）には足さない。`Bash(find:*)` などを足すと、フックのない子で `find -exec` まで通るため。
@@ -124,41 +125,72 @@ const SPECS: ReadonlyArray<readonly [readonly string[], Spec]> = [
   ],
 ];
 
-/** 探すコマンドの出力を、`|` の先で絞るだけのコマンド（ファイルを書く旗・止まらない旗は表にない）。位置の引数はパスとして確かめる。 */
-const FILTERS: ReadonlyArray<readonly [readonly string[], Spec]> = [
-  [
-    ["head"],
-    {
-      flags: "q0123456789",
-      valueFlags: "nc",
-      long: new Set(),
-      longValue: new Set(),
-      patternFirst: false,
-    },
-  ],
-  [
-    ["tail"],
-    {
-      flags: "q0123456789",
-      valueFlags: "nc",
-      long: new Set(),
-      longValue: new Set(),
-      patternFirst: false,
-    },
-  ],
-  [
-    ["wc"],
-    { flags: "lwcm", valueFlags: "", long: new Set(), longValue: new Set(), patternFirst: false },
-  ],
-  [
-    ["sort"],
-    { flags: "rnuf", valueFlags: "", long: new Set(), longValue: new Set(), patternFirst: false },
-  ],
-  [
-    ["uniq"],
-    { flags: "c", valueFlags: "", long: new Set(), longValue: new Set(), patternFirst: false },
-  ],
-];
+/**
+ * 探すコマンドの出力を、`|` の直後で絞るだけのコマンド。**位置の引数は 1 つも許さない**（`-` も。標準入力だけを読む）。
+ * `uniq` の 2 つ目の引数（出力のファイル）や、`head -c 5 <ほかのファイル>` を閉じるため。旗の値は数だけ。
+ */
+const FILTER_ARG: Readonly<Record<string, RegExp>> = {
+  head: /^-(\d+|[nc]\d+|q)$/,
+  tail: /^-(\d+|[nc]\d+|q)$/,
+  wc: /^-[lwcm]+$/,
+  sort: /^-[rnuf]+$/,
+  uniq: /^-c$/,
+};
+
+function filterOk(words: readonly string[]): boolean {
+  const name = words[0] as string;
+  const re = FILTER_ARG[name];
+  if (re === undefined) return false;
+  for (let i = 1; i < words.length; i++) {
+    const w = words[i] as string;
+    if (re.test(w)) continue;
+    // `head -n 20` の形（値は次の語。数だけ）
+    if ((name === "head" || name === "tail") && (w === "-n" || w === "-c")) {
+      if (!/^\d+$/.test(words[i + 1] ?? "")) return false;
+      i++;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+/**
+ * 引用符の外の区切りを、順に返す（core の字句解析と同じ規則で引用符・`\\` を読み飛ばす）。`&&`・`||`・`|`・`|&`・`;`・改行・`&`。
+ */
+function separatorsOf(command: string): string[] {
+  const out: string[] = [];
+  let quote: "'" | '"' | null = null;
+  for (let i = 0; i < command.length; i++) {
+    const c = command.charAt(i);
+    const next = command.charAt(i + 1);
+    if (quote === "'") {
+      if (c === "'") quote = null;
+      continue;
+    }
+    if (c === "\\") {
+      i++;
+      continue;
+    }
+    if (quote === '"') {
+      if (c === '"') quote = null;
+      continue;
+    }
+    if (c === "'" || c === '"') quote = c;
+    else if (c === "&") {
+      if (next === "&") {
+        out.push("&&");
+        i++;
+      } else out.push("&");
+    } else if (c === "|") {
+      if (next === "|" || next === "&") {
+        out.push(`|${next}`);
+        i++;
+      } else out.push("|");
+    } else if (c === ";" || c === "\n") out.push(";");
+  }
+  return out;
+}
 
 /**
  * 引用符の外の、エラー出力を捨てるだけのリダイレクト（`2>/dev/null`・`2>&1`）を除く。ほかのリダイレクトは残す（字句解析が拒否する）。
@@ -285,11 +317,19 @@ async function pointsOutside(
   if (w === "" || w === "-") return false;
   if (w.startsWith("~")) return true;
   const abs = posix.normalize(w.startsWith("/") ? w : `${toolCwd}/${w}`);
-  try {
-    // 実パスで比べる（macOS の /var は /private/var へのリンク。作業ツリーは実パスなので、字句では外に見える）
-    return !inside(await resolve(abs), worktree);
-  } catch {
-    return !inside(abs, worktree); // まだないパス。字句の上で中にあれば中（展開はない）
+  // 実パスで比べる（macOS の /var は /private/var へのリンク。作業ツリーは実パスなので、字句では外に見える）。
+  // まだないパスは、今ある一番深い祖先を実パスにして、残りを字句で足す（途中に外へのリンクがあれば外）
+  let head = abs;
+  let rest = "";
+  for (;;) {
+    try {
+      const real = await resolve(head);
+      return !inside(posix.normalize(rest === "" ? real : `${real}/${rest}`), worktree);
+    } catch {
+      if (head === "/") return true;
+      rest = rest === "" ? posix.basename(head) : `${posix.basename(head)}/${rest}`;
+      head = posix.dirname(head);
+    }
   }
 }
 
@@ -306,7 +346,9 @@ async function cdTarget(
     dir === undefined ||
     dir === "" ||
     dir.startsWith("-") ||
-    dir.startsWith("~")
+    dir.startsWith("~") ||
+    // シェルの cd は `..` を字句で解く（cd -L）。確かめは実パスなので、`..` があるとリンクをはさんで食い違う。`..` がなければ同じ場所
+    dir.split("/").includes("..")
   )
     return undefined;
   try {
@@ -395,27 +437,35 @@ export async function isReadOnlySearch(
   if (protectedRoots.some((r) => inside(r, worktree) || inside(worktree, r))) return false;
   if (hasUnquotedExpansion(command)) return false;
   const cmd = stripHarmlessRedirects(command);
-  if (/(^|[^&])&($|[^&])/.test(cmd)) return false; // 裏での実行
-  const segs = commandWords(cmd)?.filter((s) => s.length > 0);
-  if (segs === undefined || segs.length === 0) return false;
+  const segs = commandWords(cmd);
+  if (segs === undefined || segs.length === 0 || segs.some((x) => x.length === 0)) return false;
+  // 区切りの種類を見る。`cd` は先頭の `&&` の前だけ、絞るコマンドは `|` の直後だけ。`|&`・`&` は使わない
+  const seps = separatorsOf(cmd);
+  if (seps.length !== segs.length - 1) return false;
+  if (seps.some((x) => !["&&", "||", "|", ";"].includes(x))) return false;
   let here = toolCwd;
   let searched = false;
+  let prevPiped = false; // 1 つ前の段が、探すコマンドか絞るコマンドで、`|` でつないだか
   for (const [i, words] of segs.entries()) {
+    const sep = i === 0 ? undefined : seps[i - 1];
     // 先頭の 1 つだけの `cd <作業ツリーの中> && …`（Claude Code はこの形でよく送る）。以後の相対パスは、その場所から解く。
     // 2 つ目の cd・`;`・`||`・`|` でつないだ cd は使わない（cd に失敗しても後ろが動く・cd が効かない形）
     if (words[0] === "cd") {
-      if (i !== 0 || !/^\s*cd\s+[^\s;|&]+\s*&&/.test(cmd)) return false;
+      if (i !== 0 || seps[0] !== "&&") return false;
       const next = await cdTarget(words.slice(1), here, worktree, resolve);
       if (next === undefined) return false;
       here = next;
       continue;
     }
+    if (words[0] !== undefined && words[0] in FILTER_ARG) {
+      if (!(sep === "|" && prevPiped) || !filterOk(words)) return false;
+      prevPiped = true;
+      continue;
+    }
     let paths: string[] | undefined;
     if (words[0] === "find") paths = findStarts(words.slice(1));
     else {
-      const hit =
-        SPECS.find(([h]) => h.every((w, i) => words[i] === w)) ??
-        (searched ? FILTERS.find(([h]) => h.every((w, i) => words[i] === w)) : undefined);
+      const hit = SPECS.find(([h]) => h.every((w, k) => words[k] === w));
       if (hit === undefined) return false;
       paths = positionalsOf(hit[1], words.slice(hit[0].length));
     }
@@ -424,6 +474,7 @@ export async function isReadOnlySearch(
       if (await pointsOutside(p, here, worktree, resolve)) return false;
     }
     searched = true;
+    prevPiped = true;
   }
   return searched;
 }

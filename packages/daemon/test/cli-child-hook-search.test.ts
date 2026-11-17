@@ -114,6 +114,9 @@ async function setup() {
   const child = await spawnOne();
   const other = await spawnOne();
   const tree = join(worktreeRoot, child.nodeId);
+  // 作業ツリーの中を指すリンク（`cd l && cd ../../..` で外へ出られないことを確かめる）
+  mkdirSync(join(tree, "src", "b", "c"), { recursive: true });
+  symlinkSync(join(tree, "src", "b", "c"), join(tree, "l"));
   const hook = async (command: string, cwd = tree) => {
     const res = await fetch(`${run.url}/v1/hook`, {
       method: "POST",
@@ -174,8 +177,8 @@ describe("CLI の子のフック: 作業ツリーの中を探すコマンド（#
       ["ls ../src", join(s.tree, "src")],
       ["ls", join(s.tree, "src")],
       [`ls ${s.linkedTree}/src`, s.tree],
+      ["cd l && ls", s.tree],
       ["ls src", s.linkedTree],
-      [`cd ${s.linkedTree} && git grep foo`, s.tree],
       [`cd ${s.tree}/src && grep -rn foo .`, s.tree],
       ["cd src && ls ..", s.tree],
       ["cd src && ls | head", s.tree],
@@ -222,6 +225,15 @@ describe("CLI の子のフック: 作業ツリーの中を探すコマンド（#
       "cd -P src && ls",
       "cd $HOME && ls",
       "ls src && cd src && ls",
+      `cd ${s.linkedTree} && git grep foo`,
+      "cd l && cd ../../.. && ls",
+      "cd l && ls ../../..",
+      "cd l/.. && ls",
+      "ls src | uniq - out.txt",
+      "ls src | uniq src/x src/y",
+      "ls src | head -c 5 src/a.ts",
+      "ls src ; head",
+      "ls src && wc",
       `ls ${join(s.repoRoot, ".git", "worktrees", basename(s.tree))}`,
       "head src/a.ts",
       "find src | tail -f",

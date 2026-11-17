@@ -163,3 +163,58 @@ describe("#91 との組み合わせ: 探すコマンドの許しと、承認済�
     expect(permit(`${approved} -p`)).toBe(false);
   });
 });
+
+describe("isReadOnlySearch を直に（#92 の追記: cd・パイプの後ろ・リンク）", () => {
+  // 作業ツリーの中を指すリンク `l -> a/b/c`、外を指すリンク `out -> /etc`
+  const inLinks: Record<string, string> = { ...links, [`${WT}/l`]: `${WT}/a/b/c` };
+  const res = async (p: string) => {
+    const { posix } = await import("node:path");
+    const r = posix.resolve(p);
+    for (const [from, to] of Object.entries(inLinks)) {
+      if (r === from || r.startsWith(`${from}/`)) return to + r.slice(from.length);
+    }
+    if (r.startsWith(`${WT}/out-missing`)) throw new Error("ENOENT");
+    return r;
+  };
+  const direct = (c: string, cwd = WT) => isReadOnlySearch(c, cwd, WT, res, [S]);
+  it.each([
+    "cd src && ls",
+    "cd l && ls",
+    // ls の引数の `..` は、カーネルが実パスで解く（<wt>/a/b/c から 3 つ上は <wt>）。cd の `..` だけが字句
+    "cd l && ls ../../..",
+    "find src -type f | head -50",
+    "find src | head -n 20",
+    "grep -rln foo src | sort | uniq -c | wc -l",
+    "ls src 2>/dev/null",
+  ])("通す: %s", async (c) => {
+    expect(await direct(c)).toBe(true);
+  });
+  it.each([
+    // 絞るコマンドは位置の引数を取らない（uniq の出力のファイル・ほかのファイルを読む）
+    "ls src | uniq - out.txt",
+    "ls a | uniq a/x a/y",
+    "ls a | head -c 5 a/x",
+    "ls a | head -",
+    "ls a | sort -o out",
+    "ls a | tail -f",
+    // 絞るコマンドは `|` の直後だけ
+    "ls src ; head",
+    "ls src && wc",
+    "head -n 5",
+    "ls src |& head",
+    // cd は先頭の `&&` の前だけ・1 つだけ・行き先に `..` なし
+    "cd l && cd ../../.. && ls",
+    "cd l && ls ../../../..",
+    "cd l/.. && ls",
+    "cd src/../.. && ls",
+    "cd src; ls",
+    "cd src || ls",
+    "ls && cd src && ls",
+    // 途中に外へのリンクがあり、先がまだないパス
+    "ls out/nope",
+    "ls src;",
+    "ls src &",
+  ])("断る: %s", async (c) => {
+    expect(await direct(c)).toBe(false);
+  });
+});
