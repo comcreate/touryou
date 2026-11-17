@@ -131,10 +131,34 @@ export const UI_FLOW_KINDS = [
   "decision",
   "extension",
   "answer",
+  "approved",
+  "rejected",
+  "split",
 ] as const;
 export type UiFlowKind = (typeof UI_FLOW_KINDS)[number];
 /** 人（ノードでない相手）。 */
 export const UI_HUMAN = "human";
+
+/**
+ * 追加指示（`node.instructed`）のうち、daemon が判断の答え・範囲の頼みの判定を子に届けるために書いたものの、文の頭（#115）。
+ * daemon の `answerText`（answer-delivery.ts）と `notifyChild`（scope-handlers.ts）の文と合わせる（daemon の試験で照らす）。
+ * やり取りの札を「指示」でなく種類の言葉にするためだけに使う（判定・権限には使わない）。
+ */
+export const UI_ANSWER_TEXT_PREFIX = "【人間からの回答】";
+export const UI_EXTENSION_TEXT_PREFIX = "範囲の拡張の要求（";
+const EXTENSION_RESULT: readonly (readonly [string, UiFlowKind])[] = [
+  ["）は承認された。", "approved"],
+  ["）は却下された。", "rejected"],
+  ["）は、作業を切り出して別に進めることになった。", "split"],
+];
+/** 追加指示の文から、やり取りの種類を決める。判断の答えは、判断の記録の側（`answer`）で描くので null（重ねない）。 */
+function instructionKind(text: string): UiFlowKind | null {
+  if (text.startsWith(UI_ANSWER_TEXT_PREFIX)) return null;
+  if (text.startsWith(UI_EXTENSION_TEXT_PREFIX)) {
+    for (const [mark, kind] of EXTENSION_RESULT) if (text.includes(mark)) return kind;
+  }
+  return "instruction";
+}
 
 /** やり取り 1 件（#89）。本文は載せない。 */
 export interface UiFlow {
@@ -441,13 +465,15 @@ export function flowsOf(state: OrchState): UiFlow[] {
   const t = (x: string | undefined): string => uiText(x);
 
   for (const i of state.instructions) {
+    const kind = instructionKind(i.text);
+    if (kind === null) continue;
     const to = idOf(i.nodeId);
     const reply =
       i.deliveredSeq === undefined ? undefined : firstReportAfter(i.nodeId, i.deliveredSeq);
     push(
       {
         id: `f-${i.seq}`,
-        kind: "instruction",
+        kind,
         dir: "down",
         from: actorOf(i.actor),
         to,

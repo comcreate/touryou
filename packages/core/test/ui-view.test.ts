@@ -6,6 +6,7 @@ import {
   type OrchEvent,
   type OrchState,
   stallSummary,
+  UI_ANSWER_TEXT_PREFIX,
   UI_CUT_MARK,
   UI_LIMITS,
   UI_OPTION_MAX,
@@ -650,6 +651,40 @@ describe("uiViewOf の #89 の値（題・最後の動き・人の要対応・�
       doneAt: "2026-10-20T03:00:00Z",
     });
     expect(JSON.stringify(v)).not.toContain("秘密の本文");
+  });
+
+  it("やり取り: 範囲の頼みの判定を届ける追加指示は、許可・却下・切り出しの種類。判断の答えの追加指示は重ねない（#115）", () => {
+    const evs = [
+      ...base(),
+      start("a"),
+      ev({
+        type: "node.instructed",
+        payload: {
+          nodeId: "a",
+          text: "範囲の拡張の要求（コマンド ls）は却下された。範囲の内側で進める",
+        },
+      } as never),
+      ev({
+        type: "node.instructed",
+        payload: { nodeId: "a", text: "範囲の拡張の要求（コマンド ls）は承認された。使ってよい" },
+      } as never),
+      ev({
+        type: "node.instructed",
+        payload: {
+          nodeId: "a",
+          text: "範囲の拡張の要求（コマンド ls）は、作業を切り出して別に進めることになった。範囲の内側で進める",
+        },
+      } as never),
+      ev({
+        type: "node.instructed",
+        payload: { nodeId: "a", text: `${UI_ANSWER_TEXT_PREFIX}判断 d1\n選んだ選択肢: x` },
+      } as never),
+      ev({ type: "node.instructed", payload: { nodeId: "a", text: "ふつうの指示" } } as never),
+    ];
+    const kinds = uiViewOf(must(evs))
+      .flows.filter((f) => f.dir === "down")
+      .map((f) => f.kind);
+    expect(kinds.sort()).toEqual(["approved", "instruction", "rejected", "split"]);
   });
 
   it("やり取り: 子 → 親は届いたかは分からない。判断の頼みは答えで done、答えは子の次の報告で done（推定）", () => {

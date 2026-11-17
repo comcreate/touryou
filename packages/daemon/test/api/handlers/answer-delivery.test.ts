@@ -7,6 +7,7 @@ import {
   type Result,
   type Scope,
   stateOf,
+  UI_ANSWER_TEXT_PREFIX,
 } from "@touryou/core";
 import { describe, expect, it } from "vitest";
 import { answerText, recoverAnswerDeliveries } from "../../../src/api/handlers/answer-delivery.js";
@@ -489,5 +490,15 @@ describe("decision.answer の結果の delivery（回答を子に届けたか）
     const id = await r.decide();
     const res = await r.answer(id, { choice: "YAML" });
     expect(res.value).toMatchObject({ accepted: true, delivery: "skipped" });
+  });
+});
+
+describe("判断の答えの追加指示と状態画面（#115）", () => {
+  it("answerText の文の頭は、core の UI_ANSWER_TEXT_PREFIX と同じ（やり取りで「指示」と重ねて描かない）", () => {
+    const text = answerText(
+      { decisionId: "d1", nodeId: "a", question: "q", options: ["x"] } as never,
+      "x",
+    );
+    expect(text.startsWith(UI_ANSWER_TEXT_PREFIX)).toBe(true);
   });
 });

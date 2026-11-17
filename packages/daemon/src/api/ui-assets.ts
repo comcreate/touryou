@@ -112,7 +112,7 @@ details[open]>:not(summary){animation:open .3s ease-out both}
 .trow{display:grid;grid-template-columns:minmax(200px,1.6fr) 140px 1fr 1fr;gap:8px;align-items:center;padding:6px 14px;border-top:1px solid var(--line);font-size:13.5px;min-width:640px}
 .trow.thead{border-top:0;font-size:12.5px;color:var(--muted);font-weight:700}
 .trow.turn{background:var(--kaki-soft)}.trow.finished{opacity:.7}
-.tname{display:flex;align-items:center;gap:6px}
+.tname{display:flex;align-items:center;gap:6px;min-width:0}.tname .strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tname button{flex:none;white-space:nowrap}
 .tag{display:inline-block;font-size:12px;color:var(--muted);margin-right:8px}
 .tag.blocking{color:var(--blocking);font-weight:600}.tag.request{font-weight:600}.tag.failed{color:var(--failed);font-weight:600}
 .desc{font-size:12.5px;color:var(--muted);margin:2px 0 6px}.irreversible{font-size:12.5px;color:var(--shu);margin:2px 0 6px}
@@ -206,7 +206,7 @@ export const UI_JS = `'use strict';
   // 受信箱の項目の種類（利用者の言葉）。「止まっているかも」は、daemon の知らせ（stall）があるときだけ（画面で推し量らない）
   var KIND_NAMES = { decision: '判断を求む', answer: '答え', violation: '止められた操作', failure: 'うまくいかなかった', stopIncomplete: '止まりきっていない', done: '済んだ', progress: '進み具合', info: '知らせ', digest: 'まとめ' };
   var BAND_NAMES = { turn: 'あなたの出番', running: '進んでいる', finished: '終わった' };
-  var FLOW_KIND_NAMES = { instruction: '指示', report: '報告', done: '済んだの報告', decision: '判断を求む', extension: '範囲の頼み', answer: '答え' };
+  var FLOW_KIND_NAMES = { instruction: '指示', report: '報告', done: '済んだの報告', decision: '判断を求む', extension: '範囲の頼み', answer: '答え', approved: '許可', rejected: '却下', split: '切り出し' };
   var ENTRY_MAX = 5;
   var EXTERNAL_CHECK_PREFIXES = ${EXTERNAL_CHECK_PREFIXES};
   var PRIORITY_NAMES = { blocking: '要判断', failed: '失敗', completed: '完了', progress: '進捗', info: '情報' };
@@ -566,11 +566,11 @@ export const UI_JS = `'use strict';
         b.disabled = x.targetHidden && decision !== 'reject';
         b.addEventListener('click', function () {
           openConfirm(
-            '拡張要求の' + DECISION_LABELS[decision],
+            '範囲の頼みの' + DECISION_LABELS[decision],
             [['ノード', x.nodeId], ['種類', x.kind ? name(KIND_LABELS, x.kind) : '（不明）'], ['対象', x.targetHidden ? '（表示できない）' : x.target], ['理由', x.reason], ['判定', DECISION_LABELS[decision] + (Object.hasOwn(DECISION_NOTES, decision) ? '（' + DECISION_NOTES[decision] + '）' : '')]],
             'scope.decide',
             { extensionId: x.id, decision: decision },
-            '拡張要求を' + DECISION_LABELS[decision] + 'しました'
+            '範囲の頼みを' + DECISION_LABELS[decision] + 'しました'
           );
         });
         opts.appendChild(b);
@@ -765,6 +765,20 @@ export const UI_JS = `'use strict';
     line.appendChild(el('span', 'when', '　' + timeText(f.sentAt, Date.now())));
     return line;
   }
+  // 受信箱の知らせの文を、利用者の言葉にする（#115）。daemon の文にあるノード ID は子の題に、内部の言葉は言い換える。
+  // ID は、カードの ID の欄で見られる。題のないノードは ID のまま
+  var titleById = new Map();
+  var SUMMARY_WORDS = { command: 'コマンドを足す頼み', write: '書き込める場所を足す頼み' };
+  function friendlySummary(text) {
+    return text
+      .replace(/[\\w:.-]+/g, function (w) {
+        var t = titleById.get(w);
+        return typeof t === 'string' && t !== '' ? '「' + cleanText(t, 40) + '」' : w;
+      })
+      .replace(/範囲の拡張要求(?:（(command|write)）)?/g, function (all, k) {
+        return k ? SUMMARY_WORDS[k] : '範囲の頼み';
+      });
+  }
   function entryRow(i, delegated) {
     var band = inboxBand(i, delegated);
     var row = el('div', 'entry');
@@ -773,7 +787,7 @@ export const UI_JS = `'use strict';
     head.appendChild(el('span', 'chip ' + (i.stall === true ? 'stall' : band.cls), i.stall === true ? '止まっているかも' : isStopRequest(i, delegated) ? band.label : name(KIND_NAMES, i.kind)));
     head.appendChild(el('span', 'when', timeText(i.at, Date.now())));
     row.appendChild(head);
-    var text = typeof i.summary === 'string' ? i.summary : '';
+    var text = friendlySummary(typeof i.summary === 'string' ? i.summary : '');
     if (Array.from(text).length > 60) {
       var d = fold('text-' + i.id, cleanText(text, 60));
       d.appendChild(el('div', 'confirm-line', text));
@@ -1172,7 +1186,7 @@ export const UI_JS = `'use strict';
       ['木の根', rootId],
       ['削除されるノード', v.nodeIds.length + ' 件（' + ids + more + '）'],
       ['アーカイブ日', cleanText(v.archivedAt, 40) + '（経過 ' + v.elapsedDays + ' 日 / 保持期間 ' + v.retentionDays + ' 日）'],
-      ['墓標', (tombstone === false ? '残さない' : tombstone === true ? '残す' : '保持ポリシーの既定に従う') + '（タイトル: ' + cleanText(v.tombstoneTitle, 100) + '）']
+      ['消した跡（題だけを残す記録）', (tombstone === false ? '残さない' : tombstone === true ? '残す' : '設定の既定に従う') + '（題: ' + cleanText(v.tombstoneTitle, 100) + '）']
     ];
     if (typeof v.discardedRefs === 'number' && v.discardedRefs > 0) lines.push(['一緒に消える保管', v.discardedRefs + ' 件の、破棄した成果（取り出すなら、先に保管の一覧から）']);
     if (v.hold && typeof v.hold === 'object') lines.push(['保留', '保留中（ノード ' + cleanText(String(v.hold.nodeId || ''), 128) + (v.hold.until ? '。' + cleanText(String(v.hold.until), 40) + ' まで' : '。無期限') + '）。保留は自動の削除だけを止める。この最終削除は、保留を無視して消す']);
@@ -1219,9 +1233,9 @@ export const UI_JS = `'use strict';
       card.appendChild(el('span', 'tag', 'アーカイブ済みの木'));
       card.appendChild(el('span', '', id));
       var del = el('div', 'opts');
-      var b1 = el('button', '', '最終削除…（墓標は既定）');
+      var b1 = el('button', '', '最終削除…（消した跡は設定の既定）');
       b1.addEventListener('click', function () { startPurge(id, undefined); });
-      var b2 = el('button', '', '墓標を残さずに最終削除…');
+      var b2 = el('button', '', '消した跡も残さずに最終削除…');
       b2.addEventListener('click', function () { startPurge(id, false); });
       del.appendChild(b1);
       del.appendChild(b2);
@@ -1442,6 +1456,8 @@ export const UI_JS = `'use strict';
     var v = { nodes: view.nodes, inbox: view.inbox, decisions: view.decisions, extensions: view.extensions, flows: flows };
     var byId = new Map();
     view.nodes.forEach(function (n) { byId.set(n.id, n); });
+    titleById = new Map();
+    view.nodes.forEach(function (n) { if (typeof n.title === 'string') titleById.set(n.id, n.title); });
     nextSeen = new Set();
     renderTodo(v, byId);
     renderCards(v, byId);

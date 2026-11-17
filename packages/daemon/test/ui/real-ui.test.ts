@@ -52,6 +52,23 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       ev({ type: "node.instructed", payload: { nodeId: "ui-a", text: "x" } }, { nodeId: "root" }),
       // 人からの指示（段を飛ばす。木の外の「人」の箱から）
       ev({ type: "node.instructed", payload: { nodeId: "ui-c", text: "x" } }),
+      // 人から子への、範囲の頼みの却下（札は「指示」でなく「却下」。#115）と、範囲の頼みの知らせ（内部の言葉を言い換える）
+      ev({
+        type: "node.instructed",
+        payload: {
+          nodeId: "ui-c",
+          text: "範囲の拡張の要求（コマンド ls）は却下された。範囲の内側で進める",
+        },
+      }),
+      ev({
+        type: "inbox.added",
+        payload: {
+          id: "x1",
+          kind: "info",
+          nodeId: "ui-c",
+          summary: "範囲の拡張要求（command）: pnpm lint",
+        },
+      }),
       // 止まっているかもの子（長い ID。狭い窓で、はみ出さないことも見る）と、済んだ子
       ...created(LONG, "investigate", "root", "関係図の見た目を見本と比べる"),
       ev({
@@ -124,6 +141,45 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(await page.evaluate(() => document.getElementById("view-switch")?.hidden)).toBe(false);
     expect(await csp()).toEqual([]);
     expect(problems).toEqual([]);
+  });
+
+  it("知らせの文は、長いノード ID でなく子の題。内部の言葉（墓標・範囲の拡張要求（command））を出さない（#115）", async () => {
+    const body = (await page.evaluate(() => document.body.textContent)) ?? "";
+    const entries = await page.evaluate(() =>
+      [...document.querySelectorAll(".entry")].map((e) => e.textContent ?? ""),
+    );
+    const stall = entries.find((t) => t.includes("止まっているかもしれない")) ?? "";
+    expect(stall).toContain("「関係図の見た目を見本と比べる」");
+    expect(stall).not.toContain(LONG);
+    expect(entries.some((t) => t.includes("コマンドを足す頼み: pnpm lint"))).toBe(true);
+    expect(body).not.toContain("墓標");
+    expect(body).not.toContain("範囲の拡張要求");
+  });
+
+  it("人から子への範囲の頼みの却下の線の札は「却下」（「指示」でない）", async () => {
+    const labels = await page.evaluate(() =>
+      [...document.querySelectorAll("#graph text.mlabel")].map((e) => e.textContent ?? ""),
+    );
+    expect(labels.some((t) => t.startsWith("→ 却下"))).toBe(true);
+  });
+
+  it("一覧の「詳しく」は、狭い窓でも 1 行（折れない）", async () => {
+    await page.click("#show-list");
+    for (const width of [1280, 900, 700, 420]) {
+      await page.setViewportSize({ width, height: 900 });
+      const heights = await page.evaluate(() =>
+        [...document.querySelectorAll("#list .tname button")].map((b) => {
+          const r = b.getBoundingClientRect();
+          const line = Number.parseFloat(getComputedStyle(b).lineHeight) || 20;
+          return r.height / line;
+        }),
+      );
+      expect(heights.length).toBeGreaterThan(0);
+      for (const h of heights) expect(h, `幅 ${width}`).toBeLessThan(1.9);
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.click("#show-graph");
+    await page.waitForSelector("#graph .gnode");
   });
 
   it("箱は見本の形：状態の言葉と印・左の縁の段・役割の印・列の見出し。止まっているかもは、くすんだ黄（カードも）", async () => {
