@@ -28,7 +28,7 @@ ID は、短縮せずに、そのまま渡します（作業ツリーのディ�
 
 子を動かす:
 
-- `mcp__node__node_spawn`: 子を作る。`parentId`（自分か子孫の ID）・`role`・`objective`・`acceptanceCriteria`（確かめられる形で書く）・`scope`（`writableLocations`・`forbiddenLocations` は作業ツリー内の相対パス、`allowedCommands`）・`dependsOn`（任意）を渡す。範囲は必要最小限にする。依存先が未完了なら `pending` になる。
+- `mcp__node__node_spawn`: 子を作る。`parentId`（自分か子孫の ID）・`role`・`objective`・`acceptanceCriteria`（確かめられる形で書く）・`scope`（`writableLocations`・`forbiddenLocations` は作業ツリー内の相対パス、`allowedCommands`）・`dependsOn`（任意）を渡す。範囲は必要最小限にする。作業ツリーの中を探す読み取りだけのコマンド（`ls`・`find`・`grep`・`git ls-files`・`git grep`）は、`allowedCommands` に入れなくても子が使える。子に探し方を案内するときは、Glob・Grep の道具を決めつけない（Claude Code の版によっては出ないので、そのときは Bash のこれらで探すと書く）。依存先が未完了なら `pending` になる。
 - `mcp__node__node_send`: 稼働中の子へ追加の指示を送る。`queued` は受け付けただけなので、届いたかは受信箱や状態で確かめる。
 - `mcp__node__node_stop`: 子を止める。`graceful` は穏当、`immediate` は即時。`graceMs` は `graceful` のときだけ指定できる。
 - `mcp__node__node_hookUnbind`: 子のフック（plugin のファイルで設定するフック）が、`/clear`・`--resume` で session_id が変わって拒否され続けるときに、結び付けを外す。次に来たセッションに結び直す。子のトークンが漏れた疑いがあるときは使わず、人間に知らせる。

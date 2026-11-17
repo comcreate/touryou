@@ -8,6 +8,7 @@
  * - 書き込み系（Write・Edit・MultiEdit・NotebookEdit）は、対象のパス（絶対にして、最も深い既存の祖先を実パスにしたもの。
  *   リンク経由の範囲外への書き込みを防ぐ）を書き込みとして判定する。解決に失敗したら拒否する。
  *   フック入力の `cwd`（`HookInput.cwd`）は使わない。基準は、起動時に実パスにした作業ツリー。
+ * - Bash の、作業ツリーの中を探す読み取りだけのコマンド（`read-only-search.ts`）は、範囲の allowedCommands によらず許可する。
  * - Bash は、コマンドとして判定する。`run_in_background` が `undefined`・`false` 以外、
  *   `dangerouslyDisableSandbox` が `true` なら拒否する（ADR 未決の既定）。
  * - 自ノードの MCP ツールは、子のロールの道具だけ（`mcp__node__<道具>`・`mcp__plugin_<plugin>_node__<道具>`）を許可する。権限の絞り込みは窓口のロール別の操作表（NFR_004）の責務。
@@ -25,6 +26,7 @@ import {
   type Scope,
   type ScopeViolationReason,
 } from "@touryou/core";
+import { isReadOnlySearch } from "./read-only-search.js";
 
 /** パスの実パス化（書き込み先の判定用）。解決できなければ reject する。 */
 export type ResolvePath = (absPath: string) => Promise<string>;
@@ -831,6 +833,17 @@ export async function decideToolUse(
       return deny("backgroundExecution", command);
     if (input.dangerouslyDisableSandbox === true)
       return deny("commandNotAllowed", `${command}（dangerouslyDisableSandbox）`);
+    // 作業ツリーの中を探す読み取りだけのコマンド（ls・find・grep・git ls-files・git grep）は、範囲によらず許す（#92）
+    if (
+      await isReadOnlySearch(
+        command,
+        toolCwd,
+        cwd,
+        resolve,
+        protectedPaths?.roots.map((r) => r.path),
+      )
+    )
+      return ALLOW;
     const d = evaluateScope(scope, cwd, { kind: "command", command });
     return d.allowed ? ALLOW : deny(d.reason, d.subject);
   }

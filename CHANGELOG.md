@@ -4,6 +4,7 @@
 
 ### 利用者に見える変更
 
+- **調べ役などの子が、作業ツリーの中を Bash の `ls`・`find`・`grep`・`git ls-files`・`git grep` で探せるようにした**（#92）: Claude Code の native 版は Glob・Grep の道具を出さず、Bash の find・grep で探させるが、子のフックが範囲の許可のコマンドにないとして止めていたため、子が何も探せなかった。これらは範囲によらず許す（作業ツリーの中だけ。`find -exec`・`-delete`、grep のコマンドを動かすオプション、`git grep -O`、外のパス、禁じる場所は今までどおり断る）。統合と子の skill の案内も、道具が見えないときは Bash で探すと書きそろえた。
 - **常駐を外すとき、TouRyou.app がなければ LaunchServices の登録の解除を飛ばしたと知らせる**（#79）: `touryou launchd uninstall` で、current の中に TouRyou.app がないのに「登録を解いた」と出ていたのを、`apply` にそろえて「飛ばした」と出すようにした。
 
 ### 内部の変更

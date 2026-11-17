@@ -221,6 +221,7 @@ interface Capabilities {
 - 入力待ちの知らせ（Notification）は、同じノードに直近 10 分に出していれば足さない。窓はトークンつきの報告と session_id で引いた報告で分ける。
 - git の設定は、`-c`・`--config-env`・`git config` の書き込みで、`alias.*`・`include.path`・`includeIf.*` を拒む。
 - 線引き: Bash の検査はコマンドの字面の解析で、`python -c` の中の文字列や変数で組み立てたパスは見ない。印と禁じる場所は誤りと事故を防ぐためのもので、モデルが意図して外そうとすることに対する境界ではない。バックグラウンド起動（`run_in_background`、`&`、`nohup`、`setsid` など）は既定で拒否する。
+- 作業ツリーの中を探す読み取りだけのコマンド（`ls`・`find`・`grep`・`git ls-files`・`git grep`。`|`・`&&`・`;` でつないだものを含む）は、範囲の `allowedCommands` によらず許す（FR_014: 読み込みは制限しない。`daemon/src/sdk/read-only-search.ts`）。Claude Code の native 版は Glob・Grep の道具を出さず（find・grep を内蔵の bfs・ugrep に差し替える）、Bash で探させるため。許さない形: git の大域のオプション、`find` の `-exec`・`-execdir`・`-ok`・`-okdir`・`-delete`・`-fprint*`・`-fls`、grep の `--filter`・`--pager`・`--view`・`--query`・`-Q`・`--save-config`・`--config`・`--index`・`--pre`、`git grep` の `-O`・`--open-files-in-pager`・`--textconv`・`--ext-diff`、作業ツリーの外を指す語（絶対パス・`~`・`..`。実パスにできればリンクを解いて確かめる）、作業ツリーの外からの実行、禁じる場所が作業ツリーの中にあるとき。禁じる場所の判定は、これより先に効く。子の permissions（6.2）には足さない（Claude Code が、読み取りだけのコマンドとして安全な旗に限って通すため。`Bash(find:*)` を足すと、フックのない子で `find -exec` まで通る）。
 - Stop のフックの「未読」は、`deliveredSeq` がまだない、そのノードあての指示の数で数える。
 
 ## 6.5. 配布・導入
