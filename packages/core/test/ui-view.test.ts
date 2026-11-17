@@ -531,7 +531,7 @@ describe("uiViewOf の #89 の値（題・最後の動き・人の要対応・�
     const s = must([
       ...base(),
       created("b", "implement", "root", {
-        objective: "  集計を直す  ",
+        objective: "  集計を\n\t直す   こと  ",
         acceptanceCriteria: ["秘密の基準"],
         scope: { writableLocations: ["src"], forbiddenLocations: [".git"], allowedCommands: [] },
       }),
@@ -542,7 +542,7 @@ describe("uiViewOf の #89 の値（題・最後の動き・人の要対応・�
       }),
     ]);
     const v = uiViewOf(s);
-    expect(v.nodes.find((x) => x.id === "b")?.title).toBe("  集計を直す  ");
+    expect(v.nodes.find((x) => x.id === "b")?.title).toBe("集計を 直す こと");
     expect(v.nodes.find((x) => x.id === "c")?.title).toBe(
       `${"あ".repeat(UI_TITLE_MAX)}${UI_CUT_MARK}`,
     );
@@ -733,6 +733,26 @@ describe("uiViewOf の #89 の値（題・最後の動き・人の要対応・�
       doneAt: "2026-10-20T06:00:00Z",
     });
     expect(v.flows.find((f) => f.kind === "done")).toMatchObject({ stage: "sent", to: "root" });
+  });
+
+  it("やり取り: 完了の報告は、受理・差し戻しのあと done で、doneAt はその時刻", () => {
+    const s = must([
+      ...base(),
+      start("a"),
+      report("r1", "a", "done"),
+      ev({
+        type: "node.stateChanged",
+        payload: { nodeId: "a", event: { type: "reportDone" } },
+      } as never),
+      ev(
+        { type: "node.stateChanged", payload: { nodeId: "a", event: { type: "accept" } } } as never,
+        "2026-10-20T07:00:00Z",
+      ),
+    ]);
+    expect(uiViewOf(s).flows.find((f) => f.kind === "done")).toMatchObject({
+      stage: "done",
+      doneAt: "2026-10-20T07:00:00Z",
+    });
   });
 
   it("やり取りは UI_LIMITS.flows 件まで。切ったら truncated に flows", () => {

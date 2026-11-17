@@ -263,7 +263,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       .map((i) => i.nodeId),
   );
   const nodes = cap("nodes", state.nodes, UI_LIMITS.nodes).map((n): UiNode => {
-    const title = uiText(n.objective, UI_TITLE_MAX);
+    const title = titleOf(n.objective);
     const needsHuman = human.get(n.id) ?? 0;
     const at = last.get(n.id);
     return {
@@ -343,6 +343,12 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
   return { lastSeq: state.lastSeq, nodes, inbox, decisions, extensions, flows, truncated };
 }
 
+/** 題: 改行・タブ・続く空白を空白 1 つにまとめ、前後の空白を除いて 1 行にしてから、`UI_TITLE_MAX` で切る。 */
+function titleOf(objective: unknown): string {
+  if (typeof objective !== "string") return "";
+  return uiText(objective.replace(/\s+/gu, " ").trim(), UI_TITLE_MAX);
+}
+
 /** 終わった状態（人の決めが残らないもの）。停止（stopped）は、人の要対応がなければ終わった扱い。 */
 const FINISHED_STATES: ReadonlySet<string> = new Set([
   "verified",
@@ -406,7 +412,7 @@ export function flowsOf(state: OrchState): UiFlow[] {
   const parentOf = new Map<string, string>();
   for (const n of state.nodes)
     parentOf.set(n.id, n.parentId === null ? UI_HUMAN : idOf(n.parentId) || UI_HUMAN);
-  const stateOf = new Map(state.nodes.map((n) => [n.id, n.state] as const));
+  const nodeOf = new Map(state.nodes.map((n) => [n.id, n] as const));
   // 子の報告（review は人・親の書いたものなので除く）を、ノードごとに記録の順で
   const reportsBy = new Map<string, { seq: number; at: string }[]>();
   for (const r of state.reports) {
@@ -451,7 +457,20 @@ export function flowsOf(state: OrchState): UiFlow[] {
     const from = idOf(r.nodeId);
     const done = r.kind === "done";
     // 完了の報告は、最後のもので、ノードがまだ完了の報告の状態（受理・差し戻しの前）なら、返事を待っている
-    const waiting = done && lastDone.get(r.nodeId) === r.seq && stateOf.get(r.nodeId) === "done";
+    const node = nodeOf.get(r.nodeId);
+    const waiting = done && lastDone.get(r.nodeId) === r.seq && node?.state === "done";
+    // 済んだ時刻: 進み具合などは送った時刻。完了の報告は、受理・差し戻しの時刻（記録は最後の 1 回だけなので、
+    // その直前の完了の報告にだけ付ける。それより前の完了の報告は、済んだが時刻は分からない）。
+    const lastDoneBeforeReview =
+      done && node?.reviewedSeq !== undefined
+        ? state.reports
+            .filter(
+              (x) =>
+                x.nodeId === r.nodeId && x.kind === "done" && x.seq < (node.reviewedSeq as number),
+            )
+            .at(-1)?.seq
+        : undefined;
+    const doneAt = !done ? r.at : lastDoneBeforeReview === r.seq ? node?.reviewedAt : undefined;
     push(
       {
         id: `f-${r.seq}`,
@@ -461,7 +480,7 @@ export function flowsOf(state: OrchState): UiFlow[] {
         to: parentOf.get(r.nodeId) ?? UI_HUMAN,
         stage: waiting ? "sent" : "done",
         sentAt: t(r.at),
-        ...(waiting || done ? {} : { doneAt: t(r.at) }),
+        ...(waiting || doneAt === undefined ? {} : { doneAt: t(doneAt) }),
         deliveryUnknown: true,
       },
       r.seq,

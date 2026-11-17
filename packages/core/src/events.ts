@@ -437,6 +437,9 @@ export interface NodeRecord {
   readonly parentSession?: { readonly sessionId: string; readonly seq: number };
   /** アーカイブした時刻（`archive` のイベントの `at`）。 */
   readonly archivedAt?: string;
+  /** 最後に完了の報告を受理・差し戻しした（`done` からの `accept`・`reject`）イベントの `seq` と時刻。画面のやり取りの段に使う。 */
+  readonly reviewedSeq?: number;
+  readonly reviewedAt?: string;
   /** 直近の `start`・`restart` の `seq`。未回答の判断要求の上限（`openDecisionsPerNode`）で、数える範囲の始まり。古いスナップショットにはない（0 とみなす）。 */
   readonly runStartedSeq?: number;
 }
@@ -1394,6 +1397,9 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
         state: next,
         ...(startsRun ? { runStartedSeq: seq } : {}),
         ...(next === "archived" ? { archivedAt: raw.at } : {}),
+        ...((event.type === "accept" || event.type === "reject") && node.state === "done"
+          ? { reviewedSeq: seq, reviewedAt: raw.at as string }
+          : {}),
       });
       if (event.type === "stop" && t.value.changed && t.value.effect !== "cancelStart") {
         d.stopRequests.push(

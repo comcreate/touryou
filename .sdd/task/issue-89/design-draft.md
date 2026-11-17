@@ -70,7 +70,7 @@ flowchart LR
 
 | モジュール | 場所 | 役割 |
 |:--|:--|:--|
-| 表示モデル | `packages/core/src/ui-view.ts` | 5 節の値を足す。`flowsOf`（やり取りの段の決め）と `needsHumanOf`（人の要対応の数え）を純粋な関数で |
+| 表示モデル | `packages/core/src/ui-view.ts` | 5 節の値を足す。`flowsOf`（やり取りの段の決め）と `humanCounts`（人の要対応の数え）を純粋な関数で |
 | 状態の畳み | `packages/core/src/events.ts` | `DecisionRecord.answeredSeq`・`answeredAt`、`ExtensionRecord.decidedAt` を足す（新しいイベントは要らない） |
 | 画面 | `packages/daemon/src/api/ui-assets.ts` | 「いまあなたがすること」・作業のカード・一覧・管理のたたみ。図は `graph.js` に任せる |
 | 図の入口 | `packages/daemon/src/ui/graph-entry.ts`（新・案） | `drawGraph(host, view)`。表示モデルから、整えた文字・確かめた ID・数だけを作り直して描く |
@@ -84,9 +84,9 @@ flowchart LR
 ```ts
 export interface UiNode {
   // いまの欄に足す
-  /** 目的（objective）の先頭を整えて切ったもの（約 80 コードポイント。uiText と同じ整え）。なければ欄なし。 */
+  /** 目的（objective）の先頭を整えて切ったもの（80 コードポイント。uiText と同じ整えに加え、改行・タブ・続く空白を空白 1 つにまとめ、前後の空白を除いて 1 行にする）。なければ欄なし。 */
   readonly title?: string;
-  /** そのノードの最後の記録（報告・受信箱・状態の変化・指示）の時刻。 */
+  /** そのノードの最後の動き（報告・受信箱の項目・指示と受け取り・判断と拡張の要求）の時刻。状態の変化は時刻の記録がないので含めない。 */
   readonly lastActivityAt?: string;
   /** 人の操作が要る数（判断待ち・範囲の頼み・止まっているかも・停止の代行依頼）。openItems とは別（research.md 1.4）。 */
   readonly needsHuman: number;
@@ -104,7 +104,8 @@ export interface UiInboxItem {
 
 export interface UiExtension {
   // いまの欄に足す
-  readonly at: string;
+  /** 要求の時刻。古い記録にはないので省ける。 */
+  readonly at?: string;
 }
 
 export const UI_FLOW_STAGES = ["sent", "delivered", "done"] as const;
@@ -124,6 +125,7 @@ export interface UiFlow {
 // UiView に readonly flows: readonly UiFlow[] を足す。新しい順に UI_LIMITS.flows（200）件まで。
 // 本文は載せない（種類・時刻・ID だけ）。表示モデルは時計を持たない純粋な関数なので、「24 時間たったものを外す」はしない（件数の上限だけ）。
 // 親への依頼（parentRequest）は、画面のやり取りに要らないので載せない。
+// 完了の報告の doneAt は、受理・差し戻しの時刻（NodeRecord.reviewedAt。最後の 1 回だけ記録する。それより前の完了の報告には doneAt を付けない）。
 ```
 
 - 段の決め方（`flowsOf`）は research.md 9.3 のとおり。子 → 親は `deliveryUnknown`（「届いた」の記録は #102 で足す）。
@@ -163,7 +165,7 @@ export interface UiFlow {
 
 | 対象 | 試験 |
 |:--|:--|
-| `flowsOf`・`needsHumanOf`・`band`・`title`・`lastActivityAt` | core の単体の試験（記録の列から期待の値。上限・24 時間・統合の見える範囲） |
+| `flowsOf`・`humanCounts`・`band`・`title`・`lastActivityAt` | core の単体の試験（記録の列から期待の値。上限・統合の見える範囲） |
 | `layoutOf` | vm／単体：根だけ・鎖・横に広い・深さの不揃い・子 50・同じ入力で同じ出力・重ならない・親が子の真ん中の高さ |
 | `graph-path` | `d` が許した命令と数だけ・上りと下りが交わらない・矢印の向き |
 | `svgEl` | 許していないタグ・属性・値を拒む。一覧にない `class`（空白で区切ったうちの 1 つでも）を拒む。`createElementNS` が 1 か所だけ |
