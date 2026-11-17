@@ -47,7 +47,7 @@ claude plugin marketplace add comcreate/touryou
 4. `.github/workflows/release.yml` が、`plugin/` の中身を根にした zip（`touryou-<版>.zip`）と、その `.sha256` を Release に付ける。sha256 と URL は、実行の Summary に出る。Release は不変に扱う（付け直し〔`--clobber`〕はしない。Release がすでにあれば、ワークフローは失敗する。やり直し方は、下の「やり直す」）。
    同じ実行で、macOS（**arm64 のみ**）の配布物（Node 同梱の `touryou-<版>-darwin-arm64.tar.gz` と `.sha256`）を作り、展開して daemon が起動する確認（smoke。`scripts/dist-smoke.sh`）を通したものだけを、同じ Release に付ける（失敗すると、Release は作られない）。smoke は、はじめに、利用者の `/setup` と同じ中身の検査（`scripts/dist-check.sh`。`plugin/scripts/install-runtime.sh` を source して `check_list`・`check_types`・`check_kinds`・`check_links` を使い、行き先のないリンクも断る）を tar.gz に当てる。`scripts/dist-build.sh` は、lib の外を指す・行き先のないシンボリックリンク（pnpm deploy が残す `.pnpm/node_modules/@touryou/daemon`）を取り除き、取り除いたものをビルドの出力に出す（#56）。あわせて、Claude デスクトップアプリの拡張機能 `touryou-mcp-<版>.mcpb` と `.sha256` も作る（`scripts/mcpb-build.sh`。JS だけ・未署名。`docs/desktop-extension.md`）。Release の asset は、zip・tar.gz・.mcpb と、それぞれの `.sha256` の 6 ファイル。配布物の sha256 は `checksums.json`（`scripts/make-checksums.mjs` が、リリースの実行の中で `plugin/` に書く。リポジトリにはない）に入れ、zip に入れる。利用者の `/setup` が、plugin の中の `scripts/install-runtime.sh` で、これと照合する（script も zip に入り、許可リストで `scripts/install-runtime.sh`・`scripts/runtime-version-notice.sh` だけを通す）。
 5. `marketplace-self` のジョブが、`.claude-plugin/marketplace.json` を新しい版に書き換える PR を出す。中身（3 つの値と、`.claude/settings.json` の `ref` が `marketplace-v<版>` になっていること）を確かめてマージする。マージのあと、すぐに 5-a の tag を付ける。PR が出なければ、Summary の値で手で直して PR を出す（Release はそのままでよい）。
-5-a. **marketplace の tag**（5 の PR をマージしたあと、すぐ）: 決まりを越えてよい管理者が、手元から、5 の PR のマージのコミットに `marketplace-v<版>` の tag を付けて push する（#90）。5 の PR は、`marketplace.json` と一緒に、project の `.claude/settings.json` の `extraKnownMarketplaces.touryou.source.ref` も `marketplace-v<版>` に書き換えている。そのため、**tag を付けるまで、project の設定での marketplace の取得は失敗する**（`Remote branch marketplace-v<版> not found`）。tag を付ければ直る。付け忘れは `marketplace-ref.yml`（`main` への push と日に 1 回）が失敗して知らせる。名前の食い違いは、PR の CI（`ci.yml` の `scripts/check-marketplace-ref.sh name`）が失敗して知らせる。
+5-a. **marketplace の tag**（5 の PR をマージしたあと、すぐ）: 決まりを越えてよい管理者が、手元から、5 の PR のマージのコミットに `marketplace-v<版>` の tag を付けて push する（#90）。5 の PR は、`marketplace.json` と一緒に、project の `.claude/settings.json` の `extraKnownMarketplaces.touryou.source.ref` も `marketplace-v<版>` に書き換えている。そのため、**tag を付けるまで、project の設定での marketplace の取得は失敗する**（`Remote branch marketplace-v<版> not found`）。tag を付ければ直る。付け忘れは `marketplace-ref.yml` が知らせる。`main` への push のとき（この PR のマージの直後で、tag はまだない）は警告に留めて成功で終え、日に 1 回と手動の実行では失敗にする。tag の中の版が合わないときは、どのきっかけでも失敗にする。名前の食い違いは、PR の CI（`ci.yml` の `scripts/check-marketplace-ref.sh name`）が失敗して知らせる。
 
    tag は、`main` の最初の親をたどって `.claude-plugin/marketplace.json` を最後に変えたコミットに付ける。そのコミットで、marketplace の版がちょうど `<版>` になったこと（直前のコミットでは別の版だったこと）を確かめてから付ける。`v<版>` の tag と同じく、決まり（ruleset `release-tags`）で、管理者だけが作れ、だれも付け直し・削除できない。
 
@@ -145,7 +145,7 @@ claude plugin marketplace add comcreate/touryou
 
 ### `release-tags` に `marketplace-v*` を足す（#90。一度だけ）
 
-決まりを越えてよい管理者が、手元の端末で行う。実行の前に、`gh` を管理者のアカウントに切り替えておく（`gh auth status` で確かめ、違えば `gh auth switch` で切り替える）。ID は名前から引く。いまの中身を読み、`conditions.ref_name.include` に `refs/tags/marketplace-v*` を足すだけで、ほかは変えない。変えたあとの中身を表示し、`y` と答えたときだけ PUT する。zsh の対話に貼れるように、コメント行（`#`）は入れていない。
+決まりを越えてよい管理者が、手元の端末で行う。実行の前に、`gh` を管理者のアカウントに切り替えておく（`gh auth status` で確かめ、違えば `gh auth switch` で切り替える）。ID は名前から引く。いまの中身を読み、`conditions.ref_name.include` に `refs/tags/marketplace-v*` を足すだけで、ほかは変えない。変えたあとの中身を表示し、`y` と答えたときだけ PUT する。`include` は並べ替えるので、`refs/tags/marketplace-v*` が `refs/tags/v*` の前に出る（害はない）。読んだ中身の `bypass_actors` が空なら止める（権限の足りない token で読むと空になり、そのまま PUT すると越えられる人が消えるため）。zsh の対話に貼れるように、コメント行（`#`）は入れていない。
 
 ```sh
 (
@@ -154,6 +154,7 @@ repo=comcreate/touryou
 id="$(gh api "repos/${repo}/rulesets" --jq '[.[] | select(.name == "release-tags" and .target == "tag")] | if length == 1 then .[0].id else empty end')"
 if [ -z "${id}" ]; then echo "release-tags の ruleset が 1 つに決まりません。止めます"; exit 1; fi
 cur="$(gh api "repos/${repo}/rulesets/${id}")"
+if printf '%s' "${cur}" | jq -e '(.bypass_actors | length) > 0' >/dev/null; then :; else echo "bypass_actors が空です（読んだ token の権限が足りない恐れ）。越えられる人を消さないよう、止めます"; exit 1; fi
 new="$(printf '%s' "${cur}" | jq '{name, target, enforcement, bypass_actors, conditions, rules} | .conditions.ref_name.include |= ((. + ["refs/tags/marketplace-v*"]) | unique)')"
 printf '%s\n' "いまの対象:"
 printf '%s' "${cur}" | jq -c '.conditions.ref_name'
@@ -176,6 +177,8 @@ project の `.claude/settings.json` の `ref` を `marketplace-v0.1.2` にする
 1. 管理者が、上の「`release-tags` に `marketplace-v*` を足す」を行う。
 2. 管理者が、リリースの手順の 5-a の script で、`marketplace-v0.1.2` を付けて push する（いまの `main` で `marketplace.json` を最後に変えたのは、#78 のマージのコミット。そこで版が 0.1.1 から 0.1.2 になったことを、script が確かめる）。
 3. #90 の PR をマージする。PR の CI は名前の一致だけを照らす。tag があり中の版が合うことは、マージのあとの `main` で `marketplace-ref.yml` が照らす。
+
+順番を間違えて、1・2 の前に #90 の PR をマージしたとき：project の設定での marketplace の取得が `Remote branch marketplace-v0.1.2 not found` で失敗する（`marketplace-ref.yml` は、push のときは警告、日に 1 回の実行で失敗）。差し戻しは要らない。すぐ 1・2 を行えば直る（tag を付ける先は #78 のマージのコミットのままで、5-a の script がそれを選ぶ。#90 のマージは `marketplace.json` を変えないため）。
 
 ## Actions の artifact の容量
 

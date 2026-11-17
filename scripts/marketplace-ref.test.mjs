@@ -53,8 +53,12 @@ function fixture(version, ref) {
   git(work, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qm", "init");
   git(work, "remote", "add", "origin", up);
   git(work, "push", "-q", "origin", "main");
-  const run = (mode) =>
-    spawnSync("bash", ["scripts/check-marketplace-ref.sh", mode], { cwd: work, encoding: "utf8" });
+  const run = (mode, env = {}) =>
+    spawnSync("bash", ["scripts/check-marketplace-ref.sh", mode], {
+      cwd: work,
+      encoding: "utf8",
+      env: { ...process.env, MISSING_TAG_OK: "", ...env },
+    });
   const tag = (name, v) => {
     market(v, { tagged: true });
     git(work, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-qam", "t");
@@ -89,10 +93,15 @@ test("tag: 上流に tag がなければ失敗、中の版が違えば失敗、�
     let r = f.run("tag");
     assert.notEqual(r.status, 0);
     assert.match(r.stdout, /上流に tag marketplace-v0\.1\.2 がありません/);
+    r = f.run("tag", { MISSING_TAG_OK: "1" });
+    assert.equal(r.status, 0, "push のときは、tag がないことは警告に留める");
+    assert.match(r.stdout, /::warning::上流に tag marketplace-v0\.1\.2 がまだありません/);
     f.tag("marketplace-v0.1.2", "0.1.1");
     r = f.run("tag");
     assert.notEqual(r.status, 0);
     assert.match(r.stdout, /版が「0\.1\.1」/);
+    r = f.run("tag", { MISSING_TAG_OK: "1" });
+    assert.notEqual(r.status, 0, "中の版の食い違いは、push のときも失敗にする");
   } finally {
     f.done();
   }
@@ -132,6 +141,11 @@ test("marketplace-ref.yml は main への push・定期・手動で tag を照�
   assert.match(w, /permissions:\n {2}contents: read\n/);
   assert.doesNotMatch(w, /write/);
   assert.match(w, /bash scripts\/check-marketplace-ref\.sh tag/);
+  assert.match(
+    w,
+    /MISSING_TAG_OK: \$\{\{ github\.event_name == 'push' && '1' \|\| '' \}\}/,
+    "push のときだけ tag がないのを警告に留める",
+  );
 });
 
 test("release.yml の marketplace-self は、settings.json の ref も marketplace-v<版> に書き換え、name で照らす", {
