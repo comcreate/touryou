@@ -122,7 +122,7 @@ jq -c '.plugins[] | {version}' "$(find "$d" -name marketplace.json -path '*toury
 3. `settings.json` の `ref` の変更は、`marketplace-self` の PR に同梱する。
 4. tag の名前は `marketplace-v<版>`。
 
-最初の切り替えの順番（`docs/release.md` の「最初の切り替え」）：ruleset の変更 → `marketplace-v0.1.2` を #78 のマージのコミットに付ける → この PR のマージ。
+最初の切り替えの順番（`docs/release.md` の「最初の切り替え」）：ruleset の変更 → `marketplace-v0.1.2` を #78 のマージのコミットに付ける → この PR のマージ → 手動で `marketplace ref` を走らせて確かめる（最初の tag の push では、付く先のコミットに workflow がないので、照らしは動かない）。
 
 確かめたこと（実装の段）：
 

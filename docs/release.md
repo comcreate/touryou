@@ -178,7 +178,9 @@ project の `.claude/settings.json` の `ref` を `marketplace-v0.1.2` にする
 
 1. 管理者が、上の「`release-tags` に `marketplace-v*` を足す」を行う。
 2. 管理者が、リリースの手順の 5-a の script で、`marketplace-v0.1.2` を付けて push する（いまの `main` で `marketplace.json` を最後に変えたのは、#78 のマージのコミット。そこで版が 0.1.1 から 0.1.2 になったことを、script が確かめる）。
-3. #90 の PR をマージする。PR の CI は名前の一致だけを照らす。2 の tag の push のときに、`marketplace-ref.yml` が tag の中の版を照らす。マージのあとは、手動で `marketplace ref` を走らせ、`main` の `ref` の tag があることを確かめる。
+3. #90 の PR をマージする。PR の CI は名前の一致だけを照らす。マージのあと、手動で `marketplace ref` を走らせ（Actions の画面の Run workflow）、`main` の `ref` の tag があり、中の版が合うことを確かめる。
+
+2 の tag の push では、`marketplace-ref.yml` は動かない（tag の push で動く workflow は、tag の付く先のコミットにあるものだけで、#78 のマージのコミットには、まだこの workflow がない）。付ける先の確かめは、5-a の script が行う。次の版からは、tag の付く先（5 の PR のマージのコミット）に workflow があるので、tag の push で動く。
 
 順番を間違えて、1・2 の前に #90 の PR をマージしたとき：project の設定での marketplace の取得が `Remote branch marketplace-v0.1.2 not found` で失敗する（日に 1 回の `marketplace ref` も失敗する）。差し戻しは要らない。すぐ 1・2 を行えば直る（tag を付ける先は #78 のマージのコミットのままで、5-a の script がそれを選ぶ。#90 のマージは `marketplace.json` を変えないため）。
 
