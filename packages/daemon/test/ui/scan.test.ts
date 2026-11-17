@@ -133,7 +133,7 @@ const BANNED: readonly [string, RegExp][] = [
 /** HTML を解釈する名前。出てきてよいのは `.innerHTML=""` のあとが `;`・`,`・`}`・`)` で終わる形だけ。 */
 const HTML_SINKS =
   /innerHTML|outerHTML|insertAdjacentHTML|srcdoc|setHTML|createContextualFragment|DOMParser/g;
-const EMPTY_INNER_HTML = /\.innerHTML\s*=\s*(?:""|''|``)\s*(?=[;,})])/g;
+const EMPTY_INNER_HTML = /\.innerHTML\s*=\s*(?:""|''|``)(?=\s*[;,})]|\s*$)/g;
 
 /** 束（文字）から、禁じた API を見つけて、その名前を返す。 */
 export function bannedIn(js: string): string[] {
@@ -149,6 +149,9 @@ describe("禁止の API の見つけ方（すり抜ける書き方を見つけ�
   it.each([
     'a.innerHTML=""+x;',
     'a.innerHTML = "" + html;',
+    'a.outerHTML=""+x;',
+    "a.innerHTML=``+x;",
+    'a.innerHTML=""\n+x;',
     "a.innerHTML+=x;",
     'a.innerHTML="<b>";',
     'e["innerHTML"]=x;',
