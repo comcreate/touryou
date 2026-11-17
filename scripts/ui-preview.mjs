@@ -116,6 +116,7 @@ report(ago(90), "c1", "progress");
 item(ago(90), "c1", "progress", `箱の形を直しています ${XSS}`);
 create(ago(85), "g1", "implement", "c1", "線の札の時刻");
 create(ago(85), "g2", "implement", "c1", "凡例");
+create(ago(85), "g6", "implement", "c1", "線の太さ");
 create(ago(85), "g3", "investigate", "c3", "古い調べ（止めた）");
 create(ago(85), "g5", "implement", "c3", "止まり切らない子（停止の代行依頼）");
 instruct(ago(80), ago(79), "c3", by("root"));
@@ -159,6 +160,7 @@ instruct(ago(33), ago(32), "g1", HUMAN, "範囲の頼みは許可された", "ex
 instruct(ago(45), ago(44), "c4", by("root"), "PR を見る");
 instruct(ago(40), ago(39), "g1", by("c1"));
 instruct(ago(38), ago(37), "g2", by("c1"));
+instruct(ago(36), ago(35), "g6", by("c1"));
 report(ago(35), "g1", "progress");
 instruct(ago(30), ago(29), "c5", HUMAN, "人からの指示");
 report(ago(25), "g2", "done");
@@ -187,6 +189,8 @@ ev(ago(2), by("c3"), "scope.extensionRequested", {
   target: { kind: "write", value: "docs/ui.md" },
   reason: `文書も直したい ${XSS}`,
 });
+// 頼みのあとの報告（図の上りの線は、答え待ちの頼みを優先して、柿色の頼みのまま）
+report(ago(1), "c3", "progress", "頼みの答えを待つあいだ、ほかを進めています");
 instruct(ago(1), undefined, "c4", HUMAN, "人からの短い指示（まだ届いていない）");
 
 const fold = (es, base) => {
@@ -197,11 +201,10 @@ const fold = (es, base) => {
 let state = fold(events);
 
 // --- --live: 作り物のやり取りを足し、段を進める（イベントを 1 つ足して畳み直す）---
+// 作り物のやり取りは、動いている子と孫にだけ足す（答え待ち・止まっているかも・失敗の子に「いま」のやり取りを出さない）
 const LIVE_TARGETS = [
   ["c1", "root"],
-  ["c3", "root"],
-  ["c4", "root"],
-  ["c5", "root"],
+  ["g6", "c1"],
 ];
 let liveStep = 0;
 let pending; // { seq, nodeId, stage }

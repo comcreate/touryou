@@ -296,6 +296,61 @@ describe("人とのやり取り（人の箱は置かない。利用者の決め�
   });
 });
 
+describe("上りの線は、答え待ちの頼みを優先する（利用者の決め）", () => {
+  const nodes = [
+    { id: "root", parentId: null },
+    { id: "a", parentId: "root" },
+  ];
+  it("頼みのあとに新しい報告が来ても、上りの線は柿色の頼みのまま。下りの線は、いちばん新しいもの", () => {
+    const m = graphModelOf({
+      nodes,
+      flows: [
+        // 新しい順
+        {
+          dir: "up",
+          from: "a",
+          to: "root",
+          stage: "done",
+          kind: "report",
+          sentAt: "2026-11-17T10:03:00Z",
+        },
+        { dir: "down", from: "root", to: "a", stage: "sent", kind: "instruction" },
+        {
+          dir: "up",
+          from: "a",
+          to: "root",
+          stage: "sent",
+          kind: "extension",
+          sentAt: "2026-11-17T10:02:00Z",
+        },
+        { dir: "down", from: "human", to: "a", stage: "done", kind: "answer" },
+        {
+          dir: "up",
+          from: "a",
+          to: "root",
+          stage: "sent",
+          kind: "decision",
+          sentAt: "2026-11-17T10:01:00Z",
+        },
+      ],
+    });
+    expect(m.lanes.map((l) => [l.dir, l.label, l.waiting])).toEqual([
+      ["up", "範囲の頼み", true], // 答え待ちの頼みのうち、いちばん新しいもの
+      ["down", "指示", false],
+    ]);
+  });
+  it("頼みに答えたあと（段が done）は、いちばん新しいものに戻る", () => {
+    const m = graphModelOf({
+      nodes,
+      flows: [
+        { dir: "up", from: "a", to: "root", stage: "done", kind: "report" },
+        { dir: "up", from: "a", to: "root", stage: "done", kind: "extension" },
+      ],
+    });
+    expect(m.lanes.map((l) => [l.label, l.waiting])).toEqual([["報告", false]]);
+  });
+});
+
 describe("閉じた判断は、答え待ちに数えない（カードと同じ）", () => {
   it("閉じた判断（closedReason）だけが残る子は、答え待ちの箱にならず、柿色の線も丸い数も出ない", () => {
     const m = graphModelOf({
