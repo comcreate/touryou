@@ -186,12 +186,14 @@ project の `.claude/settings.json` の `ref` を `marketplace-v0.1.2` にする
 
 ### 手で marketplace を足した人には、project の固定が効かない（#100）
 
+この節は、touryou のリポジトリの中で Claude Code を開く人（touryou を開発する人）向けです。README のとおりに入れて使うだけの人は、固定なしで `main` に追従するのがふつうの状態で、何もしなくてよいです。
+
 project の `.claude/settings.json` の `ref`（`marketplace-v<版>`）が効くのは、user の設定に touryou の marketplace の項目がない人だけです。
 
 - 前に手で `claude plugin marketplace add comcreate/touryou` をした人は、user の設定の `extraKnownMarketplaces.touryou` に `ref` なしの項目があります（「declared in user settings」と出たもの）。このときは、このリポジトリの中でも user の項目が勝ち、`main` に追従します。plugin は普通に動きます（壊れはしません。#90 より前と同じ状態です）。`claude plugin marketplace list` の Source が `GitHub (comcreate/touryou)` のまま（`@marketplace-v…` が付かない）なら、この状態です。
 - この状態で `claude plugin marketplace add "comcreate/touryou#marketplace-v<版>"` だけをすると、「its source doesn't match its extraKnownMarketplaces entry in user or managed settings」で失敗します。
 - 固定したいときは、次の順にします。
-  1. user の設定（既定は `$HOME/.claude/settings.json`）の `extraKnownMarketplaces.touryou.source` に `"ref": "marketplace-v<版>"` を足す。足した直後は登録と食い違い、plugin が「failed to load（Marketplace touryou is added but ignored）」になりますが、次の 2 で直ります。
+  1. user の設定（既定は `$HOME/.claude/settings.json`。`CLAUDE_CONFIG_DIR` を使っているときは、その下の `settings.json`）の `extraKnownMarketplaces.touryou.source` に `"ref": "marketplace-v<版>"` を足す。足した直後は登録と食い違い、plugin が「failed to load（Marketplace touryou is added but ignored）」になりますが、次の 2 で直ります。
   2. `claude plugin marketplace add "comcreate/touryou#marketplace-v<版>"` をし直す。Source が `comcreate/touryou@marketplace-v<版>` になり、plugin も enabled に戻ります。
 - user の項目で固定したときは、版を上げるたびに、user の項目の `ref` を自分で新しい版に直し、2 をし直します（project の `ref` の書き換えは、user の項目には及びません）。
 - `claude plugin marketplace remove touryou` は使いません。その marketplace から入れた plugin を外し、plugin の保存した設定・データも消すためです。
