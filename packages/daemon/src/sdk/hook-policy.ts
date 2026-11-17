@@ -880,7 +880,16 @@ export function grantedOnlyByExtension(
   const granted = effective.allowedCommands
     .filter((e) => !brief.allowedCommands.includes(e))
     // 区切り（`;`・`|` など）を含む項目は、承認した形そのものと意味が違う語の並びになるので外す
-    .filter((e) => commandWords(e)?.filter((s) => s.length > 0).length === 1)
+    // 裏で動かす項目（`x &`）も、`entryWords` が空白で分けるだけの形に戻るので外す（解析した語と同じ項目だけを残す）
+    .filter((e) => {
+      const segs = commandWords(e)?.filter((s) => s.length > 0);
+      const words = entryWords(e);
+      return (
+        segs?.length === 1 &&
+        segs[0]?.length === words.length &&
+        words.every((w, i) => segs[0]?.[i] === w)
+      );
+    })
     .map(entryWords)
     .filter((w) => commandEntryProblem(w) === undefined);
   return segments.every((seg) =>
