@@ -22,6 +22,31 @@ const { EXTERNAL_CHECK_SUMMARY } = await import(`${R}/daemon/dist/external-check
 const { DesktopRuntimeAdapter } = await import(`${R}/daemon/dist/sdk/desktop-adapter.js`);
 const { createConfirmationGate } = await import(`${R}/daemon/dist/api/confirmation-gate.js`);
 const HUMAN = "human-token-human-token-human-token-1234";
+/**
+ * 画面を開く（#88 のあとの道）。人間のトークンで使い捨てのチケット（`POST /v1/ui/ticket`）をもらい、`/ui#ticket=…` で開く。
+ * 画面は、チケットを画面のセッションに交換する。`#token=` は使わない（#108）。
+ */
+/** たたんだ欄（この子への操作・終わった作業など）を、すべて開く（ボタンを押せるように）。 */
+const openAll = (page) =>
+  page.evaluate(() => {
+    for (const d of document.querySelectorAll("#view details")) d.open = true;
+  });
+const openUi = async (page, base) => {
+  const res = await fetch(`${base}/v1/ui/ticket`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${HUMAN}` },
+  });
+  const body = await res.json();
+  if (!res.ok || typeof body?.value?.ticket !== "string")
+    throw new Error(`チケットをもらえない（HTTP ${res.status}）`);
+  const r = await page.goto(`${base}/ui#ticket=${body.value.ticket}`);
+  // 画面が出たら、たたんだ欄を開く（操作のボタン・管理の欄を押せるように）。出なければ、そのまま（呼んだ側が確かめる）
+  await page
+    .waitForSelector("#view:not([hidden])", { timeout: 8000 })
+    .then(() => openAll(page))
+    .catch(() => {});
+  return r;
+};
 let n = 0;
 const ev = (b) => ({
   seq: ++n,
@@ -358,13 +383,13 @@ for (const scheme of ["light", "dark"]) {
     errors.push(`dialog:${d.message()}`);
     d.dismiss();
   });
-  await page.goto(`${url}/ui#token=${HUMAN}`);
+  await openUi(page, url);
   await page.waitForSelector("#view:not([hidden])", { timeout: 8000 });
   out[scheme] = {
     urlAfter: page.url(),
     xss: await page.evaluate(() => window.__xss ?? null),
     imgCount: await page.locator("#view img, #view script").count(),
-    treeText: await page.locator("#tree").innerText(),
+    treeText: await page.locator("#view").innerText(),
     status: await page.locator("#status").innerText(),
     errors,
   };
@@ -393,7 +418,7 @@ await page.fill("#token", HUMAN);
 await page.click("button[type=submit]");
 await page.waitForSelector("#view:not([hidden])", { timeout: 8000 });
 await page.waitForFunction(
-  () => document.getElementById("status").innerText.includes("SSE"),
+  () => document.getElementById("status").innerText.includes("変わるとすぐ更新"),
   null,
   { timeout: 8000 },
 );
@@ -421,7 +446,7 @@ state = {
 };
 const t0 = Date.now();
 await page.waitForFunction(
-  () => document.getElementById("inbox").innerText.includes("新しい項目"),
+  () => document.getElementById("view").innerText.includes("新しい項目"),
   null,
   { timeout: 5000 },
 );
@@ -436,13 +461,13 @@ pageO.on("dialog", (d) => {
   opErrors.push(`dialog:${d.message()}`);
   d.dismiss();
 });
-await pageO.goto(`${url}/ui#token=${HUMAN}`);
+await openUi(pageO, url);
 await pageO.waitForSelector("#view:not([hidden])", { timeout: 8000 });
 const confirmText = async () =>
   (await pageO.locator("#confirm").isVisible()) ? pageO.locator("#confirm").innerText() : "";
 // (a) 選択肢で回答 → 確認画面（質問と回答が、もう一度出る）→ 戻る → もう一度 → 二重クリックでも要求は 1 回
-await pageO.locator("#decisions .card").first().waitFor();
-const card1 = pageO.locator("#decisions .card").first();
+await pageO.locator("#todo .task").first().waitFor();
+const card1 = pageO.locator("#todo .task").first();
 await card1.getByRole("button", { name: "A案", exact: true }).click();
 ops.confirmShown =
   (await confirmText()).includes("A案") && (await confirmText()).includes("判断への回答");
@@ -468,7 +493,7 @@ ops.notResumedShown =
 ops.answeredParams = calls[0]?.params;
 await pageO
   .waitForFunction(
-    () => ![...document.querySelectorAll("#decisions button")].some((b) => b.textContent === "A案"),
+    () => ![...document.querySelectorAll("#todo button")].some((b) => b.textContent === "A案"),
     null,
     {
       timeout: 5000,
@@ -483,7 +508,7 @@ await pageO
     },
   );
 // (b) 自由入力: 空・制御文字は、確認に進まない。改行つきの回答は、確認に出る
-const card2 = pageO.locator("#decisions .card", { hasText: "自由入力の判断" });
+const card2 = pageO.locator("#todo .task", { hasText: "自由入力の判断" });
 await card2.getByRole("button", { name: "自由入力で回答する" }).click();
 ops.emptyRejected =
   (await card2.innerText()).includes("回答が空です") &&
@@ -520,7 +545,7 @@ const d2Calls = calls.filter((c) => c.params.decisionId === "d2");
 ops.retrySameRequestId = d2Calls.length === 2 && d2Calls[0].requestId === d2Calls[1].requestId;
 ops.requestIdIsUuid = /^[0-9a-f-]{36}$/.test(d2Calls[0]?.requestId ?? "");
 // (d) 長い質問・長い選択肢: 質問は 2,000 文字まで読め、超えたら印。長い選択肢のボタンは無効（自由入力を促す）
-const card3 = pageO.locator("#decisions .card", { hasText: "長い質問" });
+const card3 = pageO.locator("#todo .task", { hasText: "長い質問" });
 const q3 = await card3.innerText();
 ops.longQuestionShownUpTo2000 = q3.includes("問".repeat(1990)) && q3.includes("…（省略）");
 ops.shortOptionEnabled = await card3.getByRole("button", { name: "短い選択肢" }).isEnabled();
@@ -568,7 +593,7 @@ ops.answeredOnceAfter429 = d3Calls.length === 1; // 429 は、サーバーに届
 // (f) 子が書いた質問・選択肢の XSS 文字列は、実行されない（確認画面でも）
 ops.xssNotExecuted = (await pageO.evaluate(() => window.__xss ?? null)) === null;
 // (g) 拡張要求の判定: 対象を表示 → 確認（対象つき）→ 送信。許可する対象は送らない（daemon が記録済みの対象を使う）
-const ext1 = pageO.locator("#decisions .card", { hasText: "テストを足したい" });
+const ext1 = pageO.locator("#todo .task", { hasText: "テストを足したい" });
 await ext1.waitFor();
 ops.ext1ShowsTarget = (await ext1.innerText()).includes("src/ok.ts");
 await ext1.getByRole("button", { name: "承認", exact: true }).click();
@@ -586,7 +611,7 @@ ops.ext1SentOnce =
   JSON.stringify(decideCalls[0].params) ===
     JSON.stringify({ extensionId: "x1", decision: "approve" });
 // 隠れた対象（x2）: 値は画面に出ない。承認・切り出しは無効で、却下だけ押せる
-const ext2 = pageO.locator("#decisions .card", { hasText: "外へ書きたい" });
+const ext2 = pageO.locator("#todo .task", { hasText: "外へ書きたい" });
 await ext2.waitFor();
 ops.ext2HidesValue = !(await ext2.innerText()).includes("outside");
 ops.ext2ApproveDisabled = await ext2
@@ -597,8 +622,7 @@ ops.ext2SplitDisabled = await ext2
   .isDisabled();
 ops.ext2RejectEnabled = await ext2.getByRole("button", { name: "却下", exact: true }).isEnabled();
 // 子が書いた理由の XSS 文字列（x3）は、実行されない
-ops.ext3Rendered =
-  (await pageO.locator("#decisions .card", { hasText: "pnpm test" }).count()) === 1;
+ops.ext3Rendered = (await pageO.locator("#todo .task", { hasText: "pnpm test" }).count()) === 1;
 // (h) 最終削除: 打ち込むまで送れない。一致したら送れる。送る params は nodeId だけ
 const sendBtn = () => pageO.locator("#confirm button.primary");
 const typedArea = () => pageO.locator("#confirm textarea");
@@ -801,19 +825,19 @@ pageR.on("dialog", (d) => {
   rcErrors.push(`dialog:${d.message()}`);
   d.dismiss();
 });
-await pageR.goto(`${url}/ui#token=${HUMAN}`);
+await openUi(pageR, url);
 await pageR.waitForSelector("#view:not([hidden])", { timeout: 8000 });
-const row = (id) => pageR.locator("#tree .node", { hasText: id }).filter({ hasText: "停止" });
+const row = (id) => pageR.locator(`#card-${id}`);
 const instructCalls = () => calls.filter((c) => c.operation === "node.reclaimInstruct");
 // (a) ボタンは、停止したノードで、指示済みでないものだけ
 rc.buttonOnS1 =
   (await row("s1").getByRole("button", { name: "破棄して回収を指示…" }).count()) === 1;
 rc.noButtonOnS3 =
-  (await row("s3").getByRole("button").count()) === 0 &&
+  (await row("s3").getByRole("button", { name: "破棄して回収を指示…" }).count()) === 0 &&
   (await row("s3").innerText()).includes("破棄を指示済み");
 rc.noButtonOnRunning =
   (await pageR
-    .locator("#tree .node", { hasText: "実行" })
+    .locator(".card", { hasText: "動いている" })
     .getByRole("button", { name: "破棄して回収を指示…" })
     .count()) === 0;
 // (b) 押す → 事前確認の内容
@@ -879,8 +903,8 @@ rc.secondExpectTips =
 rc.newRequestId = ic.length === 2 && ic[0].requestId !== ic[1].requestId;
 await pageR.waitForFunction(
   () =>
-    ![...document.querySelectorAll("#tree .node")].some(
-      (n) => n.textContent.includes("s1") && n.querySelector("button"),
+    ![...(document.getElementById("card-s1")?.querySelectorAll("button") ?? [])].some(
+      (b) => b.textContent === "破棄して回収を指示…",
     ),
   null,
   { timeout: 5000 },
@@ -908,10 +932,9 @@ pageC.on("dialog", (d) => {
   csErrors.push(`dialog:${d.message()}`);
   d.dismiss();
 });
-await pageC.goto(`${url}/ui#token=${HUMAN}`);
+await openUi(pageC, url);
 await pageC.waitForSelector("#view:not([hidden])", { timeout: 8000 });
-const crow = (id) =>
-  pageC.locator("#tree .node", { hasText: id }).filter({ hasText: "停止未完了" });
+const crow = (id) => pageC.locator(`#card-${id}`);
 const confirmCalls = () => calls.filter((c) => c.operation === "node.confirmStopped");
 // (a) 出し分け: stopDelegated の c1 だけに出す（c2・停止したノード・実行中のノードには出さない）
 cs.buttonOnC1 = (await crow("c1").getByRole("button", { name: "止めたと宣言…" }).count()) === 1;
@@ -962,7 +985,9 @@ cs.params = JSON.stringify(cc[0]?.params) === JSON.stringify({ nodeId: "c1", not
 // (e) 停止済みになったら、ボタンは消える
 await pageC.waitForFunction(
   () =>
-    ![...document.querySelectorAll("#tree button")].some((b) => b.textContent === "止めたと宣言…"),
+    ![...document.querySelectorAll("#view .card button")].some(
+      (b) => b.textContent === "止めたと宣言…",
+    ),
   null,
   { timeout: 5000 },
 );
@@ -988,14 +1013,13 @@ const dk = {};
 const pageD = await (await browser.newContext()).newPage();
 const dkErrors = [];
 pageD.on("pageerror", (e) => dkErrors.push(String(e)));
-await pageD.goto(`${dUrl}/ui#token=${HUMAN}`);
+await openUi(pageD, dUrl);
 await pageD.waitForSelector("#view:not([hidden])", { timeout: 8000 });
-const drow = (id) =>
-  pageD.locator("#tree .node", { hasText: id }).filter({ hasText: "停止未完了" });
+const drow = (id) => pageD.locator(`#card-${id}`);
 dk.buttonOnC2 = (await drow("c2").getByRole("button", { name: "止めたと宣言…" }).count()) === 1;
 dk.noButtonOnRunning =
   (await pageD
-    .locator("#tree .node", { hasText: "実行" })
+    .locator(".card", { hasText: "動いている" })
     .getByRole("button", { name: "止めたと宣言…" })
     .count()) === 0;
 const before = confirmCalls().length;
@@ -1025,13 +1049,10 @@ pageH.on("dialog", (d) => {
   huErrors.push(`dialog:${d.message()}`);
   d.dismiss();
 });
-await pageH.goto(`${url}/ui#token=${HUMAN}`);
+await openUi(pageH, url);
 await pageH.waitForSelector("#view:not([hidden])", { timeout: 8000 });
 const HU = "フックの結び付けを外す…";
-const hrow = (id) =>
-  pageH
-    .locator("#tree .node")
-    .filter({ has: pageH.locator("span", { hasText: new RegExp(`^${id}$`) }) });
+const hrow = (id) => pageH.locator(`#card-${id}`);
 const unbindCalls = () => calls.filter((c) => c.operation === "node.hookUnbind");
 // (a) 出し分け: 動いている子（a・constructor）だけ。統合ノード（root・m1）・停止未完了（c1）・停止（s1）には出さない
 hu.buttonOnA = (await hrow("a").getByRole("button", { name: HU }).count()) === 1;
@@ -1057,7 +1078,7 @@ hu.noTypedBox = (await pageH.locator("#confirm textarea").count()) === 0;
 hu.requestBeforeConfirm = unbindCalls().length === 0;
 hu.noXss =
   (await pageH.evaluate(() => window.__xss ?? null)) === null &&
-  (await pageH.locator("#confirm img, #confirm script, #tree img, #tree script").count()) === 0;
+  (await pageH.locator("#confirm img, #confirm script, #view img, #view script").count()) === 0;
 // (c) 送る。params は { nodeId: "a" }。二重クリックでも 1 回。結果は「外しました」
 await pageH.locator("#confirm button.primary").dblclick();
 await pageH.waitForFunction(
@@ -1111,9 +1132,9 @@ const pollStatuses = [];
 page2.on("response", (res) => {
   if (res.url().endsWith("/v1/ui/state")) pollStatuses.push(res.status());
 });
-await page2.goto(`${pollUrl}/ui#token=${HUMAN}`);
+await openUi(page2, pollUrl);
 await page2.waitForFunction(
-  () => document.getElementById("status").innerText.includes("ポーリング"),
+  () => document.getElementById("status").innerText.includes("秒ごとに確かめて更新"),
   null,
   { timeout: 8000 },
 );
@@ -1126,7 +1147,7 @@ const page4 = await (await browser.newContext()).newPage();
 page4.on("request", (req) => {
   if (req.url().endsWith("/v1/events")) retryRequests += 1;
 });
-await page4.goto(`${pollUrl}/ui#token=${HUMAN}`);
+await openUi(page4, pollUrl);
 await page4.waitForTimeout(4000);
 out.eventRequestsWithin4sOf429 = retryRequests; // 1（Retry-After の 5 秒より前には、再接続しない）
 // 通知が続いても、状態の取り直しは、最短 1 秒ごと（間引き）
@@ -1135,9 +1156,9 @@ let stateRequests = 0;
 pageT.on("request", (req) => {
   if (req.url().endsWith("/v1/ui/state")) stateRequests += 1;
 });
-await pageT.goto(`${url}/ui#token=${HUMAN}`);
+await openUi(pageT, url);
 await pageT.waitForFunction(
-  () => document.getElementById("status").innerText.includes("SSE"),
+  () => document.getElementById("status").innerText.includes("変わるとすぐ更新"),
   null,
   { timeout: 8000 },
 );
@@ -1187,7 +1208,7 @@ out.throttleWindowMs = Date.now() - tt;
   const pageCf = await (await browser.newContext()).newPage();
   const cfErrors = [];
   pageCf.on("pageerror", (e) => cfErrors.push(String(e)));
-  await pageCf.goto(`${cUrl}/ui#token=${HUMAN}`);
+  await openUi(pageCf, cUrl);
   await pageCf.waitForSelector("#view:not([hidden])", { timeout: 8000 });
   cf.hiddenWithoutPending = !(await pageCf.locator("#approvals").isVisible());
   const asked = await fetch(`${cUrl}/v1/request`, {
@@ -1351,35 +1372,33 @@ out.throttleWindowMs = Date.now() - tt;
   ).newPage();
   const uxErrors = [];
   pageU.on("pageerror", (e) => uxErrors.push(String(e)));
-  await pageU.goto(`${url}/ui#token=${HUMAN}`);
+  await openUi(pageU, url);
   await pageU.waitForFunction(
-    () => document.getElementById("inbox").innerText.includes("停止未完了（代行）"),
+    () => document.getElementById("view").innerText.includes("停止未完了（代行）"),
     null,
     { timeout: 8000 },
   );
-  const card = (text) => pageU.locator("#inbox .card", { hasText: text });
+  // 受信箱の項目は、子のカードの中の行（.entry）。種類は、行の頭の札（.chip）の印と言葉
+  const card = (text) => pageU.locator(".entry", { hasText: text });
+  const chipClass = async (text) =>
+    (await card(text).locator(".chip").first().getAttribute("class")) ?? "";
   ux.delegatedNotFailed =
-    (await card("停止未完了（代行）").getAttribute("class")).includes("request") &&
+    (await chipClass("停止未完了（代行）")).includes("request") &&
     (await card("停止未完了（代行）").innerText()).includes("停止の代行依頼") &&
-    !(await card("停止未完了（代行）").innerText()).includes("失敗");
-  ux.directStillFailed = (await card("停止未完了（直接）").innerText()).includes("失敗");
-  const row = (id, st) => pageU.locator("#tree .node", { hasText: id }).filter({ hasText: st });
-  ux.stoppedHasCount = (await row("s2", "停止").innerText()).includes("要対応");
-  ux.externalCheckNotFailed = (await card("daemon 再起動後").getAttribute("class")).includes(
-    "request",
+    !(await chipClass("停止未完了（代行）")).includes("failed");
+  ux.directStillFailed = (await chipClass("停止未完了（直接）")).includes("failed");
+  const row = (id) => pageU.locator(`#card-${id}`);
+  // 止めた子のカードに、その子の知らせと、回収の指示のボタンが出る（#89 のあと、「あなたの答え」の数は人の操作が要るものだけ）
+  ux.stoppedShowsItems =
+    (await row("s2").innerText()).includes("止まったノードの情報") &&
+    (await row("s2").getByRole("button", { name: "破棄して回収を指示…" }).count()) === 1;
+  ux.externalCheckNotFailed = !(await chipClass("daemon 再起動後")).includes("failed");
+  ux.archivedNoCount = await pageU.evaluate(
+    () => !(document.getElementById("card-arch2")?.textContent ?? "").includes("あなたの答え"),
   );
-  ux.archivedNoCount = await pageU.evaluate(() =>
-    [...document.querySelectorAll("#tree .node")].every(
-      (r) => !(r.firstChild.textContent === "arch2" && r.textContent.includes("要対応")),
-    ),
-  );
-  ux.archivedRowShown = await pageU.evaluate(() =>
-    [...document.querySelectorAll("#tree .node")].some((r) => r.firstChild.textContent === "arch2"),
-  );
+  ux.archivedRowShown = await pageU.evaluate(() => document.getElementById("card-arch2") !== null);
   ux.runningHasCount = await pageU.evaluate(() =>
-    [...document.querySelectorAll("#tree .node")].some(
-      (r) => r.firstChild.textContent === "a" && r.textContent.includes("要対応"),
-    ),
+    (document.getElementById("card-a")?.textContent ?? "").includes("あなたの答え"),
   );
   // 入力欄は、すべて id と name を持つ（id は一意）
   ux.fields = await pageU.evaluate(() => {
@@ -1392,7 +1411,7 @@ out.throttleWindowMs = Date.now() - tt;
     };
   });
   // ページの下のボタンを押すと、確認の欄が見える所まで動き、フォーカスが欄の中に移る
-  const reclaimBtn = row("s9", "停止").getByRole("button", { name: "破棄して回収を指示…" });
+  const reclaimBtn = row("s9").getByRole("button", { name: "破棄して回収を指示…" });
   await reclaimBtn.scrollIntoViewIfNeeded();
   ux.scrolledDown = (await pageU.evaluate(() => window.scrollY)) > 0;
   await reclaimBtn.click();
@@ -1400,7 +1419,8 @@ out.throttleWindowMs = Date.now() - tt;
   await pageU.waitForTimeout(300);
   ux.confirmVisible = await pageU.evaluate(() => {
     const r = document.getElementById("confirm").getBoundingClientRect();
-    return r.top >= 0 && r.top < window.innerHeight;
+    // 動かしたあとの位置は、小数の丸めで 1px 未満ずれうる
+    return r.top > -1 && r.top < window.innerHeight;
   });
   ux.focusInConfirm = await pageU.evaluate(() =>
     document.getElementById("confirm").contains(document.activeElement),
@@ -1428,10 +1448,10 @@ await page3.route("**/v1/events", (route) => {
   eventRequests += 1;
   return eventRequests === 1 ? route.abort() : route.continue();
 });
-await page3.goto(`${url}/ui#token=${HUMAN}`);
+await openUi(page3, url);
 const t1 = Date.now();
 await page3.waitForFunction(
-  () => document.getElementById("status").innerText.includes("SSE"),
+  () => document.getElementById("status").innerText.includes("変わるとすぐ更新"),
   null,
   { timeout: 10000 },
 );
