@@ -10,7 +10,7 @@
   関係図について：
   - 本番は Rete.js で描く（描画のプラグインを使わず自前で描く R0。research.md 6.1・6.5）。
   - この見本には Rete.js を入れていない。R0 の自前の描き手が出す形を、SVG と CSS で示している。
-    箱の並び（木の形。根が左、子は右）・上りと下りを別のつながりにすること・拡大と移動のボタンは、
+    箱の並び（木の形。根が左、子は右。親の右の幹から枝分かれ）・上りと下りを別のつながりにすること・拡大と移動のボタンは、
     area のプラグインの操作（translate・zoom）を見た目で示したもの。
 
   安全の決まり（本番に合わせたところ）：
@@ -121,6 +121,39 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .lvl{color:var(--ink-2)}
 .msgcell{font-weight:700}.msgcell.u{color:var(--ai)}.msgcell.d{color:var(--murasaki)}.msgcell.h{color:var(--kaki)}.msgcell.none{color:var(--ink-2);font-weight:400}
 [hidden]{display:none!important}
+.trunk{fill:none;stroke:var(--ink-2);stroke-width:4;stroke-linecap:round;opacity:.55}
+.twig{fill:none;stroke:var(--ink-2);stroke-width:1.5;stroke-dasharray:2 5;opacity:.6}
+.fold .box{fill:var(--paper);stroke:var(--rule);stroke-dasharray:4 4;stroke-width:1.5}
+.fold{cursor:pointer}.fold .ttl{font-size:13px;font-weight:700;fill:var(--ink)}.fold .sub{font-size:11.5px;fill:var(--ink-2)}
+.wire.f1.flow{animation-duration:.9s}.wire.f2.flow{animation-duration:2.2s}.wire.f3.flow{animation-duration:4.5s;opacity:.6}
+.wire.f0.flow{animation:none;opacity:.45}
+.pip.f1{animation-duration:1.6s}.pip.f2{animation-duration:3.2s}.pip.f3{animation-duration:6s;opacity:.6}
+.pip.wait{offset-distance:100%;animation:waitpulse 1.2s ease-in-out infinite}
+.wire.stall{stroke:var(--ink-2)!important;opacity:.55}.wire.stall.flow{animation:none;stroke-dasharray:3 6}
+.tip.stall{fill:var(--ink-2)}
+.wire.still{stroke-width:1.5!important;opacity:.5}.wire.still.flow{animation:none;stroke-dasharray:none}
+.wire.fail{stroke:var(--shu)!important}.wire.fail.flow{animation:none;stroke-dasharray:none}.tip.fail{fill:var(--shu)}
+.mark{font-size:12px;font-weight:800}.markbg{fill:var(--sheet);stroke-width:1.5}
+.markbg.stall{stroke:var(--ink-2)}.mark.stall{fill:var(--ink-2)}
+.markbg.still{stroke:var(--ink-2)}.mark.still{fill:var(--ink-2);font-size:10px}
+.markbg.fail{stroke:var(--shu);animation:failflash 1.2s ease-out 1 both;animation-delay:1s}.mark.fail{fill:var(--shu)}
+.mlabel.stall,.mlabel.still{fill:var(--ink-2)}.mlabel.fail{fill:var(--shu)}
+.node.s-stall rect.box{animation:slowblink 2.8s ease-in-out infinite}
+.node.s-done rect.box,.node.s-stopped rect.box{fill:var(--paper)}
+.states{display:grid;gap:4px;padding:8px 14px 12px;font-size:12.5px;color:var(--ink-2);border-top:1px dashed var(--rule)}
+.srow{display:grid;grid-template-columns:34px 9em 1fr;gap:8px;align-items:center}
+.srow b{color:var(--ink)}
+.sw{height:0;border-top:3px dashed var(--ai)}
+.s-human .sw{border-top-color:var(--kaki);border-top-width:4px}
+.s-stall .sw{border-top:3px dotted var(--ink-2)}
+.s-still .sw{border-top:1.5px solid var(--ink-2)}
+.s-fail .sw{border-top:3px solid var(--shu)}
+.s-flow .sw{animation:legendflow 1s linear infinite;border-image:repeating-linear-gradient(90deg,var(--ai) 0 6px,transparent 6px 12px) 3}
+@keyframes waitpulse{0%,100%{transform:scale(1);box-shadow:0 0 0 0 var(--kaki-soft)}50%{transform:scale(1.5);box-shadow:0 0 0 6px var(--kaki-soft)}}
+@keyframes slowblink{0%,100%{opacity:1}50%{opacity:.45}}
+@keyframes failflash{0%{stroke-width:1.5}30%{stroke-width:7}100%{stroke-width:1.5}}
+@keyframes legendflow{to{border-image-source:repeating-linear-gradient(90deg,var(--ai) 0 6px,transparent 6px 12px)}}
+@media (max-width:640px){.srow{grid-template-columns:34px 1fr}.srow span:last-child{grid-column:2}}
 .piplayer{position:absolute;left:0;top:0;transform-origin:0 0;pointer-events:none}
 
 .wire{fill:none;stroke-linecap:round}
@@ -236,7 +269,8 @@ const VIEW = {
     { id: "n-a1", role: "作業", parentId: "n-root", state: "wait", title: "支払い方法の選び方の画面を作る。カードと振り込みの二つを並べ、違いを短く書く", lastActivityAt: min(3), needsHuman: 1 },
     { id: "n-b2", role: "統合", parentId: "n-root", state: "run", title: "注文の確認のメールの文を見直し、送る時刻をそろえる", lastActivityAt: min(6), needsHuman: 0 },
     { id: "n-b3", role: "作業", parentId: "n-b2", state: "stall", title: "メールの文の雛形を三つ作り、試験の宛先で送って確かめる", lastActivityAt: min(42), needsHuman: 1, cli: true },
-    { id: "n-c4", role: "作業", parentId: "n-root", state: "done", title: "注文の一覧の並び順を、新しい順にする", lastActivityAt: min(55), needsHuman: 0 }
+    { id: "n-c4", role: "作業", parentId: "n-root", state: "done", title: "注文の一覧の並び順を、新しい順にする", lastActivityAt: min(55), needsHuman: 0 },
+    { id: "n-h10", role: "作業", parentId: "n-b2", state: "run", title: "送ったメールの控えを残す場所を決める（起こしたばかり）", lastActivityAt: min(0.5), needsHuman: 0 }
   ],
   // dir: up（子 → 親）・down（親 → 子）。human：人の操作が要る
   messages: [
@@ -246,6 +280,7 @@ const VIEW = {
     { from: "n-root", to: "n-b2", dir: "down", kind: "頼み", at: min(30), text: "確認のメールを見直してください。" },
     { from: "n-b3", to: "n-b2", dir: "up", kind: "止まっているかも", at: min(42), human: true, text: "42 分、動きがありません。" },
     { from: "n-b2", to: "n-b3", dir: "down", kind: "答え", at: min(44), text: "宛先は試験用のものだけにしてください。" },
+    { from: "n-root", to: "n-a1", dir: "down", kind: "止める頼み", at: min(8), failed: true, text: "止める頼みが届きませんでした（子が受け取れない）。" },
     { from: "n-c4", to: "n-root", dir: "up", kind: "済んだ", at: min(55), text: "新しい順に並べ替えました。試験は通っています。" },
     { from: "n-root", to: "n-c4", dir: "down", kind: "頼み", at: min(70), text: "一覧の並び順を直してください。" }
   ],
@@ -278,7 +313,7 @@ function svgEl(tag, attrs, text) {           // SVG を作るのは、ここ 1 �
 }
 const ago = (iso) => { const m = Math.round((NOW - Date.parse(iso)) / 60000); return m < 1 ? "いま" : m < 60 ? m + " 分前" : Math.floor(m / 60) + " 時間前"; };
 const clock = (iso) => { const d = new Date(Date.parse(iso) + 9 * 3600000); return String(d.getUTCHours()).padStart(2,"0") + ":" + String(d.getUTCMinutes()).padStart(2,"0"); };
-const STATE = { run: ["動いています", "run"], wait: ["あなたの答え待ち", "wait"], done: ["済んだ", "done"], stall: ["止まっているかも", "stall"] };
+const STATE = { run: ["動いています", "run"], wait: ["あなたの答え待ち", "wait"], done: ["済んだ", "done"], stall: ["止まっているかも", "stall"], stopped: ["止めた", "done"] };
 const byId = Object.fromEntries(VIEW.nodes.map(n => [n.id, n]));
 const short = (s, n) => s.length > n ? s.slice(0, n - 1) + "…" : s;
 
@@ -360,168 +395,178 @@ for (const t of VIEW.todo) {
 updateCount();
 
 // ---- 関係図（Rete.js R0 の見た目を SVG で示す） ----
-// 見比べ用：案 A（枝を束ねる）・案 B（出口を子ごとに分ける。勧め）・案 C（木の一覧＋やり取りの列）。
-// 値は「いまの値」と「子 5・孫 3」を切り替えられる。research.md 8 節の調べにもとづく。
-// Rete では、上りと下りを別のつながり（connection）として持ち、端子（socket）は線のある所だけに置く。
+// 決まった形（案 B を土台に）：
+// - 根が左、深さごとに右の列。親の箱は高さ 80 のまま。箱の右に短い「幹」（縦の棒）を置き、そこから子ごとに枝分かれする。
+// - 線は上り（子 → 親、藍、上）と下り（親 → 子、紫、下）の 2 本だけ。親子のつながりの灰色の線はなくした。
+//   親子は「幹からの枝分かれ」と「列（深さ）」で分かる。やり取りがまだない子だけ、幹からごく薄い点線の枝で示す。
+// - 図に出す子は、親ごとに 6 まで。超えたら済んだ子を「済んだ子 N」にまとめ、それでも超えたら「ほかに N」と一覧を勧める。
+// - 状態は、色（向き）に、動き・濃さ・端子の印を重ねて表す。動きを止めても、印と濃さで分かる。
 const BIG = {
   nodes: [
     ...VIEW.nodes,
-    { id: "n-d5", role: "作業", parentId: "n-root", state: "run", title: "支払いのあとの「ありがとう」の画面の文を直す", lastActivityAt: min(9), needsHuman: 0 },
+    { id: "n-d5", role: "作業", parentId: "n-root", state: "run", title: "支払いのあとの「ありがとう」の画面の文を直す", lastActivityAt: min(28), needsHuman: 0 },
     { id: "n-f8", role: "統合", parentId: "n-root", state: "run", title: "店の管理の画面に、注文の数のまとめを足す", lastActivityAt: min(4), needsHuman: 0 },
+    { id: "n-k11", role: "作業", parentId: "n-root", state: "done", title: "注文の確認の画面の文字の大きさをそろえる", lastActivityAt: min(80), needsHuman: 0 },
+    { id: "n-k12", role: "作業", parentId: "n-root", state: "stopped", title: "古い支払いの画面を消す（取りやめ）", lastActivityAt: min(90), needsHuman: 0 },
     { id: "n-b6", role: "作業", parentId: "n-b2", state: "run", title: "送る時刻を、店の営業の時間の中にそろえる", lastActivityAt: min(12), needsHuman: 0 },
     { id: "n-g9", role: "作業", parentId: "n-f8", state: "wait", title: "まとめの数の区切り（日・週）を決めて表にする", lastActivityAt: min(2), needsHuman: 1 }
   ],
   messages: [
     ...VIEW.messages,
-    { from: "n-root", to: "n-d5", dir: "down", kind: "頼み", at: min(25), text: "ありがとうの画面の文を直してください。" },
-    { from: "n-d5", to: "n-root", dir: "up", kind: "進み", at: min(9), text: "文の案を二つ作りました。" },
-    { from: "n-root", to: "n-f8", dir: "down", kind: "頼み", at: min(28), text: "管理の画面にまとめを足してください。" },
+    { from: "n-root", to: "n-d5", dir: "down", kind: "頼み", at: min(40), text: "ありがとうの画面の文を直してください。" },
+    { from: "n-d5", to: "n-root", dir: "up", kind: "進み", at: min(28), text: "文の案を二つ作りました。" },
+    { from: "n-root", to: "n-f8", dir: "down", kind: "頼み", at: min(30), text: "管理の画面にまとめを足してください。" },
     { from: "n-f8", to: "n-root", dir: "up", kind: "進み", at: min(4), text: "表の枠ができました。" },
+    { from: "n-root", to: "n-k11", dir: "down", kind: "頼み", at: min(120), text: "文字の大きさをそろえてください。" },
+    { from: "n-k11", to: "n-root", dir: "up", kind: "済んだ", at: min(80), text: "そろえました。" },
+    { from: "n-root", to: "n-k12", dir: "down", kind: "止める", at: min(90), text: "取りやめます。止めてください。" },
     { from: "n-b2", to: "n-b6", dir: "down", kind: "頼み", at: min(35), text: "送る時刻をそろえてください。" },
     { from: "n-b6", to: "n-b2", dir: "up", kind: "進み", at: min(12), text: "営業の時間の表を読みました。" },
     { from: "n-f8", to: "n-g9", dir: "down", kind: "頼み", at: min(15), text: "区切りを決めて表にしてください。" },
     { from: "n-g9", to: "n-f8", dir: "up", kind: "判断を求める", at: min(2), human: true, text: "区切りは日と週のどちらを先にしますか。" }
   ]
 };
+const MAXKIDS = 6;
 const g = el("section", "sec");
 g.append(el("h2", "", "やり取りの図"));
-const lead = el("p", "lead", "");
-g.append(lead);
+g.append(el("p", "lead", "左が親、右が子と孫。親の箱の右の縦の棒（幹）から、子ごとに枝が分かれます。枝の上の藍の線が子から親への報告（←）、下の紫の線が親から子への頼み（→）。線の動きと端子の印で、流れているか・止まっているかが分かります。箱を押すと、その作業の詳しいようすへ移ります。"));
 const ctl = el("div", "ctl");
 function seg(label, items, onPick) {
   const box = el("div", "shape"); box.append(el("span", "", label));
   const bs = items.map(([k, t]) => { const b = el("button", "sm", t); b.addEventListener("click", () => onPick(k)); box.append(b); return [k, b]; });
   return { box, set: (k) => bs.forEach(([kk, b]) => { b.classList.toggle("done", kk === k); b.setAttribute("aria-pressed", String(kk === k)); }) };
 }
-const st = { plan: "B", data: "small", line: "orth" };
-const sPlan = seg("案：", [["A", "A 枝を束ねる"], ["B", "B 出口を子ごとに分ける（勧め）"], ["C", "C 木の一覧＋やり取りの列"]], (k) => { st.plan = k; render(); });
-const sData = seg("値：", [["small", "いまの値（子 3・孫 1）"], ["big", "子 5・孫 3"]], (k) => { st.data = k; render(); });
-const sLine = seg("線の形：", [["orth", "角丸の折れ線"], ["curve", "曲線"]], (k) => { st.line = k; render(); });
-ctl.append(sPlan.box, sData.box, sLine.box);
-const judge = el("p", "judge", "");
-g.append(ctl, judge);
-const NOTE = {
-  A: "案 A：親の右の辺の 1 か所から、どの子の線も出ます。子が増えると、親のすぐ右で線が束になり、どの線がどの子のものか追えません。",
-  B: "案 B（勧め）：親の右の辺に、子ごとの出口を縦に並べます（子の並びと同じ順）。外側の子ほど親の近くで曲げるので、線は交わりません。3 本（上＝上り ←、真ん中＝つながり、下＝下り →）は、子ごとにまとまったまま進みます。ラベルは、その子だけの線の上に置くので、ほかの線にかかりません。調べでは、読みやすさに最も効くのは線の交わりを減らすことでした（research.md 8 節）。",
-  C: "案 C：図にせず、木を字下げの一覧にして、右に「最後の上り」「最後の下り」の列を並べます。線が要らないので、子が 10・孫が 20 に増えても崩れません。どこで答えを待っているかを探すには、この形がいちばん速い見込みです。図（案 B）と並べて、図はたためる形にする案もあります。"
-};
+const st = { view: "graph", data: "small" };
+const sView = seg("見せ方：", [["graph", "図"], ["list", "一覧"]], (k) => { st.view = k; render(); });
+const sData = seg("値：", [["small", "いまの値"], ["big", "子が多いとき（子 8・孫 3）"]], (k) => { st.data = k; render(); });
+ctl.append(sView.box, sData.box);
+g.append(ctl, el("p", "judge", "親子のつながりの線はなくしました。上りと下りの線と、幹からの枝分かれで親子が分かるからです。やり取りがまだない子（起こしたばかり）だけ、薄い点線の枝で親を示します。図に出す子は親ごとに 6 までで、超えると済んだ子をまとめます。"));
 const board = el("div", "board");
 const listView = el("div", "tlist");
 g.append(board, listView);
-const BW = 176, BH0 = 80, COL = 430, LEAF = 120, R = 10, ARROW = 9;
+const BW = 176, BH = 80, COL = 400, LEAF = 108, TRUNK = 26, GAP = 8, ARROW = 9;
 const svg = svgEl("svg", { viewBox: "0 0 10 10", role: "img", "aria-label": "作業の木と、親子のやり取りの図" });
 const world = svgEl("g", {});
 svg.append(world); board.append(svg);
 const pipLayer = el("div", "piplayer"); board.append(pipLayer);
 let W = 10, H = 10, drawn = [];
-function roundPath(pts, r) {          // 角だけを丸めた折れ線（直線はまっすぐ、角は 2 次ベジェ）
-  let d = "M" + pts[0][0] + " " + pts[0][1];
-  for (let i = 1; i < pts.length - 1; i++) {
-    const [ax, ay] = pts[i - 1], [bx, by] = pts[i], [cx, cy] = pts[i + 1];
-    const l1 = Math.hypot(bx - ax, by - ay), l2 = Math.hypot(cx - bx, cy - by);
-    const rr = Math.min(r, l1 / 2, l2 / 2);
-    if (rr < 0.5) { d += " L" + bx + " " + by; continue; }
-    d += " L" + (bx - (bx - ax) / l1 * rr) + " " + (by - (by - ay) / l1 * rr) + " Q" + bx + " " + by + " " + (bx + (cx - bx) / l2 * rr) + " " + (by + (cy - by) / l2 * rr);
-  }
-  const e = pts[pts.length - 1];
-  return d + " L" + e[0] + " " + e[1];
+const latestOf = (msgs, from, to) => msgs.filter(m => m.from === from && m.to === to).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
+// 子を 6 までに絞る（済んだ・止めた子をまとめる）
+function visibleKids(nodes, id) {
+  const all = nodes.filter(n => n.parentId === id);
+  if (all.length <= MAXKIDS) return { show: all, folded: [], more: [] };
+  const live = all.filter(n => n.state !== "done" && n.state !== "stopped");
+  const folded = all.filter(n => n.state === "done" || n.state === "stopped");
+  const room = MAXKIDS - 1;
+  return { show: live.slice(0, room), folded, more: live.slice(room) };
 }
-function layout(nodes) {            // research.md 6.1 の layoutOf の形（純粋な計算）。根が左、子は右の列
-  const kids = (id) => nodes.filter(n => n.parentId === id).map(n => n.id);
-  const pos = {}; let leaf = 0, maxDepth = 0;
+function layout(nodes) {            // research.md 6.1 の layoutOf の形（純粋な計算）
+  const pos = {}, groups = {}; let leaf = 0, maxDepth = 0;
   (function place(id, d) {
     maxDepth = Math.max(maxDepth, d);
-    const ks = kids(id);
-    if (!ks.length) { pos[id] = { cy: 30 + LEAF / 2 + leaf++ * LEAF, d, kids: ks }; return; }
-    ks.forEach(k => place(k, d + 1));
-    pos[id] = { cy: (pos[ks[0]].cy + pos[ks[ks.length - 1]].cy) / 2, d, kids: ks };
+    const vk = visibleKids(nodes, id); groups[id] = vk;
+    const ids = vk.show.map(n => n.id);
+    if (!ids.length && !vk.folded.length) { pos[id] = { cy: 30 + LEAF / 2 + leaf++ * LEAF, d }; return; }
+    ids.forEach(k => place(k, d + 1));
+    if (vk.folded.length || vk.more.length) { pos["fold-" + id] = { cy: 30 + LEAF / 2 + leaf++ * LEAF, d: d + 1, fold: true }; }
+    const ys = [...ids.map(k => pos[k].cy), ...(pos["fold-" + id] ? [pos["fold-" + id].cy] : [])];
+    pos[id] = { cy: (Math.min(...ys) + Math.max(...ys)) / 2, d };
   })("n-root", 0);
-  for (const id in pos) {
-    const p = pos[id];
-    p.h = Math.max(BH0, p.kids.length * 24 + 16);   // 出口が並ぶぶん、親の箱を高くする（案 B）
-    p.x = 40 + p.d * COL; p.y = p.cy - p.h / 2;
-  }
-  return { pos, W: 40 + maxDepth * COL + BW + 40, H: 60 + leaf * LEAF, kids };
+  for (const id in pos) { const p = pos[id]; p.x = 40 + p.d * COL; p.y = p.cy - BH / 2; }
+  return { pos, groups, W: 40 + maxDepth * COL + BW + 40, H: 60 + leaf * LEAF };
 }
-function lanesOf(nodes, msgs) {
-  const lanes = [];
-  for (const n of nodes) if (n.parentId) {
-    const ms = msgs.filter(m => (m.from === n.id && m.to === n.parentId) || (m.from === n.parentId && m.to === n.id));
-    for (const dir of ["kin", "up", "down"]) {
-      const list = dir === "kin" ? [] : ms.filter(m => m.dir === dir).sort((a, b) => Date.parse(b.at) - Date.parse(a.at));
-      if (dir !== "kin" && !list.length) continue;
-      lanes.push({ parent: n.parentId, child: n.id, dir, latest: list[0], human: list.some(m => m.human) });
-    }
-  }
-  return lanes;
+// 線の状態：flow（流れている。最近ほど速い）・human（答え待ち）・stall（滞り）・still（停止・済んだ）・fail（失敗）
+function laneState(child, m) {
+  if (child.state === "stall") return "stall";
+  if (child.state === "done" || child.state === "stopped") return "still";
+  if (m.failed) return "fail";
+  if (m.human) return "human";
+  const age = (NOW - Date.parse(m.at)) / 60000;
+  return age <= 5 ? "flow f1" : age <= 30 ? "flow f2" : age <= 60 ? "flow f3" : "flow f0";
 }
-function laneGeom(L, l) {
-  const P = L.pos[l.parent], C = L.pos[l.child];
-  const sib = P.kids, i = sib.indexOf(l.child), n = sib.length, k = i - (n - 1) / 2;
-  const pr = P.x + BW, cl = C.x;
-  const lo = l.dir === "up" ? -1 : l.dir === "down" ? 1 : 0;
-  let py, cy, x;
-  if (st.plan === "A") {            // 案 A：親の 1 か所から出す
-    py = P.cy + lo * 16; cy = C.cy + lo * 16;
-    const s = Math.sign(C.cy - P.cy), mid = (pr + cl) / 2;
-    x = mid + (lo === -1 ? 10 * s : lo === 1 ? -10 * s : 0);
-  } else {                          // 案 B：子ごとの出口。外側の子ほど親の近くで曲げる
-    const port = P.cy + k * 24;
-    py = port + lo * 6; cy = C.cy + lo * 14;
-    const maxk = (n - 1) / 2, s = Math.sign(C.cy - port);
-    x = pr + 34 + (maxk - Math.abs(k)) * 26 + (lo === -1 ? 7 * s : lo === 1 ? -7 * s : 0);
-  }
-  const a = pr + (l.dir === "up" ? ARROW : 0), b = cl - (l.dir === "down" ? ARROW : 0);
-  let pts = [[a, py], [x, py], [x, cy], [b, cy]];
-  if (l.dir === "up") pts = pts.reverse();          // 上りは子から親へ（動く点の向き）
-  let d;
-  if (st.line === "orth") d = roundPath(pts, R);
-  else { const [s0, , , e0] = pts; const cx1 = (pr + cl) / 2; d = "M" + s0[0] + " " + s0[1] + " C" + cx1 + " " + s0[1] + " " + cx1 + " " + e0[1] + " " + e0[0] + " " + e0[1]; }
-  let tip;
-  if (l.dir === "up") tip = "M" + pr + " " + py + " L" + (pr + ARROW + 2) + " " + (py - 5) + " L" + (pr + ARROW + 2) + " " + (py + 5) + " Z";
-  if (l.dir === "down") tip = "M" + cl + " " + cy + " L" + (cl - ARROW - 2) + " " + (cy - 5) + " L" + (cl - ARROW - 2) + " " + (cy + 5) + " Z";
-  return { d, tip, pr, cl, py, cy, bendX: x };
-}
+const MARK = { stall: "⏸", still: "■", fail: "✕" };
 function drawGraph(nodes, msgs) {
   const L = layout(nodes); W = L.W; H = L.H;
   world.replaceChildren(); pipLayer.replaceChildren(); drawn = [];
   for (let x = 0; x <= W; x += 40) world.append(svgEl("line", { class: "gridline", x1: x, y1: 0, x2: x, y2: H }));
-  const lanes = lanesOf(nodes, msgs);
-  lanes.forEach((l, i) => {
-    const gm = laneGeom(L, l);
-    const cls = l.dir + (l.human ? " human" : "");
-    const parts = [];
-    if (l.dir === "kin") parts.push(svgEl("path", { class: "kin", d: gm.d }));
-    else {
-      const base = svgEl("path", { class: "wire base " + cls, d: gm.d, pathLength: 1 });
-      base.style.animationDelay = (i * 0.05) + "s";      // 本番は CSS の :nth-child で決める
-      const flow = svgEl("path", { class: "wire flow " + cls, d: gm.d });
-      flow.append(svgEl("title", {}, l.latest.kind + "：" + l.latest.text));
-      parts.push(base, flow, svgEl("path", { class: "tip " + cls, d: gm.tip }));
-      setTimeout(() => flow.classList.add("on"), 900);
-      const up = l.dir === "up";
-      // ラベル：その子だけの横の線（曲がり角と子の箱のあいだ）の上か下。答え待ちはいつも、ほかは種類だけを出し、時刻は指を置いたとき
-      const curve = st.line === "curve";
-      const lx = curve ? gm.cl - 14 : gm.bendX + 14, ly = up ? gm.cy - 7 : gm.cy + 16;
-      const lab = svgEl("text", { class: "mlabel " + (l.human ? "h" : up ? "u" : "d"), x: lx, y: ly, "text-anchor": curve ? "end" : "start" });
-      lab.append(svgEl("tspan", { class: "k" }, (up ? "← " : "→ ") + l.latest.kind), svgEl("tspan", { class: "when" }, "　" + ago(l.latest.at)));
-      lab.style.animationDelay = "0.6s";
-      if (l.human) lab.classList.add("keep");
-      parts.push(lab);
-      const dot = el("span", "pip " + (l.human ? "h" : up ? "u" : "d"));
-      dot.style.offsetPath = "path('" + gm.d + "')";      // D8 は未決定。本番で使うなら 1 か所に閉じる
-      dot.style.animationDelay = (i * 0.3) + "s";
-      pipLayer.append(dot);
+  const byIdL = Object.fromEntries(nodes.map(n => [n.id, n]));
+  let li = 0;
+  for (const pid in L.groups) {
+    const gr = L.groups[pid]; const P = L.pos[pid];
+    const kidsShown = gr.show.map(n => n.id).concat(L.pos["fold-" + pid] ? ["fold-" + pid] : []);
+    if (!kidsShown.length) continue;
+    const tx = P.x + BW + TRUNK;
+    const ys = kidsShown.map(k => L.pos[k].cy).concat([P.cy]);
+    // 幹：親の右の辺から短く出て、子の高さまで縦にのびる
+    world.append(svgEl("path", { class: "trunk", d: "M" + (P.x + BW) + " " + P.cy + " H" + tx }));
+    world.append(svgEl("path", { class: "trunk", d: "M" + tx + " " + (Math.min(...ys) - GAP) + " V" + (Math.max(...ys) + GAP) }));
+    for (const kid of kidsShown) {
+      const C = L.pos[kid], cl = C.x;
+      if (C.fold) {
+        world.append(svgEl("path", { class: "twig", d: "M" + tx + " " + C.cy + " H" + cl }));
+        continue;
+      }
+      const child = byIdL[kid];
+      const up = latestOf(msgs, kid, pid), down = latestOf(msgs, pid, kid);
+      const parts = [];
+      if (!up && !down) {               // やり取りがまだない子：薄い点線の枝
+        parts.push(svgEl("path", { class: "twig", d: "M" + tx + " " + C.cy + " H" + cl }), svgEl("circle", { class: "port k", cx: cl, cy: C.cy, r: 3.5 }));
+      }
+      for (const [dir, m] of [["up", up], ["down", down]]) {
+        if (!m) continue;
+        const y = C.cy + (dir === "up" ? -GAP : GAP);
+        const sCls = laneState(child, m);
+        const cls = "wire " + dir + " " + sCls;
+        const d = dir === "up" ? "M" + cl + " " + y + " H" + (tx + ARROW) : "M" + tx + " " + y + " H" + (cl - ARROW);
+        const base = svgEl("path", { class: cls + " base", d, pathLength: 1 });
+        base.style.animationDelay = (li * 0.05) + "s";   // 本番は CSS の :nth-child で決める
+        const flow = svgEl("path", { class: cls + " flow", d });
+        flow.append(svgEl("title", {}, m.kind + "：" + m.text));
+        const tipX = dir === "up" ? tx : cl;
+        const tip = dir === "up" ? "M" + tx + " " + y + " L" + (tx + ARROW + 2) + " " + (y - 5) + " L" + (tx + ARROW + 2) + " " + (y + 5) + " Z"
+                                 : "M" + cl + " " + y + " L" + (cl - ARROW - 2) + " " + (y - 5) + " L" + (cl - ARROW - 2) + " " + (y + 5) + " Z";
+        parts.push(base, flow, svgEl("path", { class: "tip " + dir + " " + sCls, d: tip }));
+        parts.push(svgEl("circle", { class: "port " + (dir === "up" ? "u" : "d") + " " + sCls, cx: cl, cy: y, r: 4 }));
+        // ラベル：幹と子の箱のあいだの、その線だけの上（上り）か下（下り）。縁取りで線に重なっても読める
+        const lab = svgEl("text", { class: "mlabel " + (sCls === "human" ? "h" : dir === "up" ? "u" : "d") + (sCls.startsWith("flow") ? "" : " " + sCls), x: tx + 18, y: dir === "up" ? y - 6 : y + 15 });
+        lab.append(svgEl("tspan", { class: "k" }, (dir === "up" ? "← " : "→ ") + m.kind), svgEl("tspan", { class: "when" }, "　" + ago(m.at)));
+        if (sCls !== "flow f1" && sCls !== "flow f2" && sCls !== "flow f3" && sCls !== "flow f0") lab.classList.add("keep");
+        parts.push(lab);
+        // 端子の印（子の側）
+        const mk = MARK[sCls];
+        if (mk && (dir === "up" || sCls === "fail")) {
+          parts.push(svgEl("circle", { class: "markbg " + sCls, cx: cl - 22, cy: dir === "up" ? C.cy : y, r: 9 }));
+          parts.push(svgEl("text", { class: "mark " + sCls, x: cl - 22, y: (dir === "up" ? C.cy : y) + 4, "text-anchor": "middle" }, mk));
+        }
+        // 動く点：流れているときは進む。答え待ちは矢印の先で止まって脈打つ
+        if (sCls === "human" || (sCls.startsWith("flow") && sCls !== "flow f0")) {
+          const dot = el("span", "pip " + (sCls === "human" ? "h wait" : dir === "up" ? "u" : "d") + " " + sCls.replace("flow ", ""));
+          dot.style.offsetPath = "path('" + d + "')";      // D8 は未決定。本番で使うなら 1 か所に閉じる
+          dot.style.animationDelay = (li * 0.3) + "s";
+          pipLayer.append(dot);
+        }
+        li++;
+      }
+      parts.forEach(p => world.append(p));
+      drawn.push({ ids: [pid, kid], parts });
     }
-    const pc = l.dir === "kin" ? "k" : l.dir === "up" ? "u" : "d";
-    parts.push(svgEl("circle", { class: "port " + pc, cx: gm.pr, cy: gm.py, r: 4 }), svgEl("circle", { class: "port " + pc, cx: gm.cl, cy: gm.cy, r: 4 }));
-    parts.forEach(p => world.append(p));
-    drawn.push({ l, parts });
-  });
-  for (const n of nodes) drawNode(n, L.pos[n.id]);
+  }
+  for (const n of nodes) if (L.pos[n.id]) drawNode(n, L.pos[n.id]);
+  for (const pid in L.groups) { const f = L.pos["fold-" + pid]; if (f) drawFold(L.groups[pid], f); }
   svg.setAttribute("viewBox", "0 0 " + W + " " + H);
   pipLayer.style.width = W + "px"; pipLayer.style.height = H + "px";
   vb = { x: 0, y: 0, w: W, h: H }; applyVB();
+}
+function drawFold(gr, p) {
+  const gEl = svgEl("g", { class: "fold" });
+  gEl.append(svgEl("rect", { class: "box", x: p.x, y: p.cy - 26, width: BW, height: 52, rx: 26 }));
+  const t1 = "済んだ・止めた子 " + gr.folded.length;
+  gEl.append(svgEl("text", { class: "ttl", x: p.x + 16, y: p.cy - 3 }, t1));
+  gEl.append(svgEl("text", { class: "sub", x: p.x + 16, y: p.cy + 16 }, gr.more.length ? "ほかに " + gr.more.length + "（一覧で見る）" : "一覧で見る"));
+  gEl.append(svgEl("title", {}, gr.folded.map(n => n.title).join("／")));
+  gEl.setAttribute("tabindex", "0"); gEl.setAttribute("role", "button");
+  gEl.addEventListener("click", () => { st.view = "list"; render(); });
+  world.append(gEl);
 }
 function goCard(id) {
   const c = document.getElementById("card-" + id); if (!c) return;
@@ -530,13 +575,12 @@ function goCard(id) {
 }
 function drawNode(n, p) {
   const id = n.id;
-  const node = svgEl("g", { class: "node" + (n.needsHuman ? " need" : ""), tabindex: 0, role: "button", "aria-label": n.title + "。" + STATE[n.state][0] });
-  node.append(svgEl("rect", { class: "halo", x: p.x, y: p.y, width: BW, height: p.h, rx: 12 }));
-  node.append(svgEl("rect", { class: "box", x: p.x, y: p.y, width: BW, height: p.h, rx: 12 }));
-  const ty = p.cy - 16;
-  node.append(svgEl("text", { class: "ttl", x: p.x + 12, y: ty }, short(n.title, 12)));
-  node.append(svgEl("text", { class: "sub", x: p.x + 12, y: ty + 20 }, n.role + "　" + ago(n.lastActivityAt)));
-  node.append(svgEl("text", { class: "st st-" + n.state, x: p.x + 12, y: ty + 40 }, STATE[n.state][0]));
+  const node = svgEl("g", { class: "node s-" + n.state + (n.needsHuman ? " need" : ""), tabindex: 0, role: "button", "aria-label": n.title + "。" + STATE[n.state][0] });
+  node.append(svgEl("rect", { class: "halo", x: p.x, y: p.y, width: BW, height: BH, rx: 12 }));
+  node.append(svgEl("rect", { class: "box", x: p.x, y: p.y, width: BW, height: BH, rx: 12 }));
+  node.append(svgEl("text", { class: "ttl", x: p.x + 12, y: p.y + 24 }, short(n.title, 12)));
+  node.append(svgEl("text", { class: "sub", x: p.x + 12, y: p.y + 44 }, n.role + "　" + ago(n.lastActivityAt)));
+  node.append(svgEl("text", { class: "st st-" + n.state, x: p.x + 12, y: p.y + 66 }, STATE[n.state][0]));
   if (n.needsHuman) {
     node.append(svgEl("circle", { class: "badge", cx: p.x + BW - 4, cy: p.y + 4, r: 12 }));
     node.append(svgEl("text", { class: "badge-t", x: p.x + BW - 4, y: p.y + 8.5, "text-anchor": "middle" }, n.needsHuman));
@@ -544,7 +588,7 @@ function drawNode(n, p) {
   node.append(svgEl("title", {}, n.title));
   const hot = (on) => {
     node.classList.toggle("hot", on);
-    for (const w of drawn) { const mine = w.l.parent === id || w.l.child === id; for (const e of w.parts) { e.classList.toggle("dim", on && !mine); e.classList.toggle("lit", on && mine); } }
+    for (const w of drawn) { const mine = w.ids.includes(id); for (const e of w.parts) { e.classList.toggle("dim", on && !mine); e.classList.toggle("lit", on && mine); } }
   };
   node.addEventListener("pointerenter", () => hot(true)); node.addEventListener("pointerleave", () => hot(false));
   node.addEventListener("focus", () => hot(true)); node.addEventListener("blur", () => hot(false));
@@ -552,22 +596,20 @@ function drawNode(n, p) {
   node.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); goCard(id); } });
   world.append(node);
 }
-function drawList(nodes, msgs) {      // 案 C：木の一覧＋やり取りの列
+function drawList(nodes, msgs) {      // 一覧：木の字下げ＋最後の上り・下り
   listView.replaceChildren();
   const head = el("div", "trow thead");
   head.append(el("span", "", "作業"), el("span", "", "状態"), el("span", "", "← 最後の上り（子 → 親）"), el("span", "", "→ 最後の下り（親 → 子）"));
   listView.append(head);
-  const kids = (id) => nodes.filter(n => n.parentId === id);
-  const last = (n, dir) => msgs.filter(m => m.dir === dir && (dir === "up" ? m.from === n.id && m.to === n.parentId : m.to === n.id && m.from === n.parentId)).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0];
   (function row(n, d) {
     const r = el("div", "trow" + (n.needsHuman ? " need" : ""));
     const t = el("span", "tname"); t.dataset.depth = String(d);
     t.append(el("span", "lvl", d ? "└" : ""), el("b", "", short(n.title, 28)));
     const go = el("button", "sm quiet", "詳しく"); go.addEventListener("click", () => goCard(n.id)); t.append(go);
-    const cell = (m, dir) => { const c = el("span", "msgcell " + (m ? (m.human ? "h" : dir) : "none")); c.textContent = m ? (dir === "u" ? "← " : "→ ") + m.kind + "　" + ago(m.at) : (n.parentId ? "なし" : "（いちばん上）"); return c; };
-    r.append(t, el("span", "chip " + STATE[n.state][1], STATE[n.state][0]), cell(last(n, "up"), "u"), cell(last(n, "down"), "d"));
+    const cell = (m, dir) => { const c = el("span", "msgcell " + (m ? (m.human ? "h" : dir) : "none")); c.textContent = m ? (dir === "u" ? "← " : "→ ") + m.kind + "　" + ago(m.at) : (n.parentId ? "まだない" : "（いちばん上）"); return c; };
+    r.append(t, el("span", "chip " + STATE[n.state][1], STATE[n.state][0]), cell(n.parentId && latestOf(msgs, n.id, n.parentId), "u"), cell(n.parentId && latestOf(msgs, n.parentId, n.id), "d"));
     listView.append(r);
-    kids(n.id).forEach(k => row(k, d + 1));
+    nodes.filter(k => k.parentId === n.id).forEach(k => row(k, d + 1));
   })(nodes.find(n => !n.parentId), 0);
 }
 // 拡大・移動（Rete の area の zoom・translate を見た目で示す）
@@ -585,21 +627,27 @@ zi.addEventListener("click", () => zoomBy(1.4)); zo.addEventListener("click", ()
 zf.addEventListener("click", () => { vb = { x: 0, y: 0, w: W, h: H }; applyVB(); });
 zoom.append(zi, zo, zf); board.append(zoom);
 let drag = null;
-svg.addEventListener("pointerdown", (e) => { if (e.target.closest(".node")) return; drag = { x: e.clientX, y: e.clientY, vx: vb.x, vy: vb.y }; svg.setPointerCapture(e.pointerId); });
+svg.addEventListener("pointerdown", (e) => { if (e.target.closest(".node,.fold")) return; drag = { x: e.clientX, y: e.clientY, vx: vb.x, vy: vb.y }; svg.setPointerCapture(e.pointerId); });
 svg.addEventListener("pointermove", (e) => { if (!drag) return; const s = vb.w / svg.clientWidth; vb.x = Math.max(0, Math.min(W - vb.w, drag.vx - (e.clientX - drag.x) * s)); vb.y = Math.max(0, Math.min(H - vb.h, drag.vy - (e.clientY - drag.y) * s)); applyVB(); });
 svg.addEventListener("pointerup", () => { drag = null; });
 new ResizeObserver(applyVB).observe(svg);
+// 凡例：向きと、状態の見え方
 const legend = el("div", "legend");
-legend.append(el("span", "u", "← 上り：子 → 親（上の線）"), el("span", "p", "親子のつながり（真ん中）"), el("span", "d", "→ 下り：親 → 子（下の線）"), el("span", "h", "あなたの答え待ち"));
-board.append(legend);
+legend.append(el("span", "u", "← 上り：子 → 親（枝の上）"), el("span", "d", "→ 下り：親 → 子（枝の下）"));
+const states = el("div", "states");
+for (const [cls, name, how] of [
+  ["s-flow", "流れている", "点が進む。最近ほど速く濃い。1 時間を過ぎると止まって薄くなる"],
+  ["s-human", "あなたの答え待ち", "柿色。点が矢印の先で止まって脈打つ"],
+  ["s-stall", "滞り", "線がくすんで止まる。子の左に ⏸。子の箱がゆっくり点滅"],
+  ["s-still", "止めた・済んだ", "動かない細い線。子の左に ■"],
+  ["s-fail", "失敗・通らなかった操作", "赤い ✕。出たときに一度だけ光る"]
+]) { const r = el("div", "srow " + cls); r.append(el("span", "sw"), el("b", "", name), el("span", "", how)); states.append(r); }
+board.append(legend, states);
 function render() {
   const data = st.data === "big" ? BIG : VIEW;
-  sPlan.set(st.plan); sData.set(st.data); sLine.set(st.line);
-  sLine.box.hidden = st.plan === "C";
-  judge.textContent = NOTE[st.plan];
-  lead.textContent = st.plan === "C" ? "木を字下げの一覧にし、親子のやり取りを列で見せます。" : "左が親、右が子と孫。親子の枝ごとに 3 本の線：上の藍が子から親への報告（←）、真ん中の灰色が親子のつながり、下の紫が親から子への頼み（→）。オレンジは、あなたの答えを待っているやり取りです。箱に指を置くと、その箱の線と時刻だけが残ります。";
-  board.hidden = st.plan === "C"; listView.hidden = st.plan !== "C";
-  if (st.plan === "C") drawList(data.nodes, data.messages); else drawGraph(data.nodes, data.messages);
+  sView.set(st.view); sData.set(st.data);
+  board.hidden = st.view !== "graph"; listView.hidden = st.view !== "list";
+  if (st.view === "list") drawList(data.nodes, data.messages); else drawGraph(data.nodes, data.messages);
 }
 render();
 app.append(g);
