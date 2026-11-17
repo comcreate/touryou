@@ -425,6 +425,13 @@ export function flowsOf(state: OrchState): UiFlow[] {
     reportsBy.get(nodeId)?.find((r) => r.seq > seq);
   const lastDone = new Map<string, number>();
   for (const r of state.reports) if (r.kind === "done") lastDone.set(r.nodeId, r.seq);
+  // ノードごとの、最後の受理・差し戻しより前の、最後の完了の報告の seq（記録の順に 1 回だけなめる）
+  const reviewedDone = new Map<string, number>();
+  for (const r of state.reports) {
+    if (r.kind !== "done") continue;
+    const reviewed = nodeOf.get(r.nodeId)?.reviewedSeq;
+    if (reviewed !== undefined && r.seq < reviewed) reviewedDone.set(r.nodeId, r.seq);
+  }
 
   const out: { flow: UiFlow; seq: number }[] = [];
   const push = (flow: UiFlow, seq: number): void => {
@@ -461,15 +468,7 @@ export function flowsOf(state: OrchState): UiFlow[] {
     const waiting = done && lastDone.get(r.nodeId) === r.seq && node?.state === "done";
     // 済んだ時刻: 進み具合などは送った時刻。完了の報告は、受理・差し戻しの時刻（記録は最後の 1 回だけなので、
     // その直前の完了の報告にだけ付ける。それより前の完了の報告は、済んだが時刻は分からない）。
-    const lastDoneBeforeReview =
-      done && node?.reviewedSeq !== undefined
-        ? state.reports
-            .filter(
-              (x) =>
-                x.nodeId === r.nodeId && x.kind === "done" && x.seq < (node.reviewedSeq as number),
-            )
-            .at(-1)?.seq
-        : undefined;
+    const lastDoneBeforeReview = done ? reviewedDone.get(r.nodeId) : undefined;
     const doneAt = !done ? r.at : lastDoneBeforeReview === r.seq ? node?.reviewedAt : undefined;
     push(
       {
