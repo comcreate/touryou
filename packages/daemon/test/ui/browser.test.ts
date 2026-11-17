@@ -172,4 +172,41 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(r).toEqual({ twice: 8, holders: 1, after: 0, errors: [] });
     expect(problems).toEqual([]);
   });
+
+  it("箱を押す・Enter・Space で onPick に ID が渡る。指を置くと、その子の線だけ浮かぶ。destroy のあとは何も起きない", async () => {
+    const r = await page.evaluate(async () => {
+      type G = {
+        draw(h: HTMLElement, v: unknown, o?: { onPick?: (id: string) => void }): Promise<unknown>;
+        destroy(): void;
+      };
+      const w = window as unknown as { touryouGraph: G; VIEW: unknown };
+      const host = document.getElementById("g") as HTMLElement;
+      const picked: string[] = [];
+      await w.touryouGraph.draw(host, w.VIEW, { onPick: (id) => picked.push(id) });
+      const a = host.querySelector('.gnode[data-id="a"]') as HTMLElement;
+      a.click();
+      a.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      a.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+      a.dispatchEvent(new KeyboardEvent("keydown", { key: "x", bubbles: true }));
+      a.dispatchEvent(new PointerEvent("pointerenter"));
+      const hot = host.classList.contains("hot");
+      const lit = host.querySelectorAll(".lit").length;
+      a.dispatchEvent(new PointerEvent("pointerleave"));
+      const cooled = !host.classList.contains("hot") && host.querySelectorAll(".lit").length === 0;
+      const tab = a.tabIndex;
+      w.touryouGraph.destroy();
+      a.click(); // 片付けたあとの古い箱：受け手は外れている
+      a.dispatchEvent(new PointerEvent("pointerenter"));
+      const after = { picked: picked.length, hot: host.classList.contains("hot") };
+      await w.touryouGraph.draw(host, w.VIEW); // 後の試験のために描き直す
+      return { picked, hot, lit, cooled, tab, after };
+    });
+    expect(r.picked).toEqual(["a", "a", "a"]);
+    expect(r.hot).toBe(true);
+    expect(r.lit).toBe(2); // a の上りと下り（中間の統合との枝）
+    expect(r.cooled).toBe(true);
+    expect(r.tab).toBe(0);
+    expect(r.after).toEqual({ picked: 3, hot: false });
+    expect(problems).toEqual([]);
+  });
 });

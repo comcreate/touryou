@@ -155,6 +155,16 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(await page.locator("#graph text.mstage").count()).toBeGreaterThan(0);
   });
 
+  it("箱を押すと、その子のカードへ移って光る（一覧の「詳しく」と同じ）。凡例は図のときだけ出る", async () => {
+    expect(await page.evaluate(() => document.getElementById("graph-legend")?.hidden)).toBe(false);
+    await page.click('#graph .gnode[data-id="ui-c"]');
+    await page.waitForSelector("#card-ui-c.flash"); // 光らせるのは次の番（setTimeout 0）
+    await page.click("#show-list");
+    expect(await page.evaluate(() => document.getElementById("graph-legend")?.hidden)).toBe(true);
+    await page.click("#show-graph");
+    await page.waitForSelector("#graph .gnode");
+  });
+
   it("図と一覧を切り替えられる。一覧にすると図は片付き、図に戻すと描き直す", async () => {
     await page.click("#show-list");
     expect(await page.evaluate(() => document.getElementById("graph")?.hidden)).toBe(true);
@@ -185,6 +195,8 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
 
   it.runIf(process.env.TOURYOU_UI_SHOTS !== undefined)("画面写し（明・暗）", async () => {
     const dir = process.env.TOURYOU_UI_SHOTS as string;
+    await page.mouse.move(1, 1); // 箱の上に指を残さない（線が薄くならないように）
+    await page.evaluate(() => window.scrollTo(0, 0));
     for (const scheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
       await page.screenshot({ path: `${dir}/ui-${scheme}.png`, fullPage: true });

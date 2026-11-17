@@ -70,6 +70,18 @@ describe("図の自前のコード（走査）", () => {
     );
   });
 
+  it("合図の受け手は addEventListener だけで付け、どれも destroy で外れる形（signal）。文字列の受け手は使わない", () => {
+    const entry = codeOf("graph-entry.ts");
+    const adds = [...entry.matchAll(/addEventListener\(/g)].length;
+    expect(adds).toBeGreaterThan(0);
+    // どの addEventListener も、destroy で abort する signal を付ける
+    expect([...entry.matchAll(/\bopt,?\s*\)/g)].length).toBe(adds);
+    expect(src("graph-entry.ts")).toContain("const opt = { signal: ac.signal };");
+    expect(src("graph-entry.ts")).toMatch(/listening\?\.abort\(\);/);
+    for (const f of files)
+      expect(codeOf(f)).not.toMatch(/\.on[a-z]+\s*=|setAttribute(NS)?\(\s*[^,]*["'`]on/);
+  });
+
   it("HTML の要素を作るのは el の 1 か所（div・span だけ）。el に渡すタグも div・span だけ", () => {
     expect([...all.matchAll(/createElement\(/g)]).toHaveLength(1);
     expect(src("graph-entry.ts")).toContain("Object.hasOwn(TAGS, tag)");
@@ -84,6 +96,10 @@ describe("図の自前のコード（走査）", () => {
     const DOM_SAFE = new Set([
       "textContent",
       "className",
+      "classList",
+      "remove",
+      // draw の 3 つめの引数の受け手（画面の関数。読むだけで、要素の属性には入れない）
+      "onPick",
       "dataset",
       "id",
       "style",

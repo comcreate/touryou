@@ -8,7 +8,14 @@ import { type GetSchemes, NodeEditor } from "rete";
 import { AreaPlugin } from "rete-area-plugin";
 import { ReadonlyPlugin } from "rete-readonly-plugin";
 import { BOX_W, COL_GAP, type LayoutPos, layoutOf, MARGIN } from "./graph-layout.js";
-import { agoText, type GraphLane, type GraphNode, graphModelOf, stageText } from "./graph-model.js";
+import {
+  ageClassOf,
+  agoText,
+  type GraphLane,
+  type GraphNode,
+  graphModelOf,
+  stageText,
+} from "./graph-model.js";
 import {
   humanColumnOf,
   humanLaneOf,
@@ -61,6 +68,8 @@ const HUMAN_NODE = " human";
 const COLUMN_NAMES = ["いちばん上の統合", "子", "孫", "ひ孫"];
 
 let current: AreaPlugin<Schemes, never> | null = null;
+/** いまの図の合図の受け手を、まとめて外すためのもの（`destroy` で外す）。 */
+let listening: AbortController | null = null;
 let currentHost: HTMLElement | null = null;
 /** 描きの番号（世代）。`draw`・`destroy` のたびに進む。古い `draw` の続きは、番号が違えば黙って抜ける。 */
 let generation = 0;
@@ -68,9 +77,12 @@ let generation = 0;
 /** いまの図を消す（描いていなければ何もしない）。描いている途中の `draw` も、そこで止まる。 */
 export function destroy(): void {
   generation += 1;
+  listening?.abort(); // 箱に付けた合図の受け手を、すべて外す
+  listening = null;
   current?.destroy();
   current = null;
   currentHost?.replaceChildren(); // area の器も片付ける
+  currentHost?.classList.remove("hot");
   currentHost = null;
 }
 
@@ -80,14 +92,33 @@ export interface Drawn {
   readonly height: number;
 }
 
+/** `draw` の 3 つめの引数。グローバルを増やさず、画面からの受け手をここで受ける。 */
+export interface DrawOptions {
+  /** 箱を押した（クリック・Enter・Space）とき、その子のノード ID（`ID_PATTERN` を通したもの）を渡す。 */
+  readonly onPick?: (nodeId: string) => void;
+}
+
 /**
  * 図を描く。前の図（描いている途中のものも）は消してから描く。
  * 途中で次の `draw` か `destroy` が呼ばれたら、例外を出さずに抜ける（取り残さない。そのときは大きさ 0 を返す）。
  * 枠の幅に合わせて縮める（大きくはしない）。拡大・移動は、そのあとも人が変えられる。
  */
-export async function draw(host: HTMLElement, view: unknown): Promise<Drawn> {
+export async function draw(
+  host: HTMLElement,
+  view: unknown,
+  options: DrawOptions = {},
+): Promise<Drawn> {
   destroy();
   const mine = generation;
+  const ac = new AbortController();
+  listening = ac;
+  const onPick = typeof options.onPick === "function" ? options.onPick : null;
+  /** つながりの器と、その両端のノード ID（指を置いた箱の線だけ浮かべる）。 */
+  const wires: { el: HTMLElement; a: string; b: string }[] = [];
+  const hot = (id: string | null): void => {
+    host.classList.toggle("hot", id !== null);
+    for (const w of wires) w.el.classList.toggle("lit", id !== null && (w.a === id || w.b === id));
+  };
   const live = (): boolean => mine === generation;
   const none: Drawn = { width: 0, height: 0 };
   const now = Date.now();
@@ -156,11 +187,39 @@ export async function draw(host: HTMLElement, view: unknown): Promise<Drawn> {
     };
     if (type === "node") {
       if (payload.id === HUMAN_NODE) drawHuman(element);
-      else drawNode(element, byId.get(payload.id), now);
-    } else if (type === "connection")
-      drawShape(element, shapes[(payload as ReteConn).shape], width, height);
+      else {
+        const n = byId.get(payload.id);
+        const box = drawNode(element, n, now);
+        if (box !== null && n !== undefined) listen(box, n.id);
+      }
+    } else if (type === "connection") {
+      const c = payload as ReteConn;
+      drawShape(element, shapes[c.shape], width, height);
+      wires.push({ el: element, a: c.source, b: c.target });
+    }
     return ctx;
   });
+
+  /** 箱の合図の受け手（`addEventListener` だけ。`destroy` で `ac` ごと外れる）。 */
+  function listen(box: HTMLElement, id: string): void {
+    const opt = { signal: ac.signal };
+    box.tabIndex = 0;
+    box.addEventListener("pointerenter", () => hot(id), opt);
+    box.addEventListener("pointerleave", () => hot(null), opt);
+    box.addEventListener("focus", () => hot(id), opt);
+    box.addEventListener("blur", () => hot(null), opt);
+    if (onPick === null) return;
+    box.addEventListener("click", () => onPick(id), opt);
+    box.addEventListener(
+      "keydown",
+      (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        onPick(id);
+      },
+      opt,
+    );
+  }
 
   for (const n of model.nodes) {
     await editor.addNode({ id: n.id });
@@ -192,7 +251,8 @@ export async function draw(host: HTMLElement, view: unknown): Promise<Drawn> {
 function laneShape(l: GraphLane, lane: Lane, child: GraphNode | undefined, now: number): Shape {
   const finished = child?.tier === "over";
   const stage = finished ? "done" : l.stage === "sent" && l.unknown ? "unknown" : l.stage;
-  const extra = `${l.human ? " human" : ""}${l.waiting && !finished ? " wait" : ""}${finished ? " over" : ""}`;
+  // 新しいほど濃い（a1〜a4）。答え待ちの柿色（wait）と、終わった子の薄い灰（over）は、CSS でこれを上書きする
+  const extra = ` ${ageClassOf(l.at, now)}${l.human ? " human" : ""}${l.waiting && !finished ? " wait" : ""}${finished ? " over" : ""}`;
   return {
     kind: "lane",
     d: lane.d,
@@ -233,11 +293,12 @@ function drawHuman(element: HTMLElement): void {
 }
 
 /** 箱（見本の `drawNode`）：題・役割の印と「何分前」・状態の言葉と印・動いている点・人の答えの数。 */
-function drawNode(element: HTMLElement, n: GraphNode | undefined, now: number): void {
-  if (n === undefined) return;
+function drawNode(element: HTMLElement, n: GraphNode | undefined, now: number): HTMLElement | null {
+  if (n === undefined) return null;
   element.replaceChildren();
   const box = el("div", `gnode t-${n.tier} s-${n.status}`);
   box.dataset.id = n.id;
+  box.ariaLabel = `${n.title}。${n.statusText}`;
   const row = el("div", "gr");
   const icon = svgEl("svg", { class: "gic", width: 12, height: 12, viewBox: "0 0 12 12" });
   icon.append(svgEl("path", { class: "role-ic", d: roleIconOf(n.integrator) }));
@@ -252,6 +313,7 @@ function drawNode(element: HTMLElement, n: GraphNode | undefined, now: number): 
     box.append(b);
   }
   element.append(box);
+  return box;
 }
 
 function drawShape(element: HTMLElement, s: Shape | undefined, w: number, h: number): void {

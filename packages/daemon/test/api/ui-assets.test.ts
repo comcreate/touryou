@@ -1241,8 +1241,14 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     );
     expect([...UI_JS.matchAll(/\bg\.draw\(/g)]).toHaveLength(1);
     expect(UI_JS).toContain("var box = document.getElementById('graph');");
+    // 箱を押したときに graph.js から返るのは ID だけ。形を確かめてから、一覧の「詳しく」と同じ openCard を呼ぶ
+    expect(UI_JS).toContain(
+      "var pick = function (id) { if (typeof id === 'string' && ID_RE.test(id)) openCard(id); };",
+    );
     // 描けないとき（reject も同期の例外も）は一覧に戻る。戻すのは、いちばん新しい描きのときだけ
-    expect(UI_JS).toContain("Promise.resolve(g.draw(box, view)).then(fit, fallback);");
+    expect(UI_JS).toContain(
+      "Promise.resolve(g.draw(box, view, { onPick: pick })).then(fit, fallback);",
+    );
     expect(UI_JS).toMatch(/\} catch \(e\) \{\s*fallback\(\);/);
     expect(UI_JS).toMatch(
       /var fallback = function \(\) \{\s*if \(mine !== graphDrawId\) return;\s*graphMode = 'list';/,

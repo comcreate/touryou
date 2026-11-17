@@ -248,3 +248,10 @@ export function stageText(l: Pick<GraphLane, "stage" | "unknown" | "inferred">):
   if (l.stage === "delivered") return "届いた（返事を待っている）";
   return l.inferred ? "済んだ（推定）" : "済んだ";
 }
+
+/** やり取りの新しさの段（見本の a1〜a4）。5 分・30 分・1 時間で区切る。時刻がなければいちばん古い段。 */
+export function ageClassOf(at: number | null, now: number): "a1" | "a2" | "a3" | "a4" {
+  if (at === null) return "a4";
+  const m = (now - at) / 60000;
+  return m <= 5 ? "a1" : m <= 30 ? "a2" : m <= 60 ? "a3" : "a4";
+}

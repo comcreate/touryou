@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { BOX_H, BOX_W, COL_GAP, layoutOf, MARGIN, ROW_H } from "../../src/ui/graph-layout.js";
-import { agoText, graphModelOf, stageText } from "../../src/ui/graph-model.js";
+import { ageClassOf, agoText, graphModelOf, stageText } from "../../src/ui/graph-model.js";
 import {
   gapRowAbove,
   humanColumnOf,
@@ -236,6 +236,17 @@ describe("箱の状態（見本の STATE・TIER。画面の言葉とそろえる
     expect(must(by.get("run")).lastAt).toBe(Date.parse(AT));
     expect(must(by.get("pend")).lastAt).toBe(null);
     expect(agoText(0)).toBe("いま");
+    // 新しさの段（5 分・30 分・1 時間で区切る。時刻がなければいちばん古い段）
+    expect([0, 5, 6, 30, 31, 60, 61].map((m) => ageClassOf(0, m * 60_000))).toEqual([
+      "a1",
+      "a1",
+      "a2",
+      "a2",
+      "a3",
+      "a3",
+      "a4",
+    ]);
+    expect(ageClassOf(null, 0)).toBe("a4");
     expect(agoText(12 * 60_000)).toBe("12 分前");
     expect(agoText(3 * 3600_000)).toBe("3 時間前");
     expect(stageText({ stage: "sent", unknown: true, inferred: false })).toBe(
