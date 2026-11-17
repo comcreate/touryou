@@ -1,7 +1,16 @@
 {
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
-  "files": { "includes": ["**", "!pnpm-lock.yaml", "!.sdd", "!docs", "!plugin"] },
+  "files": {
+    "includes": [
+      "**",
+      "!pnpm-lock.yaml",
+      "!.sdd",
+      "!docs",
+      "!plugin",
+      "!packages/daemon/ui-graph/graph.js"
+    ]
+  },
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
   "linter": {
     "enabled": true,

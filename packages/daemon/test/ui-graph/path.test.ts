@@ -76,6 +76,7 @@ describe("svgEl の値の検査", () => {
   it("数・クラス・d・viewBox の形だけ通す", () => {
     expect(svgAttrValue("x", 1.234)).toBe("1.2");
     expect(svgAttrValue("class", "line up g-sent")).toBe("line up g-sent");
+    expect(svgAttrValue("class", "line ")).toBe("line");
     expect(svgAttrValue("d", "M 1 2 L 3 4 Z")).toBe("M 1 2 L 3 4 Z");
     expect(svgAttrValue("viewBox", "0 0 100 50")).toBe("0 0 100 50");
     for (const [k, v] of [
@@ -83,6 +84,9 @@ describe("svgEl の値の検査", () => {
       ["x", Number.POSITIVE_INFINITY],
       ["class", 'a"b'],
       ["class", "A"],
+      ["class", "line bogus"],
+      ["class", ""],
+      ["class", "__proto__"],
       ["d", "M 0 0 url(#x)"],
       ["d", "M0 0');x:y"],
       ["viewBox", "0 0 1"],

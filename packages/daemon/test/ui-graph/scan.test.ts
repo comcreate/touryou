@@ -1,7 +1,8 @@
 import { readdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { bundleGraph } from "../../../../scripts/ui-graph-bundle.mjs";
+import { bundleGraph, GRAPH_JS_PATH } from "../../../../scripts/ui-graph-bundle.mjs";
 
 const DIR = new URL("../../src/ui-graph/", import.meta.url);
 const files = readdirSync(DIR).filter((f) => f.endsWith(".ts"));
@@ -125,6 +126,9 @@ describe("束ねた graph.js（禁止の API の不在）", async () => {
     ["storage・cookie", /localStorage|sessionStorage|document\s*\.\s*cookie|indexedDB/],
     ["通信", /\bfetch\s*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon/],
     ["大域の regeneratorRuntime", /regeneratorRuntime\s*=/],
+    ["文字列の setTimeout・setInterval", /set(Timeout|Interval)\s*\(\s*["'`]/],
+    ["srcdoc", /srcdoc/],
+    ['setAttribute("on…', /setAttribute(NS)?\(\s*(null\s*,\s*)?["'`]on/i],
   ];
   for (const [name, re] of BANNED)
     it(`${name} がない`, () => {
@@ -132,8 +136,36 @@ describe("束ねた graph.js（禁止の API の不在）", async () => {
       expect(m === null ? "" : js.slice(Math.max(0, m.index - 60), m.index + 60), name).toBe("");
     });
 
-  it("入口（TouryouGraph.drawGraph）がある。rete-connection-plugin は入らない。大きさ（gzip）は 20 KB 以下", () => {
-    expect(js).toMatch(/^"use strict";var TouryouGraph=|^var TouryouGraph=/);
+  it("SVG を作るのは自前の svgEl の 1 か所だけ（ライブラリは createElementNS・setAttributeNS を使わない）", () => {
+    const ns = [...js.matchAll(/createElementNS/g)];
+    expect(ns).toHaveLength(1);
+    expect(js.slice(Math.max(0, (ns[0]?.index ?? 0) - 80), ns[0]?.index)).toContain("svgEl:");
+    expect([...js.matchAll(/setAttributeNS/g)]).toHaveLength(1);
+  });
+
+  it("置いてある束（packages/daemon/ui-graph/graph.js）は、lockfile の版から作り直したものと一致する", () => {
+    expect(
+      readFileSync(GRAPH_JS_PATH, "utf8") === js,
+      "node scripts/ui-graph-bundle.mjs --write で作り直す",
+    ).toBe(true);
+    // 入っている版が、package.json の固定の版・lockfile と同じ
+    const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
+    const lock = readFileSync(new URL("../../../../pnpm-lock.yaml", import.meta.url), "utf8");
+    const req = createRequire(new URL("../../package.json", import.meta.url));
+    for (const name of ["rete", "rete-area-plugin", "rete-readonly-plugin"]) {
+      const pinned = pkg.devDependencies[name] as string;
+      expect(pinned).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(lock).toContain(`${name}@${pinned}`);
+      expect(JSON.parse(readFileSync(req.resolve(`${name}/package.json`), "utf8")).version).toBe(
+        pinned,
+      );
+    }
+    expect(js).not.toMatch(/\/home\/|\/Users\/|node_modules/); // 手元のパスを含まない（どこで作っても同じ）
+  });
+
+  it("入口（window.touryouGraph.drawGraph）がある。グローバルに出す名前は touryouGraph の 1 つ。rete-connection-plugin は入らない。大きさ（gzip）は 20 KB 以下", () => {
+    expect(js).toMatch(/^"use strict";var touryouGraph=|^var touryouGraph=/);
+    expect(js).not.toMatch(/\b(window|globalThis|self)\.[A-Za-z_$][\w$]*\s*=[^=]/); // ほかの名前を大域に置かない
     expect(js).toContain("drawGraph");
     expect(js).not.toContain("rete-connection-plugin");
     expect(gzipSync(js).length).toBeLessThanOrEqual(20 * 1024);
