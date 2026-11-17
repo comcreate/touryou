@@ -139,7 +139,8 @@ async function fitView(): Promise<void> {
 
 /**
  * 描いた図の、画面での大きさ（枠に合わせた倍率のもの。枠の高さを中身に合わせるのに使う）と、拡大・縮小の操作。
- * 操作は、画面のボタンから呼ぶ（外に出すグローバルは `draw`・`destroy` のまま増やさない）。いま描いている図に効く。
+ * 操作は、画面のボタンから呼ぶ（外に出すグローバルは `draw`・`destroy` のまま増やさない）。返した描きの図にだけ効き、
+ * そのあと描き直した・片付けたあとは何もしない。
  */
 export interface Drawn {
   readonly width: number;
@@ -199,7 +200,12 @@ export async function draw(
     opt,
   );
   const live = (): boolean => mine === generation;
-  const none: Drawn = { width: 0, height: 0, zoomBy, fit: fitView };
+  // 返す操作は、この描きの図にだけ効く（あとで描き直した・片付けたあとに古い操作を呼んでも、何もしない）
+  const ctl = {
+    zoomBy: (f: number): Promise<void> => (live() ? zoomBy(f) : Promise.resolve()),
+    fit: (): Promise<void> => (live() ? fitView() : Promise.resolve()),
+  };
+  const none: Drawn = { width: 0, height: 0, ...ctl };
   const now = Date.now();
   const model = graphModelOf(view);
   const L = layoutOf(model.nodes);
@@ -343,7 +349,7 @@ export async function draw(
   relight(host, byId, hot);
   // 返す大きさは、枠に合わせた倍率（k）のもの。人が拡大・縮小したあとの描き直しでも、枠の高さは初めて描いたときの
   // 大きさのまま保つ（描き直しのたびに枠の高さが変わって、ページが跳ねないように）
-  return { width: width * k, height: height * k, zoomBy, fit: fitView };
+  return { width: width * k, height: height * k, ...ctl };
 }
 
 /**

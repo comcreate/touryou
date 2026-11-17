@@ -378,6 +378,30 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(problems).toEqual([]);
   });
 
+  it("古い描きが返した操作は、描き直したあとの図を動かさない", async () => {
+    const r = await page.evaluate(async () => {
+      type Ctl = { zoomBy(f: number): Promise<void>; fit(): Promise<void> };
+      type G = { draw(h: HTMLElement, v: unknown): Promise<Ctl>; destroy(): void };
+      const w = window as unknown as { touryouGraph: G; VIEW: unknown };
+      const host = document.getElementById("g") as HTMLElement;
+      const t = () => (host.firstElementChild as HTMLElement).style.transform;
+      w.touryouGraph.destroy();
+      const old = await w.touryouGraph.draw(host, w.VIEW);
+      const fresh = await w.touryouGraph.draw(host, w.VIEW); // 描き直し
+      await fresh.zoomBy(1.4);
+      const before = t();
+      await old.zoomBy(1.4);
+      await old.fit();
+      const after = t();
+      w.touryouGraph.destroy();
+      await fresh.zoomBy(1.4); // 片付けたあとも、何も起きない（例外も出ない）
+      await w.touryouGraph.draw(host, w.VIEW); // 後の試験のために描き直す
+      return { before, after };
+    });
+    expect(r.after).toBe(r.before);
+    expect(problems).toEqual([]);
+  });
+
   it("ホイールの拡大も、同じ上限で止まる", async () => {
     await page.mouse.move(500, 300);
     for (let i = 0; i < 30; i++) await page.mouse.wheel(0, -400);
