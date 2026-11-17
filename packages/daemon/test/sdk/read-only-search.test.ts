@@ -165,16 +165,25 @@ describe("#91 との組み合わせ: 探すコマンドの許しと、承認済�
 });
 
 describe("isReadOnlySearch を直に（#92 の追記: cd・パイプの後ろ・リンク）", () => {
-  // 作業ツリーの中を指すリンク `l -> a/b/c`、外を指すリンク `out -> /etc`
-  const inLinks: Record<string, string> = { ...links, [`${WT}/l`]: `${WT}/a/b/c` };
+  // 作業ツリーの中を指すリンク `l -> a/b/c`、外を指すリンク `out -> /etc`・`x -> /outside/out/deep`。
+  // カーネルと同じに、語を前から 1 つずつたどり、たどった先がリンクならすぐ解く（`x/..` は `/outside/out`）
+  const inLinks: Record<string, string> = {
+    ...links,
+    [`${WT}/l`]: `${WT}/a/b/c`,
+    [`${WT}/x`]: "/outside/out/deep",
+  };
   const res = async (p: string) => {
-    const { posix } = await import("node:path");
-    const r = posix.resolve(p);
-    for (const [from, to] of Object.entries(inLinks)) {
-      if (r === from || r.startsWith(`${from}/`)) return to + r.slice(from.length);
+    let cur = "";
+    for (const c of p.split("/")) {
+      if (c === "" || c === ".") continue;
+      if (c === "..") {
+        cur = cur.slice(0, Math.max(0, cur.lastIndexOf("/")));
+        continue;
+      }
+      cur = `${cur}/${c}`;
+      for (let n = 0; inLinks[cur] !== undefined && n < 8; n++) cur = inLinks[cur] as string;
     }
-    if (r.startsWith(`${WT}/out-missing`)) throw new Error("ENOENT");
-    return r;
+    return cur === "" ? "/" : cur;
   };
   const direct = (c: string, cwd = WT) => isReadOnlySearch(c, cwd, WT, res, [S]);
   it.each([
@@ -212,6 +221,12 @@ describe("isReadOnlySearch を直に（#92 の追記: cd・パイプの後ろ・
     "ls && cd src && ls",
     // 途中に外へのリンクがあり、先がまだないパス
     "ls out/nope",
+    // 外へのリンクの `..`（カーネルは x を先に解くので、外の /outside/out に着く）
+    "ls x/..",
+    "grep -r foo x/..",
+    "find x/.. -name a",
+    "cd a && ls ../x/..",
+    "ls x/../..",
     "ls src;",
     "ls src &",
   ])("断る: %s", async (c) => {

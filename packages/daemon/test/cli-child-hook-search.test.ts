@@ -117,6 +117,10 @@ async function setup() {
   // 作業ツリーの中を指すリンク（`cd l && cd ../../..` で外へ出られないことを確かめる）
   mkdirSync(join(tree, "src", "b", "c"), { recursive: true });
   symlinkSync(join(tree, "src", "b", "c"), join(tree, "l"));
+  // 作業ツリーの外を指すリンク（`ls x/..` で外へ出られないことを確かめる）
+  mkdirSync(join(base, "outside", "out", "deep"), { recursive: true });
+  writeFileSync(join(base, "outside", "out", "secret.txt"), "foo\n");
+  symlinkSync(join(base, "outside", "out", "deep"), join(tree, "x"));
   const hook = async (command: string, cwd = tree) => {
     const res = await fetch(`${run.url}/v1/hook`, {
       method: "POST",
@@ -233,6 +237,10 @@ describe("CLI の子のフック: 作業ツリーの中を探すコマンド（#
       "ls src | uniq src/x src/y",
       "ls src | head -c 5 src/a.ts",
       "ls src ; head",
+      "ls x/..",
+      "grep -r foo x/..",
+      "find x/.. -name secret.txt",
+      "cd src && ls ../x/..",
       "ls src && wc",
       `ls ${join(s.repoRoot, ".git", "worktrees", basename(s.tree))}`,
       "head src/a.ts",

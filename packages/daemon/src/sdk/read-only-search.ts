@@ -24,7 +24,6 @@
  * そのかわり、CLI の子（dontAsk）のフックは、これで許したときに明示の許可（`permit: "readOnlySearch"`）を返す（compose の decideCliHook）。
  */
 
-import { posix } from "node:path";
 import { commandWords } from "@touryou/core";
 
 export type ResolveReal = (absPath: string) => Promise<string>;
@@ -316,20 +315,14 @@ async function pointsOutside(
 ): Promise<boolean> {
   if (w === "" || w === "-") return false;
   if (w.startsWith("~")) return true;
-  const abs = posix.normalize(w.startsWith("/") ? w : `${toolCwd}/${w}`);
-  // 実パスで比べる（macOS の /var は /private/var へのリンク。作業ツリーは実パスなので、字句では外に見える）。
-  // まだないパスは、今ある一番深い祖先を実パスにして、残りを字句で足す（途中に外へのリンクがあれば外）
-  let head = abs;
-  let rest = "";
-  for (;;) {
-    try {
-      const real = await resolve(head);
-      return !inside(posix.normalize(rest === "" ? real : `${real}/${rest}`), worktree);
-    } catch {
-      if (head === "/") return true;
-      rest = rest === "" ? posix.basename(head) : `${posix.basename(head)}/${rest}`;
-      head = posix.dirname(head);
-    }
+  // 語のまま（`..` を字句でつぶさずに）実パスにする。カーネルは `x/..` の `x` を先に解く（`x` が外へのリンクなら外に着く）ので、
+  // 字句でつぶすと食い違う。resolve は、今ある部分をカーネルと同じ順で実パスにし、まだない残りを足す（残りに `..` があれば失敗）。
+  // 実パスにできなければ外と見なす（macOS の /var は /private/var へのリンク。作業ツリーは実パス）
+  const abs = w.startsWith("/") ? w : `${toolCwd}/${w}`;
+  try {
+    return !inside(await resolve(abs), worktree);
+  } catch {
+    return true;
   }
 }
 
@@ -352,7 +345,7 @@ async function cdTarget(
   )
     return undefined;
   try {
-    const real = await resolve(posix.normalize(dir.startsWith("/") ? dir : `${toolCwd}/${dir}`));
+    const real = await resolve(dir.startsWith("/") ? dir : `${toolCwd}/${dir}`);
     return inside(real, worktree) ? real : undefined;
   } catch {
     return undefined;
