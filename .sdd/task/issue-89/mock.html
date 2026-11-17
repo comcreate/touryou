@@ -25,7 +25,7 @@
 
   図の役割の分け方（11-17 に決めた方針）：
   - 線は「やり取りの流れ」だけ：向き（上＝上り ←、下＝下り →）と、最後のやり取りがいつか（新しいほど濃く太い）。
-    上り・下りは色で分けない（落ち着いた 1 色。背景との明るさの差は明暗とも 3 対 1 以上）。柿色の線は、あなたの答え待ちだけ。
+    上り・下りは色で分けない（落ち着いた藍 1 色。新しいほど濃く、古いほど灰色に近い。終わった作業の線は薄い灰。背景との明るさの差は明暗とも 3 対 1 以上）。柿色の線は、あなたの答え待ちだけ。
   - 箱は「作業の状態」だけ：3 つの段にまとめる。
     あなたの出番（答え待ち＝柿・止まっているかも＝くすんだ黄・失敗＝赤。印と文字を必ず添える）／進んでいる（ふつう）／終わった（済んだ・止めた。薄い）。
   - 動きは「変化があったとき」だけ：開いたときと、新しいやり取りが来たときに、玉がその線を 1 回だけ走る。
@@ -38,19 +38,19 @@
   --paper:#f3efe6;--sheet:#fbf9f4;--ink:#22201c;--ink-2:#5b5650;--rule:#d8d0c0;--grid:#e7e0d1;
   --ai:#2a4f8f;--ai-soft:#dfe7f4;--murasaki:#7b3f8c;--murasaki-soft:#efe2f2;
   --kaki:#c95a00;--kaki-soft:#fbe6d2;--matsu:#2f6b45;--matsu-soft:#dcebdf;--shu:#a3261c;--shu-soft:#f7dfdb;
-  --on-strong:#fff;--wire:#5f594f;--kiiro:#8a6d00;--kiiro-soft:#f4ecc8;
+  --on-strong:#fff;--wire:#2a4f8f;--wire-2:#4b6492;--wire-3:#6b7891;--wire-4:#86898f;--wire-over:#c4bfb5;--shadow:0 1px 2px rgba(70,50,20,.10),0 3px 8px rgba(70,50,20,.06);--kiiro:#8a6d00;--kiiro-soft:#f4ecc8;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --paper:#16181c;--sheet:#1e2126;--ink:#ebe6dc;--ink-2:#a39d93;--rule:#363a42;--grid:#23262c;
   --ai:#86a8e8;--ai-soft:#1e2a40;--murasaki:#cf9ade;--murasaki-soft:#2e2134;
   --kaki:#ff9a3c;--kaki-soft:#3b2614;--matsu:#7fc495;--matsu-soft:#18301f;--shu:#ff8c80;--shu-soft:#3d1b18;
-  --on-strong:#16181c;--wire:#a39d93;--kiiro:#d9b84a;--kiiro-soft:#332b10;
+  --on-strong:#16181c;--wire:#8fb0ea;--wire-2:#8aa2cc;--wire-3:#8d97aa;--wire-4:#838891;--wire-over:#4a4e55;--shadow:0 1px 2px rgba(0,0,0,.35),0 3px 8px rgba(0,0,0,.25);--kiiro:#d9b84a;--kiiro-soft:#332b10;
 }}
 :root[data-theme="dark"]{
   --paper:#16181c;--sheet:#1e2126;--ink:#ebe6dc;--ink-2:#a39d93;--rule:#363a42;--grid:#23262c;
   --ai:#86a8e8;--ai-soft:#1e2a40;--murasaki:#cf9ade;--murasaki-soft:#2e2134;
   --kaki:#ff9a3c;--kaki-soft:#3b2614;--matsu:#7fc495;--matsu-soft:#18301f;--shu:#ff8c80;--shu-soft:#3d1b18;
-  --on-strong:#16181c;--wire:#a39d93;--kiiro:#d9b84a;--kiiro-soft:#332b10;
+  --on-strong:#16181c;--wire:#8fb0ea;--wire-2:#8aa2cc;--wire-3:#8d97aa;--wire-4:#838891;--wire-over:#4a4e55;--shadow:0 1px 2px rgba(0,0,0,.35),0 3px 8px rgba(0,0,0,.25);--kiiro:#d9b84a;--kiiro-soft:#332b10;
 }
 *{box-sizing:border-box}
 html{background:var(--paper)}
@@ -118,8 +118,8 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .judge{margin:0 0 10px;font-size:13px;color:var(--ink-2)}
 .ctl{display:grid;gap:4px;margin-bottom:4px}
 .shape{flex-wrap:wrap}
-.mlabel .when{opacity:0;transition:opacity .2s}
-.mlabel.keep .when,.mlabel.lit .when{opacity:1}
+.mlabel .when{fill:var(--ink-2);font-weight:400;opacity:.85}
+.mlabel.keep .when{fill:var(--kaki);opacity:1}
 .tlist{display:grid;border:1px solid var(--rule);border-radius:14px;background:var(--sheet);overflow-x:auto}
 .trow{display:grid;grid-template-columns:minmax(220px,1.6fr) 130px 1fr 1fr;gap:8px;align-items:center;padding:8px 14px;border-top:1px solid var(--rule);font-size:13.5px;min-width:640px}
 .trow.thead{border-top:0;font-size:12.5px;color:var(--ink-2);font-weight:700}
@@ -187,10 +187,23 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .lkey:first-child .krow{grid-template-columns:34px 1fr}
 .sw{height:0;border-top:3px solid var(--wire)}.sw.a4{border-top-width:1.6px;opacity:.7}.sw.human{border-top:3.5px solid var(--kaki)}
 .bx{width:30px;height:18px;border-radius:5px;border:1.5px solid var(--rule);background:var(--sheet)}
-.bx.t-turn{border:2.5px solid var(--kaki)}.bx.t-over{opacity:.5;background:var(--paper)}
+.bx.t-turn{border:2.5px solid var(--kaki)}.bx{border-left:4px solid var(--ai)}.bx.t-turn{border-left-color:var(--kaki)}.bx.t-over{border-left-color:var(--wire-over)}.bx.t-over{opacity:.5;background:var(--paper)}
 .chip.fail{background:var(--shu-soft);color:var(--shu)}
 .chip.stall{background:var(--kiiro-soft);color:var(--kiiro)}
 @media (max-width:640px){.legend2{grid-template-columns:1fr}}
+.line.a2{stroke:var(--wire-2)}.line.a3{stroke:var(--wire-3);stroke-opacity:1}.line.a4{stroke:var(--wire-4);stroke-opacity:1}
+.line.over{stroke:var(--wire-over);stroke-opacity:1}
+.tip.a2,.port.a2{fill:var(--wire-2)}.tip.a3,.port.a3{fill:var(--wire-3)}.tip.a4,.port.a4{fill:var(--wire-4);fill-opacity:1}.tip.over,.port.over{fill:var(--wire-over);fill-opacity:1}
+.sw{border-top-color:var(--wire)}.sw.a4{border-top-color:var(--wire-4);opacity:1}
+.colhead{font-size:12.5px;font-weight:700;fill:var(--ink-2);opacity:.7}
+.node rect.box{filter:drop-shadow(0 1px 1.5px rgba(70,50,20,.14))}
+:root[data-theme="dark"] .node rect.box{filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .node rect.box{filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}}
+.card,.task{box-shadow:var(--shadow)}
+.stripe{fill:var(--ai)}.t-turn .stripe{fill:var(--kaki)}.t-over .stripe{fill:var(--wire-over)}
+.role-ic{fill:none;stroke:var(--ink-2);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.alive{fill:var(--matsu);animation:alive 3s ease-in-out infinite}
+@keyframes alive{0%,100%{opacity:1}50%{opacity:.55}}
 .piplayer{position:absolute;left:0;top:0;transform-origin:0 0;pointer-events:none}
 
 .wire{fill:none;stroke-linecap:round}
@@ -243,7 +256,7 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .chip.run::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;animation:breathe 1.6s infinite}
 .spark{display:block;width:100%;height:34px}
 .spark .bar{transform-box:fill-box;transform-origin:bottom;animation:grow .7s cubic-bezier(.2,.9,.3,1.2) both}
-.spark .bar.u{fill:var(--ai)}.spark .bar.d{fill:var(--murasaki)}.spark .bar.h{fill:var(--kaki)}
+.spark .bar.u{fill:var(--ai)}.spark .bar.d{fill:var(--ai)}.spark .bar.h{fill:var(--kaki)}
 .spark .axis{stroke:var(--rule)}
 .flowlist{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:13.5px}
 .flowlist li{display:grid;grid-template-columns:20px 1fr auto;gap:6px;align-items:start}
@@ -498,14 +511,14 @@ function layout(nodes) {            // research.md 6.1 の layoutOf の形（純
     maxDepth = Math.max(maxDepth, d);
     const vk = visibleKids(nodes, id); groups[id] = vk;
     const ids = vk.show.map(n => n.id);
-    if (!ids.length && !vk.folded.length) { pos[id] = { cy: 30 + LEAF / 2 + leaf++ * LEAF, d }; return; }
+    if (!ids.length && !vk.folded.length) { pos[id] = { cy: 44 + LEAF / 2 + leaf++ * LEAF, d }; return; }
     ids.forEach(k => place(k, d + 1));
-    if (vk.folded.length || vk.more.length) { pos["fold-" + id] = { cy: 30 + LEAF / 2 + leaf++ * LEAF, d: d + 1, fold: true }; }
+    if (vk.folded.length || vk.more.length) { pos["fold-" + id] = { cy: 44 + LEAF / 2 + leaf++ * LEAF, d: d + 1, fold: true }; }
     const ys = [...ids.map(k => pos[k].cy), ...(pos["fold-" + id] ? [pos["fold-" + id].cy] : [])];
     pos[id] = { cy: (Math.min(...ys) + Math.max(...ys)) / 2, d };
   })("n-root", 0);
   for (const id in pos) { const p = pos[id]; p.x = 40 + p.d * COL; p.y = p.cy - BH / 2; }
-  return { pos, groups, W: 40 + maxDepth * COL + BW + 40, H: 60 + leaf * LEAF };
+  return { pos, groups, W: 40 + maxDepth * COL + BW + 40, H: 74 + leaf * LEAF };
 }
 // 線の見え方：答え待ち（柿）か、ふつう（1 色）。新しさは濃さと太さ。終わった作業の線は薄い
 function laneLook(child, m) {
@@ -525,7 +538,8 @@ function runPip(r, delay) {          // 玉を 1 回だけ走らせる
 function drawGraph(nodes, msgs) {
   const L = layout(nodes); W = L.W; H = L.H;
   world.replaceChildren(); pipLayer.replaceChildren(); drawn = []; runners = [];
-  for (let x = 0; x <= W; x += 40) world.append(svgEl("line", { class: "gridline", x1: x, y1: 0, x2: x, y2: H }));
+  const maxD = Math.max(...Object.values(L.pos).map(p => p.d));
+  for (let d = 0; d <= maxD; d++) world.append(svgEl("text", { class: "colhead", x: 40 + d * COL + 4, y: 26 }, d === 0 ? "いちばん上の統合" : d === 1 ? "子" : d === 2 ? "孫" : "ひ孫"));
   const byIdL = Object.fromEntries(nodes.map(n => [n.id, n]));
   let li = 0;
   for (const pid in L.groups) {
@@ -565,7 +579,7 @@ function drawGraph(nodes, msgs) {
         lab.append(svgEl("tspan", { class: "k" }, (dir === "up" ? "← " : "→ ") + m.kind), svgEl("tspan", { class: "when" }, "　" + ago(m.at)));
         if (look === "human") lab.classList.add("keep");
         parts.push(lab);
-        if (look !== "over") runners.push({ d, human: look === "human", line, lab, m, kid });
+        if (look !== "over") runners.push({ d, human: look === "human", line, lab, m, kid, live: child.state === "run" && look === "a1" });
         li++;
       }
       parts.forEach(p => world.append(p));
@@ -600,8 +614,15 @@ function drawNode(n, p) {
   const node = svgEl("g", { class: "node t-" + TIER(n) + " s-" + n.state, tabindex: 0, role: "button", "aria-label": n.title + "。" + STATE[n.state][0] });
   node.append(svgEl("rect", { class: "halo", x: p.x, y: p.y, width: BW, height: BH, rx: 12 }));
   node.append(svgEl("rect", { class: "box", x: p.x, y: p.y, width: BW, height: BH, rx: 12 }));
-  node.append(svgEl("text", { class: "ttl", x: p.x + 12, y: p.y + 24 }, short(n.title, 12)));
-  node.append(svgEl("text", { class: "sub", x: p.x + 12, y: p.y + 44 }, n.role + "　" + ago(n.lastActivityAt)));
+  node.append(svgEl("text", { class: "ttl", x: p.x + 12, y: p.y + 24 }, short(n.title, 11)));
+  node.append(svgEl("rect", { class: "stripe", x: p.x + 3, y: p.y + 10, width: 3.5, height: BH - 20, rx: 1.75 }));
+  // 役割の印：統合＝枝分かれ、作業＝金づち（SVG の簡単な形。d は数だけで組む）
+  const ix = p.x + 13, iy = p.y + 34;
+  node.append(svgEl("path", { class: "role-ic", d: n.role === "統合"
+    ? "M" + ix + " " + (iy + 5) + " H" + (ix + 4) + " M" + (ix + 4) + " " + iy + " V" + (iy + 10) + " M" + (ix + 4) + " " + iy + " H" + (ix + 9) + " M" + (ix + 4) + " " + (iy + 10) + " H" + (ix + 9)
+    : "M" + (ix + 1) + " " + (iy + 10) + " L" + (ix + 6) + " " + (iy + 4) + " M" + (ix + 3) + " " + (iy + 2) + " L" + (ix + 6) + " " + iy + " L" + (ix + 10) + " " + (iy + 4) + " L" + (ix + 8) + " " + (iy + 6) + " Z" }));
+  node.append(svgEl("text", { class: "sub", x: p.x + 28, y: p.y + 44 }, n.role + "　" + ago(n.lastActivityAt)));
+  if (n.state === "run") node.append(svgEl("circle", { class: "alive", cx: p.x + BW - 14, cy: p.y + 14, r: 4 }));
   node.append(svgEl("text", { class: "st st-" + n.state, x: p.x + 12, y: p.y + 66 }, STATE[n.state][0] + (n.state === "stall" ? "　" + ago(n.lastActivityAt).replace("前", "") : "")));
   if (n.needsHuman) {
     node.append(svgEl("circle", { class: "badge", cx: p.x + BW - 4, cy: p.y + 4, r: 12 }));
@@ -657,21 +678,27 @@ new ResizeObserver(applyVB).observe(svg);
 const legend = el("div", "legend2");
 const lineKey = el("div", "lkey");
 lineKey.append(el("b", "", "線（やり取りの流れ）"));
-for (const [cls, t] of [["a1", "← 上の線：子 → 親の報告　→ 下の線：親 → 子の頼み"], ["a1", "新しい（5 分以内）：濃く太い"], ["a4", "古い（1 時間より前）：薄く細い"], ["human", "柿色：あなたの答え待ちのやり取り"]]) {
+for (const [cls, t] of [["a1", "← 上の線：子 → 親の報告　→ 下の線：親 → 子の頼み"], ["a1", "新しい（5 分以内）：濃い藍で太い。動いている子なら、10 秒に 1 回そっと玉が走る"], ["a4", "古い（1 時間より前）：灰色に近く細い"], ["human", "柿色：あなたの答え待ちのやり取り"]]) {
   const r = el("div", "krow"); r.append(el("span", "sw " + cls), el("span", "", t)); lineKey.append(r);
 }
 const boxKey = el("div", "lkey");
 boxKey.append(el("b", "", "箱（作業の状態）"));
-for (const [cls, name, t] of [["t-turn", "あなたの出番", "● 答え待ち（柿）・‖ 止まっているかも（くすんだ黄）・✕ 失敗（赤）。ゆっくり脈打つ"], ["t-go", "進んでいる", "動いている。ふつうの箱"], ["t-over", "終わった", "済んだ・■ 止めた。箱も線も薄い"]]) {
+for (const [cls, name, t] of [["t-turn", "あなたの出番", "● 答え待ち（柿）・‖ 止まっているかも（くすんだ黄）・✕ 失敗（赤）。ゆっくり脈打つ"], ["t-go", "進んでいる", "動いている。右上の緑の点がゆっくり光る"], ["t-over", "終わった", "済んだ・■ 止めた。箱も線も薄い"]]) {
   const r = el("div", "krow"); r.append(el("span", "bx " + cls), el("b", "", name), el("span", "", t)); boxKey.append(r);
 }
 legend.append(lineKey, boxKey);
 board.append(legend);
+const byIdNow = (id) => ((st.data === "big" ? BIG : VIEW).nodes.find(n => n.id === id) || {}).state;
+// 最後のやり取りが 5 分以内で、子が動いている線だけ、10 秒に 1 回そっと玉が走る（動きを止めている間は走らない）
+setInterval(() => {
+  if (document.documentElement.classList.contains("still") || matchMedia("(prefers-reduced-motion: reduce)").matches || st.view !== "graph") return;
+  runners.filter(r => r.live).forEach((r, i) => runPip(r, i * 0.4));
+}, 10000);
 tryBtn.addEventListener("click", () => {
   if (st.view !== "graph") { st.view = "graph"; render(); }
   const r = runners.find(x => !x.human && x.m.dir === "up" && x.kid !== "n-b3") || runners[0];
   if (!r) return;
-  r.line.classList.remove("a2", "a3", "a4"); r.line.classList.add("a1");
+  r.line.classList.remove("a2", "a3", "a4"); r.line.classList.add("a1"); r.live = byIdNow(r.kid) === "run";
   r.lab.lastChild.textContent = "　いま";
   runPip(r, 0);
 });
@@ -686,7 +713,7 @@ app.append(g);
 
 // ---- 作業ごとのようす ----
 const cs = el("section", "sec");
-cs.append(el("h2", "", "作業ごとのようす"), el("p", "lead", "最後に動いた順。棒は、この 1 時間のやり取りの数（藍は上り、紫は下り、柿は答え待ち）。"));
+cs.append(el("h2", "", "作業ごとのようす"), el("p", "lead", "最後に動いた順。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。"));
 const cards = el("div", "cards");
 const sorted = [...VIEW.nodes].sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt));
 sorted.forEach((n, ci) => {
@@ -741,8 +768,8 @@ const ad = el("details", "admin");
 ad.append(el("summary", "", "管理（取り消せない操作）"));
 ad.append(el("p", "warn", "ここの操作は、あとから戻せません。押すと、作業の名前を打ち込んで確かめる画面が出ます。"));
 for (const [label, desc] of [
-  ["アーカイブした作業を消す", "記録を消し、墓標だけを残します。"],
-  ["墓標も残さずに消す", "記録も墓標も消します。いちばん強い消し方です。"],
+  ["アーカイブした作業を消す", "記録を消し、「消した」という印だけを残します。"],
+  ["消した印も残さずに消す", "記録も、消した印も消します。いちばん強い消し方です。"],
   ["捨てた作業の保管を消す", "保管していた成果を消します。ブランチに取り出していなければ、もう戻りません。"]
 ]) { const op = el("div", "op"); const b = el("button", "danger", label); op.append(b, el("p", "", desc)); ad.append(op); }
 const keep = el("div", "op"); keep.append(el("button", "", "自動で消すのを保留する"), el("p", "", "これは戻せます。保留はいつでも解けます。")); ad.append(keep);
