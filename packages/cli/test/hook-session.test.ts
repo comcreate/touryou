@@ -366,6 +366,18 @@ describe("承認済みの範囲の拡張（#91）", () => {
       hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" },
     });
   });
+  it("permit: readOnlySearch（#92）の許可も、明示の許可を出す", async () => {
+    const r = await runHook({
+      env: ENV,
+      input: bash,
+      readFile,
+      fetchImpl: reply({ decision: "allow", permit: "readOnlySearch" }),
+    });
+    expect(r.code).toBe(0);
+    expect(JSON.parse(r.stdout ?? "")).toMatchObject({
+      hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" },
+    });
+  });
   it("permit のないふつうの許可は、いままでどおり何も出さない（起動のときの許可の一覧に任せる）", async () => {
     const r = await runHook({
       env: ENV,

@@ -129,6 +129,7 @@ import { createLsofProbe, nodeExec, type ProcessProbe } from "./sdk/lsof-probe.j
 import { nodeTimers } from "./sdk/node-timers.js";
 import { nodeFsOps, resolveForWrite } from "./sdk/path-resolve.js";
 import type { PluginDirPorts } from "./sdk/plugin-dir.js";
+import { isReadOnlySearch } from "./sdk/read-only-search.js";
 import type { RuntimeAdapter, Timers } from "./sdk/runtime.js";
 import { openSqliteStore } from "./sqlite-store.js";
 import { createWaker } from "./wake.js";
@@ -1599,7 +1600,9 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     toolInput: unknown,
     cwd: string | undefined,
     trust?: "sessionIdOnly",
-  ): Promise<{ allow: true; permit?: "extension" } | { allow: false; reason: string }> => {
+  ): Promise<
+    { allow: true; permit?: "extension" | "readOnlySearch" } | { allow: false; reason: string }
+  > => {
     cliHookAt.set(nodeId, Date.parse(clock()));
     // 有効な範囲（ブリーフの範囲＋承認済みの拡張）。イベント列から毎回導くので、承認は次の呼び出しから効き、再起動でも失われない（#91）
     const scope = effectiveScope(log.state(), nodeId);
@@ -1633,6 +1636,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       };
     }
     const resolved = await resolveScope(scope, wt, resolveHookPath);
+    const roots = [...protectedRoots, ...otherGitDirsRoot(gitDir)];
     const d = await decideToolUse(
       resolved,
       wt,
@@ -1642,7 +1646,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       {
         // ほかのノードの git のディレクトリ（`.git/worktrees/<ほかの名前>/`。紐付けのコードのファイルがある）は、読み取りも禁じる。
         // 自分の git のディレクトリは除く（自分のコードは mcp が読む。mcp はフックを通らない）。
-        roots: [...protectedRoots, ...otherGitDirsRoot(gitDir)],
+        roots,
         allow: gitDir === undefined ? [] : [gitDir],
         writeDenied: gitDir === undefined ? [join(wt, ".git")] : [gitDir, join(wt, ".git")],
         home: (deps.parentEnv ?? process.env).HOME,
@@ -1656,6 +1660,25 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       // 起動のときの許可の一覧（ブリーフの範囲から作る。dontAsk）にない、承認済みの拡張でだけ通る Bash は、明示の許可を返す（#91）
       // 承認済みの書き込みの場所への書き込みも同じ。書き込みのパスは、作業ツリー（実パス）と比べるため実パスにしてから渡す
       // （macOS の /var と /private/var の食い違いで、明示の許可が付かなくなるのを防ぐ）
+      // 作業ツリーの中を探す読み取りだけのコマンド（#92）も、明示の許可を返す。CLI の子は dontAsk で、起動のときの許可の一覧は
+      // ブリーフの範囲だけなので、何も言わない許しでは Claude Code の側で断られる。判定は上の decideToolUse と同じ確かめ
+      const command =
+        typeof toolInput === "object" && toolInput !== null
+          ? (toolInput as Record<string, unknown>).command
+          : undefined;
+      if (
+        toolName === "Bash" &&
+        typeof command === "string" &&
+        (await isReadOnlySearch(
+          command,
+          here,
+          wt,
+          resolveHookPath,
+          roots.map((r) => r.path),
+        ))
+      ) {
+        return { allow: true, permit: "readOnlySearch" };
+      }
       const brief = log.state().nodes.find((n) => n.id === nodeId)?.scope;
       const input = await withRealWritePath(toolName, toolInput, here, resolveHookPath);
       if (brief !== undefined && grantedOnlyByExtension(brief, scope, toolName, input, wt)) {
