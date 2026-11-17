@@ -79,11 +79,16 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
   });
 
   it("箱と線が描かれる。文字は textContent（差し込まれた HTML は要素にならない）", async () => {
-    expect(await page.locator(".gnode").count()).toBe(8); // 7 つのノードと「人」の箱
-    expect(await page.locator("svg.glink path.line").count()).toBe(9);
-    expect(await page.locator("svg.glink path.line.human").count()).toBe(3);
-    expect(await page.locator("svg.glink path.line.wait").count()).toBe(1); // 答え待ちの判断だけ
-    expect(await page.locator("svg.glink path.tip").count()).toBe(9);
+    expect(await page.locator(".gnode").count()).toBe(7); // 7 つのノードだけ（「人」の箱は描かない）
+    expect(await page.locator('.gnode[data-id="human"]').count()).toBe(0);
+    expect(await page.locator("svg.glink path.line").count()).toBe(7); // 根と人のやり取りは線にしない
+    // 答え待ちの判断（子 c → 親 m1 の上り）だけ柿色
+    expect(await page.locator("svg.glink path.line.wait").count()).toBe(1);
+    expect(await page.locator("svg.glink path.line.wait.up").count()).toBe(1);
+    expect(await page.locator("svg.glink path.tip").count()).toBe(7);
+    // 人の答えは、親 m1 から子 c への下りの線の札で出す
+    const labels = await page.locator("svg.glink text.mlabel.down").allTextContents();
+    expect(labels.some((t) => t.startsWith("→ 答え"))).toBe(true);
     expect(await page.locator("svg.glink path.twig").count()).toBe(1); // やり取りのない子 e
     expect(await page.locator("#g img, #g script, #g style, #g foreignObject").count()).toBe(0);
     expect(await page.locator('.gnode[data-id="a"] .gt').textContent()).toContain("<img src=x");
@@ -169,7 +174,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
       await w.touryouGraph.draw(host, w.VIEW); // 後の試験のために描き直す
       return { twice, holders, after, errors };
     });
-    expect(r).toEqual({ twice: 8, holders: 1, after: 0, errors: [] });
+    expect(r).toEqual({ twice: 7, holders: 1, after: 0, errors: [] });
     expect(problems).toEqual([]);
   });
 
@@ -203,7 +208,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     });
     expect(r.picked).toEqual(["a", "a", "a"]);
     expect(r.hot).toBe(true);
-    expect(r.lit).toBe(2); // a の上りと下り（中間の統合との枝）
+    expect(r.lit).toBe(1); // a の下り（中間の統合からの指示）
     expect(r.cooled).toBe(true);
     expect(r.tab).toBe(0);
     expect(r.after).toEqual({ picked: 3, hot: false });
@@ -244,7 +249,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     });
 
   it("指を置いたまま描き直しても、ほかの線は 1 枚も元の明るさに戻らない（#115 のあとの点滅）", async () => {
-    const a = must(await page.locator('.gnode[data-id="a"]').boundingBox());
+    const a = must(await page.locator('.gnode[data-id="c"]').boundingBox());
     await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
     await page.waitForTimeout(300); // 浮かびの transition が終わるまで待つ
     const r = await redrawFrames();
@@ -264,11 +269,11 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
   it("キーボードで focus したまま描き直しても、同じ箱に focus が戻り、ほかの線は薄いまま", async () => {
     await page.mouse.move(2, 2);
     await page.evaluate(() =>
-      (document.querySelector('#g .gnode[data-id="a"]') as HTMLElement).focus(),
+      (document.querySelector('#g .gnode[data-id="c"]') as HTMLElement).focus(),
     );
     await page.waitForTimeout(300);
     const r = await redrawFrames();
-    expect(r.active).toBe("a");
+    expect(r.active).toBe("c");
     expect(r.hot).toBe(true);
     expect(r.lit).toBe(2);
     expect(r.worst).toBeLessThan(0.2);
@@ -280,7 +285,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
         VIEW: { nodes: { id: string; parentId: string | null }[] };
       };
       const host = document.getElementById("g") as HTMLElement;
-      const view = { ...w.VIEW, nodes: w.VIEW.nodes.filter((n) => n.id !== "a") };
+      const view = { ...w.VIEW, nodes: w.VIEW.nodes.filter((n) => n.id !== "c") };
       await w.touryouGraph.draw(host, view);
       const out = {
         hot: host.classList.contains("hot"),

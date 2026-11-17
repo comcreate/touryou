@@ -16,16 +16,7 @@ import {
   graphModelOf,
   stageText,
 } from "./graph-model.js";
-import {
-  humanColumnOf,
-  humanLaneOf,
-  type Lane,
-  laneOf,
-  roleIconOf,
-  setRunnerPath,
-  trunkOf,
-  twigOf,
-} from "./graph-path.js";
+import { type Lane, laneOf, roleIconOf, setRunnerPath, trunkOf, twigOf } from "./graph-path.js";
 import { svgEl } from "./svg-el.js";
 
 // ---- 描き手 ----
@@ -62,8 +53,6 @@ interface Shape {
   readonly stage?: string;
 }
 
-/** 「人」の箱の rete の ID。ノードの ID（`ID_PATTERN`。空白を含まない）と重ならない。 */
-const HUMAN_NODE = " human";
 /** 列の見出し（見本の `colhead`）。 */
 const COLUMN_NAMES = ["いちばん上の統合", "子", "孫", "ひ孫"];
 
@@ -187,7 +176,7 @@ export async function draw(
     if (kids.length > 0) trunks.push(...trunkOf(P, kidPos));
     kids.forEach((kid, i) => {
       const C = kidPos[i] as LayoutPos;
-      const mine = model.lanes.filter((l) => !l.human && l.parent === pid && l.child === kid);
+      const mine = model.lanes.filter((l) => l.parent === pid && l.child === kid);
       if (mine.length === 0) add({ kind: "twig", d: twigOf(P, C) }, pid, kid);
       for (const l of mine) {
         const s = laneShape(l, laneOf(P, C, l.dir), byId.get(kid), now);
@@ -195,25 +184,9 @@ export async function draw(
       }
     });
   }
-  // 人とのやり取り（段を飛ばす）：木の右に縦の通り道をとり、その右に「人」の箱を置く
-  const humanLanes = model.lanes.filter((l) => l.human && L.pos.has(l.child));
-  const talkers = [...new Set(humanLanes.map((l) => l.child))];
-  let width = L.width;
-  let height = L.height;
-  let H: LayoutPos | null = null;
-  if (humanLanes.length > 0) {
-    const col = humanColumnOf(L, talkers.length);
-    H = col.human;
-    width = col.width;
-    height = col.height;
-    for (const l of humanLanes) {
-      const N = L.pos.get(l.child) as LayoutPos;
-      const slot = talkers.indexOf(l.child);
-      const lane = humanLaneOf(N, H, col.corridorX(slot), l.dir, slot, talkers.length);
-      const s = laneShape(l, lane, byId.get(l.child), now);
-      add(s, l.dir === "up" ? l.child : HUMAN_NODE, l.dir === "up" ? HUMAN_NODE : l.child);
-    }
-  }
+  // 人の箱は置かない（利用者の決め）。人の答えなどは、親から子への下りの線の札で表す
+  const width = L.width;
+  const height = L.height;
   const depths = [...L.pos.values()].reduce((m, p) => Math.max(m, p.depth), 0);
 
   const editor = new NodeEditor<Schemes>();
@@ -235,12 +208,9 @@ export async function draw(
       payload: { id: string };
     };
     if (type === "node") {
-      if (payload.id === HUMAN_NODE) drawHuman(element);
-      else {
-        const n = byId.get(payload.id);
-        const box = drawNode(element, n, now);
-        if (box !== null && n !== undefined) listen(box, n.id);
-      }
+      const n = byId.get(payload.id);
+      const box = drawNode(element, n, now);
+      if (box !== null && n !== undefined) listen(box, n.id);
     } else if (type === "connection") {
       const c = payload as ReteConn;
       drawShape(element, shapes[c.shape], width, height);
@@ -304,7 +274,6 @@ export async function draw(
     await editor.addNode({ id: n.id });
     if (!live()) return none;
   }
-  if (H !== null) await editor.addNode({ id: HUMAN_NODE });
   for (const c of conns) {
     if (!live()) return none;
     await editor.addConnection(c);
@@ -314,8 +283,6 @@ export async function draw(
     if (!live()) return none;
     if (p !== undefined) await area.translate(n.id, { x: p.x, y: p.y });
   }
-  if (!live()) return none;
-  if (H !== null) await area.translate(HUMAN_NODE, { x: H.x, y: H.y });
   if (!live()) return none;
   readonly.enable(); // 置いたあとは、つなぐ・動かす・消すを止める（拡大・移動は残る）
   // 枠の幅に合わせて縮める（読める大きさを保つため、大きくはしない。小さすぎる木は 0.5 倍まで）
@@ -362,14 +329,14 @@ function laneShape(l: GraphLane, lane: Lane, child: GraphNode | undefined, now: 
   const finished = child?.tier === "over";
   const stage = finished ? "done" : l.stage === "sent" && l.unknown ? "unknown" : l.stage;
   // 新しいほど濃い（a1〜a4）。答え待ちの柿色（wait）と、終わった子の薄い灰（over）は、CSS でこれを上書きする
-  const extra = ` ${ageClassOf(l.at, now)}${l.human ? " human" : ""}${l.waiting && !finished ? " wait" : ""}${finished ? " over" : ""}`;
+  const extra = ` ${ageClassOf(l.at, now)}${l.waiting && !finished ? " wait" : ""}${finished ? " over" : ""}`;
   return {
     kind: "lane",
     d: lane.d,
     lane,
     look: `${l.dir}${extra} g-${stage}`,
-    label: `${l.dir === "up" ? "← " : "→ "}${l.label}${l.at === null ? "" : `　${agoText(now - l.at)}`}${l.human ? `　${stageText(l)}` : ""}`,
-    stage: l.human ? "" : stageText(l),
+    label: `${l.dir === "up" ? "← " : "→ "}${l.label}${l.at === null ? "" : `　${agoText(now - l.at)}`}`,
+    stage: stageText(l),
   };
 }
 
@@ -392,14 +359,6 @@ function drawBackdrop(
   for (const d of trunks) svg.append(svgEl("path", { class: "trunk", d }));
   box.append(svg);
   return box;
-}
-
-function drawHuman(element: HTMLElement): void {
-  element.replaceChildren();
-  const box = el("div", "gnode b-human t-go");
-  box.dataset.id = "human";
-  box.append(el("span", "gt", "人（あなた）"), el("span", "gs", "答える・決める"));
-  element.append(box);
 }
 
 /** 箱（見本の `drawNode`）：題・役割の印と「何分前」・状態の言葉と印・動いている点・人の答えの数。 */

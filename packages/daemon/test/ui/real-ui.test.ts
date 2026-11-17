@@ -50,7 +50,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       ...created("ui-b", "review", "root", "関係図のレビュー"),
       ...created("ui-c", "implement", "root", "一覧の見せ方を直す"),
       ev({ type: "node.instructed", payload: { nodeId: "ui-a", text: "x" } }, { nodeId: "root" }),
-      // 人からの指示（段を飛ばす。木の外の「人」の箱から）
+      // 人からの指示（人の箱は描かない。親 root から子への下りの線で表す）
       ev({ type: "node.instructed", payload: { nodeId: "ui-c", text: "x" } }),
       // 人から子への、範囲の頼みの却下（札は「指示」でなく「却下」。#115）と、範囲の頼みの知らせ（内部の言葉を言い換える）
       ev({
@@ -141,7 +141,8 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   });
 
   it("画面が graph.js を読み、#graph に図を描く。CSP の違反もエラーもない", async () => {
-    expect(await page.locator("#graph .gnode").count()).toBe(7); // 6 つのノードと「人」の箱
+    expect(await page.locator("#graph .gnode").count()).toBe(6); // 6 つのノードだけ（「人」の箱は描かない）
+    expect(await page.locator('#graph .gnode[data-id="human"]').count()).toBe(0);
     expect(await page.locator("#graph svg.glink path.line").count()).toBeGreaterThan(0);
     expect(await page.evaluate(() => document.getElementById("list")?.hidden)).toBe(true);
     expect(await page.evaluate(() => document.getElementById("view-switch")?.hidden)).toBe(false);
@@ -164,9 +165,9 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(body).not.toContain("範囲の拡張要求");
   });
 
-  it("人から子への範囲の頼みの却下の線の札は「却下」（「指示」でない）", async () => {
+  it("人から子への範囲の頼みの却下の線の札は「却下」（「指示」でない）。親から子への下りの線に出る", async () => {
     const labels = await page.evaluate(() =>
-      [...document.querySelectorAll("#graph text.mlabel")].map((e) => e.textContent ?? ""),
+      [...document.querySelectorAll("#graph text.mlabel.down")].map((e) => e.textContent ?? ""),
     );
     expect(labels.some((t) => t.startsWith("→ 却下"))).toBe(true);
   });
@@ -237,7 +238,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(await page.locator("#show-list[aria-pressed=true]").count()).toBe(1);
     await page.click("#show-graph");
     await page.waitForSelector("#graph .gnode");
-    expect(await page.locator("#graph .gnode").count()).toBe(7);
+    expect(await page.locator("#graph .gnode").count()).toBe(6);
     expect(await page.locator("#show-graph[aria-pressed=true]").count()).toBe(1);
   });
 

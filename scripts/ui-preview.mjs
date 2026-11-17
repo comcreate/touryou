@@ -74,8 +74,12 @@ const create = (at, nodeId, role, parentId, objective) => {
 };
 const change = (at, nodeId, event, actor = SYSTEM) =>
   ev(at, actor, "node.stateChanged", { nodeId, event });
-const instruct = (at, deliveredAt, nodeId, actor, text = "追加の指示") => {
-  const s = ev(at, actor, "node.instructed", { nodeId, text });
+const instruct = (at, deliveredAt, nodeId, actor, text = "追加の指示", kind) => {
+  const s = ev(at, actor, "node.instructed", {
+    nodeId,
+    text,
+    ...(kind === undefined ? {} : { kind }),
+  });
   if (deliveredAt !== undefined)
     ev(deliveredAt, SYSTEM, "node.instructionDelivered", { nodeId, instructedSeq: s });
   return s;
@@ -137,6 +141,21 @@ ev(ago(50), by("c3"), "scope.extensionRequested", {
   reason: "古い成果物を消したい",
 });
 ev(ago(48), HUMAN, "scope.extensionDecided", { extensionId: "x-old", decision: "reject" });
+// 判定を子に届ける追加指示（#116 の kind）。図では、親から子への下りの線の札「→ 却下」になる
+instruct(ago(48), ago(47), "c3", HUMAN, "範囲の頼みは却下された", "extensionRejected");
+// 孫の範囲の頼みを許可した（親 c1 から孫 g1 への下りの線の札「→ 許可」）
+ev(ago(34), by("g1"), "scope.extensionRequested", {
+  extensionId: "x-ok",
+  nodeId: "g1",
+  target: { kind: "command", value: "pnpm lint" },
+  reason: "書式を確かめたい",
+});
+ev(ago(33), HUMAN, "scope.extensionDecided", {
+  extensionId: "x-ok",
+  decision: "approve",
+  granted: { kind: "command", value: "pnpm lint" },
+});
+instruct(ago(33), ago(32), "g1", HUMAN, "範囲の頼みは許可された", "extensionApproved");
 instruct(ago(45), ago(44), "c4", by("root"), "PR を見る");
 instruct(ago(40), ago(39), "g1", by("c1"));
 instruct(ago(38), ago(37), "g2", by("c1"));

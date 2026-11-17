@@ -8,7 +8,6 @@ import { PATH_PATTERN } from "./svg-el.js";
 /** 上りと下りの道を、枝の中心から上下にずらす幅。 */
 export const LANE_GAP = 6;
 export const ARROW = 8;
-const RADIUS = 8;
 
 const num = (v: number): string => {
   if (!Number.isFinite(v)) throw new Error("path: not a number");
@@ -34,7 +33,7 @@ export interface Lane {
   readonly d: string;
   /** 矢印の三角。 */
   readonly tip: string;
-  /** 端子の丸（子の箱の端。人の道にはない）の真ん中。 */
+  /** 端子の丸（子の箱の端）の真ん中。 */
   readonly portX?: number;
   readonly portY?: number;
   /** 札（種類と「何分前」）の左下。段の言葉は、その外側（上りは上・下りは下）に `stageY` で置く。 */
@@ -104,122 +103,12 @@ export function twigOf(P: LayoutPos, C: LayoutPos): string {
   ]);
 }
 
-/** 点の並び（縦と横の線だけ）を、角を丸めた折れ線の `d` にする。 */
-export function roundedPath(pts: readonly (readonly [number, number])[], radius = RADIUS): string {
-  if (pts.length < 2) throw new Error("path: points");
-  const first = pts[0] as readonly [number, number];
-  const cmds: [string, ...number[]][] = [["M", first[0], first[1]]];
-  for (let i = 1; i < pts.length - 1; i++) {
-    const [px, py] = pts[i - 1] as readonly [number, number];
-    const [x, y] = pts[i] as readonly [number, number];
-    const [nx, ny] = pts[i + 1] as readonly [number, number];
-    const inLen = Math.hypot(x - px, y - py);
-    const outLen = Math.hypot(nx - x, ny - y);
-    const r = Math.min(radius, inLen / 2, outLen / 2);
-    if (r < 0.5) {
-      cmds.push(["L", x, y]);
-      continue;
-    }
-    cmds.push(["L", x - ((x - px) / inLen) * r, y - ((y - py) / inLen) * r]);
-    cmds.push(["Q", x, y, x + ((nx - x) / outLen) * r, y + ((ny - y) / outLen) * r]);
-  }
-  const last = pts[pts.length - 1] as readonly [number, number];
-  cmds.push(["L", last[0], last[1]]);
-  return pathD(cmds);
-}
-
-/** 箱の上の辺より上で、いちばん近い行の間（葉の行と行のあいだの、箱のない帯）の真ん中の y。 */
-export function gapRowAbove(top: number): number {
-  const half = (ROW_H - BOX_H) / 2;
-  const k = Math.floor((top - MARGIN + half - 4) / ROW_H);
-  return MARGIN - half + k * ROW_H;
-}
-
-/** 矢印の三角。先が (x, y) で、`to` の向き（左・右・下）を指す。 */
-function tipAt(x: number, y: number, to: "left" | "right" | "down"): string {
+/** 矢印の三角。先が (x, y) で、`to` の向き（左・右）を指す。 */
+function tipAt(x: number, y: number, to: "left" | "right"): string {
   const b = ARROW + 2;
-  if (to === "left") return pathD([["M", x, y], ["L", x + b, y - 5], ["L", x + b, y + 5], ["Z"]]);
-  return to === "right"
-    ? pathD([["M", x, y], ["L", x - b, y - 5], ["L", x - b, y + 5], ["Z"]])
-    : pathD([["M", x, y], ["L", x - 5, y - b], ["L", x + 5, y - b], ["Z"]]);
-}
-
-/** 通り道の、ノード 1 つ分の幅（上りと下りの 2 本）。 */
-export const CORRIDOR_STEP = 16;
-
-/**
- * 「人」の箱と通り道の場所。通り道は、木のどの箱よりも右（`L.width - MARGIN` より右）にとり、その右に人の箱を置く。
- * `talkers` は、人とやり取りするノードの数（ノードごとに通り道をずらす）。
- */
-export function humanColumnOf(
-  L: Layout,
-  talkers: number,
-): { human: LayoutPos; corridorX: (slot: number) => number; width: number; height: number } {
-  const corridor = L.width - MARGIN + 24;
-  const hx = corridor + talkers * CORRIDOR_STEP + 32;
-  return {
-    human: { x: hx, y: MARGIN, cy: MARGIN + BOX_H / 2, depth: -1 },
-    corridorX: (slot) => corridor + slot * CORRIDOR_STEP,
-    width: hx + BOX_W + MARGIN,
-    height: Math.max(L.height, MARGIN * 2 + BOX_H),
-  };
-}
-
-/**
- * 人とのやり取りの道（段を飛ばす。research.md 6.1 の (b)）。木の右の縦の通り道を通る。
- * ノードの箱の上の辺から出て、行の間（箱のない所。`gapRowAbove`）を右へ、通り道を縦に、人の箱の左の辺へ。
- * `corridorX` は、そのノードの通り道の x（ノードごとにずらし、重ねない）。上りは人の箱を、下りはノードの箱を指す。
- * 札は、行の間の帯に 1 行で置く（帯は狭いので、段の言葉も同じ行に続ける。`stageY` は `labelY` と同じ）。
- */
-export function humanLaneOf(
-  N: LayoutPos,
-  H: LayoutPos,
-  corridorX: number,
-  dir: Dir,
-  slot = 0,
-  slots = 1,
-): Lane {
-  const up = dir === "up";
-  const sx = N.x + BOX_W - (up ? 24 : 40);
-  const gapY = gapRowAbove(N.y) + (up ? -4 : 4);
-  const cx = corridorX + (up ? 0 : LANE_GAP);
-  // 人の箱の左の辺に着く高さは、道ごとに分ける（矢印の先を重ねない）
-  const hy = humanEndY(H, slot * 2 + (up ? 0 : 1), slots * 2);
-  const fromNode: [number, number][] = [
-    [sx, N.y],
-    [sx, gapY],
-    [cx, gapY],
-    [cx, hy],
-    [H.x, hy],
-  ];
-  if (up) {
-    const pts = fromNode.slice(0, -1).concat([[H.x - ARROW, hy]]);
-    return {
-      d: roundedPath(pts),
-      tip: tipAt(H.x, hy, "right"),
-      labelX: N.x + BOX_W + 8,
-      labelY: gapY - 3,
-      stageY: gapY - 3,
-    };
-  }
-  const pts = fromNode
-    .slice(1)
-    .reverse()
-    .concat([[sx, N.y - ARROW]]);
-  return {
-    d: roundedPath(pts),
-    tip: tipAt(sx, N.y, "down"),
-    labelX: N.x + BOX_W + 8,
-    labelY: gapY + 11,
-    stageY: gapY + 11,
-  };
-}
-
-/** 人の箱の左の辺の、`i` 本目（`n` 本中）の道が着く高さ。箱の上下 10px を残して、等しく分ける。 */
-export function humanEndY(H: LayoutPos, i: number, n: number): number {
-  const top = H.y + 10;
-  const span = BOX_H - 20;
-  return n <= 1 ? H.cy : top + (span * Math.min(i, n - 1)) / (n - 1);
+  return to === "left"
+    ? pathD([["M", x, y], ["L", x + b, y - 5], ["L", x + b, y + 5], ["Z"]])
+    : pathD([["M", x, y], ["L", x - b, y - 5], ["L", x - b, y + 5], ["Z"]]);
 }
 
 /** 役割の印（12×12 の中。見本の `role-ic`）：統合は枝分かれ、ほかは金づち。 */
