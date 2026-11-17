@@ -1,8 +1,8 @@
 /**
  * 関係図（`/ui/graph.js`）の束ね（#89 の試作）。esbuild で、自前の入口（`packages/daemon/src/ui-graph/graph-entry.ts`）と
- * rete・rete-area-plugin・rete-readonly-plugin を 1 つの IIFE にする（グローバルに出す名前は `touryouGraph` の 1 つ。app.js は `window.touryouGraph.drawGraph` だけを呼ぶ）。
+ * rete・rete-area-plugin・rete-readonly-plugin を 1 つの IIFE にする（グローバルに出す名前は `touryouGraph` の 1 つ。`draw`・`destroy` だけ）。
  * いまは試験の中だけで使う（配布物の画面には、まだ出さない。PR-5 で配る）。
- * 束は `packages/daemon/ui-graph/graph.js` に置き、試験で、lockfile の版から作り直したものと一致することを確かめる。
+ * 束は `UI_GRAPH_JS`（`packages/daemon/ui-graph/ui-graph-js.ts` の文字列）として置き、試験で、lockfile の版から作り直したものと一致することを確かめる。
  * 使い方: node scripts/ui-graph-bundle.mjs（大きさを出す）／ node scripts/ui-graph-bundle.mjs --write（束を作り直して置く）
  */
 
@@ -30,7 +30,11 @@ const noGlobalRegenerator = {
 const DAEMON = join(dirname(fileURLToPath(import.meta.url)), "..", "packages", "daemon");
 
 /** @returns {Promise<string>} 束ねた JS（最小化あり） */
-export const GRAPH_JS_PATH = join(DAEMON, "ui-graph", "graph.js");
+export const GRAPH_JS_PATH = join(DAEMON, "ui-graph", "ui-graph-js.ts");
+
+/** 束を、`UI_GRAPH_JS` を出す TS の文字にする。 */
+export const graphModule = (js) =>
+  `// 自動で作るファイル（node scripts/ui-graph-bundle.mjs --write）。手で直さない。\n// 関係図の束（#89）。lockfile の版から束ね直したものと一致することを、試験で比べる。\nexport const UI_GRAPH_JS: string = ${JSON.stringify(js)};\n`;
 
 export async function bundleGraph({ minify = true } = {}) {
   const { build } = await import("esbuild");
@@ -55,7 +59,7 @@ export async function bundleGraph({ minify = true } = {}) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const js = await bundleGraph();
-  if (process.argv.includes("--write")) writeFileSync(GRAPH_JS_PATH, js);
+  if (process.argv.includes("--write")) writeFileSync(GRAPH_JS_PATH, graphModule(js));
   const raw = Buffer.byteLength(js);
   console.log(
     `graph.js: ${(raw / 1024).toFixed(1)} KB（最小化）・${(gzipSync(js).length / 1024).toFixed(1)} KB（gzip）`,

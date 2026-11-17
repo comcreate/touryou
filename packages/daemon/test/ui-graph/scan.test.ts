@@ -1,8 +1,10 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { runInNewContext } from "node:vm";
 import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { bundleGraph, GRAPH_JS_PATH } from "../../../../scripts/ui-graph-bundle.mjs";
+import { bundleGraph, GRAPH_JS_PATH, graphModule } from "../../../../scripts/ui-graph-bundle.mjs";
+import { UI_GRAPH_JS } from "../../ui-graph/ui-graph-js.js";
 
 const DIR = new URL("../../src/ui-graph/", import.meta.url);
 const files = readdirSync(DIR).filter((f) => f.endsWith(".ts"));
@@ -116,8 +118,8 @@ describe("束ねた graph.js（禁止の API の不在）", async () => {
     ["<style> の差し込み", /createElement\(\s*["'`]style|<style/i],
     ["adoptedStyleSheets・CSSStyleSheet", /adoptedStyleSheets|CSSStyleSheet|insertRule/],
     ["insertAdjacentHTML", /insertAdjacentHTML/],
-    ["outerHTML", /outerHTML/],
-    ["innerHTML への空でない代入", /innerHTML\s*(?:\+?=)\s*(?!""|''|``)/],
+    ["innerHTML・outerHTML への空でない代入", /(?:inner|outer)HTML\s*(?:\+?=)\s*(?!""|''|``)/],
+    ["outerHTML を読む", /outerHTML(?!\s*=)/],
     ["innerHTML を読む", /innerHTML(?!\s*=)/],
     ['setAttribute("style"', /setAttribute\(\s*["'`]style/],
     ["cssText", /cssText/],
@@ -143,11 +145,10 @@ describe("束ねた graph.js（禁止の API の不在）", async () => {
     expect([...js.matchAll(/setAttributeNS/g)]).toHaveLength(1);
   });
 
-  it("置いてある束（packages/daemon/ui-graph/graph.js）は、lockfile の版から作り直したものと一致する", () => {
-    expect(
-      readFileSync(GRAPH_JS_PATH, "utf8") === js,
-      "node scripts/ui-graph-bundle.mjs --write で作り直す",
-    ).toBe(true);
+  it("置いてある束（UI_GRAPH_JS）は、lockfile の版から作り直したものと一致する", () => {
+    const hint = "node scripts/ui-graph-bundle.mjs --write で作り直す";
+    expect(UI_GRAPH_JS === js, hint).toBe(true);
+    expect(readFileSync(GRAPH_JS_PATH, "utf8") === graphModule(js), hint).toBe(true);
     // 入っている版が、package.json の固定の版・lockfile と同じ
     const pkg = JSON.parse(readFileSync(new URL("../../package.json", import.meta.url), "utf8"));
     const lock = readFileSync(new URL("../../../../pnpm-lock.yaml", import.meta.url), "utf8");
@@ -163,10 +164,11 @@ describe("束ねた graph.js（禁止の API の不在）", async () => {
     expect(js).not.toMatch(/\/home\/|\/Users\/|node_modules/); // 手元のパスを含まない（どこで作っても同じ）
   });
 
-  it("入口（window.touryouGraph.drawGraph）がある。グローバルに出す名前は touryouGraph の 1 つ。rete-connection-plugin は入らない。大きさ（gzip）は 20 KB 以下", () => {
+  it("外に出すのは window.touryouGraph（draw・destroy）の 1 つだけ。rete-connection-plugin は入らない。大きさ（gzip）は 20 KB 以下", () => {
     expect(js).toMatch(/^"use strict";var touryouGraph=|^var touryouGraph=/);
     expect(js).not.toMatch(/\b(window|globalThis|self)\.[A-Za-z_$][\w$]*\s*=[^=]/); // ほかの名前を大域に置かない
-    expect(js).toContain("drawGraph");
+    const g = runInNewContext(`${js};touryouGraph`, {}) as Record<string, unknown>;
+    expect(Object.keys(g).sort()).toEqual(["destroy", "draw"]);
     expect(js).not.toContain("rete-connection-plugin");
     expect(gzipSync(js).length).toBeLessThanOrEqual(20 * 1024);
   });

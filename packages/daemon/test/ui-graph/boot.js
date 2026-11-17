@@ -60,7 +60,7 @@ var VIEW = {
     { id: "f6", kind: "instruction", dir: "down", from: "root", to: "d", stage: "done" },
   ],
 };
-window.touryouGraph.drawGraph(document.getElementById("g"), VIEW).then(
+window.touryouGraph.draw(document.getElementById("g"), VIEW).then(
   () => {
     document.body.dataset.ready = "1";
   },

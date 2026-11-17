@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { graphModelOf } from "../../src/ui-graph/graph-entry.js";
 import { BOX_W, COL_GAP, layoutOf } from "../../src/ui-graph/graph-layout.js";
+import { graphModelOf } from "../../src/ui-graph/graph-model.js";
 import { bendXOf, LANE_GAP, laneOf, pathD, twigOf } from "../../src/ui-graph/graph-path.js";
 import { PATH_PATTERN, svgAttrValue } from "../../src/ui-graph/svg-el.js";
 

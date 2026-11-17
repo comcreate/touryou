@@ -8,7 +8,7 @@
       "!.sdd",
       "!docs",
       "!plugin",
-      "!packages/daemon/ui-graph/graph.js"
+      "!packages/daemon/ui-graph/ui-graph-js.ts"
     ]
   },
   "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
