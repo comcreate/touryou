@@ -267,7 +267,10 @@ export function createStateHandlers(deps: StateHandlerDeps) {
         openItems: openItems(n.id),
         discarded: n.discarded !== undefined,
         pendingDecisions: countPending(n.id),
-        ...(titleOf(n.objective) === "" ? {} : { title: titleOf(n.objective) }),
+        // 題は人だけに付ける（統合に、孫より下の目的を読ませないため。#115 レビュー）
+        ...(req.role === "human" && titleOf(n.objective) !== ""
+          ? { title: titleOf(n.objective) }
+          : {}),
       }));
       const rows = v.nodes.map((n) => [
         n.id,
