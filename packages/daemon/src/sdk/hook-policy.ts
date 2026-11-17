@@ -20,11 +20,13 @@ import { stat } from "node:fs/promises";
 import {
   CHILD_MCP_TOOL_NAMES,
   commandWords,
+  entryWords,
   evaluateScope,
   ownMcpToolOf,
   type Scope,
   type ScopeViolationReason,
 } from "@touryou/core";
+import { commandEntryProblem } from "./child-permissions.js";
 
 /** パスの実パス化（書き込み先の判定用）。解決できなければ reject する。 */
 export type ResolvePath = (absPath: string) => Promise<string>;
@@ -842,22 +844,31 @@ export async function decideToolUse(
 }
 
 /**
- * 起動のあとに承認した拡張でだけ通る Bash か（#91）。ブリーフの範囲（起動のときの許可の一覧の元）では拒否され、
- * 有効な範囲（ブリーフ＋承認済みの拡張）では許可されるコマンドだけが真。CLI の子（dontAsk）のフックが、明示の許可を返すかの判定に使う。
+ * 承認済みの拡張に、明示の許可（`permissionDecision: "allow"`）を返してよい Bash か（#91）。CLI の子（dontAsk）のフックが使う。
+ * 明示の許可は、Claude Code の側の確かめ（読み取りだけのコマンドの安全な旗、引用符のない glob など）を飛ばす。
+ * deny・ask の規則は、明示の許可のあとも効く（Claude Code の文書: hooks の `permissionDecision`、permissions の
+ * 「Precedence among rules, hooks, and mods」）。そのため、次のすべてを満たすときだけ真にする（前方一致のぶんは、フックだけ通し、
+ * Claude Code の判定に任せる）。
+ * - 命令を区切りで分けた各部分が、承認済みの拡張だけにある項目（ブリーフにない項目）と、語の数まで同じ（完全一致）
+ * - その項目が、起動のときの一覧と同じ規則（`commandEntryProblem`: `cd` 始まり・1 語だけ・任意のコードが動く形の禁止）を通る
  * フックの判定（`decideToolUse`）で許可されたあとにだけ呼ぶ（これだけで許可を決めない）。純粋関数。
  */
 export function grantedOnlyByExtension(
   brief: Scope,
   effective: Scope,
-  cwd: string,
   toolName: string,
   toolInput: unknown,
 ): boolean {
   if (toolName !== "Bash") return false;
   const command = (toolInput as { command?: unknown } | null)?.command;
   if (typeof command !== "string") return false;
-  return (
-    !evaluateScope(brief, cwd, { kind: "command", command }).allowed &&
-    evaluateScope(effective, cwd, { kind: "command", command }).allowed
+  const segments = commandWords(command)?.filter((s) => s.length > 0);
+  if (segments === undefined || segments.length === 0) return false;
+  const granted = effective.allowedCommands
+    .filter((e) => !brief.allowedCommands.includes(e))
+    .map(entryWords)
+    .filter((w) => commandEntryProblem(w) === undefined);
+  return segments.every((seg) =>
+    granted.some((w) => w.length === seg.length && w.every((x, i) => seg[i] === x)),
   );
 }

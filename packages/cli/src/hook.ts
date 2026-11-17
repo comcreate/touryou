@@ -97,7 +97,7 @@ export const CHILD_MARK = "touryou-child";
 /**
  * 起動のあとに承認した拡張でだけ通る Bash（daemon が `permit: "extension"` を付けた許可。#91）。子は dontAsk で、起動のときの
  * 許可の一覧（`--settings`）に、あとから承認したコマンドがない。終了コード 0 だけでは Claude Code が一覧で断るので、明示の許可を返す。
- * 判定は daemon のフック（有効な範囲）が済ませている。deny の規則（禁止の場所の Edit・Read）は、Claude Code の側でそのまま効く。
+ * 判定は daemon のフック（有効な範囲）が済ませている。deny の規則（禁止の場所の Edit・Read）は、Claude Code の側でそのまま効く（Claude Code の文書の hooks の `permissionDecision` と、permissions の「Precedence among rules, hooks, and mods」）。
  */
 const EXTENSION_ALLOW: HookResult = {
   code: 0,

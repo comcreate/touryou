@@ -659,30 +659,50 @@ describe("plugin の設定（plugin.json の name・.mcp.json のサーバーの
   });
 });
 
-describe("grantedOnlyByExtension（#91: 起動のあとに承認した Bash だけ、明示の許可）", () => {
+describe("grantedOnlyByExtension（#91: 承認済みの拡張にだけ、明示の許可）", () => {
   const grep = `git grep -n -E "TODO|FIXME|XXX|HACK" -- . ':!pnpm-lock.yaml'`;
   const brief: Scope = {
     writableLocations: ["src"],
     forbiddenLocations: [".git"],
     allowedCommands: ["pnpm test"],
   };
+  const risky = [
+    "node",
+    "node x.js",
+    "pnpm exec x",
+    "git -c a=b log",
+    "git",
+    "cd docs",
+    "git config x y",
+  ];
   const effective: Scope = {
     ...brief,
-    allowedCommands: ["pnpm test", "git ls-files docs .sdd", grep],
+    allowedCommands: ["pnpm test", "git ls-files docs .sdd", grep, "git grep", ...risky],
   };
-  const bash = (command: string) =>
-    grantedOnlyByExtension(brief, effective, "/w", "Bash", { command });
+  const permit = (command: string, tool = "Bash") =>
+    grantedOnlyByExtension(brief, effective, tool, { command });
 
-  it("承認した形だけが真", () => {
-    expect(bash("git ls-files docs .sdd")).toBe(true);
-    expect(bash(grep)).toBe(true);
+  it("承認した形そのもの（引用符の付け方だけ違う形を含む）だけが真", () => {
+    expect(permit("git ls-files docs .sdd")).toBe(true);
+    expect(permit(grep)).toBe(true);
+    expect(permit(`git grep -n -E 'TODO|FIXME|XXX|HACK' -- . ':!pnpm-lock.yaml'`)).toBe(true);
+    expect(permit("git grep x")).toBe(false); // 2 語の "git grep" は承認済みでも、語の数が違う
   });
-  it("ブリーフで通る形（起動のときの一覧にある）・承認していない形・Bash 以外は偽", () => {
-    expect(bash("pnpm test")).toBe(false);
-    expect(bash("git ls-files src")).toBe(false);
-    expect(bash("git push")).toBe(false);
-    expect(bash(`${grep}; rm -rf /`)).toBe(false);
-    expect(grantedOnlyByExtension(brief, effective, "/w", "Read", { command: grep })).toBe(false);
-    expect(grantedOnlyByExtension(brief, effective, "/w", "Bash", {})).toBe(false);
+  it("前方一致のぶん（うしろに旗を足した形）は偽（フックだけ通し、Claude Code の判定に任せる）", () => {
+    expect(permit("git ls-files docs .sdd -z")).toBe(false);
+    expect(permit("git grep -O sh x")).toBe(false);
+    expect(permit("git grep --open-files-in-pager=sh x")).toBe(false);
+  });
+  it("任意のコードが動く形・1 語・cd 始まりの承認には、明示の許可を付けない（起動のときの一覧と同じ規則）", () => {
+    for (const c of risky) expect(permit(c), c).toBe(false);
+  });
+  it("ブリーフで通る形・承認していない形・区切りで足した形・Bash 以外は偽", () => {
+    expect(permit("pnpm test")).toBe(false);
+    expect(permit("git ls-files src")).toBe(false);
+    expect(permit("git push")).toBe(false);
+    expect(permit(`${grep}; rm -rf /`)).toBe(false);
+    expect(permit("pnpm test && git ls-files docs .sdd")).toBe(false);
+    expect(permit(grep, "Read")).toBe(false);
+    expect(grantedOnlyByExtension(brief, effective, "Bash", {})).toBe(false);
   });
 });

@@ -271,7 +271,7 @@ const baseName = (word: string): string => word.slice(word.lastIndexOf("/") + 1)
  * 区切り（`;`・`|`・`&&` など）で 2 つ以上に分かれる、裏で動かす、解析できない項目は、前の規則（空白で分けるだけ。引用符も字面のまま）に
  * 戻す。広げるのは「引用符の外し方を命令と揃える」ことだけで、前方一致の規則（語ごとの完全一致）は変えない。
  */
-function entryWords(entry: string): string[] {
+export function entryWords(entry: string): string[] {
   const parsed = parseCommand(entry);
   if (parsed.ok && !parsed.background) {
     const segs = parsed.segments.filter((s) => s.words.length > 0);

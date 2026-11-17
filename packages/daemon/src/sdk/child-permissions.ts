@@ -109,6 +109,19 @@ function arbitraryCode(words: readonly string[]): string | undefined {
   return undefined;
 }
 
+/**
+ * 許可のコマンドの語の並びが、Claude Code の許可（`Bash(...)`）に入れてよい形か。入れてはいけないなら理由を返す。
+ * 空・`cd` 始まり・1 語だけ（前方一致で任意の引数が通る）・任意のコードが動く形。引用符などの文字の確かめ（`UNSAFE`）は含まない。
+ * 起動のときの一覧（`childAllowList`）と、承認済みの拡張への明示の許可（hook-policy の `grantedOnlyByExtension`。#91）が、同じ規則を使う。
+ */
+export function commandEntryProblem(words: readonly string[]): string | undefined {
+  if (words.length === 0) return "許可のコマンドが空";
+  if (words[0] === "cd") return "cd で始まるコマンドは許可に入れない";
+  if (words.length === 1) return "1 語だけのコマンドは許可に入れない（前方一致で任意の引数が通る）";
+  const why = arbitraryCode(words);
+  return why === undefined ? undefined : `任意のコードを動かせるコマンドは許可に入れない（${why}）`;
+}
+
 const under = (rel: string): string => (rel === "" ? "./**" : `./${rel}/**`);
 
 export interface ChildPermissions {
@@ -137,14 +150,8 @@ export function childAllowList(
       .split(/\s+/)
       .filter((w) => w !== "");
     const cmd = words.join(" ");
-    if (words.length === 0) return fail("許可のコマンドが空");
-    if (words[0] === "cd") return fail(`cd で始まるコマンドは許可に入れない: ${cmd}`);
-    if (words.length === 1) {
-      return fail(`1 語だけのコマンドは許可に入れない（前方一致で任意の引数が通る）: ${cmd}`);
-    }
-    const why = arbitraryCode(words);
-    if (why !== undefined)
-      return fail(`任意のコードを動かせるコマンドは許可に入れない（${why}）: ${cmd}`);
+    const why = commandEntryProblem(words);
+    if (why !== undefined) return fail(`${why}: ${cmd}`);
     allow.push(`Bash(${cmd}:*)`);
   }
   for (const w of scope.writableLocations) {
