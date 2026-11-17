@@ -456,8 +456,9 @@ async function cdOutside(
     } catch {
       return "unresolvable";
     }
-    if (p.worktree !== undefined && !(under(logical, p.worktree) && under(real, p.worktree)))
-      return "outsideWorktree";
+    // 実パスで比べる（macOS の /var は /private/var へのリンク。作業ツリーは実パスなので、字句では外に見える）。
+    // 移った先は字句のまま残す（シェルの `cd ..` は字句で戻る）。そこからの語も、実パスにしてから確かめる
+    if (p.worktree !== undefined && !under(real, p.worktree)) return "outsideWorktree";
     out.push(logical);
   }
   return out;

@@ -4,7 +4,15 @@
  * CLI の子は dontAsk で、起動のときの許可の一覧はブリーフの範囲だけなので、daemon は明示の許可（permit: readOnlySearch）を返す。
  */
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ok } from "@touryou/core";
@@ -121,7 +129,11 @@ async function setup() {
     expect(res.status).toBe(200);
     return ((await res.json()) as { value: { decision: string; permit?: string } }).value;
   };
-  return { base, repoRoot, stateDir, tree, other, hook };
+  // macOS の /var → /private/var のように、リンクを通る作業ツリーの置き場
+  const link = join(base, "link");
+  symlinkSync(worktreeRoot, link);
+  const linkedTree = join(link, child.nodeId);
+  return { base, repoRoot, stateDir, tree, linkedTree, other, hook };
 }
 
 describe("CLI の子のフック: 作業ツリーの中を探すコマンド（#92）", () => {
@@ -146,6 +158,33 @@ describe("CLI の子のフック: 作業ツリーの中を探すコマンド（#
     });
   });
 
+  it("実機の Claude Code が送りがちな形も通る（cd を前に付ける・旗をまとめる・エラー出力を捨てる・head で絞る・絶対パス・リンクを通る置き場）", async () => {
+    const s = await setup();
+    const cases: [string, string][] = [
+      [`cd ${s.tree} && ls src`, s.tree],
+      ["cd src && ls", s.tree],
+      ["ls -la src", s.tree],
+      ["ls src/", s.tree],
+      ["ls src 2>/dev/null", s.tree],
+      ["find src -type f | head -50", s.tree],
+      ["find src -name '*.ts' 2>/dev/null | head -n 20", s.tree],
+      ["grep -rn \"TODO\" src --include='*.ts'", s.tree],
+      ["grep -rln foo src | sort | uniq -c | wc -l", s.tree],
+      [`ls ${s.tree}/src`, s.tree],
+      ["ls ../src", join(s.tree, "src")],
+      ["ls", join(s.tree, "src")],
+      [`ls ${s.linkedTree}/src`, s.tree],
+      ["ls src", s.linkedTree],
+      [`cd ${s.linkedTree} && git grep foo`, s.tree],
+    ];
+    for (const [command, cwd] of cases) {
+      expect(await s.hook(command, cwd), `${command}（cwd: ${cwd}）`).toEqual({
+        decision: "allow",
+        permit: "readOnlySearch",
+      });
+    }
+  });
+
   it("範囲にあるコマンドは、明示の許可を付けずに通す（起動のときの一覧で通る）", async () => {
     const s = await setup();
     expect(await s.hook("git status")).toEqual({ decision: "allow" });
@@ -162,6 +201,20 @@ describe("CLI の子のフック: 作業ツリーの中を探すコマンド（#
       `ls ${join(s.repoRoot, ".git", "worktrees", s.other.nodeId)}`,
       "find src -exec cat {} +",
       "ls src > out",
+      "ls src 2>out",
+      "ls src >/dev/null 2>&1 && rm -rf src",
+      "find -L src -name x",
+      "grep -R foo src",
+      `cd ${s.repoRoot} && ls src`,
+      "cd .. && ls",
+      "cd /etc && ls",
+      "cd src",
+      "head src/a.ts",
+      "find src | tail -f",
+      "find src | sort -o out",
+      "find src | xargs cat",
+      `ls ${join(s.base, "link")}`,
+      `ls ${s.linkedTree}/../`,
     ]) {
       expect((await s.hook(command)).decision, command).toBe("deny");
     }

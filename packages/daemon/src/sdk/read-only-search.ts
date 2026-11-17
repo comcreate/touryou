@@ -15,7 +15,9 @@
  * - 位置の引数（grep・git grep の最初の引数〔パターン〕と、旗の値を除く）は、作業ツリーの外を指さない（絶対パス・`..`。
  *   実パスにできるものは、リンクを解いても中にあること）。禁じる場所は、これより先に `checkProtected` が拒否する。
  *   禁じる場所が作業ツリーの中にあるときは、使わない（パスを書かない再帰で中まで読めるため）。
- * - リダイレクト・置換・サブシェルは、字句解析（core の `commandWords`）が拒否する。`cd` などほかのコマンドが混じれば、使わない。
+ * - 作業ツリーの中への `cd <dir>`（以後の相対パスの基準になる）と、探すコマンドの後ろの `head`・`tail`・`wc`・`sort`・`uniq`
+ *   （許す旗だけ）は混ぜてよい。エラー出力を捨てるだけの `2>/dev/null`・`2>&1` は除いて見る。
+ * - ほかのリダイレクト・置換・サブシェルは、字句解析（core の `commandWords`）が拒否する。ほかのコマンドが混じれば、使わない。
  *
  * 子の permissions（`--settings` の allow）には足さない。`Bash(find:*)` などを足すと、フックのない子で `find -exec` まで通るため。
  * そのかわり、CLI の子（dontAsk）のフックは、これで許したときに明示の許可（`permit: "readOnlySearch"`）を返す（compose の decideCliHook）。
@@ -122,6 +124,88 @@ const SPECS: ReadonlyArray<readonly [readonly string[], Spec]> = [
   ],
 ];
 
+/** 探すコマンドの出力を、`|` の先で絞るだけのコマンド（ファイルを書く旗・止まらない旗は表にない）。位置の引数はパスとして確かめる。 */
+const FILTERS: ReadonlyArray<readonly [readonly string[], Spec]> = [
+  [
+    ["head"],
+    {
+      flags: "q0123456789",
+      valueFlags: "nc",
+      long: new Set(),
+      longValue: new Set(),
+      patternFirst: false,
+    },
+  ],
+  [
+    ["tail"],
+    {
+      flags: "q0123456789",
+      valueFlags: "nc",
+      long: new Set(),
+      longValue: new Set(),
+      patternFirst: false,
+    },
+  ],
+  [
+    ["wc"],
+    { flags: "lwcm", valueFlags: "", long: new Set(), longValue: new Set(), patternFirst: false },
+  ],
+  [
+    ["sort"],
+    { flags: "rnuf", valueFlags: "", long: new Set(), longValue: new Set(), patternFirst: false },
+  ],
+  [
+    ["uniq"],
+    { flags: "c", valueFlags: "", long: new Set(), longValue: new Set(), patternFirst: false },
+  ],
+];
+
+/**
+ * 引用符の外の、エラー出力を捨てるだけのリダイレクト（`2>/dev/null`・`2>&1`）を除く。ほかのリダイレクトは残す（字句解析が拒否する）。
+ * 語の始めにあるものだけを除く（`a2>/dev/null` のような語の途中は除かない）。
+ */
+function stripHarmlessRedirects(command: string): string {
+  let out = "";
+  let quote: "'" | '"' | null = null;
+  for (let i = 0; i < command.length; i++) {
+    const c = command.charAt(i);
+    if (quote === "'") {
+      if (c === "'") quote = null;
+      out += c;
+      continue;
+    }
+    if (quote === '"') {
+      if (c === "\\") {
+        out += c + command.charAt(i + 1);
+        i++;
+        continue;
+      }
+      if (c === '"') quote = null;
+      out += c;
+      continue;
+    }
+    if (c === "\\") {
+      out += c + command.charAt(i + 1);
+      i++;
+      continue;
+    }
+    if (c === "'" || c === '"') {
+      quote = c;
+      out += c;
+      continue;
+    }
+    if (c === "2" && (i === 0 || /\s/.test(command.charAt(i - 1)))) {
+      const m = /^2>(?:\s*\/dev\/null|&1)(?=$|[\s|;&])/.exec(command.slice(i));
+      if (m !== null) {
+        i += m[0].length - 1;
+        continue;
+      }
+    }
+    out += c;
+  }
+  return out;
+}
+
 /** find の式で使ってよいもの。値を取るものは、値がパターン・数・型（パスではない）。 */
 const FIND_NO_VALUE = new Set([
   "-print",
@@ -201,11 +285,35 @@ async function pointsOutside(
   if (w === "" || w === "-") return false;
   if (w.startsWith("~")) return true;
   const abs = posix.normalize(w.startsWith("/") ? w : `${toolCwd}/${w}`);
-  if (!inside(abs, worktree)) return true;
   try {
+    // 実パスで比べる（macOS の /var は /private/var へのリンク。作業ツリーは実パスなので、字句では外に見える）
     return !inside(await resolve(abs), worktree);
   } catch {
-    return false; // まだないパス。字句の上で中にある（展開はない）
+    return !inside(abs, worktree); // まだないパス。字句の上で中にあれば中（展開はない）
+  }
+}
+
+/** `cd <dir>` の行き先（実パス）。作業ツリーの外・確かめられないときは undefined。 */
+async function cdTarget(
+  args: readonly string[],
+  toolCwd: string,
+  worktree: string,
+  resolve: ResolveReal,
+): Promise<string | undefined> {
+  const dir = args[0];
+  if (
+    args.length !== 1 ||
+    dir === undefined ||
+    dir === "" ||
+    dir.startsWith("-") ||
+    dir.startsWith("~")
+  )
+    return undefined;
+  try {
+    const real = await resolve(posix.normalize(dir.startsWith("/") ? dir : `${toolCwd}/${dir}`));
+    return inside(real, worktree) ? real : undefined;
+  } catch {
+    return undefined;
   }
 }
 
@@ -286,21 +394,34 @@ export async function isReadOnlySearch(
   if (!inside(toolCwd, worktree)) return false;
   if (protectedRoots.some((r) => inside(r, worktree) || inside(worktree, r))) return false;
   if (hasUnquotedExpansion(command)) return false;
-  if (/(^|[^&])&($|[^&])/.test(command)) return false; // 裏での実行
-  const segs = commandWords(command)?.filter((s) => s.length > 0);
+  const cmd = stripHarmlessRedirects(command);
+  if (/(^|[^&])&($|[^&])/.test(cmd)) return false; // 裏での実行
+  const segs = commandWords(cmd)?.filter((s) => s.length > 0);
   if (segs === undefined || segs.length === 0) return false;
+  let here = toolCwd;
+  let searched = false;
   for (const words of segs) {
+    // `cd <作業ツリーの中>`（Claude Code は `cd <作業ツリー> && …` の形でよく送る）。以後の相対パスは、その場所から解く
+    if (words[0] === "cd") {
+      const next = await cdTarget(words.slice(1), here, worktree, resolve);
+      if (next === undefined) return false;
+      here = next;
+      continue;
+    }
     let paths: string[] | undefined;
     if (words[0] === "find") paths = findStarts(words.slice(1));
     else {
-      const hit = SPECS.find(([h]) => h.every((w, i) => words[i] === w));
+      const hit =
+        SPECS.find(([h]) => h.every((w, i) => words[i] === w)) ??
+        (searched ? FILTERS.find(([h]) => h.every((w, i) => words[i] === w)) : undefined);
       if (hit === undefined) return false;
       paths = positionalsOf(hit[1], words.slice(hit[0].length));
     }
     if (paths === undefined) return false;
     for (const p of paths) {
-      if (await pointsOutside(p, toolCwd, worktree, resolve)) return false;
+      if (await pointsOutside(p, here, worktree, resolve)) return false;
     }
+    searched = true;
   }
-  return true;
+  return searched;
 }
