@@ -149,4 +149,26 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(new Set(names)).toEqual(new Set(["none"]));
     await page.emulateMedia({ reducedMotion: "no-preference" });
   });
+
+  it("draw を続けて呼んでも、図は 1 つだけ（前の描きの続きは黙って抜ける）。draw の直後の destroy で、何も残らない", async () => {
+    const r = await page.evaluate(async () => {
+      type G = { draw(h: HTMLElement, v: unknown): Promise<void>; destroy(): void };
+      const w = window as unknown as { touryouGraph: G; VIEW: unknown };
+      const host = document.getElementById("g") as HTMLElement;
+      const errors: string[] = [];
+      const p1 = w.touryouGraph.draw(host, w.VIEW).catch((e) => errors.push(String(e)));
+      const p2 = w.touryouGraph.draw(host, w.VIEW).catch((e) => errors.push(String(e)));
+      await Promise.all([p1, p2]);
+      const twice = host.querySelectorAll(".gnode").length;
+      const holders = host.children.length;
+      const p3 = w.touryouGraph.draw(host, w.VIEW).catch((e) => errors.push(String(e)));
+      w.touryouGraph.destroy();
+      await p3;
+      const after = host.querySelectorAll(".gnode, svg").length;
+      await w.touryouGraph.draw(host, w.VIEW); // 後の試験のために描き直す
+      return { twice, holders, after, errors };
+    });
+    expect(r).toEqual({ twice: 8, holders: 1, after: 0, errors: [] });
+    expect(problems).toEqual([]);
+  });
 });

@@ -60,16 +60,27 @@ interface Shape {
 const HUMAN_NODE = " human";
 
 let current: AreaPlugin<Schemes, never> | null = null;
+let currentHost: HTMLElement | null = null;
+/** 描きの番号（世代）。`draw`・`destroy` のたびに進む。古い `draw` の続きは、番号が違えば黙って抜ける。 */
+let generation = 0;
 
-/** いまの図を消す（描いていなければ何もしない）。 */
+/** いまの図を消す（描いていなければ何もしない）。描いている途中の `draw` も、そこで止まる。 */
 export function destroy(): void {
+  generation += 1;
   current?.destroy();
   current = null;
+  currentHost?.replaceChildren(); // area の器も片付ける
+  currentHost = null;
 }
 
-/** 図を描く。前の図は消してから描く。 */
+/**
+ * 図を描く。前の図（描いている途中のものも）は消してから描く。
+ * 途中で次の `draw` か `destroy` が呼ばれたら、例外を出さずに抜ける（取り残さない）。
+ */
 export async function draw(host: HTMLElement, view: unknown): Promise<void> {
   destroy();
+  const mine = generation;
+  const live = (): boolean => mine === generation;
   const model = graphModelOf(view);
   const L = layoutOf(model.nodes);
   const byId = new Map(model.nodes.map((n) => [n.id, n]));
@@ -127,6 +138,7 @@ export async function draw(host: HTMLElement, view: unknown): Promise<void> {
   const editor = new NodeEditor<Schemes>();
   const area = new AreaPlugin<Schemes, never>(host);
   current = area;
+  currentHost = host;
   const readonly = new ReadonlyPlugin<Schemes>();
   editor.use(readonly.root);
   editor.use(area);
@@ -147,14 +159,23 @@ export async function draw(host: HTMLElement, view: unknown): Promise<void> {
     return ctx;
   });
 
-  for (const n of model.nodes) await editor.addNode({ id: n.id });
+  for (const n of model.nodes) {
+    await editor.addNode({ id: n.id });
+    if (!live()) return;
+  }
   if (H !== null) await editor.addNode({ id: HUMAN_NODE });
-  for (const c of conns) await editor.addConnection(c);
+  for (const c of conns) {
+    if (!live()) return;
+    await editor.addConnection(c);
+  }
   for (const n of model.nodes) {
     const p = L.pos.get(n.id);
+    if (!live()) return;
     if (p !== undefined) await area.translate(n.id, { x: p.x, y: p.y });
   }
+  if (!live()) return;
   if (H !== null) await area.translate(HUMAN_NODE, { x: H.x, y: H.y });
+  if (!live()) return;
   readonly.enable(); // 置いたあとは、つなぐ・動かす・消すを止める（拡大・移動は残る）
   await AreaExtensions.zoomAt(area, editor.getNodes());
 }

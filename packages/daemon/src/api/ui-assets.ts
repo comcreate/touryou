@@ -795,6 +795,7 @@ export const UI_JS = `'use strict';
   var graphMode = 'graph';
   var graphSeq = -1;
   var graphView = null;
+  var graphDrawId = 0;
   function graphApi() {
     var g = window.touryouGraph;
     return g && typeof g.draw === 'function' && typeof g.destroy === 'function' ? g : null;
@@ -803,6 +804,7 @@ export const UI_JS = `'use strict';
     var g = graphApi();
     if (g && graphSeq !== -1) g.destroy();
     graphSeq = -1;
+    graphDrawId += 1; // 片付けたあとに、前の描きの失敗で一覧へ戻さない
   }
   function renderGraph(view, seq) {
     var g = graphApi();
@@ -815,12 +817,20 @@ export const UI_JS = `'use strict';
     if (!on) { dropGraph(); return; }
     if (seq === graphSeq) return; // 変わっていなければ描き直さない（拡大・移動を保つ）
     graphSeq = seq;
-    g.draw(document.getElementById('graph'), view).catch(function () {
-      // 描けなければ、一覧に戻す（図は飾り。一覧だけで読める）
+    graphDrawId += 1;
+    var mine = graphDrawId;
+    // 描けなければ、一覧に戻す（図は飾り。一覧だけで読める）。戻すのは、いちばん新しい描きのときだけ
+    var fallback = function () {
+      if (mine !== graphDrawId) return;
       graphMode = 'list';
       dropGraph();
       renderGraph(view, seq);
-    });
+    };
+    try {
+      Promise.resolve(g.draw(document.getElementById('graph'), view)).catch(fallback);
+    } catch (e) {
+      fallback();
+    }
   }
   function showGraphMode(mode) {
     graphMode = mode;

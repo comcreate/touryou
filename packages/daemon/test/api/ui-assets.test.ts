@@ -1239,7 +1239,14 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     );
     expect([...UI_JS.matchAll(/\bg\.draw\(/g)]).toHaveLength(1);
     expect(UI_JS).toContain("g.draw(document.getElementById('graph'), view)");
-    expect(UI_JS).toMatch(/\.catch\(function \(\) \{[^}]*graphMode = 'list'/); // 描けないときは一覧に戻る
+    // 描けないとき（reject も同期の例外も）は一覧に戻る。戻すのは、いちばん新しい描きのときだけ
+    expect(UI_JS).toContain(
+      "Promise.resolve(g.draw(document.getElementById('graph'), view)).catch(fallback);",
+    );
+    expect(UI_JS).toMatch(/\} catch \(e\) \{\s*fallback\(\);/);
+    expect(UI_JS).toMatch(
+      /var fallback = function \(\) \{\s*if \(mine !== graphDrawId\) return;\s*graphMode = 'list';/,
+    );
   });
   it("見せ方の切り替え（図・一覧）があり、動きを止める（.still）と OS の設定で、図の動きも止まる", () => {
     expect(UI_HTML).toContain('<button id="show-graph" class="quiet sm" type="button">図</button>');

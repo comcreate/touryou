@@ -149,7 +149,7 @@ daemon の窓口が、状態を見るための HTML 画面を配る。**状態�
   - **CI**：`ci.yml` の **ubuntu・node 22 のジョブ 1 つだけ**で流す。版を固定した Playwright（いまは `1.64.1`。公開から 14 日以上）を、`npm install --prefix "${RUNNER_TEMP}/playwright" --ignore-scripts playwright@<版>` で一時の場所に入れ、`playwright install --with-deps chromium` でブラウザを入れる。依存（`package.json`・lockfile）には加えない。macOS のジョブ（`ci-macos.yml`）と node 24 のジョブでは流さない。ワークフローの権限は増やさない。外から取るのは、その Playwright とブラウザだけ。
   - **飛ばさない**：そのジョブでは `TOURYOU_REQUIRE_PLAYWRIGHT=1` を付けるので、Playwright が見つからないと、試験は飛ばずに落ちる。ほかのジョブと手元では、見つからなければ飛ばす。
   - **手元**：`TOURYOU_PLAYWRIGHT=$(npm root -g)/playwright pnpm --filter @touryou/daemon test` で流す。
-  - **Playwright の版上げ**：`ci.yml` の版を、公開から 14 日以上たった版に上げる（ライセンスは Apache-2.0 のままかを確かめる）。
+  - **Playwright の版上げ**：`ci.yml` の版を、公開から 14 日以上たった版に上げる（ライセンスは Apache-2.0 のままかを確かめる）。`npm install` は lockfile も完全性の値（integrity）も見ないので、`playwright` が固定する `playwright-core` も同じ版で、公開から 14 日以上たっていることを一緒に確かめる（`npm view playwright@<版> dependencies`・`npm view playwright-core time`）。
 - **画面からの呼び出し**（`app.js`）：
   - `/ui` の HTML は、`app.js` のあとに `graph.js` を読む。`app.js` は、`window.touryouGraph` を 1 か所で取り出し、`draw`・`destroy` が関数のときだけ使う。`graph.js` が読めない・描けないときは、一覧だけを出す（図は飾り。一覧だけで読める）。
   - 「やり取り」の欄の「図」「一覧」で切り替える（既定は図）。一覧にすると `destroy` で図を片付ける。状態が変わったとき（`lastSeq` が進んだとき）だけ描き直す（拡大・移動を保つ）。
