@@ -158,3 +158,101 @@
 
 - どちらも `ui-assets.ts` を大きく変える。#88 は接続（トークンの貼り付け → 使い捨てのチケット）を変え、#89 は表示を変える。
 - **勧め：#88 を先に入れる**。#88 は接続の所だけで小さく、安全に関わる（守りの試験も変わる）ので、先に固めた方が #89 の大きな組み替えで巻き込まずにすむ。#89 は PR-1（仕様）と PR-2（表示モデル。`ui-assets.ts` に触れない）を #88 と並べて進め、PR-3 から #88 の後に乗せる。
+
+## 6. 答えを受けた追記（11-17）
+
+利用者の答え：D1 見本を作り直す（動き・上りと下りの分け。見本は別のセッションが作る）。D2 **Rete.js を使う**。D3 値を足す（題は目的の先頭を約 80 字に切って整える）。D4 `details`・`summary`・`code` を足す。D5 コマンドと写すボタン。D6 まずはたたむだけ（片付けは別の Issue）。D7 #88 を先に実装する。#89 の画面の作り直しは #88 のマージのあと。
+
+### 6.1 Rete.js の組み込みの案
+
+#### 描画のプラグインの比べ（npm の tarball の中身で確認。2026-11-17）
+
+| 道 | 最小化後（gzip） | 足す依存 | CSP `style-src 'self'` との合い | 見立て |
+|:--|:--|:--|:--|:--|
+| **(R0) 描画のプラグインを使わず、自前で描く** | `rete` 5.7 KB＋`rete-area-plugin` 9.9 KB＋`rete-readonly-plugin` 0.9 KB（ほか `rete-connection-plugin` は要らない） | なし（`@babel/runtime` だけ） | 合う。箱と線は、いまの `el()` と、SVG を作る小さな関数（`svgEl`）で描き、見た目は `app.css` のクラスだけで決める | **勧め**。area のプラグインの「描く」合図（`render`）を受けて、箱の要素の中身を自前で組む道。この道が公式の作りで通るかは、文書（retejs.org）が読めず**未確認**。試作（下の 6.5 の S1）で確かめる |
+| (R1) Lit（`rete-lit-plugin` 2.0.3） | プラグイン 19.8 KB＋Lit 本体（約 15 KB の見込み） | `lit`（3.3.3）・`fast-equals` | プラグインは `<style>` を差し込まない。Lit の `static styles` は、いまのブラウザでは `adoptedStyleSheets` を使う。これが CSP の `style-src` に当たらないかは**未確認**（ブラウザで確かめる） | R0 が通らないときの次の道 |
+| (R2) Vue（`rete-vue-plugin` 2.1.3） | プラグイン 10.8 KB＋Vue の実行部 42.6 KB | `vue`（3.5.45） | **合わない**。プラグインが `document.createElement("style")` と `innerHTML` で CSS を差し込む（`rete-vue-plugin.min.js` で確認）。CSP で止まる | 外す |
+| (R3) React（`rete-react-plugin` 2.1.2） | プラグイン 10.0 KB＋React と ReactDOM（数十 KB）＋styled-components | `react`・`react-dom`・`styled-components`・`usehooks-ts` | **合わない**。styled-components は実行中に `<style>` を差し込む | 外す |
+
+- `rete-area-plugin`・`rete-react-plugin` の中の `innerHTML` は、`holder.innerHTML = ""`（中身を消すだけ）の形。文字を入れる使い方ではない（中身で確認）。
+- 出典：`https://registry.npmjs.org/<名前>`（版・依存）、各パッケージの tarball の `dist/*.min.js`（大きさ・中の API）。
+
+#### 自動の配置
+
+- elkjs（EPL-2.0 OR GPL-3.0、展開 8.2 MB）は使わない。`rete-auto-arrange-plugin` も使わない（peer に elkjs が要る）。
+- 位置は自前で計算し、`area.translate(nodeId, { x, y })` で渡す。木は、**横 1 列に並べる**（6.2 の上りと下りの帯のため）。並び順は、深さ優先で親のすぐ隣に子を置く。子が多いときは、深さごとに段を下げる案も試作で比べる。
+- 計算は純粋な関数（`layoutOf(nodes) → {id, x, y}[]`）にして、vm で試験する（いまの「画面の純粋な部分」の試験と同じ）。
+
+#### 読み取り専用
+
+- `rete-readonly-plugin`（2.0.2、0.9 KB）で、つなぐ・動かす・消すを止める。中身の挙動は文書が読めず**未確認**。足りなければ、area の合図（`nodepicked`・`translate` など）を受けて、返り値で止める（area のプラグインの決まりの作り。試作で確かめる）。
+- 拡大と画面の移動（パン）は残す（見るための操作）。
+
+#### 上りと下りの線・流れの動き
+
+- Rete の「つながり」（connection）は、もともと出口から入口への 1 本の線。**上りと下りを、別のつながり**として持つ（上り＝子の上の出口 → 親の上の入口、下り＝親の下の出口 → 子の下の入口）。
+- 線の形は、自前の描画で、上りは上へふくらむ弧、下りは下へふくらむ弧にする（`d` は数だけで組む）。色はクラス（`msg up`・`msg down`・`msg warn`）。
+- 流れの動きは、CSS の `stroke-dashoffset` の `@keyframes`（`app.css`）。動く点は、CSS の `offset-path`（D8）。`prefers-reduced-motion` と「動きを止める」で止める。
+- ノードに指を置いたときの浮かび上がりは、`classList` の付け外しだけ。
+
+### 6.2 決まりの変更（前と後）
+
+| 決まり | いま | Rete.js を入れたあと（案） | 守りの保ち方 |
+|:--|:--|:--|:--|
+| 依存 | 画面は依存なし（素の JS を TS の文字列で埋め込む） | daemon の画面に `rete`・`rete-area-plugin`・`rete-readonly-plugin` を足す（版は固定。`@babel/runtime` は束ねる） | 版は `package.json` で完全に固定。`minimumReleaseAge` 14 日の内（3 つとも公開から 4 か月以上）。npm は Dependabot の外なので、上げは手で、ライセンスと中身（`innerHTML`・`eval`・`<style>` の差し込み）を確かめる手順を `docs/release.md` に足す |
+| 資産の数 | `/ui`・`/ui/app.js`・`/ui/app.css` | **`/ui/graph.js` を足す**（esbuild で束ねた図の部分。`'self'` から配る） | `app.js` は、いまの走査をそのまま受ける。`graph.js` は、ライブラリを含むので、いまの走査の外。そのかわり、`graph.js` の**入口のコード**（自前の描き手・配置）だけを別の文字列として持ち、同じ走査にかける。ライブラリの部分は、束ねたあとの文字列で「`eval`・`new Function`・`<style>` の差し込み・`document.write`・`innerHTML` への文字の代入（`= ""` 以外）がない」を試験で確かめる |
+| CSP | `script-src 'self'; style-src 'self'; …` | **変えない** | R0 なら、`<style>` も `style` 属性も差し込まない。`style.transform` などのプロパティの設定は CSP に当たらない（area のプラグインが使う） |
+| タグの許可リスト（`TAGS`） | `div`・`span`・`p`・`button`・`textarea` | `details`・`summary`・`code` を足す（D4） | 属性は付けない。試験の「`el` に渡すタグ」の許可リストを合わせる |
+| SVG | 作らない（`svg` の生成を禁止） | `svgEl(tag, attrs)` を 1 か所だけ許す。タグは `svg`・`g`・`path`・`rect`・`text`・`title`。属性は `class`・`d`・`x`・`y`・`width`・`height`・`rx`・`viewBox`。値は数、または数で組んだ `d` だけ | 試験で、`createElementNS` と `setAttributeNS` が `svgEl` の中の 1 か所だけにあることを数える。`href`・`on*`・`style` 属性・`foreignObject`・`use`・`a` は入れない |
+| 図に渡す値 | — | 表示モデルの値のうち、**整えた文字（`uiText` を通した題・状態の名前・時刻）と、識別子（`ID_PATTERN` を通したもの）と、数**だけ | 図への入口を 1 つの関数（`drawGraph(view)`）にし、その中で値を作り直す（表示モデルをそのまま渡さない）。文字は `textContent` だけで入れる |
+| プロパティの許可リスト | 走査の `SAFE` | `classList`・`offsetPath`（D8）・`dataset` など、図に要るものを足す | 足すものを表にして、利用者に見せる。`offsetPath` は `svgEl` と同じく 1 か所に閉じる |
+| 画面の大きさ | `app.js` のみ（数十 KB） | ＋`graph.js` 約 17 KB（gzip、R0 の見込み） | — |
+
+### 6.3 D5：止まっている子の開き方（確かめた結果）
+
+- CLI の子（`claude --bg`）は、起動のときに `--name <ノード ID>` を付けている（`packages/daemon/src/sdk/launch-command.ts` と `api/handlers/parent-request-handlers.ts`。名前はノード ID）。
+- 子の画面を開くコマンドは **`claude attach <ノード ID>`**（`docs/plugin.md`・`docs/manual-verification-checklist.md` にある使い方）。
+- よって、**セッションの ID は画面に出さなくてよい**。ノード ID は、いまも画面に出している。表示モデルに `sessionId` は足さない（記録の `sessionId` は、信頼度の低い照合のためのもので、画面に出す理由がない）。
+- Desktop の子（`stopDelegated`）は、`claude attach` では開けない。コマンドのかわりに「Desktop で、この題の子を開いて確かめる」の文を出す（いまの停止の代行依頼の文と同じ扱い）。
+- 画面の文：「端末で次のコマンドを貼って、子の画面を開きます」＋`claude attach <ノード ID>`＋「写す」。写すのは `navigator.clipboard.writeText`（走査の `SAFE` に `clipboard`・`writeText` を足す）。
+
+### 6.4 D6：受信箱を人が片付ける操作（別の Issue の案）
+
+- 題：「状態画面と CLI から、人が受信箱の項目を片付けられるようにする」
+- いま：`inbox.resolved` の記録はあるが、人が呼べる操作がない。済んだ・読んだ項目が残り続け、「要対応」が増える一方になる。
+- 案：
+  - 操作 `inbox.resolve`（`{ itemIds: string[] }`、人間のトークンだけ。統合ノードは自分の部分木だけ）を足し、記録に `inbox.resolved` を積む。
+  - 画面：カードの項目に「片付ける」、カードに「この子の済んだ項目をまとめて片付ける」。取り消せる（片付けた項目は「片付けた項目」にたたんで残し、戻せる）ので、打ち込みの確認は要らない。
+  - 片付けてよい種類：`progress`・`done`・`info`。`decision`・`violation`（拡張要求が未判定のもの）・`stopIncomplete` は、答える・宣言するまで片付けさせない。
+  - CLI：`touryou inbox resolve <項目 ID>…`。
+- 決めること：戻せるようにするか（記録に `inbox.reopened` を足すか）。片付けた項目を消す時期。
+
+### 6.5 見本の担当への覚え（関係図を Rete.js で描いたときの見た目）
+
+- 見本には、Rete.js を入れなくてよい（束ねて入れるのは手間が大きい）。**見た目は、自前の描画（R0）の形を、SVG と CSS で示す**。そう見本の中に書く。
+- 図の見た目：
+  - ノードは横 1 列。箱の中は、題（太字）・役割・状態・要対応の数。人の操作が要る箱は、オレンジの枠が脈打つ。
+  - **上り（子 → 親）は、図の上半分**。箱の上の出口から、上へふくらむ弧。青。
+  - **下り（親 → 子）は、図の下半分**。箱の下の出口から、下へふくらむ弧。紫。
+  - 人の操作が要るやり取りは、オレンジで太く、速く流れる。
+  - 弧の頂点に、種類と「何分前」。
+  - 拡大・パンのボタン（＋・−・全体を見る）を図の隅に。Rete.js の area のプラグインの操作を、見た目で示す。
+- 動き：線の流れ（`stroke-dashoffset`）・動く点・最初に線が描かれる動き・箱の脈打ち・指を置いたときの浮かび上がり・押すとカードへ移る。`prefers-reduced-motion` と「動きを止める」で止める。
+
+### 6.6 新しく決めてほしいこと
+
+| # | 決めること | 選択肢 | 勧めと理由 |
+|:--|:--|:--|:--|
+| E1 | Rete.js の描画の道 | R0 自前で描く／R1 Lit | **R0**。CSP を変えずにすみ、依存が最も少ない。試作で通らなければ R1 |
+| E2 | 決まりの変更（6.2 の表） | 表のとおり／変える所を言う | 表のとおり |
+| E3 | 図の束の守り | (a) `graph.js` を別に配り、入口のコードだけを走査し、ライブラリは束ねたあとの文字列で禁止の API を確かめる／(b) ライブラリも含めて、いまの走査にかける（通らない） | **(a)** |
+| E4 | npm の上げの手順 | 手で上げ、`docs/release.md` に確かめの手順を書く／Dependabot に npm を足す | 手で上げる（いまの「npm は `minimumReleaseAge` で守る」の決まりのまま） |
+| E5 | 片付けの Issue（6.4）を立てるか | 立てる／いまは立てない | 立てる |
+
+### 6.7 段の分け方（D7 を受けて直す）
+
+1. **PR-1 仕様**（#88 と並べてよい）：IR_003・仕様・`docs/ui.md` に、6.2 の決まりの変更を書く。
+2. **PR-2 表示モデル**（#88 と並べてよい）：`ui-view.ts` に `title`・`lastActivityAt`・人の要対応の数・`ref`・頼みの `at`・流れ。
+3. **PR-3 試作**（S1。#88 と並べてよい。`ui-assets.ts` に触れない）：`graph.js` の束ね・R0 の描き手・読み取り専用・自前の配置を、別のファイルで試し、CSP の下で動くかを Playwright で確かめる。
+4. **PR-4 画面の作り直し**（**#88 のマージのあと**）：`ui-assets.ts`・`ui-assets.test.ts`。
+5. **PR-5 関係図**（PR-3 と PR-4 のあと）：`/ui/graph.js` を配り、試験・画面写し。
