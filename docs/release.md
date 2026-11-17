@@ -145,12 +145,11 @@ claude plugin marketplace add comcreate/touryou
 
 ### `release-tags` に `marketplace-v*` を足す（#90。一度だけ）
 
-決まりを越えてよい管理者が、手元の端末で行う。ID は名前から引く。いまの中身を読み、`conditions.ref_name.include` に `refs/tags/marketplace-v*` を足すだけで、ほかは変えない。変えたあとの中身を表示し、`y` と答えたときだけ PUT する。zsh の対話に貼れるように、コメント行（`#`）は入れていない。
+決まりを越えてよい管理者が、手元の端末で行う。実行の前に、`gh` を管理者のアカウントに切り替えておく（`gh auth status` で確かめ、違えば `gh auth switch` で切り替える）。ID は名前から引く。いまの中身を読み、`conditions.ref_name.include` に `refs/tags/marketplace-v*` を足すだけで、ほかは変えない。変えたあとの中身を表示し、`y` と答えたときだけ PUT する。zsh の対話に貼れるように、コメント行（`#`）は入れていない。
 
 ```sh
 (
 set -eu
-gh auth switch --hostname github.com --user ToshikiImagawa
 repo=comcreate/touryou
 id="$(gh api "repos/${repo}/rulesets" --jq '[.[] | select(.name == "release-tags" and .target == "tag")] | if length == 1 then .[0].id else empty end')"
 if [ -z "${id}" ]; then echo "release-tags の ruleset が 1 つに決まりません。止めます"; exit 1; fi
