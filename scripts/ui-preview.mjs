@@ -29,7 +29,9 @@ for (const a of args) {
 }
 const OPEN = !args.includes("--no-open");
 const LIVE = args.includes("--live");
-const LIVE_MS = Number(process.env.TOURYOU_PREVIEW_LIVE_MS ?? "3000");
+const LIVE_MS_RAW = Number(process.env.TOURYOU_PREVIEW_LIVE_MS ?? "3000");
+// 数でない・小さすぎる値は、既定に戻す（1 ミリ秒ごとに回らないように）
+const LIVE_MS = Number.isFinite(LIVE_MS_RAW) && LIVE_MS_RAW >= 50 ? LIVE_MS_RAW : 3000;
 
 const R = join(dirname(fileURLToPath(import.meta.url)), "..", "packages");
 let core;
@@ -46,209 +48,176 @@ try {
   process.exit(1);
 }
 
-// --- 種（起動のときの今を基準にした時刻）---
+// --- 種（起動のときの今を基準にした時刻）。本物の daemon と同じく、イベントの列を foldEvents で畳む ---
 const NOW = Date.now();
 const ago = (min) => new Date(NOW - min * 60_000).toISOString();
 const XSS = '<script>alert("xss")</script><img src=x onerror="alert(1)">';
+const SYSTEM = { system: true };
 const HUMAN = { human: true };
 const by = (nodeId) => ({ nodeId });
 
 let seq = 0;
-const next = () => ++seq;
-const node = (id, role, parentId, state, objective, extra = {}) => ({
-  id,
-  role,
-  parentId,
-  dependsOn: [],
-  state,
-  objective,
-  ...extra,
-});
-
-const nodes = [
-  node("root", "integrator", null, "running", "v0.1.4 の公開に向けた統合"),
-  node(
-    "c1",
-    "implement",
-    "root",
-    "running",
-    "状態画面の関係図を、見本の v8 の形にそろえ、箱・線・札・凡例の描き方を整え、狭い窓でも崩れないようにする（長い題の見え方の確かめ）",
-  ),
-  node("c2", "investigate", "root", "waiting", "調べ: SSE の枠"),
-  node("c3", "implement", "root", "running", "CLI の子の探すコマンド"),
-  node("c4", "review", "root", "running", "レビュー"),
-  node("c5", "implement", "root", "running", "配布物の確かめを直す"),
-  node("g1", "implement", "c1", "done", "線の札の時刻"),
-  node("g2", "implement", "c1", "verified", "凡例", { reviewedSeq: 0, reviewedAt: ago(20) }),
-  node("g3", "investigate", "c3", "stopped", "古い調べ（止めた）"),
-  node("g4", "implement", "c5", "archived", "片付け済みの作業", { archivedAt: ago(120) }),
-];
-
-const instructions = [];
-const reports = [];
-const inbox = [];
-const decisions = [];
-const extensions = [];
-
-const instruct = (nodeId, actor, at, deliveredAt, text = "追加の指示") => {
-  const s = next();
-  const rec = { seq: s, at, nodeId, text, actor };
-  if (deliveredAt !== undefined) Object.assign(rec, { deliveredSeq: next(), deliveredAt });
-  instructions.push(rec);
-  return rec;
+const events = [];
+const ev = (at, actor, type, payload) => {
+  seq += 1;
+  events.push({ seq, at, requestId: `preview-${seq}`, actor, type, payload });
+  return seq;
 };
-const report = (nodeId, kind, at, text = "報告") => {
-  const s = next();
-  reports.push({ seq: s, at, reportId: `rep-${s}`, nodeId, kind, text, actor: by(nodeId) });
+const brief = (objective) => ({
+  objective,
+  acceptanceCriteria: ["見本どおりに見える"],
+  scope: { writableLocations: ["src"], forbiddenLocations: [], allowedCommands: ["pnpm test"] },
+});
+const create = (at, nodeId, role, parentId, objective) => {
+  ev(at, SYSTEM, "node.created", { nodeId, role, parentId, dependsOn: [], ...brief(objective) });
+  ev(at, SYSTEM, "node.stateChanged", { nodeId, event: { type: "start" } });
+};
+const change = (at, nodeId, event, actor = SYSTEM) =>
+  ev(at, actor, "node.stateChanged", { nodeId, event });
+const instruct = (at, deliveredAt, nodeId, actor, text = "追加の指示") => {
+  const s = ev(at, actor, "node.instructed", { nodeId, text });
+  if (deliveredAt !== undefined)
+    ev(deliveredAt, SYSTEM, "node.instructionDelivered", { nodeId, instructedSeq: s });
   return s;
 };
-const item = (nodeId, kind, at, summary) => {
-  const s = next();
-  inbox.push({ seq: s, id: `in-${s}`, kind, nodeId, dependsOn: [], at, summary });
-};
+const report = (at, nodeId, kind, text = "報告") =>
+  ev(at, by(nodeId), "report.added", { reportId: `rep-${seq + 1}`, nodeId, kind, text });
+const item = (at, nodeId, kind, summary) =>
+  ev(at, SYSTEM, "inbox.added", { id: `in-${seq + 1}`, kind, nodeId, summary });
 
 // 古いもの（1 時間より前）から新しいもの（5 分以内）へ
-instruct("c1", by("root"), ago(95), ago(94), "関係図を見本にそろえる");
-report("c1", "progress", ago(90));
-item("c1", "progress", ago(90), `箱の形を直しています ${XSS}`);
-instruct("c3", by("root"), ago(80), ago(79));
-report("c3", "progress", ago(70));
-instruct("g3", by("c3"), ago(75), ago(74));
-report("g3", "progress", ago(72));
-instruct("g4", by("c5"), ago(130), ago(129));
-report("g4", "done", ago(125));
-// 人の答えた判断（下りの答え）と、却下を含む判断
-const dAnsweredReq = next();
-const dAnswered = next();
-decisions.push({
+create(ago(150), "root", "integrator", null, "v0.1.4 の公開に向けた統合");
+create(
+  ago(150),
+  "c1",
+  "integrator",
+  "root",
+  "状態画面の関係図を、見本の v8 の形にそろえ、箱・線・札・凡例の描き方を整え、狭い窓でも崩れないようにする（長い題の見え方の確かめ）",
+);
+create(ago(150), "c2", "investigate", "root", "調べ: SSE の枠");
+create(ago(150), "c3", "integrator", "root", "CLI の子の探すコマンド");
+create(ago(150), "c4", "review", "root", "レビュー");
+create(ago(150), "c5", "integrator", "root", "配布物の確かめを直す");
+// 片付け済みの孫（済んだ → 受け入れた → アーカイブ）
+create(ago(140), "g4", "implement", "c5", "片付け済みの作業");
+instruct(ago(130), ago(129), "g4", by("c5"));
+report(ago(125), "g4", "done");
+change(ago(125), "g4", { type: "reportDone" }, by("g4"));
+change(ago(122), "g4", { type: "accept" }, by("c5"));
+change(ago(121), "g4", { type: "markReclaimable", discarded: false });
+change(ago(120), "g4", { type: "archive" });
+
+instruct(ago(95), ago(94), "c1", by("root"), "関係図を見本にそろえる");
+report(ago(90), "c1", "progress");
+item(ago(90), "c1", "progress", `箱の形を直しています ${XSS}`);
+create(ago(85), "g1", "implement", "c1", "線の札の時刻");
+create(ago(85), "g2", "implement", "c1", "凡例");
+create(ago(85), "g3", "investigate", "c3", "古い調べ（止めた）");
+create(ago(85), "g5", "implement", "c3", "止まり切らない子（停止の代行依頼）");
+instruct(ago(80), ago(79), "c3", by("root"));
+instruct(ago(75), ago(74), "g3", by("c3"));
+report(ago(72), "g3", "progress");
+change(ago(71), "g3", { type: "stop", mode: "immediate" }, by("c3"));
+change(ago(71), "g3", { type: "confirmStopped" });
+report(ago(70), "c3", "progress");
+// 人の答えた判断（下りの答え）
+ev(ago(65), by("c2"), "decision.requested", {
   decisionId: "d-old",
   nodeId: "c2",
-  status: "answered",
-  requestedSeq: dAnsweredReq,
-  requestedAt: ago(65),
-  answeredSeq: dAnswered,
-  answeredAt: ago(60),
   question: "どちらの枠の数にしますか",
   options: ["4 本", "8 本"],
-  answer: "4 本",
-  answeredBy: HUMAN,
-  rejected: [{ seq: next(), answer: "16 本", actor: HUMAN }],
 });
-report("c2", "progress", ago(55));
+ev(ago(60), HUMAN, "decision.answered", { decisionId: "d-old", answer: "4 本" });
+report(ago(55), "c2", "progress");
 // 却下した範囲の頼み
-const xRejReq = next();
-extensions.push({
+ev(ago(50), by("c3"), "scope.extensionRequested", {
   extensionId: "x-old",
   nodeId: "c3",
   target: { kind: "command", value: "rm -rf build" },
   reason: "古い成果物を消したい",
-  status: "rejected",
-  requestedSeq: xRejReq,
-  requestedAt: ago(50),
-  decidedAt: ago(48),
-  decidedSeq: next(),
-  decidedBy: HUMAN,
 });
-instruct("c4", by("root"), ago(45), ago(44), "PR を見る");
-instruct("g1", by("c1"), ago(40), ago(39));
-report("g1", "progress", ago(35));
-instruct("g2", by("c1"), ago(38), ago(37));
-const g2done = report("g2", "done", ago(25));
-nodes.find((n) => n.id === "g2").reviewedSeq = next();
-void g2done;
-instruct("c5", HUMAN, ago(30), ago(29), "人からの指示");
-report("c5", "failure", ago(15), "試験が落ちた");
-item("c5", "failure", ago(15), `試験が落ちました: ${XSS}`);
-item("c4", "info", ago(12), core.stallSummary("c4", 30));
-report("g1", "done", ago(8));
-item("g1", "done", ago(8), "線の札の時刻を足しました");
+ev(ago(48), HUMAN, "scope.extensionDecided", { extensionId: "x-old", decision: "reject" });
+instruct(ago(45), ago(44), "c4", by("root"), "PR を見る");
+instruct(ago(40), ago(39), "g1", by("c1"));
+instruct(ago(38), ago(37), "g2", by("c1"));
+report(ago(35), "g1", "progress");
+instruct(ago(30), ago(29), "c5", HUMAN, "人からの指示");
+report(ago(25), "g2", "done");
+change(ago(25), "g2", { type: "reportDone" }, by("g2"));
+change(ago(20), "g2", { type: "accept" }, by("c1"));
+report(ago(15), "c5", "failure", "試験が落ちた");
+item(ago(15), "c5", "failure", `試験が落ちました: ${XSS}`);
+item(ago(12), "c4", "info", core.stallSummary("c4", 30));
+change(ago(10), "g5", { type: "stop", mode: "immediate" }, by("c3"));
+change(ago(10), "g5", { type: "stopTimeout" });
+item(ago(10), "g5", "stopIncomplete", "止めたが、まだ動いている");
+report(ago(8), "g1", "done");
+change(ago(8), "g1", { type: "reportDone" }, by("g1"));
+item(ago(8), "g1", "done", "線の札の時刻を足しました");
 // 答え待ち（判断の頼み・範囲の頼み）
-decisions.push({
+ev(ago(4), by("c2"), "decision.requested", {
   decisionId: "d-open",
   nodeId: "c2",
-  status: "open",
-  requestedSeq: next(),
-  requestedAt: ago(4),
   question: `枠が埋まったとき、どのタブを譲らせますか ${XSS}`,
   options: ["いちばん古いタブ", "裏に回ったタブ"],
-  rejected: [],
 });
-extensions.push({
+instruct(ago(3), ago(2), "c1", by("root"), "凡例も見本にそろえる");
+ev(ago(2), by("c3"), "scope.extensionRequested", {
   extensionId: "x-open",
   nodeId: "c3",
   target: { kind: "write", value: "docs/ui.md" },
   reason: `文書も直したい ${XSS}`,
-  status: "open",
-  requestedSeq: next(),
-  requestedAt: ago(2),
 });
-instruct("c1", by("root"), ago(3), ago(2), "凡例も見本にそろえる");
-instruct("c4", HUMAN, ago(1), undefined, "人からの短い指示（まだ届いていない）");
+instruct(ago(1), undefined, "c4", HUMAN, "人からの短い指示（まだ届いていない）");
 
-let state = {
-  ...core.initialState(),
-  nodes,
-  instructions,
-  reports,
-  inbox,
-  decisions,
-  extensions,
-  lastSeq: seq,
+const fold = (es, base) => {
+  const r = core.foldEvents(es, base);
+  if (!r.ok) throw new Error(`種を畳めない: ${r.error.code} ${r.error.cause}`);
+  return r.value;
 };
+let state = fold(events);
 
-// --- --live: 作り物のやり取りを足し、段を進める ---
-const LIVE_TARGETS = ["c1", "c3", "c4", "c5", "g1"];
+// --- --live: 作り物のやり取りを足し、段を進める（イベントを 1 つ足して畳み直す）---
+const LIVE_TARGETS = [
+  ["c1", "root"],
+  ["c3", "root"],
+  ["c4", "root"],
+  ["c5", "root"],
+];
 let liveStep = 0;
-let pending; // { nodeId, stage }
+let pending; // { seq, nodeId, stage }
 const tick = () => {
   const at = new Date().toISOString();
+  const start = events.length;
   if (pending === undefined) {
-    const nodeId = LIVE_TARGETS[liveStep++ % LIVE_TARGETS.length];
-    const parentId = nodes.find((n) => n.id === nodeId)?.parentId ?? "root";
-    const s = next();
-    state = {
-      ...state,
-      instructions: [
-        ...state.instructions,
-        { seq: s, at, nodeId, text: "作り物の指示", actor: by(parentId) },
-      ],
-      lastSeq: seq,
+    const [nodeId, parentId] = LIVE_TARGETS[liveStep++ % LIVE_TARGETS.length];
+    pending = {
+      seq: instruct(at, undefined, nodeId, by(parentId), "作り物の指示"),
+      nodeId,
+      stage: "sent",
     };
-    pending = { seq: s, nodeId, stage: "sent" };
   } else if (pending.stage === "sent") {
-    const d = next();
-    state = {
-      ...state,
-      instructions: state.instructions.map((i) =>
-        i.seq === pending.seq ? { ...i, deliveredSeq: d, deliveredAt: at } : i,
-      ),
-      lastSeq: seq,
-    };
+    ev(at, SYSTEM, "node.instructionDelivered", {
+      nodeId: pending.nodeId,
+      instructedSeq: pending.seq,
+    });
     pending = { ...pending, stage: "delivered" };
   } else {
-    const s = next();
-    state = {
-      ...state,
-      reports: [
-        ...state.reports,
-        {
-          seq: s,
-          at,
-          reportId: `rep-${s}`,
-          nodeId: pending.nodeId,
-          kind: "progress",
-          text: "作り物の報告",
-          actor: by(pending.nodeId),
-        },
-      ],
-      lastSeq: seq,
-    };
+    report(at, pending.nodeId, "progress", "作り物の報告");
     pending = undefined;
+  }
+  try {
+    state = fold(events.slice(start), state);
+  } catch (e) {
+    process.stderr.write(`--live のやり取りを足せませんでした: ${e.message}\n`);
+    if (timer !== undefined) clearInterval(timer);
   }
 };
 
 // --- 立てる ---
 const stateDir = mkdtempSync(join(tmpdir(), "touryou-ui-preview-"));
+// どの終わり方でも（例外で落ちたときも）一時の場所を消す。exit の中は同期の処理だけ
+process.on("exit", () => rmSync(stateDir, { recursive: true, force: true }));
 const token = randomBytes(32).toString("base64url");
 const server = api.createApiServer({
   credentials: creds.createCredentialStore({ humanToken: token }),
@@ -279,6 +248,9 @@ process.stdout.write(
   `作り物の記録で、状態画面を立てました: ${url}/ui （port ${port}）${LIVE ? "。--live: やり取りを足し続けます" : ""}\n`,
 );
 
+process.stdout.write(
+  "作り物のデータです。画面の操作（答え・承認・回収など）は試せません。押すと失敗します。\n",
+);
 if (!OPEN) {
   process.stdout.write("--no-open のため、ブラウザは開きません。Ctrl+C で止めます。\n");
 } else {
