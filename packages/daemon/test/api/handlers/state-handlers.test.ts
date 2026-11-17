@@ -881,6 +881,37 @@ describe("tree.list の pendingDecision 列", () => {
   });
 });
 
+describe("tree.list の題（#115）", () => {
+  it("人には、目的のあるノードに、目的を 1 行に整えた題を付ける。目的のないノード・統合が呼んだときは付けない", async () => {
+    const r = rig();
+    r.log.append({
+      requestId: "seed-title",
+      actor: { system: true },
+      body: {
+        type: "node.created",
+        payload: {
+          nodeId: "t",
+          role: "implement",
+          parentId: "m1",
+          dependsOn: [],
+          objective: "ログインの\n  直し",
+          acceptanceCriteria: ["通る"],
+          scope: { writableLocations: ["src"], forbiddenLocations: [], allowedCommands: [] },
+        },
+      },
+    });
+    const listed = (await r.call("tree.list", r.req("tree.list", {}, "human"))).value;
+    const nodes = listed.nodes as { id: string; title?: string }[];
+    expect(nodes.find((n) => n.id === "t")?.title).toBe("ログインの 直し");
+    expect(nodes.find((n) => n.id === "root")).not.toHaveProperty("title");
+    // 統合が呼んだときは、自分の下のノードでも題を付けない（見える範囲を広げない）
+    const byRoot = (await r.call("tree.list", r.req("tree.list", {}, ROOT))).value;
+    const rootNodes = byRoot.nodes as { id: string; title?: string }[];
+    expect(rootNodes.some((n) => n.id === "t")).toBe(true);
+    expect(rootNodes.find((n) => n.id === "t")).not.toHaveProperty("title");
+  });
+});
+
 describe("差し戻しで、CLI の子に購読がないときの案内", () => {
   const rejectRig = (over: { isCliChild?: boolean; hasSubscription?: boolean }) => {
     const r = rig();

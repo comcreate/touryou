@@ -1790,3 +1790,32 @@ describe("止まった子の未回答の判断", () => {
     );
   });
 });
+
+describe("済んだと報告した子を、受理せずに止める（#115）", () => {
+  it("done → stopping → stopped の記録を読み直せる。done のまま止まっている古い記録も、そのまま読める", () => {
+    counter = 0;
+    const head = [
+      ev(created("root", "integrator", null)),
+      ev(changed("root", { type: "start" })),
+      ev(created("a", "implement", "root")),
+      ev(changed("a", { type: "start" })),
+      ev(changed("a", { type: "reportDone" })),
+    ];
+    expect(must(foldEvents(head)).nodes.find((n) => n.id === "a")?.state).toBe("done");
+    const stopped = must(
+      foldEvents([
+        ...head,
+        ev(changed("a", { type: "stop", mode: "immediate" }), { actor: { human: true } }),
+        ev(changed("a", { type: "confirmStopped" })),
+      ]),
+    );
+    expect(stopped.nodes.find((n) => n.id === "a")?.state).toBe("stopped");
+    // 止める途中の完了の報告は、読み直しでも断られる（記録が壊れない）
+    const bad = foldEvents([
+      ...head,
+      ev(changed("a", { type: "stop", mode: "immediate" })),
+      ev(changed("a", { type: "reportDone" })),
+    ]);
+    expect(bad.ok).toBe(false);
+  });
+});

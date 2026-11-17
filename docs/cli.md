@@ -9,8 +9,8 @@ workspace では `pnpm --filter @touryou/cli exec touryou …`）。使い方は
 
 | 環境変数 | 内容 |
 |:--|:--|
-| `TOURYOU_DAEMON_URL` | daemon の窓口（例: `http://127.0.0.1:7777`。ループバックだけ） |
-| `TOURYOU_HUMAN_TOKEN` | 人間のトークン（`<stateDir>/human-token` の中身） |
+| `TOURYOU_DAEMON_URL` | daemon の窓口（例: `http://127.0.0.1:7777`。ループバックだけ）。なければ、daemon の設定の `stateDir` の `port` から作る |
+| `TOURYOU_HUMAN_TOKEN` | 人間のトークン（`<stateDir>/human-token` の中身）。なければ、そのファイルを自分で読む |
 | `TOURYOU_DAEMON_CONFIG` | daemon の設定ファイル。`stateDir` の `daemon-identity` で、トークンつきの要求の直前に毎回、daemon の身元を確かめる（`touryou-mcp` と同じ。`docs/daemon-identity.md`） |
 | `TOURYOU_CLI_ALLOW_UNVERIFIED` | **ちょうど `1`** のときだけ、`TOURYOU_DAEMON_CONFIG` なしで、身元の確認なしで動く（**開発用**。手元の開発のビルド〔`pnpm build`〕だけで効き、**配布物〔Release の tar.gz〕では効かない**。`scripts/dist-build.sh` が `packages/cli/src/dev-build.ts` の `DEV_BUILD` を `false` にする） |
 
@@ -21,7 +21,9 @@ export TOURYOU_HUMAN_TOKEN="$(cat /path/to/state/human-token)"   # トークン�
 touryou reclaim <nodeId>
 ```
 
-- `TOURYOU_DAEMON_URL`・`TOURYOU_HUMAN_TOKEN` がない、または `TOURYOU_DAEMON_CONFIG` がない（開発のビルドで `TOURYOU_CLI_ALLOW_UNVERIFIED=1` でない）ときは、何も送らずに終了コード 2。
+- CLI が出す案内（「再実行する」など）のコマンドは、本体の場所 `"$HOME/.touryou/current/bin/touryou"` で始まる（PATH に `touryou` がなくても、そのまま貼って動く。#115）。
+- **環境変数は、なくてよい**（#115）。`touryou reclaim` などの人のコマンドは、`touryou ui` と同じく、`$HOME/.touryou/config.json`（`TOURYOU_DAEMON_CONFIG` があればそれ）の `stateDir` から、窓口（`port`）・人間のトークン（`human-token`。自分だけが読める・リンクでないファイルだけ）・身元の確認の秘密を自分で読む。環境変数があれば、それを先に使う。トークンは、引数・標準出力・標準エラー・履歴に出さない。
+- 窓口・人間のトークンが、環境変数にも設定にもない、または `TOURYOU_DAEMON_CONFIG` がない（開発のビルドで `TOURYOU_CLI_ALLOW_UNVERIFIED=1` でない）ときは、何も送らずに終了コード 2。
 - daemon の身元を確かめられないとき（`daemon_identity_failed`）は、トークンを送らずに終了コード 1（操作は実行されていない）。
 - 出力・エラーを出す直前に、文字列の中の `TOURYOU_HUMAN_TOKEN` の値を `***` に置き換える（daemon や偽の窓口が、応答にトークンを入れても出さない）。中継（relay）も、トークンと本文を、失敗の文面・記録に入れない。
 - 置き換えるのは、トークンの値と完全に一致する部分だけ（一部だけを含む文字列は、そのまま出る）。
@@ -157,4 +159,8 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 ## 子の認証（外した）
 
 子の認証（`childHome`・`claude setup-token`・`CLAUDE_CODE_OAUTH_TOKEN` など）は外した（CLI の子は、親のセッションが `claude --bg` で起動する）。
+
+## 済んだと報告した子を、受理せずに片付ける（#115）
+
+`touryou stop <nodeId> --yes`: 完了報告済み（done）の子を、受理せずに止める（猶予なしの即時停止）。止めると受理できなくなる（成果は作業ツリーに残る）。`--yes` がなければ、何も送らずに説明だけを出す。人が止められるのは done の子だけ（動いている子は親の統合が止める）。停止を確かめた（stopped）あとは、`touryou reclaim <nodeId>` の表示を見て、`--yes --expect` で破棄して回収する。
 

@@ -648,7 +648,9 @@ describe("touryou purge の照合（--yes には --expect）", () => {
     const shown = await runCommand(["purge", "n1"], deps(a.client));
     expect(shown.exitCode).toBe(2);
     expect(shown.stdout).toContain(NODES_DG);
-    expect(shown.stderr).toContain(`touryou purge n1 --yes --expect ${NODES_DG}`);
+    expect(shown.stderr).toContain(
+      `"$HOME/.touryou/current/bin/touryou" purge n1 --yes --expect ${NODES_DG}`,
+    );
     const b = happy();
     const dry = await runCommand(["purge", "n1", "--dry-run"], deps(b.client));
     expect(dry.stdout).toContain(NODES_DG);
@@ -734,7 +736,7 @@ describe("touryou purge の照合（--yes には --expect）", () => {
     );
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("前回の実行が成功して");
-    expect(r.stderr).toContain("touryou discarded list");
+    expect(r.stderr).toContain('"$HOME/.touryou/current/bin/touryou" discarded list');
     expect(r.stderr).toContain("ID を確認する");
     expect(ops(a.sent)).toEqual(["node.purgePreview"]); // 事前確認を飛ばす経路はない。node.purge は呼ばない
     const b = fakeClient({ "node.purgePreview": notFound });
@@ -936,7 +938,7 @@ describe("purge-hold・purge-release（自動の最終削除の保留）", () =>
       });
       expect(r.exitCode).toBe(2);
       expect(r.stdout).toBe("");
-      expect(r.stderr).toContain('eval "$(touryou hook-env a)"');
+      expect(r.stderr).toContain('eval "$("$HOME/.touryou/current/bin/touryou" hook-env a)"');
       expect(a.sent).toEqual([]);
     }
   });
@@ -1149,6 +1151,63 @@ describe("accept（人間の受理）", () => {
   });
 });
 
+describe("stop（済んだと報告した子を、受理せずに止める。#115）", () => {
+  const tree = (state: string) =>
+    ok({
+      table: "",
+      nodes: [
+        {
+          id: "a",
+          role: "worker",
+          state,
+          parentId: "root",
+          dependsOn: [],
+          openItems: 0,
+          discarded: false,
+          title: "ログインの直し",
+        },
+      ],
+    });
+  it("--yes がなければ、題・いまの状態・役割・親を出す。done でない子・ない子は、その場で断る", async () => {
+    const done = fakeClient({ "tree.list": tree("done") });
+    const r = await runCommand(["stop", "a"], deps(done.client));
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toContain("題: ログインの直し\nいまの状態: done・役割: worker・親: root");
+    expect(done.sent.map((x) => x.operation)).toEqual(["tree.list"]);
+    const running = fakeClient({ "tree.list": tree("running") });
+    const r2 = await runCommand(["stop", "a"], deps(running.client));
+    expect(r2.exitCode).toBe(1);
+    expect(r2.stderr).toContain("止められない: a の状態は running");
+    const missing = await runCommand(
+      ["stop", "b"],
+      deps(fakeClient({ "tree.list": tree("done") }).client),
+    );
+    expect(missing.exitCode).toBe(1);
+    expect(missing.stderr).toContain("ノードが見つからない: b");
+  });
+  it("--yes がなければ、何も送らずに説明と再実行のコマンドを出す。--yes で node.stop（即時）を送る", async () => {
+    // 一覧が読めなくても、ID だけで案内する（止める要求は送らない）
+    const none = fakeClient({});
+    const shown = await runCommand(["stop", "a"], deps(none.client));
+    expect(shown.exitCode).toBe(2);
+    expect(shown.stderr).toContain('"$HOME/.touryou/current/bin/touryou" stop a --yes');
+    expect(none.sent.map((x) => x.operation)).toEqual(["tree.list"]);
+    const { client, sent } = fakeClient({ "node.stop": ok({ state: "stopping" }) });
+    const r = await runCommand(["stop", "a", "--yes"], deps(client));
+    expect(sent).toEqual([
+      {
+        requestId: "req-1",
+        role: "human",
+        operation: "node.stop",
+        params: { nodeId: "a", mode: "immediate" },
+      },
+    ]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("stopping");
+    expect(r.stdout).toContain('"$HOME/.touryou/current/bin/touryou" reclaim a');
+  });
+});
+
 describe("confirm-stopped（停止の宣言）", () => {
   it("node.confirmStopped を送る（--note つき・なし）。結果の状態と requestId を出す", async () => {
     const { client, sent } = fakeClient({ "node.confirmStopped": ok({ state: "stopped" }) });
@@ -1242,7 +1301,7 @@ describe("touryou inbox（FR_012）", () => {
     expect(lines[1]).toContain("[失敗] failure");
     expect(lines[2]).toContain("[進捗] progress");
     expect(r.stdout).toContain("全 3 件");
-    expect(r.stdout).toContain("touryou accept");
+    expect(r.stdout).toContain('"$HOME/.touryou/current/bin/touryou" accept');
   });
 
   it("空なら『未解決の項目はありません』（終了コード 0）", async () => {
@@ -1255,7 +1314,9 @@ describe("touryou inbox（FR_012）", () => {
     const { client, sent } = inbox([item(1, "info"), item(2, "info"), item(3, "info")]);
     const r = await runCommand(["inbox", "--limit", "2", "--since", "5"], deps(client));
     expect(sent[0]?.params).toEqual({ sinceSeq: 5 });
-    expect(r.stdout).toContain("続き: touryou inbox --offset 2 --limit 2 --since 5");
+    expect(r.stdout).toContain(
+      '続き: "$HOME/.touryou/current/bin/touryou" inbox --offset 2 --limit 2 --since 5',
+    );
     const r2 = await runCommand(
       ["inbox", "--limit", "2", "--offset", "2"],
       deps(inbox([item(1, "info"), item(2, "info"), item(3, "info")]).client),
@@ -1323,7 +1384,9 @@ describe("touryou inbox（FR_012）", () => {
     for (const off of ["3", "10"]) {
       const r = await runCommand(["inbox", "--offset", off], deps(three()));
       expect(r.exitCode).toBe(0);
-      expect(r.stdout).toContain("--offset が件数（3）以上。先頭から: touryou inbox");
+      expect(r.stdout).toContain(
+        '--offset が件数（3）以上。先頭から: "$HOME/.touryou/current/bin/touryou" inbox',
+      );
       expect(r.stdout).not.toContain("0〜");
     }
   });

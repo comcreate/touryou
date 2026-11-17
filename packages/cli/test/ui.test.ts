@@ -108,7 +108,9 @@ describe("touryou ui", () => {
   it("ブラウザを開けないときは、URL・チケットを出さずに、Mac のターミナルでの実行を案内する", async () => {
     const { r, all } = await run({ open: false });
     expect(r.exitCode).toBe(1);
-    expect(all).toContain("Mac のターミナルで touryou ui を実行してください");
+    expect(all).toContain(
+      'Mac のターミナルで "$HOME/.touryou/current/bin/touryou" ui を実行してください',
+    );
     expect(all).not.toContain(TICKET);
     expect(all).not.toContain("#ticket");
   });

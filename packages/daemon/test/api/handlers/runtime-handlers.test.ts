@@ -396,9 +396,38 @@ describe("node.stop（停止要求の記録 → アダプタの 2 段階停止�
     expect(call?.[1]).toEqual({ mode: "immediate", stopSeq: last?.seq });
   });
 
-  it("停止の対象でない状態（done など）は、何も書かずアダプタも呼ばずに失敗する（alreadyFinished）", async () => {
+  it("済んだと報告した（done）が受理していない子を、受理せずに止められるのは人だけ（猶予なしの即時停止。#115）", async () => {
     const r = rig();
     r.ev("a", { type: "reportDone" });
+    // 統合は done の子を止められない（止めると受理の道に戻らないので、「受理しない」を統合だけで決めさせない）
+    const before = r.state().lastSeq;
+    const byIntegrator = await r.call("node.stop", { nodeId: "a", mode: "graceful" });
+    expect(byIntegrator.error?.code).toBe("alreadyFinished");
+    expect(byIntegrator.error?.nextActions.join(" ")).toContain("stop a --yes");
+    expect(r.state().lastSeq).toBe(before);
+    // 人は止められる（記録の主体は人）
+    const res = await r.callAs("human", "node.stop", { nodeId: "a", mode: "immediate" });
+    expect(res.ok).toBe(true);
+    expect(r.state().nodes.find((n) => n.id === "a")?.state).toBe("stopping");
+    expect(r.adapter?.stops.at(-1)?.[1]).toMatchObject({ mode: "immediate" });
+    // 止める途中に、子から完了や報告が来ても、遷移は断られ、記録は壊れない
+    const t = r.state().lastSeq;
+    expect(() => r.ev("a", { type: "reportDone" })).toThrow(/invalidTransition/);
+    expect(r.state().lastSeq).toBe(t);
+    expect(r.state().nodes.find((n) => n.id === "a")?.state).toBe("stopping");
+  });
+
+  it("人が止められるのは done の子だけ（動いている子は、親の統合が止める）", async () => {
+    const r = rig();
+    const res = await r.callAs("human", "node.stop", { nodeId: "a", mode: "immediate" });
+    expect(res.error?.code).toBe("invalidTransition");
+    expect(r.state().nodes.find((n) => n.id === "a")?.state).toBe("running");
+  });
+
+  it("受理済み（verified）で、止める裏のセッションの依頼を作れない子は、何も書かずアダプタも呼ばずに失敗する（alreadyFinished）", async () => {
+    const r = rig();
+    r.ev("a", { type: "reportDone" });
+    r.ev("a", { type: "accept" });
     const before = r.state().lastSeq;
     const res = await r.call("node.stop", { nodeId: "a", mode: "graceful" });
     expect(res.ok).toBe(false);

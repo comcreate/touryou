@@ -72,7 +72,8 @@ const fail = (
 
 /**
  * 停止要求。送り直しは冪等で、一度受け付けた停止要求は、再送しても成功（`changed: false`）を返す。
- * `alreadyFinished` は、停止の対象にならない状態（完了・検証済み・回収可能・アーカイブ）への要求だけに返す。
+ * `alreadyFinished` は、停止の対象にならない状態（検証済み・回収可能・アーカイブ）への要求だけに返す。
+ * 完了の報告済み（done）は、受理せずに破棄して回収できるよう、止められる（#115）。
  */
 function stop(state: NodeState, mode: StopMode): TransitionResult {
   switch (state) {
@@ -80,6 +81,10 @@ function stop(state: NodeState, mode: StopMode): TransitionResult {
       return moved("stopping", mode === "graceful" ? "gracefulStop" : "immediateStop");
     case "waiting":
       // 動作中ではないため猶予なし。プロセスの不在を確認するまで stopped とは扱わない（spec 5.3）。
+      return moved("stopping", "immediateStop");
+    case "done":
+      // 済んだと報告したが受理していない子（#115）。受理せずに破棄して回収するために、止められる。
+      // 動作中ではないので猶予なし。プロセスの不在を確認するまで stopped とは扱わない（waiting と同じ）。
       return moved("stopping", "immediateStop");
     case "pending":
       return moved("stopped", "cancelStart"); // プロセス未生成

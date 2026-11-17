@@ -28,7 +28,7 @@ ID は、短縮せずに、そのまま渡します（作業ツリーのディ�
 
 子を動かす:
 
-- `mcp__node__node_spawn`: 子を作る。`parentId`（自分か子孫の ID）・`role`・`objective`・`acceptanceCriteria`（確かめられる形で書く）・`scope`（`writableLocations`・`forbiddenLocations` は作業ツリー内の相対パス、`allowedCommands`）・`dependsOn`（任意）を渡す。範囲は必要最小限にする。作業ツリーの中を探す読み取りだけのコマンド（`ls`・`find`・`grep`・`git ls-files`・`git grep`）は、`allowedCommands` に入れなくても子が使える。子に探し方を案内するときは、Glob・Grep の道具を決めつけない（Claude Code の版によっては出ないので、そのときは Bash のこれらで探すと書く）。依存先が未完了なら `pending` になる。
+- `mcp__node__node_spawn`: 子を作る。`parentId`（自分か子孫の ID）・`role`・`objective`・`acceptanceCriteria`（確かめられる形で書く）・`scope`（`writableLocations`・`forbiddenLocations` は作業ツリー内の相対パス、`allowedCommands`）・`dependsOn`（任意）を渡す。範囲は必要最小限にする。**`forbiddenLocations`（禁止の場所）は、親（根なら `config.json` の `rootScope`）の禁止をすべて含める**。子は親の禁止を外せないので、空にしたり親の禁止を抜いたりすると `scopeNotSubset` で断られる（禁止は根から引き継ぐ。足すのはよい）。作業ツリーの中を探す読み取りだけのコマンド（`ls`・`find`・`grep`・`git ls-files`・`git grep`）は、`allowedCommands` に入れなくても子が使える。子に探し方を案内するときは、Glob・Grep の道具を決めつけない（Claude Code の版によっては出ないので、そのときは Bash のこれらで探すと書く）。依存先が未完了なら `pending` になる。
 - `mcp__node__node_send`: 稼働中の子へ追加の指示を送る。`queued` は受け付けただけなので、届いたかは受信箱や状態で確かめる。
 - `mcp__node__node_stop`: 子を止める。`graceful` は穏当、`immediate` は即時。`graceMs` は `graceful` のときだけ指定できる。
 - `mcp__node__node_hookUnbind`: 子のフック（plugin のファイルで設定するフック）が、`/clear`・`--resume` で session_id が変わって拒否され続けるときに、結び付けを外す。次に来たセッションに結び直す。子のトークンが漏れた疑いがあるときは使わず、人間に知らせる。
@@ -93,6 +93,7 @@ CLI の子（設定 `childRuntime` が `cli` の木）は、TouRyou が起動し
 
 - 最終削除・保留・保管の取り出しなど、取り消せない操作は、あなたの操作に含まれません。人間が `touryou` コマンドか画面で行います。必要なら、人間に頼みます。
 - 範囲違反（受信箱の `violation`。要約が「範囲違反（フックが拒んだ・…）」のもの）を人に伝えるときは、「フックが拒んだ」をその言葉のまま伝える（操作は実行されていない）。「記録が 1 件」「実害なし」だけに言い換えない。拡張の要求（「範囲の拡張要求」）は、拒まれた操作ではなく、判定を待つ要求として伝える。
+- `node_spawn` が `scopeNotSubset` で失敗したら、まず子の `forbiddenLocations` に、親の禁止の場所がすべて入っているかを確かめる（`node_state` で親の範囲を見て、抜けているものを足して作り直す）。`writableLocations`・`allowedCommands` が親の範囲に収まっているかも確かめる。
 - `node_spawn`・`scope_decide` が `scopeNotSubset` で失敗し、`cause` に `config.json` の `rootScope` とあるとき（上限が根の範囲のとき）は、根の範囲が足りない。黙って子の範囲を削らずに、人に、`config.json` の `rootScope` を広げて daemon を起動し直すか、子の範囲を絞るかを尋ねる。
 - 子の範囲を、黙って広げない。範囲外の作業が要るなら、子の要求を判定するか、人間に判断を求める。
 - 失敗の応答には、原因（`cause`）と次の操作（`nextActions`）が付く。同じ操作を繰り返す前に、それを読む。

@@ -24,6 +24,9 @@ const ALLOWED: readonly Row[] = [
   ["running", stopI, "stopping", "immediateStop"],
   ["waiting", stopG, "stopping", "immediateStop"],
   ["waiting", stopI, "stopping", "immediateStop"],
+  // 済んだと報告したが受理していない子は、受理せずに破棄するために止められる（#115）
+  ["done", stopG, "stopping", "immediateStop"],
+  ["done", stopI, "stopping", "immediateStop"],
   ["pending", stopG, "stopped", "cancelStart"],
   ["pending", stopI, "stopped", "cancelStart"],
   // 停止の進行（Q3）
@@ -61,7 +64,7 @@ const EVENTS: readonly NodeEvent[] = [
 ];
 
 // 停止の対象にならない状態。停止要求は「既に終了」（alreadyFinished）を返す。
-const FINISHED: readonly NodeState[] = ["done", "verified", "reclaimable", "archived"];
+const FINISHED: readonly NodeState[] = ["verified", "reclaimable", "archived"];
 // 停止要求を一度受け付けた状態。再送は成功（changed: false）で、状態は変わらない。
 const STOP_ACCEPTED: readonly NodeState[] = ["stopping", "stopIncomplete", "stopped"];
 const isStop = (e: NodeEvent): boolean => e.type === "stop";

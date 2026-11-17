@@ -130,6 +130,53 @@ describe("touryou（bin）", () => {
     expect(seen.some((s) => s.headers.authorization !== undefined)).toBe(false);
   });
 
+  it("環境変数がなくても、$HOME/.touryou/config.json の stateDir から窓口と人間のトークンを自分で読む（#115。touryou ui と同じ）", async () => {
+    const { f, seen } = fakeFetch({ unbound: true, duplicate: false });
+    const reads: string[] = [];
+    const r = await runBin(["reclaim", "a"], {
+      env: { HOME: "/home/u" },
+      devBuild: false,
+      isTTY: TTY,
+      fetch: f,
+      readFile: (p) => {
+        if (p === "/home/u/.touryou/config.json") return JSON.stringify({ stateDir: "/s" });
+        throw new Error("no file");
+      },
+      readSecret: (p) => {
+        reads.push(p);
+        if (p === "/s/port") return "7777\n";
+        if (p === "/s/human-token") return `${TOKEN}\n`;
+        throw new Error("no file");
+      },
+      sleep: async () => {},
+    });
+    expect(reads.sort()).toEqual(["/s/human-token", "/s/port"]);
+    // 「窓口・トークンがない」では止まらず、トークンを送る前の身元の確かめまで進む（身元の秘密がないので、トークンは送らない）
+    expect(r.stderr).not.toMatch(/TOURYOU_DAEMON_URL がなく|TOURYOU_HUMAN_TOKEN がなく/);
+    expect(seen.some((x) => x.headers.authorization !== undefined)).toBe(false);
+    expect(r.stdout + r.stderr).not.toContain(TOKEN);
+  });
+
+  it("設定から窓口を読めない（port がない・形が違う）ときは、終了コード 2 で、何も送らない", async () => {
+    const { f, seen } = fakeFetch({});
+    for (const port of [undefined, "abc", "70000"]) {
+      const r = await runBin(["reclaim", "a"], {
+        env: { HOME: "/home/u" },
+        isTTY: TTY,
+        fetch: f,
+        readFile: () => JSON.stringify({ stateDir: "/s" }),
+        readSecret: (p) => {
+          if (p === "/s/port" && port !== undefined) return port;
+          if (p === "/s/human-token") return TOKEN;
+          throw new Error("no file");
+        },
+      });
+      expect(r.exitCode, String(port)).toBe(2);
+      expect(r.stderr).toContain("stateDir の port");
+    }
+    expect(seen).toEqual([]);
+  });
+
   it("cli が mcp から読むのは @touryou/mcp/relay だけ。relay・identity は MCP SDK・zod を import しない", () => {
     const here = fileURLToPath(new URL("../src", import.meta.url));
     for (const f of readdirSync(here)) {

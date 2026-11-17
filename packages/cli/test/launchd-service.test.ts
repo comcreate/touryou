@@ -193,7 +193,7 @@ describe("apply", () => {
     const f = withUid(fake(h.state));
     let r = await bin(h.home, f, ["apply", "--yes", "--org", ORG]);
     expect(r.exitCode).toBe(1);
-    expect(r.stderr).toMatch(/touryou launchd init/);
+    expect(r.stderr).toMatch(/"\$HOME\/\.touryou\/current\/bin\/touryou" launchd init/);
     const g = await initHome();
     r = await bin(g.home, g.f, ["apply", "--yes", "--org", "com.other"]);
     expect(r.exitCode).toBe(1);
@@ -473,7 +473,9 @@ describe("launchd の操作の回帰", () => {
     expect(r.exitCode).toBe(1);
     expect(r.stdout).toMatch(/stop で止めた後/);
     expect(r.stdout).toMatch(/次のログインで、また動く/);
-    expect(r.stdout).toMatch(/touryou launchd apply --yes（利用者の同意のあとだけ）/);
+    expect(r.stdout).toMatch(
+      /"\$HOME\/\.touryou\/current\/bin\/touryou" launchd apply --yes（利用者の同意のあとだけ）/,
+    );
     expect(r.stdout).toMatch(/restart は、読み込まれていないので使えない/);
   });
 
@@ -523,7 +525,9 @@ describe("古い形（v0.1.0 まで。run-daemon.sh を起こす plist）から�
     const h = legacyHome();
     const r = await bin(h.home, h.f, ["apply", "--yes", "--org", ORG]);
     expect(r.exitCode).toBe(1);
-    expect(r.stderr).toMatch(/古い形.*touryou launchd init を実行して/);
+    expect(r.stderr).toMatch(
+      /古い形.*"\$HOME\/\.touryou\/current\/bin\/touryou" launchd init を実行して/,
+    );
     expect(h.f.calls).toEqual([]);
     expect(readFileSync(h.dest, "utf8")).toBe(h.text);
   });
@@ -640,7 +644,9 @@ describe("前の形（v0.1.1。current/bin/node を直に起こす plist）か�
     const h = v011Home();
     const r = await bin(h.home, h.f, ["apply", "--yes", "--org", ORG]);
     expect(r.exitCode).toBe(1);
-    expect(r.stderr).toMatch(/古い形.*touryou launchd init を実行して/);
+    expect(r.stderr).toMatch(
+      /古い形.*"\$HOME\/\.touryou\/current\/bin\/touryou" launchd init を実行して/,
+    );
     expect(h.f.calls).toEqual([]);
   });
 
