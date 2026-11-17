@@ -22,26 +22,35 @@
   - 写すボタンの navigator.clipboard（本番は走査の SAFE に clipboard・writeText を足す。6.3）。
 
   見た目の考え：棟梁の現場の図面。明るい側は木の色の紙に墨、暗い側は夜の墨に灯り。
-  藍＝上り（子 → 親）、紫＝下り（親 → 子）、柿＝人が動くこと。目立たせるのは関係図の 1 か所だけ。
+
+  図の役割の分け方（11-17 に決めた方針）：
+  - 線は「やり取りの流れ」だけ：向き（上＝上り ←、下＝下り →）と、最後のやり取りがいつか（新しいほど濃く太い）。
+    上り・下りは色で分けない（落ち着いた 1 色。背景との明るさの差は明暗とも 3 対 1 以上）。柿色の線は、あなたの答え待ちだけ。
+  - 箱は「作業の状態」だけ：3 つの段にまとめる。
+    あなたの出番（答え待ち＝柿・止まっているかも＝くすんだ黄・失敗＝赤。印と文字を必ず添える）／進んでいる（ふつう）／終わった（済んだ・止めた。薄い）。
+  - 動きは「変化があったとき」だけ：開いたときと、新しいやり取りが来たときに、玉がその線を 1 回だけ走る。
+    いつも動いているのは、あなたの出番の箱のゆっくりした脈打ちだけ。
+  - 「静か」と「滞り」を混ぜない：時間がたっただけなら線が薄くなるだけ。「止まっているかも」は daemon の知らせがあるときだけ。
+  - 図は、いちばん上の「いまあなたがすること」の補助。図で強く目立つのは、上の欄に出ているものと同じもの。
 -->
 <style>
 :root{
   --paper:#f3efe6;--sheet:#fbf9f4;--ink:#22201c;--ink-2:#5b5650;--rule:#d8d0c0;--grid:#e7e0d1;
   --ai:#2a4f8f;--ai-soft:#dfe7f4;--murasaki:#7b3f8c;--murasaki-soft:#efe2f2;
   --kaki:#c95a00;--kaki-soft:#fbe6d2;--matsu:#2f6b45;--matsu-soft:#dcebdf;--shu:#a3261c;--shu-soft:#f7dfdb;
-  --on-strong:#fff;
+  --on-strong:#fff;--wire:#5f594f;--kiiro:#8a6d00;--kiiro-soft:#f4ecc8;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --paper:#16181c;--sheet:#1e2126;--ink:#ebe6dc;--ink-2:#a39d93;--rule:#363a42;--grid:#23262c;
   --ai:#86a8e8;--ai-soft:#1e2a40;--murasaki:#cf9ade;--murasaki-soft:#2e2134;
   --kaki:#ff9a3c;--kaki-soft:#3b2614;--matsu:#7fc495;--matsu-soft:#18301f;--shu:#ff8c80;--shu-soft:#3d1b18;
-  --on-strong:#16181c;
+  --on-strong:#16181c;--wire:#a39d93;--kiiro:#d9b84a;--kiiro-soft:#332b10;
 }}
 :root[data-theme="dark"]{
   --paper:#16181c;--sheet:#1e2126;--ink:#ebe6dc;--ink-2:#a39d93;--rule:#363a42;--grid:#23262c;
   --ai:#86a8e8;--ai-soft:#1e2a40;--murasaki:#cf9ade;--murasaki-soft:#2e2134;
   --kaki:#ff9a3c;--kaki-soft:#3b2614;--matsu:#7fc495;--matsu-soft:#18301f;--shu:#ff8c80;--shu-soft:#3d1b18;
-  --on-strong:#16181c;
+  --on-strong:#16181c;--wire:#a39d93;--kiiro:#d9b84a;--kiiro-soft:#332b10;
 }
 *{box-sizing:border-box}
 html{background:var(--paper)}
@@ -154,6 +163,34 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 @keyframes failflash{0%{stroke-width:1.5}30%{stroke-width:7}100%{stroke-width:1.5}}
 @keyframes legendflow{to{border-image-source:repeating-linear-gradient(90deg,var(--ai) 0 6px,transparent 6px 12px)}}
 @media (max-width:640px){.srow{grid-template-columns:34px 1fr}.srow span:last-child{grid-column:2}}
+/* 線（やり取りの流れ）：1 色。新しさは濃さと太さ。柿は答え待ちだけ */
+.line{fill:none;stroke:var(--wire);stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1;animation:draw 1s ease-out forwards}
+.line.a1{stroke-width:3}.line.a2{stroke-width:2.4}.line.a3{stroke-width:2;stroke-opacity:.85}.line.a4{stroke-width:1.6;stroke-opacity:.7}
+.line.human{stroke:var(--kaki);stroke-width:3.5}
+.line.over{stroke-width:1.4;stroke-opacity:.35}
+.tip{fill:var(--wire);stroke:none!important}.tip.a4{fill-opacity:.7}.tip.human{fill:var(--kaki)}.tip.over{fill-opacity:.35}
+.port{fill:var(--wire);stroke:var(--sheet);stroke-width:2}.port.human{fill:var(--kaki)}.port.over{fill-opacity:.35}
+.mlabel{fill:var(--ink-2)}.mlabel.a1 .k,.mlabel.a2 .k{fill:var(--ink)}.mlabel.human{fill:var(--kaki)}.mlabel.over{opacity:.5}
+.pip.once{width:9px;height:9px;background:var(--wire);animation:travel 1.4s cubic-bezier(.45,0,.55,1) 1 both}
+.pip.once.h{background:var(--kaki)}
+/* 箱（作業の状態）：3 つの段 */
+.node.t-turn rect.box{stroke-width:2.5}
+.node.s-wait rect.box{stroke:var(--kaki)}.node.s-wait .halo{stroke:var(--kaki)}
+.node.s-stall rect.box{stroke:var(--kiiro)}.node.s-stall .halo{stroke:var(--kiiro)}
+.node.s-fail rect.box{stroke:var(--shu)}.node.s-fail .halo{stroke:var(--shu)}
+.node.t-turn .halo{animation:halo 2.4s ease-out infinite}
+.node.t-over{opacity:.5}.node.t-over rect.box{fill:var(--paper)}
+.st-stall{fill:var(--kiiro)!important}.st-fail{fill:var(--shu)!important}
+.legend2{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;padding:10px 14px 12px;border-top:1px solid var(--rule);font-size:12.5px;color:var(--ink-2)}
+.lkey{display:grid;gap:4px;align-content:start}.lkey>b{color:var(--ink);font-size:13px}
+.krow{display:grid;grid-template-columns:34px auto 1fr;gap:8px;align-items:center}.krow b{color:var(--ink)}
+.lkey:first-child .krow{grid-template-columns:34px 1fr}
+.sw{height:0;border-top:3px solid var(--wire)}.sw.a4{border-top-width:1.6px;opacity:.7}.sw.human{border-top:3.5px solid var(--kaki)}
+.bx{width:30px;height:18px;border-radius:5px;border:1.5px solid var(--rule);background:var(--sheet)}
+.bx.t-turn{border:2.5px solid var(--kaki)}.bx.t-over{opacity:.5;background:var(--paper)}
+.chip.fail{background:var(--shu-soft);color:var(--shu)}
+.chip.stall{background:var(--kiiro-soft);color:var(--kiiro)}
+@media (max-width:640px){.legend2{grid-template-columns:1fr}}
 .piplayer{position:absolute;left:0;top:0;transform-origin:0 0;pointer-events:none}
 
 .wire{fill:none;stroke-linecap:round}
@@ -161,7 +198,7 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .wire.flow{stroke-width:2.5;stroke-dasharray:6 12;animation:flow 1.6s linear infinite;opacity:0;animation-delay:1.2s}
 .wire.flow.on{opacity:1;transition:opacity .4s}
 .up{stroke:var(--ai)}.down{stroke:var(--murasaki)}
-.human{stroke:var(--kaki)!important}
+.line.human,.wire.human{stroke:var(--kaki)!important}
 .wire.base.human{stroke-width:4;opacity:.5}
 .wire.flow.human{stroke-width:4;stroke-dasharray:10 8;animation-duration:.7s}
 .wire.dim{opacity:.08!important}
@@ -270,6 +307,7 @@ const VIEW = {
     { id: "n-b2", role: "統合", parentId: "n-root", state: "run", title: "注文の確認のメールの文を見直し、送る時刻をそろえる", lastActivityAt: min(6), needsHuman: 0 },
     { id: "n-b3", role: "作業", parentId: "n-b2", state: "stall", title: "メールの文の雛形を三つ作り、試験の宛先で送って確かめる", lastActivityAt: min(42), needsHuman: 1, cli: true },
     { id: "n-c4", role: "作業", parentId: "n-root", state: "done", title: "注文の一覧の並び順を、新しい順にする", lastActivityAt: min(55), needsHuman: 0 },
+    { id: "n-d5", role: "作業", parentId: "n-root", state: "fail", title: "支払いのあとの「ありがとう」の画面の文を直す", lastActivityAt: min(14), needsHuman: 1 },
     { id: "n-h10", role: "作業", parentId: "n-b2", state: "run", title: "送ったメールの控えを残す場所を決める（起こしたばかり）", lastActivityAt: min(0.5), needsHuman: 0 }
   ],
   // dir: up（子 → 親）・down（親 → 子）。human：人の操作が要る
@@ -278,15 +316,17 @@ const VIEW = {
     { from: "n-root", to: "n-a1", dir: "down", kind: "頼み", at: min(20), text: "支払い方法の選び方の画面を作ってください。" },
     { from: "n-b2", to: "n-root", dir: "up", kind: "進み", at: min(6), text: "雛形の二つめまでできました。" },
     { from: "n-root", to: "n-b2", dir: "down", kind: "頼み", at: min(30), text: "確認のメールを見直してください。" },
-    { from: "n-b3", to: "n-b2", dir: "up", kind: "止まっているかも", at: min(42), human: true, text: "42 分、動きがありません。" },
+    { from: "n-b3", to: "n-b2", dir: "up", kind: "入力待ちの知らせ", at: min(42), notice: true, text: "42 分、動きがありません。" },
     { from: "n-b2", to: "n-b3", dir: "down", kind: "答え", at: min(44), text: "宛先は試験用のものだけにしてください。" },
-    { from: "n-root", to: "n-a1", dir: "down", kind: "止める頼み", at: min(8), failed: true, text: "止める頼みが届きませんでした（子が受け取れない）。" },
+    { from: "n-root", to: "n-d5", dir: "down", kind: "頼み", at: min(40), text: "ありがとうの画面の文を直してください。" },
+    { from: "n-d5", to: "n-root", dir: "up", kind: "失敗の知らせ", at: min(14), text: "試験が通りません。文の長さの決まりに合いません。" },
     { from: "n-c4", to: "n-root", dir: "up", kind: "済んだ", at: min(55), text: "新しい順に並べ替えました。試験は通っています。" },
     { from: "n-root", to: "n-c4", dir: "down", kind: "頼み", at: min(70), text: "一覧の並び順を直してください。" }
   ],
   // 人が答える／確かめること
   todo: [
     { id: "t1", nodeId: "n-a1", type: "decision", ask: "振り込みの期限の文を、どちらにしますか。", options: ["3 日以内", "7 日以内"] },
+    { id: "t3", nodeId: "n-d5", type: "fail", ask: "試験が通らず、止まりました。もう一度頼むか、止めるかを選んでください。", options: ["もう一度頼む", "止める"] },
     { id: "t2", nodeId: "n-b3", type: "stall", ask: "42 分、動きがありません。止まっていないか、子の画面を開いて確かめてください。" }
   ],
   // 済んだ子の受信箱（たたむだけ。D6）
@@ -313,7 +353,8 @@ function svgEl(tag, attrs, text) {           // SVG を作るのは、ここ 1 �
 }
 const ago = (iso) => { const m = Math.round((NOW - Date.parse(iso)) / 60000); return m < 1 ? "いま" : m < 60 ? m + " 分前" : Math.floor(m / 60) + " 時間前"; };
 const clock = (iso) => { const d = new Date(Date.parse(iso) + 9 * 3600000); return String(d.getUTCHours()).padStart(2,"0") + ":" + String(d.getUTCMinutes()).padStart(2,"0"); };
-const STATE = { run: ["動いています", "run"], wait: ["あなたの答え待ち", "wait"], done: ["済んだ", "done"], stall: ["止まっているかも", "stall"], stopped: ["止めた", "done"] };
+const STATE = { run: ["動いています", "run"], wait: ["● あなたの答え待ち", "wait"], done: ["済んだ", "done"], stall: ["‖ 止まっているかも", "stall"], stopped: ["■ 止めた", "done"], fail: ["✕ 失敗", "fail"] };
+const TIER = (n) => (n.state === "wait" || n.state === "stall" || n.state === "fail") ? "turn" : (n.state === "done" || n.state === "stopped") ? "over" : "go";
 const byId = Object.fromEntries(VIEW.nodes.map(n => [n.id, n]));
 const short = (s, n) => s.length > n ? s.slice(0, n - 1) + "…" : s;
 
@@ -371,8 +412,8 @@ for (const t of VIEW.todo) {
   const who = el("div", "who"); who.append(el("b", "", short(n.title, 40)), document.createTextNode("（" + n.role + "）から ・ " + ago(n.lastActivityAt)));
   li.append(who, el("div", "ask", t.ask));
   const row = el("div", "row");
-  if (t.type === "decision") {
-    for (const o of t.options) { const b = el("button", "go", o + " にする"); b.addEventListener("click", () => finish(li, "「" + o + "」と答えました")); row.append(b); }
+  if (t.options) {
+    for (const o of t.options) { const b = el("button", "go", t.type === "fail" ? o : o + " にする"); b.addEventListener("click", () => finish(li, "「" + o + "」と答えました")); row.append(b); }
     const d = el("details"); d.append(el("summary", "", "自分の言葉で答える"), el("p", "", "（本番は、ここに入力欄が出ます）"));
     li.append(row, d);
   } else {
@@ -400,37 +441,27 @@ updateCount();
 // - 線は上り（子 → 親、藍、上）と下り（親 → 子、紫、下）の 2 本だけ。親子のつながりの灰色の線はなくした。
 //   親子は「幹からの枝分かれ」と「列（深さ）」で分かる。やり取りがまだない子だけ、幹からごく薄い点線の枝で示す。
 // - 図に出す子は、親ごとに 6 まで。超えたら済んだ子を「済んだ子 N」にまとめ、それでも超えたら「ほかに N」と一覧を勧める。
-// - 状態は、色（向き）に、動き・濃さ・端子の印を重ねて表す。動きを止めても、印と濃さで分かる。
+// - 線は「やり取りの流れ」だけ（向きと、最後のやり取りがいつか）。箱は「作業の状態」だけ（3 つの段）。
+// - 動きは変化があったときだけ：玉は開いたときと、新しいやり取りが来たときに 1 回だけ走る。
 const BIG = {
   nodes: [
     ...VIEW.nodes,
-    { id: "n-d5", role: "作業", parentId: "n-root", state: "run", title: "支払いのあとの「ありがとう」の画面の文を直す", lastActivityAt: min(28), needsHuman: 0 },
     { id: "n-f8", role: "統合", parentId: "n-root", state: "run", title: "店の管理の画面に、注文の数のまとめを足す", lastActivityAt: min(4), needsHuman: 0 },
-    { id: "n-k11", role: "作業", parentId: "n-root", state: "done", title: "注文の確認の画面の文字の大きさをそろえる", lastActivityAt: min(80), needsHuman: 0 },
-    { id: "n-k12", role: "作業", parentId: "n-root", state: "stopped", title: "古い支払いの画面を消す（取りやめ）", lastActivityAt: min(90), needsHuman: 0 },
-    { id: "n-b6", role: "作業", parentId: "n-b2", state: "run", title: "送る時刻を、店の営業の時間の中にそろえる", lastActivityAt: min(12), needsHuman: 0 },
-    { id: "n-g9", role: "作業", parentId: "n-f8", state: "wait", title: "まとめの数の区切り（日・週）を決めて表にする", lastActivityAt: min(2), needsHuman: 1 }
+    { id: "n-g9", role: "作業", parentId: "n-f8", state: "stopped", title: "まとめの数を CSV で出す（取りやめ）", lastActivityAt: min(70), needsHuman: 0 }
   ],
   messages: [
     ...VIEW.messages,
-    { from: "n-root", to: "n-d5", dir: "down", kind: "頼み", at: min(40), text: "ありがとうの画面の文を直してください。" },
-    { from: "n-d5", to: "n-root", dir: "up", kind: "進み", at: min(28), text: "文の案を二つ作りました。" },
     { from: "n-root", to: "n-f8", dir: "down", kind: "頼み", at: min(30), text: "管理の画面にまとめを足してください。" },
     { from: "n-f8", to: "n-root", dir: "up", kind: "進み", at: min(4), text: "表の枠ができました。" },
-    { from: "n-root", to: "n-k11", dir: "down", kind: "頼み", at: min(120), text: "文字の大きさをそろえてください。" },
-    { from: "n-k11", to: "n-root", dir: "up", kind: "済んだ", at: min(80), text: "そろえました。" },
-    { from: "n-root", to: "n-k12", dir: "down", kind: "止める", at: min(90), text: "取りやめます。止めてください。" },
-    { from: "n-b2", to: "n-b6", dir: "down", kind: "頼み", at: min(35), text: "送る時刻をそろえてください。" },
-    { from: "n-b6", to: "n-b2", dir: "up", kind: "進み", at: min(12), text: "営業の時間の表を読みました。" },
-    { from: "n-f8", to: "n-g9", dir: "down", kind: "頼み", at: min(15), text: "区切りを決めて表にしてください。" },
-    { from: "n-g9", to: "n-f8", dir: "up", kind: "判断を求める", at: min(2), human: true, text: "区切りは日と週のどちらを先にしますか。" }
+    { from: "n-f8", to: "n-g9", dir: "down", kind: "止める", at: min(70), text: "CSV は取りやめます。止めてください。" }
   ]
 };
 const MAXKIDS = 6;
 const g = el("section", "sec");
 g.append(el("h2", "", "やり取りの図"));
-g.append(el("p", "lead", "左が親、右が子と孫。親の箱の右の縦の棒（幹）から、子ごとに枝が分かれます。枝の上の藍の線が子から親への報告（←）、下の紫の線が親から子への頼み（→）。線の動きと端子の印で、流れているか・止まっているかが分かります。箱を押すと、その作業の詳しいようすへ移ります。"));
+g.append(el("p", "lead", "左が親、右が子と孫。親の箱の右の縦の棒（幹）から、子ごとに枝が分かれます。線はやり取りの流れだけを表します：枝の上の線が子から親への報告（←）、下の線が親から子への頼み（→）。新しいやり取りほど濃く太く、柿色の線はあなたの答え待ちです。作業の状態は箱で表します。箱を押すと、その作業の詳しいようすへ移ります。"));
 const ctl = el("div", "ctl");
+const tryBtn = el("button", "sm", "新しいやり取りを試す");
 function seg(label, items, onPick) {
   const box = el("div", "shape"); box.append(el("span", "", label));
   const bs = items.map(([k, t]) => { const b = el("button", "sm", t); b.addEventListener("click", () => onPick(k)); box.append(b); return [k, b]; });
@@ -438,8 +469,9 @@ function seg(label, items, onPick) {
 }
 const st = { view: "graph", data: "small" };
 const sView = seg("見せ方：", [["graph", "図"], ["list", "一覧"]], (k) => { st.view = k; render(); });
-const sData = seg("値：", [["small", "いまの値"], ["big", "子が多いとき（子 8・孫 3）"]], (k) => { st.data = k; render(); });
-ctl.append(sView.box, sData.box);
+const sData = seg("値：", [["small", "いまの値（子 4・孫 2）"], ["big", "子 5・孫 3"]], (k) => { st.data = k; render(); });
+const tryBox = el("div", "shape"); tryBox.append(el("span", "", "動き："), tryBtn, el("span", "", "（新しいやり取りが来たとき、玉がその線を 1 回だけ走ります）"));
+ctl.append(sView.box, sData.box, tryBox);
 g.append(ctl, el("p", "judge", "親子のつながりの線はなくしました。上りと下りの線と、幹からの枝分かれで親子が分かるからです。やり取りがまだない子（起こしたばかり）だけ、薄い点線の枝で親を示します。図に出す子は親ごとに 6 までで、超えると済んだ子をまとめます。"));
 const board = el("div", "board");
 const listView = el("div", "tlist");
@@ -475,19 +507,24 @@ function layout(nodes) {            // research.md 6.1 の layoutOf の形（純
   for (const id in pos) { const p = pos[id]; p.x = 40 + p.d * COL; p.y = p.cy - BH / 2; }
   return { pos, groups, W: 40 + maxDepth * COL + BW + 40, H: 60 + leaf * LEAF };
 }
-// 線の状態：flow（流れている。最近ほど速い）・human（答え待ち）・stall（滞り）・still（停止・済んだ）・fail（失敗）
-function laneState(child, m) {
-  if (child.state === "stall") return "stall";
-  if (child.state === "done" || child.state === "stopped") return "still";
-  if (m.failed) return "fail";
+// 線の見え方：答え待ち（柿）か、ふつう（1 色）。新しさは濃さと太さ。終わった作業の線は薄い
+function laneLook(child, m) {
+  if (TIER(child) === "over") return "over";
   if (m.human) return "human";
   const age = (NOW - Date.parse(m.at)) / 60000;
-  return age <= 5 ? "flow f1" : age <= 30 ? "flow f2" : age <= 60 ? "flow f3" : "flow f0";
+  return age <= 5 ? "a1" : age <= 30 ? "a2" : age <= 60 ? "a3" : "a4";
 }
-const MARK = { stall: "⏸", still: "■", fail: "✕" };
+let runners = [];
+function runPip(r, delay) {          // 玉を 1 回だけ走らせる
+  const dot = el("span", "pip once" + (r.human ? " h" : ""));
+  dot.style.offsetPath = "path('" + r.d + "')";      // D8 は未決定。本番で使うなら 1 か所に閉じる
+  dot.style.animationDelay = delay + "s";
+  dot.addEventListener("animationend", () => dot.remove());
+  pipLayer.append(dot);
+}
 function drawGraph(nodes, msgs) {
   const L = layout(nodes); W = L.W; H = L.H;
-  world.replaceChildren(); pipLayer.replaceChildren(); drawn = [];
+  world.replaceChildren(); pipLayer.replaceChildren(); drawn = []; runners = [];
   for (let x = 0; x <= W; x += 40) world.append(svgEl("line", { class: "gridline", x1: x, y1: 0, x2: x, y2: H }));
   const byIdL = Object.fromEntries(nodes.map(n => [n.id, n]));
   let li = 0;
@@ -515,36 +552,20 @@ function drawGraph(nodes, msgs) {
       for (const [dir, m] of [["up", up], ["down", down]]) {
         if (!m) continue;
         const y = C.cy + (dir === "up" ? -GAP : GAP);
-        const sCls = laneState(child, m);
-        const cls = "wire " + dir + " " + sCls;
+        const look = laneLook(child, m);
         const d = dir === "up" ? "M" + cl + " " + y + " H" + (tx + ARROW) : "M" + tx + " " + y + " H" + (cl - ARROW);
-        const base = svgEl("path", { class: cls + " base", d, pathLength: 1 });
-        base.style.animationDelay = (li * 0.05) + "s";   // 本番は CSS の :nth-child で決める
-        const flow = svgEl("path", { class: cls + " flow", d });
-        flow.append(svgEl("title", {}, m.kind + "：" + m.text));
-        const tipX = dir === "up" ? tx : cl;
+        const line = svgEl("path", { class: "line " + look, d, pathLength: 1 });
+        line.style.animationDelay = (li * 0.05) + "s";   // 開いたときに 1 回だけ線が描かれる（本番は CSS の :nth-child で決める）
+        line.append(svgEl("title", {}, m.kind + "：" + m.text));
         const tip = dir === "up" ? "M" + tx + " " + y + " L" + (tx + ARROW + 2) + " " + (y - 5) + " L" + (tx + ARROW + 2) + " " + (y + 5) + " Z"
                                  : "M" + cl + " " + y + " L" + (cl - ARROW - 2) + " " + (y - 5) + " L" + (cl - ARROW - 2) + " " + (y + 5) + " Z";
-        parts.push(base, flow, svgEl("path", { class: "tip " + dir + " " + sCls, d: tip }));
-        parts.push(svgEl("circle", { class: "port " + (dir === "up" ? "u" : "d") + " " + sCls, cx: cl, cy: y, r: 4 }));
+        parts.push(line, svgEl("path", { class: "tip " + look, d: tip }), svgEl("circle", { class: "port " + look, cx: cl, cy: y, r: 3.5 }));
         // ラベル：幹と子の箱のあいだの、その線だけの上（上り）か下（下り）。縁取りで線に重なっても読める
-        const lab = svgEl("text", { class: "mlabel " + (sCls === "human" ? "h" : dir === "up" ? "u" : "d") + (sCls.startsWith("flow") ? "" : " " + sCls), x: tx + 18, y: dir === "up" ? y - 6 : y + 15 });
+        const lab = svgEl("text", { class: "mlabel " + look, x: tx + 18, y: dir === "up" ? y - 6 : y + 15 });
         lab.append(svgEl("tspan", { class: "k" }, (dir === "up" ? "← " : "→ ") + m.kind), svgEl("tspan", { class: "when" }, "　" + ago(m.at)));
-        if (sCls !== "flow f1" && sCls !== "flow f2" && sCls !== "flow f3" && sCls !== "flow f0") lab.classList.add("keep");
+        if (look === "human") lab.classList.add("keep");
         parts.push(lab);
-        // 端子の印（子の側）
-        const mk = MARK[sCls];
-        if (mk && (dir === "up" || sCls === "fail")) {
-          parts.push(svgEl("circle", { class: "markbg " + sCls, cx: cl - 22, cy: dir === "up" ? C.cy : y, r: 9 }));
-          parts.push(svgEl("text", { class: "mark " + sCls, x: cl - 22, y: (dir === "up" ? C.cy : y) + 4, "text-anchor": "middle" }, mk));
-        }
-        // 動く点：流れているときは進む。答え待ちは矢印の先で止まって脈打つ
-        if (sCls === "human" || (sCls.startsWith("flow") && sCls !== "flow f0")) {
-          const dot = el("span", "pip " + (sCls === "human" ? "h wait" : dir === "up" ? "u" : "d") + " " + sCls.replace("flow ", ""));
-          dot.style.offsetPath = "path('" + d + "')";      // D8 は未決定。本番で使うなら 1 か所に閉じる
-          dot.style.animationDelay = (li * 0.3) + "s";
-          pipLayer.append(dot);
-        }
+        if (look !== "over") runners.push({ d, human: look === "human", line, lab, m, kid });
         li++;
       }
       parts.forEach(p => world.append(p));
@@ -552,6 +573,7 @@ function drawGraph(nodes, msgs) {
     }
   }
   for (const n of nodes) if (L.pos[n.id]) drawNode(n, L.pos[n.id]);
+  runners.forEach((r, i) => runPip(r, 1.0 + i * 0.12));     // 開いたときに 1 回
   for (const pid in L.groups) { const f = L.pos["fold-" + pid]; if (f) drawFold(L.groups[pid], f); }
   svg.setAttribute("viewBox", "0 0 " + W + " " + H);
   pipLayer.style.width = W + "px"; pipLayer.style.height = H + "px";
@@ -575,12 +597,12 @@ function goCard(id) {
 }
 function drawNode(n, p) {
   const id = n.id;
-  const node = svgEl("g", { class: "node s-" + n.state + (n.needsHuman ? " need" : ""), tabindex: 0, role: "button", "aria-label": n.title + "。" + STATE[n.state][0] });
+  const node = svgEl("g", { class: "node t-" + TIER(n) + " s-" + n.state, tabindex: 0, role: "button", "aria-label": n.title + "。" + STATE[n.state][0] });
   node.append(svgEl("rect", { class: "halo", x: p.x, y: p.y, width: BW, height: BH, rx: 12 }));
   node.append(svgEl("rect", { class: "box", x: p.x, y: p.y, width: BW, height: BH, rx: 12 }));
   node.append(svgEl("text", { class: "ttl", x: p.x + 12, y: p.y + 24 }, short(n.title, 12)));
   node.append(svgEl("text", { class: "sub", x: p.x + 12, y: p.y + 44 }, n.role + "　" + ago(n.lastActivityAt)));
-  node.append(svgEl("text", { class: "st st-" + n.state, x: p.x + 12, y: p.y + 66 }, STATE[n.state][0]));
+  node.append(svgEl("text", { class: "st st-" + n.state, x: p.x + 12, y: p.y + 66 }, STATE[n.state][0] + (n.state === "stall" ? "　" + ago(n.lastActivityAt).replace("前", "") : "")));
   if (n.needsHuman) {
     node.append(svgEl("circle", { class: "badge", cx: p.x + BW - 4, cy: p.y + 4, r: 12 }));
     node.append(svgEl("text", { class: "badge-t", x: p.x + BW - 4, y: p.y + 8.5, "text-anchor": "middle" }, n.needsHuman));
@@ -631,18 +653,28 @@ svg.addEventListener("pointerdown", (e) => { if (e.target.closest(".node,.fold")
 svg.addEventListener("pointermove", (e) => { if (!drag) return; const s = vb.w / svg.clientWidth; vb.x = Math.max(0, Math.min(W - vb.w, drag.vx - (e.clientX - drag.x) * s)); vb.y = Math.max(0, Math.min(H - vb.h, drag.vy - (e.clientY - drag.y) * s)); applyVB(); });
 svg.addEventListener("pointerup", () => { drag = null; });
 new ResizeObserver(applyVB).observe(svg);
-// 凡例：向きと、状態の見え方
-const legend = el("div", "legend");
-legend.append(el("span", "u", "← 上り：子 → 親（枝の上）"), el("span", "d", "→ 下り：親 → 子（枝の下）"));
-const states = el("div", "states");
-for (const [cls, name, how] of [
-  ["s-flow", "流れている", "点が進む。最近ほど速く濃い。1 時間を過ぎると止まって薄くなる"],
-  ["s-human", "あなたの答え待ち", "柿色。点が矢印の先で止まって脈打つ"],
-  ["s-stall", "滞り", "線がくすんで止まる。子の左に ⏸。子の箱がゆっくり点滅"],
-  ["s-still", "止めた・済んだ", "動かない細い線。子の左に ■"],
-  ["s-fail", "失敗・通らなかった操作", "赤い ✕。出たときに一度だけ光る"]
-]) { const r = el("div", "srow " + cls); r.append(el("span", "sw"), el("b", "", name), el("span", "", how)); states.append(r); }
-board.append(legend, states);
+// 凡例：線（流れ）と、箱（状態の 3 つの段）
+const legend = el("div", "legend2");
+const lineKey = el("div", "lkey");
+lineKey.append(el("b", "", "線（やり取りの流れ）"));
+for (const [cls, t] of [["a1", "← 上の線：子 → 親の報告　→ 下の線：親 → 子の頼み"], ["a1", "新しい（5 分以内）：濃く太い"], ["a4", "古い（1 時間より前）：薄く細い"], ["human", "柿色：あなたの答え待ちのやり取り"]]) {
+  const r = el("div", "krow"); r.append(el("span", "sw " + cls), el("span", "", t)); lineKey.append(r);
+}
+const boxKey = el("div", "lkey");
+boxKey.append(el("b", "", "箱（作業の状態）"));
+for (const [cls, name, t] of [["t-turn", "あなたの出番", "● 答え待ち（柿）・‖ 止まっているかも（くすんだ黄）・✕ 失敗（赤）。ゆっくり脈打つ"], ["t-go", "進んでいる", "動いている。ふつうの箱"], ["t-over", "終わった", "済んだ・■ 止めた。箱も線も薄い"]]) {
+  const r = el("div", "krow"); r.append(el("span", "bx " + cls), el("b", "", name), el("span", "", t)); boxKey.append(r);
+}
+legend.append(lineKey, boxKey);
+board.append(legend);
+tryBtn.addEventListener("click", () => {
+  if (st.view !== "graph") { st.view = "graph"; render(); }
+  const r = runners.find(x => !x.human && x.m.dir === "up" && x.kid !== "n-b3") || runners[0];
+  if (!r) return;
+  r.line.classList.remove("a2", "a3", "a4"); r.line.classList.add("a1");
+  r.lab.lastChild.textContent = "　いま";
+  runPip(r, 0);
+});
 function render() {
   const data = st.data === "big" ? BIG : VIEW;
   sView.set(st.view); sData.set(st.data);
