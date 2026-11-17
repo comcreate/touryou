@@ -209,8 +209,10 @@ export function graphModelOf(view: unknown): GraphModel {
   }
   const lanes: GraphLane[] = [];
   const parentOf = new Map(nodes.map((n) => [n.id, n.parentId]));
-  const taken = new Set<string>();
-  // flows は新しい順。親子の枝ごと・向きごとに、いちばん新しいものだけ
+  const taken = new Map<string, number>();
+  // flows は新しい順。親子の枝ごと・向きごとに、いちばん新しいものだけ。
+  // ただし上り（子 → 親）は、答えを待っている頼み（判断・範囲の頼みで、まだ済んでいないもの）があれば、
+  // それを新しい報告より先に出す（利用者の決め：答え待ちを優先。箱が答え待ちなのに、線が報告になるのを避ける）
   for (const x of list(v.flows, 200)) {
     const f = rec(x);
     if (f === null) continue;
@@ -228,14 +230,16 @@ export function graphModelOf(view: unknown): GraphModel {
     if (end === HUMAN ? dir === "up" : end !== up) continue;
     const parent = up;
     const key = `${parent} ${child} ${dir}`;
-    if (taken.has(key)) continue;
-    taken.add(key);
+    const asks = f.kind === "decision" || f.kind === "extension";
+    const waiting = asks && dir === "up" && stage !== "done";
+    const seen = taken.get(key);
+    // すでに出した線があれば、それが答え待ちでなく、これが答え待ちのときだけ置き換える
+    if (seen !== undefined && (!waiting || (lanes[seen] as GraphLane).waiting)) continue;
     const kind =
       typeof f.kind === "string" && own(KIND_NAMES, f.kind)
         ? (KIND_NAMES[f.kind] as string)
         : "やり取り";
-    const asks = f.kind === "decision" || f.kind === "extension";
-    lanes.push({
+    const lane: GraphLane = {
       parent,
       child,
       dir,
@@ -244,8 +248,12 @@ export function graphModelOf(view: unknown): GraphModel {
       inferred: f.doneInferred === true,
       label: kind,
       at: timeOf(f.sentAt),
-      waiting: asks && dir === "up" && stage !== "done",
-    });
+      waiting,
+    };
+    if (seen === undefined) {
+      taken.set(key, lanes.length);
+      lanes.push(lane);
+    } else lanes[seen] = lane;
   }
   return { nodes, lanes };
 }

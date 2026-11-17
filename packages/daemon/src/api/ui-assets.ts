@@ -38,7 +38,7 @@ export const UI_HTML = `<!doctype html>
 <section id="view" hidden>
 <section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h2 id="now-title">いまあなたがすること</h2><p id="now-lead" class="lead"></p></section>
 <div id="todo" class="todo"></div>
-<section class="sec"><h2>やり取り</h2><p class="lead">親子の並びと、いちばん新しい上り（子 → 親）・下り（親・人 → 子）です。</p><div id="view-switch" class="seg" role="group" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button">図</button><button id="show-list" class="quiet sm" type="button">一覧</button></div><div id="graph" class="board" hidden></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span>← 上り（子 → 親）</span><span class="lg"><span class="sw down"></span>→ 下り（親・人 → 子）</span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span>新しいほど濃い</span><span class="lg"><span class="sw wait"></span>あなたの答え待ちのやり取り</span><span class="lg"><span class="edge go"></span>進んでいる</span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span>あなたの出番（答え待ち・止まっているかも・失敗）</span><span class="lg"><span class="edge over"></span>終わった</span><span class="lg">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
+<section class="sec"><h2>やり取り</h2><p class="lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button">図</button><button id="show-list" class="quiet sm" type="button">一覧</button></div><div id="graph" class="board" hidden></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span>← 上り（子 → 親。答え待ちの頼みを先に）</span><span class="lg"><span class="sw down"></span>→ 下り（親・人 → 子）</span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span>新しいほど濃い</span><span class="lg"><span class="sw wait"></span>あなたの答え待ちのやり取り</span><span class="lg"><span class="edge go"></span>進んでいる</span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span>あなたの出番（答え待ち・止まっているかも・失敗）</span><span class="lg"><span class="edge over"></span>終わった</span><span class="lg">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
 <section class="sec"><h2>作業ごとのようす</h2><p class="lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
 <details id="finished" class="finished"><summary id="finished-summary">終わった作業</summary><div id="finished-cards" class="cards"></div></details></section>
 <details class="admin"><summary>管理（まれに使う操作）</summary><p class="warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
@@ -918,11 +918,16 @@ export const UI_JS = `'use strict';
     return d;
   }
 
-  // 一覧（木の字下げと、最後の上り・下り）。描いたノードの数を返す（木にならない・深すぎるもので、描けなかった分は、呼び出し側が「一部省略」にする）。
+  // 一覧（木の字下げと、上り・下り）。描いたノードの数を返す（木にならない・深すぎるもので、描けなかった分は、呼び出し側が「一部省略」にする）。
   // 関係図（#89 の PR-5）は、#graph に描く。それまでは一覧だけ
   function lastFlow(flows, from, to) {
     for (var k = 0; k < flows.length; k += 1) if (flows[k].from === from && flows[k].to === to) return flows[k];
     return null;
+  }
+  // 上り（子 → 親）は、答えを待つ頼み（判断・範囲の頼みで、まだ済んでいないもの）があれば、新しい報告より先にそれ（図と同じ決め方）
+  function upFlow(flows, from, to) {
+    for (var k = 0; k < flows.length; k += 1) if (flows[k].from === from && flows[k].to === to && isAwaiting(flows[k])) return flows[k];
+    return lastFlow(flows, from, to);
   }
   function flowCell(f, up, n) {
     if (!f) return el('span', 'when', n.parentId === null ? '（いちばん上）' : 'まだない');
@@ -990,7 +995,7 @@ export const UI_JS = `'use strict';
     var nodes = view.nodes;
     if (!nodes.length) { box.appendChild(el('p', 'empty', '作業はまだありません')); return 0; }
     var head = el('div', 'trow thead');
-    ['作業', '状態', '↑ 最後の上り（子 → 親）', '↓ 最後の下り（親・人 → 子）'].forEach(function (t) { head.appendChild(el('span', '', t)); });
+    ['作業', '状態', '↑ 上り（子 → 親。答え待ちの頼みを先に）', '↓ 最後の下り（親・人 → 子）'].forEach(function (t) { head.appendChild(el('span', '', t)); });
     box.appendChild(head);
     var kids = new Map();
     nodes.forEach(function (n) {
@@ -1016,7 +1021,7 @@ export const UI_JS = `'use strict';
         }
         row.appendChild(t);
         row.appendChild(el('span', 'chip ' + band, name(STATE_NAMES, n.state) + (n.needsHuman > 0 ? '・答え ' + n.needsHuman : '')));
-        row.appendChild(flowCell(n.parentId === null ? null : lastFlow(view.flows, n.id, n.parentId), true, n));
+        row.appendChild(flowCell(n.parentId === null ? null : upFlow(view.flows, n.id, n.parentId), true, n));
         row.appendChild(flowCell(n.parentId === null ? null : lastFlow(view.flows, n.parentId, n.id), false, n));
         box.appendChild(row);
         walk(n.id, depth + 1);
