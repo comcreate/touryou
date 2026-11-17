@@ -296,6 +296,33 @@ describe("人とのやり取り（人の箱は置かない。利用者の決め�
   });
 });
 
+describe("閉じた判断は、答え待ちに数えない（カードと同じ）", () => {
+  it("閉じた判断（closedReason）だけが残る子は、答え待ちの箱にならず、柿色の線も丸い数も出ない", () => {
+    const m = graphModelOf({
+      nodes: [
+        { id: "root", parentId: null },
+        { id: "a", parentId: "root", band: "turn", needsHuman: 0 },
+        { id: "b", parentId: "root", needsHuman: 1 },
+      ],
+      decisions: [
+        { decisionId: "d1", nodeId: "a", closedReason: "discarded" },
+        { decisionId: "d2", nodeId: "b" },
+      ],
+      flows: [
+        { dir: "up", from: "a", to: "root", stage: "done", kind: "decision" },
+        { dir: "up", from: "b", to: "root", stage: "sent", kind: "decision" },
+      ],
+    });
+    const a = m.nodes.find((n) => n.id === "a");
+    const b = m.nodes.find((n) => n.id === "b");
+    expect(a?.status).not.toBe("wait");
+    expect(a?.needsHuman).toBe(0);
+    expect(b?.status).toBe("wait");
+    expect(b?.needsHuman).toBe(1);
+    expect(m.lanes.filter((l) => l.waiting).map((l) => l.child)).toEqual(["b"]);
+  });
+});
+
 describe("箱の状態の言葉は、画面（app.js）の STATE_NAMES と同じ", () => {
   it("RUN_TEXT の値は、STATE_NAMES の同じキーの値と同じ（「■ 」の印つきの止まりきっていないは、印を除いて）", () => {
     const i = UI_JS.indexOf("var STATE_NAMES = {");

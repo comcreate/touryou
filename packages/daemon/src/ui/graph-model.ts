@@ -145,7 +145,10 @@ function flagsOf(
     return f;
   };
   for (const x of list(v.decisions, 100)) {
-    const f = at(idOf(rec(x)?.nodeId));
+    const d = rec(x);
+    // 閉じた判断（closedReason がある。破棄を決めた子のもの）は、答えを待っていない（画面のカードと同じ決め方）
+    if (d === null || d.closedReason !== undefined) continue;
+    const f = at(idOf(d.nodeId));
     if (f) f.wait = true;
   }
   for (const x of list(v.extensions, 100)) {
