@@ -1,9 +1,12 @@
 import { foldEvents, type OrchState } from "@touryou/core";
 import { afterEach, describe, expect, it } from "vitest";
+import { createConfirmationGate } from "../../src/api/confirmation-gate.js";
 import { createCredentialStore } from "../../src/api/credentials.js";
 import { type ApiServer, createApiServer } from "../../src/api/server.js";
 import { UI_JS } from "../../src/api/ui-assets.js";
 import { createUiSessionStore, type UiSessionStore } from "../../src/api/ui-session.js";
+import { EventLog } from "../../src/eventlog.js";
+import { createMemoryStore } from "../../src/memory-store.js";
 
 const HUMAN = "human-token-human-token-human-token-1234";
 
@@ -193,5 +196,82 @@ describe("画面の入口", () => {
     expect(UI_JS).toContain("ticket=([A-Za-z0-9_-]{43})");
     expect(UI_JS).toContain("'/v1/ui/session'");
     expect(UI_JS).toContain("replaceState");
+  });
+});
+
+describe("画面のセッションが通る入口", () => {
+  const sessionOf = async (url: string) => {
+    const ticket = (await (await ticketOf(url, HUMAN)).json()).value.ticket as string;
+    return (await (await exchange(url, ticket)).json()).value.session as string;
+  };
+
+  it("フックの入口（/v1/hook）は通らない", async () => {
+    const credentials = createCredentialStore({ humanToken: HUMAN });
+    server = createApiServer({
+      credentials,
+      getState: state,
+      handlers: {},
+      hook: async () => ({ allow: true }),
+    } as never);
+    const { url } = await server.listen(0);
+    const session = await sessionOf(url);
+    const res = await fetch(`${url}/v1/hook`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${session}`, "content-type": "application/json" },
+      body: JSON.stringify({ hook_event_name: "PreToolUse", session_id: "s", tool_name: "Bash" }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("取り消せない操作は、今までどおり daemon の確認待ちを通る（実行しない）", async () => {
+    const opened = EventLog.open(createMemoryStore().open(), {
+      clock: () => "2026-11-17T00:00:00Z",
+    });
+    if (!opened.ok) throw new Error(opened.error.code);
+    const lines: string[] = [];
+    const calls: unknown[] = [];
+    const gate = createConfirmationGate({
+      log: opened.value,
+      clock: () => "2026-11-17T00:00:00Z",
+      writeTerminal: (l) => lines.push(l),
+    });
+    const handlers = gate.wrap({
+      "node.purge": (r: unknown) => {
+        calls.push(r);
+        return { ok: true, value: { purged: ["a"] } };
+      },
+    } as never);
+    server = createApiServer({
+      credentials: createCredentialStore({ humanToken: HUMAN }),
+      getState: state,
+      handlers,
+    } as never);
+    const { url } = await server.listen(0);
+    const session = await sessionOf(url);
+    const res = await fetch(`${url}/v1/request`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${session}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        requestId: "11111111-1111-4111-8111-111111111111",
+        operation: "node.purge",
+        params: { nodeId: "a" },
+      }),
+    });
+    const body = (await res.json()) as { ok: boolean; error?: { code: string } };
+    expect(body.ok).toBe(false);
+    expect(body.error?.code).toBe("confirmationRequired");
+    expect(calls).toEqual([]);
+    expect(lines.length).toBe(1);
+  });
+
+  it("交換の本文は JSON だけを受ける", async () => {
+    const r = await start();
+    const ticket = (await (await ticketOf(r.url, HUMAN)).json()).value.ticket as string;
+    const res = await fetch(`${r.url}/v1/ui/session`, {
+      method: "POST",
+      headers: { "content-type": "text/plain" },
+      body: JSON.stringify({ ticket }),
+    });
+    expect(res.status).toBe(415);
   });
 });

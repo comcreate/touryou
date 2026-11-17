@@ -4,12 +4,12 @@
  * - チケット: `touryou ui` が、人間のトークンで `POST /v1/ui/ticket` からもらう。60 秒・1 回だけ・32 バイトの乱数。
  *   画面が `POST /v1/ui/session` でセッションのトークンに交換する。交換を試みたチケットは、成否によらず、その場で消す。
  * - セッションのトークン: 人間と同じ操作ができる。使わないと 1 時間・発行から最長 12 時間で切れる。`human-token` とは別物。
- * - 値そのものは持たず、SHA-256 のハッシュだけを持つ。照合はハッシュを鍵にした表で引く（値の比較は、長さのそろったハッシュを
- *   `timingSafeEqual` で行う）。
+ * - 値そのものは持たず、SHA-256 のハッシュだけを持つ。照合は、ハッシュを鍵にした表で引く（値どうしを比べないので、
+ *   比べる時間から値は分からない）。
  * - 値は、ログ・記録・画面の表示に出さない（NFR_005）。
  */
 
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 
 export interface UiSessionExpiry {
   /** チケットの期限。既定 60 秒。 */
@@ -78,12 +78,12 @@ export function createUiSessionStore(
       m.delete(oldest);
     }
   };
-  /** 表の鍵を引いたあと、ハッシュを一定時間で比べ直す（鍵の一致だけに頼らない）。 */
+  /**
+   * 値そのものではなく、SHA-256 のハッシュを鍵にして表を引く（引く時間から、値は分からない）。値の比較はしない。
+   */
   const lookup = <V>(m: Map<string, V>, value: string): string | undefined => {
-    const h = sha256(value);
-    const key = h.toString("hex");
-    if (!m.has(key)) return undefined;
-    return timingSafeEqual(Buffer.from(key, "hex"), h) ? key : undefined;
+    const key = sha256(value).toString("hex");
+    return m.has(key) ? key : undefined;
   };
 
   return {

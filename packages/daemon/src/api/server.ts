@@ -963,7 +963,7 @@ export function createApiServer(deps: ApiDeps): ApiServer {
    */
   /** 受け口の主体: ノードのトークンか、フック専用のトークン（子のノードとして扱う。ほかの入口では使えない）。 */
   const hookPrincipal = (token: string | undefined): Principal | undefined => {
-    const p = deps.hookTokensOnly === true ? undefined : authenticate(token);
+    const p = deps.hookTokensOnly === true ? undefined : deps.credentials.authenticate(token);
     if (p !== undefined) return p;
     const nodeId = deps.hookTokens?.authenticate(token);
     return nodeId === undefined ? undefined : { role: "child", nodeId };
@@ -1356,6 +1356,19 @@ export function createApiServer(deps: ApiDeps): ApiServer {
         allow: "POST",
         ...CLOSE,
       });
+      return;
+    }
+    const ctype = String(req.headers["content-type"] ?? "")
+      .split(";")[0]
+      ?.trim()
+      .toLowerCase();
+    if (ctype !== "application/json") {
+      req.resume();
+      reject(
+        res,
+        failure("unsupportedMediaType", "本文は application/json だけを受け付ける", "JSON で送る"),
+        CLOSE,
+      );
       return;
     }
     const origin = req.socket.remoteAddress ?? "unknown";

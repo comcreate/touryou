@@ -85,6 +85,8 @@ export const UI_JS = `'use strict';
   // 長く使える人間のトークンは、URL では受け取らない（#token= は効かない）。
   var token = '';
   var ticket = '';
+  // 今のトークンが、チケットから交換した画面のセッションか（切れたときの案内を変える）
+  var viaSession = false;
   var hash = window.location.hash;
   if (hash.length > 1) {
     var m = /(?:^|[#&])ticket=([A-Za-z0-9_-]{43})(?:&|$)/.exec(hash);
@@ -1033,6 +1035,10 @@ export const UI_JS = `'use strict';
     setStatus('接続中（' + (sseUp ? 'SSE' : 'ポーリング') + '・seq ' + lastView.seq + (lastView.partial ? '・一部省略' : '') + '）');
   }
   function rejectToken(message) {
+    if (viaSession) {
+      viaSession = false;
+      message = '画面のセッションが切れました（使わずに 1 時間たった・開いてから 12 時間たった・daemon を起動し直した など）。/touryou:ui（または Mac のターミナルで touryou ui）で開き直してください';
+    }
     token = ''; etag = ''; lastView = null; generation += 1; sseUp = false; keptList = null; purgeSignature = null; pending = null;
     if (controller) controller.abort();
     document.getElementById('approvals').hidden = true; codeDrafts.clear(); approvalErrors.clear();
@@ -1158,6 +1164,7 @@ export const UI_JS = `'use strict';
     ev.preventDefault();
     var input = document.getElementById('token');
     token = input.value.trim();
+    viaSession = false;
     input.value = '';
     start();
   });
@@ -1172,7 +1179,7 @@ export const UI_JS = `'use strict';
     })
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (body) {
-        if (body && body.ok && body.value && typeof body.value.session === 'string') token = body.value.session;
+        if (body && body.ok && body.value && typeof body.value.session === 'string') { token = body.value.session; viaSession = true; }
       })
       .catch(function () {});
   }
