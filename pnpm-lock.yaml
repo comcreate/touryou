@@ -76,6 +76,15 @@ importers:
       '@types/node':
         specifier: 22.20.5
         version: 22.20.5
+      rete:
+        specifier: 2.0.6
+        version: 2.0.6
+      rete-area-plugin:
+        specifier: 2.3.2
+        version: 2.3.2(rete@2.0.6)
+      rete-readonly-plugin:
+        specifier: 2.0.2
+        version: 2.0.2(rete-area-plugin@2.3.2(rete@2.0.6))(rete-connection-plugin@2.0.5(rete-area-plugin@2.3.2(rete@2.0.6))(rete@2.0.6))(rete@2.0.6)
 
   packages/mcp:
     dependencies:
@@ -98,6 +107,10 @@ packages:
   '@anthropic-ai/mcpb@2.1.2':
     resolution: {integrity: sha512-goRbBC8ySo7SWb7tRzr+tL6FxDc4JPTRCdgfD2omba7freofvjq5rom1lBnYHZHo6Mizs1jAHJeN53aZbDoy8A==}
     hasBin: true
+
+  '@babel/runtime@7.29.10':
+    resolution: {integrity: sha512-NpugTzbKgGrNe45Ui32cN8vCFFMxVtP/9rtfwv0nP5FRDAjvYBxJcLVpYA9mr1jxP6cnIT7x9LUzuDTbWYYNRA==}
+    engines: {node: '>=6.9.0'}
 
   '@biomejs/biome@2.5.15':
     resolution: {integrity: sha512-WZTW4slm/pdkh92K6t/3aEN++44JD1PQ7squ7RCMLI1flHGl43DVOIGXvCjHiZgBMO1V4uYxoFNtqrIA4qGuIQ==}
@@ -1169,6 +1182,27 @@ packages:
     resolution: {integrity: sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==}
     engines: {node: '>=0.10.0'}
 
+  rete-area-plugin@2.3.2:
+    resolution: {integrity: sha512-s7OrCz6xNwVl8EaJ7tXnJVQD9nbd+JAnf82qx/UDweRV86Q1qj2+nT8XkD5m1gSnvSZQqTlMptSiWUrouTEO+w==}
+    peerDependencies:
+      rete: ^2.0.0
+
+  rete-connection-plugin@2.0.5:
+    resolution: {integrity: sha512-KFtlOyEJRc0y9STVgo2T+t+j9u5fxiTxbyzPbMCm0uqncb3b8d2ABDIzvWoNo5zQAh2Oz/OvlUovupbzrGzpSg==}
+    peerDependencies:
+      rete: ^2.0.1
+      rete-area-plugin: ^2.0.0
+
+  rete-readonly-plugin@2.0.2:
+    resolution: {integrity: sha512-+ap6vSzXxOOmopoZhwJQe2Qh82jIG7Nki5wBQnKvN572QSkP0Yr/KSvOMDCh89a+gJz1DRAIjzbhio3sCAhZ9g==}
+    peerDependencies:
+      rete: ^2.0.1
+      rete-area-plugin: ^2.0.0
+      rete-connection-plugin: ^2.0.0
+
+  rete@2.0.6:
+    resolution: {integrity: sha512-kPmlKCGFES2VWtY7Y7SCB8ZeXRMsgX5deza9cu4OwmfM/ZUimd461kC3hRyccoyVxE4POlHUx0gg2jcGfusHFg==}
+
   rolldown@1.2.14:
     resolution: {integrity: sha512-eTBTTqMR6uHKLgcUqpJP8ntzDI6V4LYA8negAMBEI7gkgVvOdrx6VsvS2Ym+83KhOPdLCHWJu0w7UQFJZhHKNw==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -1421,6 +1455,8 @@ snapshots:
       zod-to-json-schema: 3.25.2(zod@3.25.76)
     transitivePeerDependencies:
       - supports-color
+
+  '@babel/runtime@7.29.10': {}
 
   '@biomejs/biome@2.5.15':
     optionalDependencies:
@@ -2293,6 +2329,28 @@ snapshots:
       unpipe: 1.0.0
 
   require-from-string@2.0.2: {}
+
+  rete-area-plugin@2.3.2(rete@2.0.6):
+    dependencies:
+      '@babel/runtime': 7.29.10
+      rete: 2.0.6
+
+  rete-connection-plugin@2.0.5(rete-area-plugin@2.3.2(rete@2.0.6))(rete@2.0.6):
+    dependencies:
+      '@babel/runtime': 7.29.10
+      rete: 2.0.6
+      rete-area-plugin: 2.3.2(rete@2.0.6)
+
+  rete-readonly-plugin@2.0.2(rete-area-plugin@2.3.2(rete@2.0.6))(rete-connection-plugin@2.0.5(rete-area-plugin@2.3.2(rete@2.0.6))(rete@2.0.6))(rete@2.0.6):
+    dependencies:
+      '@babel/runtime': 7.29.10
+      rete: 2.0.6
+      rete-area-plugin: 2.3.2(rete@2.0.6)
+      rete-connection-plugin: 2.0.5(rete-area-plugin@2.3.2(rete@2.0.6))(rete@2.0.6)
+
+  rete@2.0.6:
+    dependencies:
+      '@babel/runtime': 7.29.10
 
   rolldown@1.2.14:
     dependencies:

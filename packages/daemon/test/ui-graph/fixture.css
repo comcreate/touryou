@@ -1,0 +1,112 @@
+/* 試作のページだけの見た目（試験の中だけで使う。本番の見た目は PR-5 で app.css に入れる） */
+body {
+  margin: 0;
+  user-select: none;
+  background: #faf8f3;
+  font:
+    13px system-ui,
+    sans-serif;
+}
+#g {
+  position: relative;
+  width: 1100px;
+  height: 700px;
+  overflow: hidden;
+}
+.gnode {
+  box-sizing: border-box;
+  width: 220px;
+  height: 80px;
+  padding: 10px 14px;
+  border: 1px solid #c9c2b2;
+  border-radius: 12px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gnode.b-turn {
+  border-left: 5px solid #d9822b;
+}
+.gnode.b-finished {
+  opacity: 0.55;
+}
+.gt {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gs {
+  color: #6b6457;
+}
+.glink {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.twig {
+  fill: none;
+  stroke: #8a8270;
+  stroke-width: 1.5;
+  stroke-dasharray: 2 5;
+  opacity: 0.6;
+}
+.line {
+  fill: none;
+  stroke: #2f4a7a;
+  stroke-width: 2.5;
+  stroke-dasharray: 6 8;
+}
+.tip {
+  fill: #2f4a7a;
+}
+.line.g-sent {
+  animation: flow 0.8s linear infinite;
+}
+.line.g-unknown {
+  animation: flow 3s linear infinite;
+  stroke-dasharray: 3 6;
+}
+.line.g-delivered {
+  animation: flow 2.4s linear infinite;
+}
+.line.g-done {
+  opacity: 0.5;
+}
+.mlabel {
+  font-size: 11px;
+  fill: #2f4a7a;
+}
+.pip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2f4a7a;
+  offset-rotate: 0deg;
+  animation: travel 1.6s linear infinite;
+}
+@keyframes flow {
+  to {
+    stroke-dashoffset: -14;
+  }
+}
+@keyframes travel {
+  from {
+    offset-distance: 0%;
+  }
+  to {
+    offset-distance: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .line,
+  .pip {
+    animation: none;
+  }
+}
