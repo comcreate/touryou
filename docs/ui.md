@@ -12,12 +12,13 @@ daemon の窓口が、状態を見るための HTML 画面を配る。**状態�
 | --- | --- | --- |
 | `GET /ui` | なし | HTML（状態を含まない） |
 | `GET /ui/app.js`・`GET /ui/app.css` | なし | 画面の JS・CSS |
+| `GET /ui/graph.js` | なし | 関係図の束（#89。下の「関係図の束」。画面から呼ぶのは、作り直しのあと） |
 | `GET /v1/ui/state` | 人間のトークン・画面のセッションだけ（それ以外は 403） | 表示モデル（`uiViewOf`。`{ok:true,value}`） |
 | `GET /v1/events` | 人間のトークン・画面のセッションだけ（それ以外は 403） | SSE（変更の通知。下の「更新（SSE）」） |
 | `POST /v1/ui/ticket` | `human-token` だけ（画面のセッション・ノードは 403） | 画面を開くチケット `{ok:true,value:{ticket}}`（60 秒・1 回だけ） |
 | `POST /v1/ui/session` | なし（本文 `{ticket}` が資格） | 画面のセッションのトークン `{ok:true,value:{session}}` |
 
-**静的な資産（`/ui`・`/ui/app.js`・`/ui/app.css`）には、回数の制限をかけない**（状態を含まず、認証もないため。`/v1/ui/state` は、主体ごとの回数の制限の対象）。
+**静的な資産（`/ui`・`/ui/app.js`・`/ui/app.css`・`/ui/graph.js`）には、回数の制限をかけない**（状態を含まず、認証もないため。`/v1/ui/state` は、主体ごとの回数の制限の対象）。
 
 どれも、既存の Host・Origin の検査（`127.0.0.1:<port>`・`localhost:<port>` だけ。DNS rebinding 対策）を通る。待ち受けは 127.0.0.1 だけ（変更なし）。
 
@@ -137,6 +138,22 @@ daemon の窓口が、状態を見るための HTML 画面を配る。**状態�
 - 関係図（横向きの木・子ごとの端子・角丸の折れ線・枝の上の道が上り〔←〕・下の道が下り〔→〕・やり取りの段 `sent`・`delivered`・`done`）と、木の一覧の切り替え。線は藍 1 色の破線（新しいほど濃い。柿色は答え待ちだけ）、箱は作業の状態の 3 段（印と文字を添える）、動きは段に結びつける（`sent` 速く・玉が走る／`delivered` ゆっくり／`done` 止まる）。子の数の上限はない。
 - あとで足す：受信箱の片付け（#99）、統合の受け取りの記録（#102。それまで子 → 親の「届いた」は分からないと示す）。
 - 守りの変更のうち、図の分（PR-5）：`/ui/graph.js` を足す（`rete`・`rete-area-plugin`・`rete-readonly-plugin` を束ね、描画のプラグインは使わない）。CSP は変えない。SVG を作るのは `svgEl` の 1 か所、動く玉の `offset-path` も 1 か所。自前のコードはいまの走査に、束ねたライブラリは禁止の API の不在の試験にかける。
+
+### 関係図の束（`/ui/graph.js`）
+
+- **中身**：自前の描き手（`packages/daemon/src/ui/`）と `rete`・`rete-area-plugin`・`rete-readonly-plugin`（版は完全に固定。開発の依存）を、esbuild で 1 つにしたもの。`scripts/ui-graph-bundle.mjs --write` で、`packages/daemon/src/api/ui-graph-js.ts` の `UI_GRAPH_JS` を作り直す（手で直さない）。daemon のビルドに入り、ほかの資産と同じヘッダー（CSP を含む）で配る。
+- **外に出すもの**：`window.touryouGraph` の 1 つだけ。中身は `draw(host, view)`（表示モデルから、整えた文字・確かめた ID・数だけを作り直して描く。前の図は消す）と `destroy()`（図・合図・玉を片付ける）。
+- **図の形**：横向きの木（根が左）。人とのやり取り（判断・範囲の頼み・答え・根の報告。段を飛ばすもの）は、木の右に置く「人」の箱へ、行の間と縦の通り道を通して描く。人の答えを待つものだけ柿色。ノードどうしで段を飛ばすやり取りは描かない。
+- **束の試験**（`packages/daemon/test/ui/scan.test.ts`）：禁じた API の不在（HTML を解釈する名前は、中身を消す `.innerHTML=""` の形だけ）・`createElementNS` は自前の 1 か所・外に出す名前・ライセンスの表示・`UI_GRAPH_JS` が lockfile の版から束ね直したものと一致すること・gzip 20 KB 以下。
+- **ブラウザの試験**（`browser.test.ts`・`real-ui.test.ts`）：Playwright を依存に加えず、環境にあるもの（`TOURYOU_PLAYWRIGHT` のパスか `playwright`）を使う。無ければ飛ばす。
+  - **いまの CI では飛ばされる**（Playwright がない）。手元では、`TOURYOU_PLAYWRIGHT=$(npm root -g)/playwright pnpm --filter @touryou/daemon test` で流す。
+  - **CI で流す道（案。まだ入れていない）**：`ci.yml` の ubuntu のジョブにだけ、版を固定した Playwright（公開から 14 日以上）を、`npx --yes playwright@<版> install --with-deps chromium` で入れる手順を足し、`TOURYOU_PLAYWRIGHT` をそのパスに向ける。依存（`package.json`）には加えない。入れるかどうかは、利用者が決める。
+- **手での版上げ**（npm は Dependabot の外）：
+  1. `packages/daemon/package.json` の 3 つの版を、公開から 14 日以上たった版に、`^`・`~` なしで上げる（`pnpm --filter @touryou/daemon add -D -E <名前>@<版>`）。
+  2. ライセンス（MIT のままか）と、推移の依存（いまは `@babel/runtime` だけ）を確かめる。
+  3. `node scripts/ui-graph-bundle.mjs --write` で束を作り直し、`bash scripts/check.sh` を流す（禁止の API・ライセンスの表示・一致の試験が落ちたら、中身を確かめる。決まりは緩めない）。
+  4. 手元で Playwright の試験を流し、CSP の違反がないことを確かめる。
+  5. 大きさ（`node scripts/ui-graph-bundle.mjs` が出す最小化・gzip）を PR に書く。
 
 ## XSS・CSP
 

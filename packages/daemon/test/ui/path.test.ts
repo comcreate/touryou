@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { BOX_W, COL_GAP, layoutOf } from "../../src/ui/graph-layout.js";
+import { BOX_H, BOX_W, COL_GAP, layoutOf, ROW_H } from "../../src/ui/graph-layout.js";
 import { graphModelOf } from "../../src/ui/graph-model.js";
-import { bendXOf, LANE_GAP, laneOf, pathD, twigOf } from "../../src/ui/graph-path.js";
+import {
+  bendXOf,
+  gapRowAbove,
+  humanColumnOf,
+  humanLaneOf,
+  LANE_GAP,
+  laneOf,
+  pathD,
+  roundedPath,
+  twigOf,
+} from "../../src/ui/graph-path.js";
 import { PATH_PATTERN, svgAttrValue } from "../../src/ui/svg-el.js";
 
 const must = <T>(x: T | undefined | null): T => {
@@ -127,7 +137,16 @@ describe("graphModelOf（図に渡す値の作り直し）", () => {
     expect(m.nodes[1]?.sub).toBe("作業・running");
     expect(m.nodes[1]?.band).toBe("turn");
     expect(m.lanes).toEqual([
-      { parent: "root", child: "a", dir: "up", stage: "sent", unknown: true, label: "報告" },
+      {
+        parent: "root",
+        child: "a",
+        dir: "up",
+        stage: "sent",
+        unknown: true,
+        label: "報告",
+        human: false,
+        waiting: false,
+      },
       {
         parent: "root",
         child: "a",
@@ -135,8 +154,108 @@ describe("graphModelOf（図に渡す値の作り直し）", () => {
         stage: "delivered",
         unknown: false,
         label: "やり取り",
+        human: false,
+        waiting: false,
       },
     ]);
     expect(graphModelOf(null)).toEqual({ nodes: [], lanes: [] });
+  });
+});
+
+describe("人とのやり取り（段を飛ばす。木の外の「人」の箱）", () => {
+  it("graphModelOf：人との上り・下りは、根でも孫でも残す。答え待ちの判断・範囲の頼みだけ waiting", () => {
+    const m = graphModelOf({
+      nodes: [
+        { id: "root", parentId: null },
+        { id: "a", parentId: "root" },
+        { id: "g", parentId: "a" },
+      ],
+      flows: [
+        {
+          dir: "up",
+          from: "g",
+          to: "human",
+          stage: "sent",
+          kind: "decision",
+          deliveryUnknown: true,
+        },
+        { dir: "down", from: "human", to: "g", stage: "sent", kind: "answer" },
+        { dir: "up", from: "root", to: "human", stage: "done", kind: "report" },
+        { dir: "up", from: "a", to: "human", stage: "done", kind: "extension" },
+        { dir: "up", from: "human", to: "root", stage: "sent", kind: "report" }, // 人が子の側：落とす
+        { dir: "down", from: "root", to: "g", stage: "sent", kind: "instruction" }, // ノードどうしの段飛ばし：落とす
+        { dir: "up", from: "nobody", to: "human", stage: "sent", kind: "report" }, // 知らないノード：落とす
+      ],
+    });
+    expect(m.lanes.map((l) => [l.child, l.dir, l.human, l.waiting])).toEqual([
+      ["g", "up", true, true],
+      ["g", "down", true, false],
+      ["root", "up", true, false],
+      ["a", "up", true, false],
+    ]);
+  });
+
+  it("gapRowAbove：箱の上の、いちばん近い行の間（箱のない帯）", () => {
+    const L = layoutOf([
+      { id: "r", parentId: null },
+      { id: "a", parentId: "r" },
+      { id: "b", parentId: "r" },
+    ]);
+    for (const p of L.pos.values()) {
+      const g = gapRowAbove(p.y);
+      expect(g).toBeLessThan(p.y);
+      expect(p.y - g).toBeLessThanOrEqual(ROW_H);
+      // 同じ列と、右の列の葉（行に並ぶ箱）には入らない（右の列の親は、子の真ん中の高さなので、当たることがある）
+      const leaves = new Set(["a", "b"]);
+      for (const [id, q] of L.pos)
+        if (q.x === p.x || (q.x > p.x && leaves.has(id)))
+          expect(g < q.y || g > q.y + BOX_H, id).toBe(true);
+    }
+  });
+
+  it("humanLaneOf：上りは人の箱の左を右向きに指し、下りはノードの箱の上を下向きに指す。d は許した形", () => {
+    const N = { x: 400, y: 144, cy: 184, depth: 1 };
+    const H = { x: 1000, y: 40, cy: 80, depth: -1 };
+    const up = humanLaneOf(N, H, 900, "up");
+    const down = humanLaneOf(N, H, 900, "down");
+    for (const l of [up, down]) {
+      expect(l.d).toMatch(PATH_PATTERN);
+      expect(l.tip).toMatch(PATH_PATTERN);
+    }
+    expect(nums(up.tip).slice(0, 2)).toEqual([H.x, H.cy - LANE_GAP]);
+    expect(nums(down.tip)[1]).toBe(N.y);
+    expect(nums(up.d).slice(0, 2)).toEqual([N.x + BOX_W - 24, N.y]); // 箱の上の辺から出る
+    expect(nums(down.d).slice(0, 2)).toEqual([H.x, H.cy + LANE_GAP]); // 人の箱から出る
+  });
+
+  it("roundedPath：点が 2 つなら直線。折れ目は Q で丸める", () => {
+    expect(
+      roundedPath([
+        [0, 0],
+        [10, 0],
+      ]),
+    ).toBe("M 0 0 L 10 0");
+    expect(
+      roundedPath([
+        [0, 0],
+        [20, 0],
+        [20, 20],
+      ]),
+    ).toMatch(/^M 0 0 L 12 0 Q 20 0 20 8 L 20 20$/);
+    expect(() => roundedPath([[0, 0]])).toThrow();
+  });
+
+  it("humanColumnOf：通り道の縦の線（上りと下り）の x は、どの箱の範囲にも入らない。人の箱は、どの箱とも重ならない", () => {
+    const xs: { id: string; parentId: string | null }[] = [{ id: "r", parentId: null }];
+    for (let i = 0; i < 6; i++) xs.push({ id: `k${i}`, parentId: i < 3 ? "r" : `k${i - 3}` });
+    for (let i = 0; i < 4; i++) xs.push({ id: `g${i}`, parentId: "k3" });
+    const L = layoutOf(xs);
+    const col = humanColumnOf(L, xs.length);
+    const boxes = [...L.pos.values()];
+    for (let slot = 0; slot < xs.length; slot++)
+      for (const x of [col.corridorX(slot), col.corridorX(slot) + LANE_GAP])
+        for (const b of boxes) expect(x < b.x || x > b.x + BOX_W).toBe(true);
+    for (const b of boxes) expect(col.human.x).toBeGreaterThan(b.x + BOX_W);
+    expect(col.width).toBe(col.human.x + BOX_W + 40);
   });
 });

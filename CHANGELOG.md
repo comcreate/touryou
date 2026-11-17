@@ -12,6 +12,7 @@
 
 ### 内部の変更
 
+- **関係図の束 `/ui/graph.js` を daemon が配るようにした**（#89 の PR-5 の前半）: `UI_GRAPH_JS` を daemon のビルドに入れ、ほかの画面の資産と同じヘッダー（CSP は変えない）で配る。図に、木の外の「人」の箱と、人とのやり取り（段を飛ばすもの）の線を足した。本物の `/ui` を開いて束を読む Playwright の試験の土台と、手での版上げ・CI で Playwright を流す道（案）を `docs/ui.md` に書いた。画面から図を呼ぶのは、作り直し（PR-4）のあと。
 - **状態画面の関係図の試作（R0：Rete.js を描画のプラグインなしで使い、箱と線は自前で描く）を足した**（#89 の PR-3）: `rete`・`rete-area-plugin`・`rete-readonly-plugin`（版は完全に固定・開発の依存）を esbuild で 1 つの束にする `scripts/ui-graph-bundle.mjs`、自前の描き手・配置（`packages/daemon/src/ui/`）と、その走査・配置・束の禁止の API の不在・CSP の下で動くこと（Playwright）の試験。配布物の画面には、まだ出さない。
 - **手で marketplace を足した人には project の marketplace の固定が効かないことを、文書に書いた**（#100）: user の設定の項目が勝ち `main` に追従すること、固定したいときの手順（user の項目に `ref` を足し、固定した参照で `marketplace add` をし直す。版上げのたびに直す）、`marketplace remove` は plugin とそのデータを消すので使わないことを、`docs/release.md` に書き、`README.md`・`docs/plugin.md` からそこを指した。
 - **project 設定の marketplace の参照を、変わらない tag `marketplace-v<版>` に固定した**（#90）: `.claude/settings.json` の `extraKnownMarketplaces` に `ref: marketplace-v0.1.2` を足した（これまでは `main` に追従していた）。`release.yml` の `marketplace-self` の PR が、`marketplace.json` と一緒に `ref` も新しい版に書き換え、マージのあとに管理者が手元から tag を付ける（`docs/release.md` の 5-a）。tag の決まり（ruleset `release-tags`）の対象に `refs/tags/marketplace-v*` を足し、管理者だけが作れ、付け直し・削除できないようにする。PR の CI で `ref` の名前が版と合うかを、`marketplace-ref.yml` で、tag の push のときは tag の中の版が tag 名と合うかを、日に 1 回は `main` の `ref` の tag があり中の版が合うかを照らす（`scripts/check-marketplace-ref.sh`）。

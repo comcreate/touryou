@@ -58,6 +58,26 @@ var VIEW = {
       deliveryUnknown: true,
     },
     { id: "f6", kind: "instruction", dir: "down", from: "root", to: "d", stage: "done" },
+    // 人とのやり取り（段を飛ばす）
+    {
+      id: "h1",
+      kind: "decision",
+      dir: "up",
+      from: "c",
+      to: "human",
+      stage: "sent",
+      deliveryUnknown: true,
+    },
+    {
+      id: "h2",
+      kind: "answer",
+      dir: "down",
+      from: "human",
+      to: "a",
+      stage: "sent",
+      deliveryUnknown: true,
+    },
+    { id: "h3", kind: "report", dir: "up", from: "root", to: "human", stage: "done" },
   ],
 };
 window.touryouGraph.draw(document.getElementById("g"), VIEW).then(

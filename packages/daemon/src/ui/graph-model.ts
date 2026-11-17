@@ -2,7 +2,7 @@
  * 関係図に渡す値の作り直し（#89。純粋な関数）。表示モデル（形を信じない）から、整えた文字・確かめた ID・数だけを作る。
  */
 import { ID_PATTERN } from "../../../core/src/ids.js";
-import { uiText } from "../../../core/src/ui-view.js";
+import { UI_HUMAN, uiText } from "../../../core/src/ui-view.js";
 import type { Dir } from "./graph-path.js";
 
 export const STAGES = ["sent", "delivered", "done"] as const;
@@ -11,6 +11,8 @@ const ROLE_NAMES: Readonly<Record<string, string>> = {
   integrator: "統合",
   implement: "実装",
   review: "レビュー",
+  investigate: "調査",
+  merge: "マージ",
 };
 const BANDS = ["turn", "running", "finished"] as const;
 type Band = (typeof BANDS)[number];
@@ -31,13 +33,21 @@ export interface GraphNode {
   readonly sub: string;
   readonly band: Band;
 }
+/** 人（ノードでない相手）。木の外に 1 つの箱として置く。 */
+export const HUMAN = UI_HUMAN;
+
 export interface GraphLane {
+  /** 親のノード ID。人とのやり取りなら `HUMAN`（`human` が true）。 */
   readonly parent: string;
   readonly child: string;
   readonly dir: Dir;
   readonly stage: Stage;
   readonly unknown: boolean;
   readonly label: string;
+  /** 人とのやり取り（段を飛ばす。木の外の「人」の箱から、通り道を通して描く）。 */
+  readonly human: boolean;
+  /** 人の答えを待っている（判断・範囲の頼みが、まだ済んでいない）。柿色で描く。 */
+  readonly waiting: boolean;
 }
 export interface GraphModel {
   readonly nodes: readonly GraphNode[];
@@ -83,13 +93,16 @@ export function graphModelOf(view: unknown): GraphModel {
   for (const x of list(v.flows, 200)) {
     const f = rec(x);
     if (f === null) continue;
-    const from = idOf(f.from);
-    const to = idOf(f.to);
+    const from = f.from === HUMAN ? HUMAN : idOf(f.from);
+    const to = f.to === HUMAN ? HUMAN : idOf(f.to);
     const dir = f.dir === "up" || f.dir === "down" ? f.dir : null;
     const stage = STAGES.find((s) => s === f.stage);
     if (from === null || to === null || dir === null || stage === undefined) continue;
     const [parent, child] = dir === "up" ? [to, from] : [from, to];
-    if (parentOf.get(child) !== parent) continue; // 段を飛ばすやり取りは、この試作では描かない
+    const human = parent === HUMAN;
+    if (child === HUMAN || !known.has(child)) continue;
+    // 人とのやり取りは、根でも孫でも描く（段を飛ばす）。ノードどうしは、親子の枝だけ
+    if (!human && parentOf.get(child) !== parent) continue;
     const key = `${parent} ${child} ${dir}`;
     if (taken.has(key)) continue;
     taken.add(key);
@@ -97,7 +110,17 @@ export function graphModelOf(view: unknown): GraphModel {
       typeof f.kind === "string" && own(KIND_NAMES, f.kind)
         ? (KIND_NAMES[f.kind] as string)
         : "やり取り";
-    lanes.push({ parent, child, dir, stage, unknown: f.deliveryUnknown === true, label: kind });
+    const asks = f.kind === "decision" || f.kind === "extension";
+    lanes.push({
+      parent,
+      child,
+      dir,
+      stage,
+      unknown: f.deliveryUnknown === true,
+      label: kind,
+      human,
+      waiting: human && asks && dir === "up" && stage !== "done",
+    });
   }
   return { nodes, lanes };
 }

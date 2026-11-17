@@ -1,9 +1,8 @@
 /**
- * 関係図（`/ui/graph.js`）の束ね（#89 の試作）。esbuild で、自前の入口（`packages/daemon/src/ui/graph-entry.ts`）と
+ * 関係図（`/ui/graph.js`）の束ね（#89）。esbuild で、自前の入口（`packages/daemon/src/ui/graph-entry.ts`）と
  * rete・rete-area-plugin・rete-readonly-plugin を 1 つの IIFE にする（グローバルに出す名前は `touryouGraph` の 1 つ。`draw`・`destroy` だけ）。
- * いまは試験の中だけで使う（配布物の画面には、まだ出さない。PR-5 で配る）。
- * 束は `UI_GRAPH_JS`（`packages/daemon/ui-graph/ui-graph-js.ts` の文字列）として置き、試験で、lockfile の版から作り直したものと一致することを確かめる。
- * 使い方: node scripts/ui-graph-bundle.mjs（大きさを出す）／ node scripts/ui-graph-bundle.mjs --write（束を作り直して置く）
+ * 束は `UI_GRAPH_JS`（`packages/daemon/src/api/ui-graph-js.ts` の文字列。daemon のビルドに入り、`GET /ui/graph.js` で配る）として置き、試験で、lockfile の版から作り直したものと一致することを確かめる。
+ * 使い方: node scripts/ui-graph-bundle.mjs（大きさを出す）／ --write（束を作り直して置く）／ --check（置いてある束と比べ、違えば終了コード 1。release でビルドの前に流す）
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
@@ -37,7 +36,7 @@ function noGlobalRegenerator(hits) {
 
 const DAEMON = join(dirname(fileURLToPath(import.meta.url)), "..", "packages", "daemon");
 
-export const GRAPH_JS_PATH = join(DAEMON, "ui-graph", "ui-graph-js.ts");
+export const GRAPH_JS_PATH = join(DAEMON, "src", "api", "ui-graph-js.ts");
 
 /** 束を、`UI_GRAPH_JS` を出す TS の文字にする。 */
 export const graphModule = (js) =>
@@ -102,6 +101,12 @@ export async function bundleGraph({ minify = true } = {}) {
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const js = await bundleGraph();
   if (process.argv.includes("--write")) writeFileSync(GRAPH_JS_PATH, graphModule(js));
+  if (process.argv.includes("--check") && readFileSync(GRAPH_JS_PATH, "utf8") !== graphModule(js)) {
+    console.error(
+      "UI_GRAPH_JS が、lockfile の版から束ね直したものと違う（node scripts/ui-graph-bundle.mjs --write で作り直す）",
+    );
+    process.exit(1);
+  }
   const raw = Buffer.byteLength(js);
   console.log(
     `graph.js: ${(raw / 1024).toFixed(1)} KB（最小化）・${(gzipSync(js).length / 1024).toFixed(1)} KB（gzip）`,

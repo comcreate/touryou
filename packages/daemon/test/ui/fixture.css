@@ -110,3 +110,16 @@ body {
     animation: none;
   }
 }
+.gnode.b-human {
+  border-style: dashed;
+}
+.line.human {
+  stroke: #5a4a8a;
+}
+.line.wait {
+  stroke: #d9822b;
+  stroke-width: 3.5;
+}
+.tip.wait {
+  fill: #d9822b;
+}

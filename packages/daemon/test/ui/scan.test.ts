@@ -4,7 +4,7 @@ import { runInNewContext } from "node:vm";
 import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
 import { bundleGraph, GRAPH_JS_PATH, graphModule } from "../../../../scripts/ui-graph-bundle.mjs";
-import { UI_GRAPH_JS } from "../../ui-graph/ui-graph-js.js";
+import { UI_GRAPH_JS } from "../../src/api/ui-graph-js.js";
 
 const DIR = new URL("../../src/ui/", import.meta.url);
 const files = readdirSync(DIR).filter((f) => f.endsWith(".ts"));

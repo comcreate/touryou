@@ -5,65 +5,11 @@
  */
 import { readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
-import { createRequire } from "node:module";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { bundleGraph } from "../../../../scripts/ui-graph-bundle.mjs";
 import { UI_HEADERS } from "../../src/api/ui-assets.js";
-
-interface Box {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-interface Loc {
-  count(): Promise<number>;
-  textContent(): Promise<string | null>;
-  boundingBox(): Promise<Box | null>;
-}
-interface Msg {
-  type(): string;
-  text(): string;
-}
-interface Page {
-  on(event: "console", f: (m: Msg) => void): void;
-  on(event: "pageerror", f: (e: Error) => void): void;
-  addInitScript(f: () => void): Promise<void>;
-  goto(url: string): Promise<unknown>;
-  waitForSelector(s: string): Promise<unknown>;
-  waitForTimeout(ms: number): Promise<void>;
-  evaluate<R, A = undefined>(f: (a: A) => R, a?: A): Promise<R>;
-  locator(s: string): Loc;
-  screenshot(o: { path: string }): Promise<unknown>;
-  emulateMedia(o: { reducedMotion: "reduce" | "no-preference" }): Promise<void>;
-  request: { get(url: string): Promise<{ headers(): Record<string, string> }> };
-  mouse: {
-    move(x: number, y: number, o?: { steps: number }): Promise<void>;
-    down(): Promise<void>;
-    up(): Promise<void>;
-    wheel(dx: number, dy: number): Promise<void>;
-  };
-}
-interface Browser {
-  newPage(o: { viewport: { width: number; height: number } }): Promise<Page>;
-  close(): Promise<void>;
-}
-type Pw = { chromium: { launch(): Promise<Browser> } };
-type Win = Window & { __csp?: string[] };
-const require = createRequire(import.meta.url);
-const pw: Pw | null = (() => {
-  try {
-    return require(process.env.TOURYOU_PLAYWRIGHT ?? "playwright") as Pw;
-  } catch {
-    return null;
-  }
-})();
-
-const must = <T>(x: T | null): T => {
-  if (x === null) throw new Error("missing");
-  return x;
-};
+import { type Browser, must, type Page, type Pw, pw, type Win } from "./playwright.js";
 
 const HTML =
   '<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>graph</title>' +
@@ -132,9 +78,11 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
   });
 
   it("箱と線が描かれる。文字は textContent（差し込まれた HTML は要素にならない）", async () => {
-    expect(await page.locator(".gnode").count()).toBe(7);
-    expect(await page.locator("svg.glink path.line").count()).toBe(6);
-    expect(await page.locator("svg.glink path.tip").count()).toBe(6);
+    expect(await page.locator(".gnode").count()).toBe(8); // 7 つのノードと「人」の箱
+    expect(await page.locator("svg.glink path.line").count()).toBe(9);
+    expect(await page.locator("svg.glink path.line.human").count()).toBe(3);
+    expect(await page.locator("svg.glink path.line.wait").count()).toBe(1); // 答え待ちの判断だけ
+    expect(await page.locator("svg.glink path.tip").count()).toBe(9);
     expect(await page.locator("svg.glink path.twig").count()).toBe(1); // やり取りのない子 e
     expect(await page.locator("#g img, #g script, #g style, #g foreignObject").count()).toBe(0);
     expect(await page.locator('.gnode[data-id="a"] .gt').textContent()).toContain("<img src=x");

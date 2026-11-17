@@ -15,6 +15,8 @@ export const SVG_CLASSES: ReadonlySet<string> = new Set([
   "mlabel",
   "up",
   "down",
+  "human",
+  "wait",
   "g-sent",
   "g-unknown",
   "g-delivered",

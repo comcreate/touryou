@@ -2,7 +2,7 @@
  * 関係図の線（#89。設計の下書き 7 節）。`d` は数だけで組む（命令 M・L・Q・Z）。
  * 動く玉の `offset-path` を設定するのも、この 1 か所（`setRunnerPath`）だけ。
  */
-import { BOX_W, type LayoutPos } from "./graph-layout.js";
+import { BOX_H, BOX_W, type Layout, type LayoutPos, MARGIN, ROW_H } from "./graph-layout.js";
 import { PATH_PATTERN } from "./svg-el.js";
 
 /** 上りと下りの道を、枝の中心から上下にずらす幅。 */
@@ -153,6 +153,105 @@ export function bendXOf(P: LayoutPos, kids: readonly LayoutPos[], colGap: number
     out[o.i] = start + rank * step;
   }
   return out;
+}
+
+/** 点の並び（縦と横の線だけ）を、角を丸めた折れ線の `d` にする。 */
+export function roundedPath(pts: readonly (readonly [number, number])[], radius = RADIUS): string {
+  if (pts.length < 2) throw new Error("path: points");
+  const first = pts[0] as readonly [number, number];
+  const cmds: [string, ...number[]][] = [["M", first[0], first[1]]];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [px, py] = pts[i - 1] as readonly [number, number];
+    const [x, y] = pts[i] as readonly [number, number];
+    const [nx, ny] = pts[i + 1] as readonly [number, number];
+    const inLen = Math.hypot(x - px, y - py);
+    const outLen = Math.hypot(nx - x, ny - y);
+    const r = Math.min(radius, inLen / 2, outLen / 2);
+    if (r < 0.5) {
+      cmds.push(["L", x, y]);
+      continue;
+    }
+    cmds.push(["L", x - ((x - px) / inLen) * r, y - ((y - py) / inLen) * r]);
+    cmds.push(["Q", x, y, x + ((nx - x) / outLen) * r, y + ((ny - y) / outLen) * r]);
+  }
+  const last = pts[pts.length - 1] as readonly [number, number];
+  cmds.push(["L", last[0], last[1]]);
+  return pathD(cmds);
+}
+
+/** 箱の上の辺より上で、いちばん近い行の間（葉の行と行のあいだの、箱のない帯）の真ん中の y。 */
+export function gapRowAbove(top: number): number {
+  const half = (ROW_H - BOX_H) / 2;
+  const k = Math.floor((top - MARGIN + half - 4) / ROW_H);
+  return MARGIN - half + k * ROW_H;
+}
+
+/** 矢印の三角。先が (x, y) で、`to` の向き（右・下）を指す。 */
+function tipAt(x: number, y: number, to: "right" | "down"): string {
+  const b = ARROW + 2;
+  return to === "right"
+    ? pathD([["M", x, y], ["L", x - b, y - 5], ["L", x - b, y + 5], ["Z"]])
+    : pathD([["M", x, y], ["L", x - 5, y - b], ["L", x + 5, y - b], ["Z"]]);
+}
+
+/** 通り道の、ノード 1 つ分の幅（上りと下りの 2 本）。 */
+export const CORRIDOR_STEP = 16;
+
+/**
+ * 「人」の箱と通り道の場所。通り道は、木のどの箱よりも右（`L.width - MARGIN` より右）にとり、その右に人の箱を置く。
+ * `talkers` は、人とやり取りするノードの数（ノードごとに通り道をずらす）。
+ */
+export function humanColumnOf(
+  L: Layout,
+  talkers: number,
+): { human: LayoutPos; corridorX: (slot: number) => number; width: number; height: number } {
+  const corridor = L.width - MARGIN + 24;
+  const hx = corridor + talkers * CORRIDOR_STEP + 32;
+  return {
+    human: { x: hx, y: MARGIN, cy: MARGIN + BOX_H / 2, depth: -1 },
+    corridorX: (slot) => corridor + slot * CORRIDOR_STEP,
+    width: hx + BOX_W + MARGIN,
+    height: Math.max(L.height, MARGIN * 2 + BOX_H),
+  };
+}
+
+/**
+ * 人とのやり取りの道（段を飛ばす。research.md 6.1 の (b)）。木の右の縦の通り道を通る。
+ * ノードの箱の上の辺から出て、行の間（箱のない所。`gapRowAbove`）を右へ、通り道を縦に、人の箱の左の辺へ。
+ * `corridorX` は、そのノードの通り道の x（ノードごとにずらし、重ねない）。上りは人の箱を、下りはノードの箱を指す。
+ */
+export function humanLaneOf(N: LayoutPos, H: LayoutPos, corridorX: number, dir: Dir): Lane {
+  const up = dir === "up";
+  const sx = N.x + BOX_W - (up ? 24 : 40);
+  const gapY = gapRowAbove(N.y) + (up ? -4 : 4);
+  const cx = corridorX + (up ? 0 : LANE_GAP);
+  const hy = H.cy + (up ? -LANE_GAP : LANE_GAP);
+  const fromNode: [number, number][] = [
+    [sx, N.y],
+    [sx, gapY],
+    [cx, gapY],
+    [cx, hy],
+    [H.x, hy],
+  ];
+  if (up) {
+    const pts = fromNode.slice(0, -1).concat([[H.x - ARROW, hy]]);
+    return {
+      d: roundedPath(pts),
+      tip: tipAt(H.x, hy, "right"),
+      labelX: sx + 8,
+      labelY: gapY - 4,
+    };
+  }
+  const pts = fromNode
+    .slice(1)
+    .reverse()
+    .concat([[sx, N.y - ARROW]]);
+  return {
+    d: roundedPath(pts),
+    tip: tipAt(sx, N.y, "down"),
+    labelX: sx + 8,
+    labelY: gapY - 4,
+  };
 }
 
 /** 動く玉に道を設定する。中身は `d` と同じ検査を通したものだけ。 */

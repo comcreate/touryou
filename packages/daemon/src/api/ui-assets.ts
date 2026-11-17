@@ -112,7 +112,6 @@ details[open]>:not(summary){animation:open .3s ease-out both}
 .trow.thead{border-top:0;font-size:12.5px;color:var(--muted);font-weight:700}
 .trow.turn{background:var(--kaki-soft)}.trow.finished{opacity:.7}
 .tname{display:flex;align-items:center;gap:6px}
-.node{padding:2px 0;overflow-wrap:anywhere}.state{color:var(--muted);margin-left:8px;font-size:13px}.count{color:var(--blocking)}
 .tag{display:inline-block;font-size:12px;color:var(--muted);margin-right:8px}
 .tag.blocking{color:var(--blocking);font-weight:600}.tag.request{font-weight:600}.tag.failed{color:var(--failed);font-weight:600}
 .desc{font-size:12.5px;color:var(--muted);margin:2px 0 6px}.irreversible{font-size:12.5px;color:var(--shu);margin:2px 0 6px}
