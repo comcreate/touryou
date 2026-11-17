@@ -47,8 +47,9 @@ export type HookDecider = (
       /**
        * 起動のあとに承認した拡張（`scope.extensionDecided`）でだけ通る Bash（#91）。起動のときの許可の一覧（`--settings` の
        * permissions.allow。dontAsk）には入っていないので、フックのコマンドが Claude Code へ明示の許可（permissionDecision: allow）を返す。
+       * `readOnlySearch` は、作業ツリーの中を探す読み取りだけのコマンド（#92）。同じ理由で、明示の許可を返す。
        */
-      readonly permit?: "extension";
+      readonly permit?: "extension" | "readOnlySearch";
     }
   | { readonly allow: false; readonly reason: string }
 >;

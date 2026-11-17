@@ -1,0 +1,171 @@
+/**
+ * #92: CLI の子のフック（POST /v1/hook）の道で、作業ツリーの中を探す読み取りだけのコマンドが通ること。
+ * 本物の daemon（createDaemon）と、本物の git の作業ツリー（git worktree add）で確かめる。
+ * CLI の子は dontAsk で、起動のときの許可の一覧はブリーフの範囲だけなので、daemon は明示の許可（permit: readOnlySearch）を返す。
+ */
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { ok } from "@touryou/core";
+import { afterEach, describe, expect, it } from "vitest";
+import { createDaemon, type DaemonDeps, type WorktreePorts } from "../src/compose.js";
+import { FakeCliAdapter } from "./sdk/fakes.js";
+
+const cleanups: (() => Promise<void> | void)[] = [];
+afterEach(async () => {
+  for (const c of cleanups.splice(0).reverse()) await c();
+});
+
+const git = (cwd: string, ...args: string[]) =>
+  execFileSync("git", [
+    "-C",
+    cwd,
+    "-c",
+    "user.email=t@example.invalid",
+    "-c",
+    "user.name=t",
+    ...args,
+  ]);
+
+const scope = {
+  writableLocations: ["src"],
+  forbiddenLocations: [".git"],
+  allowedCommands: ["git status"],
+};
+
+async function setup() {
+  const base = realpathSync(mkdtempSync(join(tmpdir(), "touryou-cli-search-")));
+  cleanups.push(() => rmSync(base, { recursive: true, force: true }));
+  const repoRoot = join(base, "repo");
+  const worktreeRoot = join(base, "worktrees");
+  const stateDir = join(base, "state");
+  mkdirSync(repoRoot);
+  mkdirSync(worktreeRoot);
+  git(repoRoot, "init", "-q");
+  mkdirSync(join(repoRoot, "src"));
+  writeFileSync(join(repoRoot, "src", "a.ts"), "export const foo = 1;\n");
+  git(repoRoot, "add", ".");
+  git(repoRoot, "commit", "-q", "-m", "init");
+  const launcher = new FakeCliAdapter();
+  const worktree: WorktreePorts = {
+    factsFor: async () => undefined,
+    removeWorktree: async () => ok(undefined),
+    provisionWorktree: async ({ nodeId }) => {
+      const p = join(worktreeRoot, nodeId);
+      git(repoRoot, "worktree", "add", "-q", "-b", `touryou/${nodeId}`, p);
+      return ok({ worktreePath: p });
+    },
+    cwdOf: async (id) => join(worktreeRoot, id),
+  };
+  const deps: DaemonDeps = {
+    cliAdapter: launcher,
+    worktree,
+    probe: async () => [],
+    logLine: () => {},
+    confirmationOut: () => {},
+  };
+  const made = createDaemon(
+    {
+      stateDir,
+      repoRoot,
+      worktreeRoot,
+      rootCwd: repoRoot,
+      rootNodeId: "root",
+      rootScope: scope,
+      port: 0,
+    },
+    deps,
+  );
+  if (!made.ok) throw new Error(`${made.error.code}: ${made.error.cause}`);
+  const run = await made.value.start();
+  cleanups.push(() => made.value.stop());
+  const log = made.value.log;
+  launcher.sink = { record: (q) => log.append(q), recordAll: (qs) => log.appendAll(qs) };
+  const rootToken = readFileSync(run.rootTokenPath, "utf8").trim();
+  const spawnOne = async () => {
+    const res = await fetch(`${run.url}/v1/request`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${rootToken}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        requestId: `q-${Math.random()}`.replace(".", ""),
+        operation: "node.spawn",
+        params: {
+          parentId: "root",
+          role: "implement",
+          objective: "x",
+          acceptanceCriteria: ["x"],
+          scope,
+        },
+      }),
+    });
+    const json = (await res.json()) as { ok: boolean; value: { nodeId: string } };
+    expect(json.ok, JSON.stringify(json)).toBe(true);
+    return { nodeId: json.value.nodeId, token: launcher.sessions.at(-1)?.token ?? "" };
+  };
+  const child = await spawnOne();
+  const other = await spawnOne();
+  const tree = join(worktreeRoot, child.nodeId);
+  const hook = async (command: string, cwd = tree) => {
+    const res = await fetch(`${run.url}/v1/hook`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${child.token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        hook_event_name: "PreToolUse",
+        session_id: "s-1",
+        cwd,
+        tool_name: "Bash",
+        tool_input: { command, description: "探す" },
+      }),
+    });
+    expect(res.status).toBe(200);
+    return ((await res.json()) as { value: { decision: string; permit?: string } }).value;
+  };
+  return { base, repoRoot, stateDir, tree, other, hook };
+}
+
+describe("CLI の子のフック: 作業ツリーの中を探すコマンド（#92）", () => {
+  it("範囲の allowedCommands になくても通り、明示の許可（permit: readOnlySearch）が付く", async () => {
+    const s = await setup();
+    for (const command of [
+      "ls src",
+      "find src -name '*.ts'",
+      "grep -rn foo src",
+      "git ls-files",
+      "git grep foo",
+    ]) {
+      expect(await s.hook(command), command).toEqual({
+        decision: "allow",
+        permit: "readOnlySearch",
+      });
+    }
+    // 作業ツリーの配下に cd したときも、相対のパスはそこから解く
+    expect(await s.hook("ls .", join(s.tree, "src"))).toEqual({
+      decision: "allow",
+      permit: "readOnlySearch",
+    });
+  });
+
+  it("範囲にあるコマンドは、明示の許可を付けずに通す（起動のときの一覧で通る）", async () => {
+    const s = await setup();
+    expect(await s.hook("git status")).toEqual({ decision: "allow" });
+  });
+
+  it("作業ツリーの外のパス・禁じる場所・許さない旗は断る", async () => {
+    const s = await setup();
+    for (const command of [
+      "ls /etc",
+      "ls ..",
+      "grep -rn foo ../",
+      `find ${s.repoRoot} -name '*.ts'`,
+      `ls ${s.stateDir}`,
+      `ls ${join(s.repoRoot, ".git", "worktrees", s.other.nodeId)}`,
+      "find src -exec cat {} +",
+      "ls src > out",
+    ]) {
+      expect((await s.hook(command)).decision, command).toBe("deny");
+    }
+    // cwd が作業ツリーの外なら、探すコマンドとしては許さない
+    expect((await s.hook("ls src", s.repoRoot)).decision).toBe("deny");
+  });
+});

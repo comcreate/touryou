@@ -18,6 +18,7 @@
  * - リダイレクト・置換・サブシェルは、字句解析（core の `commandWords`）が拒否する。`cd` などほかのコマンドが混じれば、使わない。
  *
  * 子の permissions（`--settings` の allow）には足さない。`Bash(find:*)` などを足すと、フックのない子で `find -exec` まで通るため。
+ * そのかわり、CLI の子（dontAsk）のフックは、これで許したときに明示の許可（`permit: "readOnlySearch"`）を返す（compose の decideCliHook）。
  */
 
 import { posix } from "node:path";

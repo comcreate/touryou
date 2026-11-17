@@ -296,4 +296,15 @@ describe("承認済みの範囲の拡張（#91。トークンのある形）", (
     });
     expect(plain).toEqual({ code: 0, stderr: "" });
   });
+  it("permit: readOnlySearch（作業ツリーの中を探すコマンド。#92）の許可も、明示の許可を出す", async () => {
+    const r = await runHook({
+      env: ENV,
+      input: pre,
+      fetchImpl: reply(200, { ok: true, value: { decision: "allow", permit: "readOnlySearch" } }),
+    });
+    expect(r.code).toBe(0);
+    expect(JSON.parse(r.stdout ?? "")).toMatchObject({
+      hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" },
+    });
+  });
 });
