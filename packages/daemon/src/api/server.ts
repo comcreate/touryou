@@ -71,6 +71,7 @@ import {
 import { pickResult } from "./results.js";
 import { createSseHub, nodeFeedOf, responseSink } from "./sse-hub.js";
 import { UI_CSS, UI_HEADERS, UI_HTML, UI_HTML_HEADERS, UI_JS } from "./ui-assets.js";
+import { UI_GRAPH_JS } from "./ui-graph-js.js";
 import { createUiSessionStore, type UiSessionStore } from "./ui-session.js";
 import { parseEnvelope, validateParams } from "./validate.js";
 
@@ -336,6 +337,8 @@ const UI_ASSETS: Readonly<Record<string, UiAsset>> = {
   "/ui": { type: "text/html; charset=utf-8", body: UI_HTML, html: true },
   "/ui/app.js": { type: "text/javascript; charset=utf-8", body: UI_JS },
   "/ui/app.css": { type: "text/css; charset=utf-8", body: UI_CSS },
+  // 関係図（#89）。rete を束ねたもの。scripts/ui-graph-bundle.mjs で作り、試験で中身を確かめる
+  "/ui/graph.js": { type: "text/javascript; charset=utf-8", body: UI_GRAPH_JS },
 };
 /** 本文を読まずに返す応答には、接続を閉じさせる（読んでいない本文が、次の要求と混ざらない。遅い本文で接続を占有されない）。 */
 const CLOSE = { connection: "close" } as const;

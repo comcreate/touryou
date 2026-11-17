@@ -1,8 +1,7 @@
 /**
- * 関係図（`/ui/graph.js`）の束ね（#89 の試作）。esbuild で、自前の入口（`packages/daemon/src/ui/graph-entry.ts`）と
+ * 関係図（`/ui/graph.js`）の束ね（#89）。esbuild で、自前の入口（`packages/daemon/src/ui/graph-entry.ts`）と
  * rete・rete-area-plugin・rete-readonly-plugin を 1 つの IIFE にする（グローバルに出す名前は `touryouGraph` の 1 つ。`draw`・`destroy` だけ）。
- * いまは試験の中だけで使う（配布物の画面には、まだ出さない。PR-5 で配る）。
- * 束は `UI_GRAPH_JS`（`packages/daemon/ui-graph/ui-graph-js.ts` の文字列）として置き、試験で、lockfile の版から作り直したものと一致することを確かめる。
+ * 束は `UI_GRAPH_JS`（`packages/daemon/src/api/ui-graph-js.ts` の文字列。daemon のビルドに入り、`GET /ui/graph.js` で配る）として置き、試験で、lockfile の版から作り直したものと一致することを確かめる。
  * 使い方: node scripts/ui-graph-bundle.mjs（大きさを出す）／ node scripts/ui-graph-bundle.mjs --write（束を作り直して置く）
  */
 
@@ -37,7 +36,7 @@ function noGlobalRegenerator(hits) {
 
 const DAEMON = join(dirname(fileURLToPath(import.meta.url)), "..", "packages", "daemon");
 
-export const GRAPH_JS_PATH = join(DAEMON, "ui-graph", "ui-graph-js.ts");
+export const GRAPH_JS_PATH = join(DAEMON, "src", "api", "ui-graph-js.ts");
 
 /** 束を、`UI_GRAPH_JS` を出す TS の文字にする。 */
 export const graphModule = (js) =>

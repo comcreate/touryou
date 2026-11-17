@@ -78,6 +78,7 @@ describe("画面の資産（GET /ui ほか）", () => {
       ["/ui", "text/html"],
       ["/ui/app.js", "text/javascript"],
       ["/ui/app.css", "text/css"],
+      ["/ui/graph.js", "text/javascript"],
     ] as const) {
       const res = await fetch(`${r.url}${path}`);
       expect(res.status, path).toBe(200);
