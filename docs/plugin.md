@@ -33,6 +33,8 @@ claude plugin marketplace add comcreate/touryou
 2. **plugin を入れる**: `/plugin install touryou@touryou`。plugin は、Claude Code の設定の場所（`CLAUDE_CONFIG_DIR`。既定は `$HOME/.claude`）ごとに入る。分けているときは、同じ値で install・update・起動する。
 3. **本体を入れる**: `/touryou:setup`。plugin の中の `scripts/install-runtime.sh` が、配布物を GitHub Release から取り、plugin に入っている sha256 と照合してから `$HOME/.touryou` に展開する（照合が通るまで、展開も実行もしない）。
 
+前に手で marketplace を足した人には、project の設定の marketplace の固定（`marketplace-v<版>`）が効かず、`main` に追従します（動きはします）。固定したいときの手順は [`docs/release.md`](release.md) の「手で marketplace を足した人には、project の固定が効かない」。`claude plugin marketplace remove` は plugin とそのデータを消すので、使いません。
+
 ## 取得について
 
 `/setup`・`/touryou:desktop` は、配布物を **`curl`**（認証なし）で、`https://github.com/comcreate/touryou/releases/download/v<版>/<名前>` から取ります。GitHub のアカウント・GitHub CLI（`gh`）は要りません。ブラウザで取ると quarantine が付き、daemon が動かないので、ブラウザでは取りません（`curl` は quarantine を付けない）。取ったファイルは、plugin に入っている `checksums.json` の sha256 と照合してから使います。

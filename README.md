@@ -29,6 +29,8 @@ claude plugin marketplace add comcreate/touryou
 
 そのあと、統合セッションで `/touryou:start` を実行して、接続を確かめます。くわしくは [`docs/plugin.md`](docs/plugin.md)。
 
+前に手で marketplace を足した人には、project の設定の marketplace の固定（`marketplace-v<版>`）が効かず、`main` に追従します（動きはします）。固定したいときの手順は [`docs/release.md`](docs/release.md) の「手で marketplace を足した人には、project の固定が効かない」。`claude plugin marketplace remove` は plugin とそのデータを消すので、使いません。
+
 新しい版が出たら、`claude plugin marketplace update touryou` と `claude plugin update touryou@touryou` のあとに、もう一度 `/touryou:setup` を実行します（本体と plugin の版が違うと、セッションの始まりに知らせが出ます。知らせるだけで、取得や daemon の起動し直しはしません。常駐にしているときは、`/setup` の中で「はい」と答えたときだけ、daemon を止めて新しい版で起動し直します）。
 
 ## 手元でビルドして使う（開発する人向け）
