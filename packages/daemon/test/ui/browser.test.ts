@@ -81,6 +81,9 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
   it("箱と線が描かれる。文字は textContent（差し込まれた HTML は要素にならない）", async () => {
     expect(await page.locator(".gnode").count()).toBe(7); // 7 つのノードだけ（「人」の箱は描かない）
     expect(await page.locator('.gnode[data-id="human"]').count()).toBe(0);
+    // 列の見出し（いちばん上の統合・子・孫）は描かない
+    expect(await page.locator("#g text.colhead").count()).toBe(0);
+    expect(await page.locator("#g .gback text").count()).toBe(0);
     expect(await page.locator("svg.glink path.line").count()).toBe(7); // 根と人のやり取りは線にしない
     // 答え待ちの判断（子 c → 親 m1 の上り）だけ柿色
     expect(await page.locator("svg.glink path.line.wait").count()).toBe(1);

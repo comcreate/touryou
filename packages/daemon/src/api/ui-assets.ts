@@ -155,7 +155,7 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .galive{position:absolute;right:10px;top:10px;width:8px;height:8px;border-radius:50%;background:var(--matsu);animation:galive 3s ease-in-out infinite}
 .gbadge{position:absolute;right:-10px;top:-10px;min-width:24px;height:24px;padding:0 4px;box-sizing:border-box;border-radius:12px;background:var(--kaki);color:var(--on-strong);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
 .glink{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
-.colhead{font-size:12.5px;font-weight:700;fill:var(--muted)}
+
 .trunk{fill:none;stroke:var(--ai-3);stroke-width:4;stroke-linecap:round;opacity:.5}
 .twig{fill:none;stroke:var(--muted);stroke-width:1.5;stroke-dasharray:2 5;opacity:.6}
 .line{fill:none;stroke:var(--ai);stroke-width:2.5;stroke-dasharray:6 8}.tip{fill:var(--ai)}.port{fill:var(--ai);stroke:var(--sheet);stroke-width:2}

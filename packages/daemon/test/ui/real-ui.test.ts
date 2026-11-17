@@ -213,10 +213,10 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     }, LONG);
     expect(colors.stall).not.toBe(colors.wait);
     expect(colors.card).toBe(colors.stall);
-    expect(await page.locator("#graph text.colhead").allTextContents()).toEqual([
-      "いちばん上の統合",
-      "子",
-    ]);
+    // 列の見出し（いちばん上の統合・子・孫）は出さない（利用者の決め）
+    expect(await page.locator("#graph text.colhead").count()).toBe(0);
+    const heads = await page.locator("#graph text").allTextContents();
+    for (const t of ["いちばん上の統合", "子", "孫"]) expect(heads).not.toContain(t);
     expect(await page.locator("#graph text.mstage").count()).toBeGreaterThan(0);
   });
 

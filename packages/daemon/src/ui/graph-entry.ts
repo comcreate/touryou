@@ -7,7 +7,7 @@
 import { type GetSchemes, NodeEditor } from "rete";
 import { AreaPlugin } from "rete-area-plugin";
 import { ReadonlyPlugin } from "rete-readonly-plugin";
-import { BOX_W, COL_GAP, type LayoutPos, layoutOf, MARGIN } from "./graph-layout.js";
+import { type LayoutPos, layoutOf } from "./graph-layout.js";
 import {
   ageClassOf,
   agoText,
@@ -52,9 +52,6 @@ interface Shape {
   readonly label?: string;
   readonly stage?: string;
 }
-
-/** 列の見出し（見本の `colhead`）。 */
-const COLUMN_NAMES = ["いちばん上の統合", "子", "孫", "ひ孫"];
 
 let current: AreaPlugin<Schemes, never> | null = null;
 /** いまの図の合図の受け手を、まとめて外すためのもの（`destroy` で外す）。 */
@@ -187,7 +184,6 @@ export async function draw(
   // 人の箱は置かない（利用者の決め）。人の答えなどは、親から子への下りの線の札で表す
   const width = L.width;
   const height = L.height;
-  const depths = [...L.pos.values()].reduce((m, p) => Math.max(m, p.depth), 0);
 
   const editor = new NodeEditor<Schemes>();
   const area = new AreaPlugin<Schemes, never>(host);
@@ -197,8 +193,8 @@ export async function draw(
   editor.use(readonly.root);
   editor.use(area);
   area.use(readonly.area);
-  // 背景：列の見出しと、親の幹（どのノード・つながりにも属さないので、area の中身にじかに置く）
-  area.area.content.add(drawBackdrop(trunks, depths, width, height));
+  // 背景：親の幹（どのノード・つながりにも属さないので、area の中身にじかに置く）
+  area.area.content.add(drawBackdrop(trunks, width, height));
 
   area.addPipe((ctx) => {
     if (ctx.type !== "render") return ctx;
@@ -346,22 +342,10 @@ function laneShape(l: GraphLane, lane: Lane, child: GraphNode | undefined, now: 
   };
 }
 
-function drawBackdrop(
-  trunks: readonly string[],
-  depths: number,
-  w: number,
-  h: number,
-): HTMLElement {
+function drawBackdrop(trunks: readonly string[], w: number, h: number): HTMLElement {
   const box = el("div", "gback");
   const svg = svgEl("svg", { class: "glink", width: w, height: h, viewBox: `0 0 ${w} ${h}` });
-  for (let d = 0; d <= depths; d++)
-    svg.append(
-      svgEl(
-        "text",
-        { class: "colhead", x: MARGIN + d * (BOX_W + COL_GAP) + 4, y: MARGIN - 18 },
-        COLUMN_NAMES[Math.min(d, COLUMN_NAMES.length - 1)] as string,
-      ),
-    );
+  // 列の見出し（いちばん上の統合・子・孫）は置かない（利用者の決め。親子は線と箱の位置で分かる）
   for (const d of trunks) svg.append(svgEl("path", { class: "trunk", d }));
   box.append(svg);
   return box;
