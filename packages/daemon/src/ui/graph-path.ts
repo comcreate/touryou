@@ -2,7 +2,7 @@
  * 関係図の線（#89。設計の下書き 7 節）。`d` は数だけで組む（命令 M・L・Q・Z）。
  * 動く玉の `offset-path` を設定するのも、この 1 か所（`setRunnerPath`）だけ。
  */
-import { BOX_H, BOX_W, type LayoutPos, MARGIN, ROW_H } from "./graph-layout.js";
+import { BOX_H, BOX_W, type Layout, type LayoutPos, MARGIN, ROW_H } from "./graph-layout.js";
 import { PATH_PATTERN } from "./svg-el.js";
 
 /** 上りと下りの道を、枝の中心から上下にずらす幅。 */
@@ -192,6 +192,27 @@ function tipAt(x: number, y: number, to: "right" | "down"): string {
   return to === "right"
     ? pathD([["M", x, y], ["L", x - b, y - 5], ["L", x - b, y + 5], ["Z"]])
     : pathD([["M", x, y], ["L", x - 5, y - b], ["L", x + 5, y - b], ["Z"]]);
+}
+
+/** 通り道の、ノード 1 つ分の幅（上りと下りの 2 本）。 */
+export const CORRIDOR_STEP = 16;
+
+/**
+ * 「人」の箱と通り道の場所。通り道は、木のどの箱よりも右（`L.width - MARGIN` より右）にとり、その右に人の箱を置く。
+ * `talkers` は、人とやり取りするノードの数（ノードごとに通り道をずらす）。
+ */
+export function humanColumnOf(
+  L: Layout,
+  talkers: number,
+): { human: LayoutPos; corridorX: (slot: number) => number; width: number; height: number } {
+  const corridor = L.width - MARGIN + 24;
+  const hx = corridor + talkers * CORRIDOR_STEP + 32;
+  return {
+    human: { x: hx, y: MARGIN, cy: MARGIN + BOX_H / 2, depth: -1 },
+    corridorX: (slot) => corridor + slot * CORRIDOR_STEP,
+    width: hx + BOX_W + MARGIN,
+    height: Math.max(L.height, MARGIN * 2 + BOX_H),
+  };
 }
 
 /**

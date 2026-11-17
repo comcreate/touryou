@@ -66,6 +66,8 @@ jobs:
         with:
           node-version: 22.20.0
       - run: pnpm install --frozen-lockfile
+      - name: 関係図の束（UI_GRAPH_JS）が、lockfile の版から束ね直したものと一致することを確かめる
+        run: node scripts/ui-graph-bundle.mjs --check
       - run: pnpm build
       - name: tar.gz を作る
         env:

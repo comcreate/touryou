@@ -4,6 +4,7 @@ import { graphModelOf } from "../../src/ui/graph-model.js";
 import {
   bendXOf,
   gapRowAbove,
+  humanColumnOf,
   humanLaneOf,
   LANE_GAP,
   laneOf,
@@ -242,5 +243,19 @@ describe("人とのやり取り（段を飛ばす。木の外の「人」の箱�
       ]),
     ).toMatch(/^M 0 0 L 12 0 Q 20 0 20 8 L 20 20$/);
     expect(() => roundedPath([[0, 0]])).toThrow();
+  });
+
+  it("humanColumnOf：通り道の縦の線（上りと下り）の x は、どの箱の範囲にも入らない。人の箱は、どの箱とも重ならない", () => {
+    const xs: { id: string; parentId: string | null }[] = [{ id: "r", parentId: null }];
+    for (let i = 0; i < 6; i++) xs.push({ id: `k${i}`, parentId: i < 3 ? "r" : `k${i - 3}` });
+    for (let i = 0; i < 4; i++) xs.push({ id: `g${i}`, parentId: "k3" });
+    const L = layoutOf(xs);
+    const col = humanColumnOf(L, xs.length);
+    const boxes = [...L.pos.values()];
+    for (let slot = 0; slot < xs.length; slot++)
+      for (const x of [col.corridorX(slot), col.corridorX(slot) + LANE_GAP])
+        for (const b of boxes) expect(x < b.x || x > b.x + BOX_W).toBe(true);
+    for (const b of boxes) expect(col.human.x).toBeGreaterThan(b.x + BOX_W);
+    expect(col.width).toBe(col.human.x + BOX_W + 40);
   });
 });

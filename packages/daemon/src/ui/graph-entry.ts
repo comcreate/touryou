@@ -7,9 +7,17 @@
 import { type GetSchemes, NodeEditor } from "rete";
 import { AreaExtensions, AreaPlugin } from "rete-area-plugin";
 import { ReadonlyPlugin } from "rete-readonly-plugin";
-import { BOX_H, BOX_W, COL_GAP, type LayoutPos, layoutOf, MARGIN } from "./graph-layout.js";
+import { BOX_W, COL_GAP, type LayoutPos, layoutOf } from "./graph-layout.js";
 import { type GraphLane, type GraphNode, graphModelOf, STAGE_TEXT } from "./graph-model.js";
-import { bendXOf, humanLaneOf, type Lane, laneOf, setRunnerPath, twigOf } from "./graph-path.js";
+import {
+  bendXOf,
+  humanColumnOf,
+  humanLaneOf,
+  type Lane,
+  laneOf,
+  setRunnerPath,
+  twigOf,
+} from "./graph-path.js";
 import { svgEl } from "./svg-el.js";
 
 // ---- 描き手 ----
@@ -50,8 +58,6 @@ interface Shape {
 
 /** 「人」の箱の rete の ID。ノードの ID（`ID_PATTERN`。空白を含まない）と重ならない。 */
 const HUMAN_NODE = " human";
-/** 通り道の、ノード 1 つ分の幅（上りと下りの 2 本）。 */
-const CORRIDOR_STEP = 16;
 
 let current: AreaPlugin<Schemes, never> | null = null;
 
@@ -101,15 +107,13 @@ export async function draw(host: HTMLElement, view: unknown): Promise<void> {
   let height = L.height;
   let H: LayoutPos | null = null;
   if (humanLanes.length > 0) {
-    const corridor = L.width - MARGIN + 24;
-    const hx = corridor + talkers.length * CORRIDOR_STEP + 32;
-    H = { x: hx, y: MARGIN, cy: MARGIN + BOX_H / 2, depth: -1 };
-    width = hx + BOX_W + MARGIN;
-    height = Math.max(L.height, MARGIN * 2 + BOX_H);
+    const col = humanColumnOf(L, talkers.length);
+    H = col.human;
+    width = col.width;
+    height = col.height;
     for (const l of humanLanes) {
       const N = L.pos.get(l.child) as LayoutPos;
-      const slot = talkers.indexOf(l.child);
-      const lane = humanLaneOf(N, H, corridor + slot * CORRIDOR_STEP, l.dir);
+      const lane = humanLaneOf(N, H, col.corridorX(talkers.indexOf(l.child)), l.dir);
       conns.push({
         id: `c${conns.length}`,
         source: l.dir === "up" ? l.child : HUMAN_NODE,
