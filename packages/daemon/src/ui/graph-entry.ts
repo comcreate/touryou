@@ -103,8 +103,17 @@ function teardown(): void {
 /** 拡大の下限と上限（ホイールも、ボタンも同じ。小さすぎる・大きすぎる図にしない）。 */
 const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 2;
-/** 初めて描いたときの、枠に合わせた倍率（「全体を見る」で戻す）。 */
+/** 「全体を見る」の倍率：字が小さくなっても、図の全部を枠に収める（0.25 倍まで）。 */
 let fitK = 1;
+/** 初めの形の倍率の下限（利用者の決め：初めは読める大きさ。収まらない分は、図をつかんで動かして見る）。 */
+const FIRST_MIN = 0.5;
+/**
+ * 「全体を見る」と初めの形で、図の上に空ける高さ（右上の「＋」「−」「全体を見る」のボタン 34px と、その上下の間）。
+ * 右上の箱がボタンの下に隠れないように。拡大・移動したあとは、重なってもよい。
+ */
+const FIT_TOP = 48;
+/** 図の下に足す余白（いちばん下の枝の札が、枠の下の縁で切れないように。図の中の下の余白〔MARGIN〕に足す）。 */
+const FIT_BOTTOM = 16;
 const clampZoom = (k: number): number => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, k));
 
 /**
@@ -129,12 +138,12 @@ async function zoomBy(f: number): Promise<void> {
   );
 }
 
-/** 「全体を見る」：初めて描いたときの形（枠に合わせた倍率・左上）に戻す。描いていなければ何もしない。 */
+/** 「全体を見る」：図の全部を枠に収める倍率と、左上（右上のボタンの分だけ下）に置く。描いていなければ何もしない。 */
 async function fitView(): Promise<void> {
   const a = current;
   if (a === null) return;
   await a.area.zoom(fitK, 0, 0);
-  await a.area.translate(0, 0);
+  await a.area.translate(0, FIT_TOP);
 }
 
 /**
@@ -336,20 +345,25 @@ export async function draw(
   }
   if (!live()) return none;
   readonly.enable(); // 置いたあとは、つなぐ・動かす・消すを止める（拡大・移動は残る）
-  // 枠の幅に合わせて縮める（読める大きさを保つため、大きくはしない。小さすぎる木は 0.5 倍まで）
-  const k = Math.max(0.5, Math.min(1, host.clientWidth / width));
-  fitK = k;
+  // 枠の幅と高さ（CSS の max-height。上の空き〔ボタン〕と下の余白を含む）に収まる倍率。大きくはしない。
+  const maxH = Number.parseFloat(getComputedStyle(host).maxHeight);
+  const byHeight = Number.isFinite(maxH) ? (maxH - FIT_TOP - FIT_BOTTOM) / height : 1;
+  const fits = Math.min(1, host.clientWidth / width, byHeight);
+  // 初めの形は、読める大きさ（0.5 倍）より小さくしない。「全体を見る」は、0.25 倍まで縮めて全部を収める
+  const k = Math.max(FIRST_MIN, fits);
+  fitK = clampZoom(fits);
   // 同じ器への描き直しなら、人が変えた拡大・移動をそのまま残す（初めて描くときだけ、枠に合わせる）
   const keep = kept !== null && kept.host === host ? kept : null;
   kept = null;
   await area.area.zoom(keep?.k ?? k, 0, 0);
   if (!live()) return none;
-  await area.area.translate(keep?.x ?? 0, keep?.y ?? 0);
+  await area.area.translate(keep?.x ?? 0, keep?.y ?? FIT_TOP);
   if (!live()) return none;
   relight(host, byId, hot);
   // 返す大きさは、枠に合わせた倍率（k）のもの。人が拡大・縮小したあとの描き直しでも、枠の高さは初めて描いたときの
   // 大きさのまま保つ（描き直しのたびに枠の高さが変わって、ページが跳ねないように）
-  return { width: width * k, height: height * k, ...ctl };
+  // 高さは、上の空き（ボタン）と下の余白を含む。画面は、この高さで枠の高さを決める
+  return { width: width * k, height: height * k + FIT_TOP + FIT_BOTTOM, ...ctl };
 }
 
 /**

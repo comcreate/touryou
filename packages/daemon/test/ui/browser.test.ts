@@ -421,4 +421,96 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
       await w.touryouGraph.draw(document.getElementById("g") as HTMLElement, w.VIEW);
     });
   });
+  /** 高い木（孫まで 3 段・葉 14）を、画面と同じく枠の高さを返り値に合わせて描き、いちばん下と右上を測る。 */
+  const fitShape = (width: number) =>
+    page.evaluate(async (w: number) => {
+      type Ctl = { height: number; zoomBy(f: number): Promise<void>; fit(): Promise<void> };
+      type G = { draw(h: HTMLElement, v: unknown): Promise<Ctl>; destroy(): void };
+      const g = (window as unknown as { touryouGraph: G }).touryouGraph;
+      const nodes: { id: string; parentId: string | null; title: string }[] = [
+        { id: "root", parentId: null, title: "根" },
+      ];
+      const flows: Record<string, string>[] = [];
+      for (let i = 0; i < 5; i++) {
+        nodes.push({ id: `c${i}`, parentId: "root", title: `子 ${i}` });
+        for (let j = 0; j < 3; j++)
+          nodes.push({ id: `g${i}${j}`, parentId: `c${i}`, title: `孫 ${i}${j}` });
+      }
+      // いちばん下の子に、下りの線と札（「→ 指示」と段の言葉）を付ける
+      flows.push({
+        id: "f1",
+        kind: "instruction",
+        dir: "down",
+        from: "root",
+        to: "c4",
+        stage: "done",
+      });
+      flows.push({
+        id: "f2",
+        kind: "instruction",
+        dir: "down",
+        from: "c4",
+        to: "g42",
+        stage: "done",
+      });
+      const host = document.createElement("div");
+      host.className = "board";
+      host.style.width = `${w}px`;
+      const wrap = document.createElement("div");
+      wrap.className = "board-wrap";
+      wrap.append(host);
+      document.body.append(wrap);
+      const view = { nodes, flows };
+      const r = await g.draw(host, view);
+      host.style.height = `${Math.min(720, Math.max(180, Math.ceil(r.height)))}px`; // 画面（app.js）と同じ
+      const measure = () => {
+        const hb = host.getBoundingClientRect();
+        const boxes = [...host.querySelectorAll<HTMLElement>(".gnode")].map((b) =>
+          b.getBoundingClientRect(),
+        );
+        const texts = [...host.querySelectorAll<SVGTextElement>("text.mlabel, text.mstage")].map(
+          (t) => t.getBoundingClientRect(),
+        );
+        const bottom = Math.max(...boxes.map((b) => b.bottom), ...texts.map((t) => t.bottom));
+        const top = Math.min(...boxes.map((b) => b.top));
+        const right = boxes.filter((b) => b.right > hb.right - 280);
+        const k = Number(
+          /scale\(([\d.]+)\)/.exec((host.firstElementChild as HTMLElement).style.transform)?.[1],
+        );
+        return {
+          k,
+          below: hb.bottom - bottom,
+          above: hb.top - top,
+          rightTop: Math.min(...right.map((b) => b.top)) - hb.top,
+        };
+      };
+      const first = measure();
+      await r.zoomBy(1.4);
+      await r.fit();
+      const fitted = measure();
+      g.destroy();
+      wrap.remove();
+      return { first, fitted };
+    }, width);
+
+  it("高い木：初めの形は読める大きさ（0.5 倍）で止まり、「全体を見る」は全部を枠に収めて下に余白をとる。右上の箱はボタンの下に隠れない", async () => {
+    for (const width of [1100, 600]) {
+      const r = await fitShape(width);
+      // 初めの形は 0.5 倍より小さくしない（収まらない分は、図を動かして見る）
+      expect(r.first.k, `${width}px: 初めの倍率`).toBe(0.5);
+      // 全体を見るは、0.5 倍より小さくしてでも、全部を収める
+      expect(r.fitted.k, `${width}px: 全体を見るの倍率`).toBeLessThan(0.5);
+      expect(r.fitted.below, `${width}px: 下の余白`).toBeGreaterThanOrEqual(12);
+      // ボタンは枠の上から 10px・高さ 34px。右上の箱は、その下（44px より下）から始まる
+      for (const m of [r.first, r.fitted])
+        expect(m.rightTop, `${width}px: 右上の箱`).toBeGreaterThanOrEqual(44);
+    }
+    // 後の試験のために、試験のページの図を描き直す
+    await page.evaluate(async () => {
+      type G = { draw(h: HTMLElement, v: unknown): Promise<unknown>; destroy(): void };
+      const w = window as unknown as { touryouGraph: G; VIEW: unknown };
+      await w.touryouGraph.draw(document.getElementById("g") as HTMLElement, w.VIEW);
+    });
+    expect(problems).toEqual([]);
+  });
 });

@@ -1028,7 +1028,7 @@ export const UI_JS = `'use strict';
     var fit = function (r) {
       if (mine !== graphDrawId || !r || typeof r.height !== 'number' || !(r.height > 0)) return;
       graphCtl = r;
-      box.style.height = Math.min(720, Math.max(180, Math.ceil(r.height) + 16)) + 'px';
+      box.style.height = Math.min(720, Math.max(180, Math.ceil(r.height))) + 'px';
     };
     try {
       // 箱を押したら、その子のカードへ移って光らせる（一覧の「詳しく」と同じ）。graph.js から返るのは ID だけ
