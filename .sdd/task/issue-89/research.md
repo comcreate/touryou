@@ -349,3 +349,74 @@
 - **案 C（木の一覧＋最後の上り・下りの列）を、図と並べて持つ**。「どこで答えを待っているか」を探す仕事は、表のほうが速い見込み（Ghoniem）で、大きくなっても崩れない。
 - 時間の並び（シーケンス図）は、作業のカードの中の「やり取り」の列で足りているので、図には足さない。
 - 決めてほしいこと：F1 図の形（案 B／A／ほか）。F2 一覧（案 C）を図と並べて持つか。F3 大きいときに図をたたむ目安（例：子 10）。
+
+## 9. やり取りの進み具合を、記録から出せるか（11-17 の調べ）
+
+利用者の決め：図の動きを「やり取りの進み具合」に結びつける（**送った・まだ届いていない → 届いた・返事を待っている → 済んだ**）。daemon の記録（イベント列と、それを畳んだ状態 `OrchState`）で、どこまで出せるかをコードで確かめた。どのイベントも、封筒に `seq`・`at`（ISO 8601 UTC）・`actor` を持つ（`packages/core/src/events.ts`）。
+
+### 9.1 やり取りごとの、記録にあるもの・ないもの
+
+| やり取り | 送った | 届いた | 済んだ・答えが返った |
+|:--|:--|:--|:--|
+| 親 → 子の指示（`node.send`） | **ある**：`node.instructed`（状態の `InstructionRecord.seq`・`at`） | **ある**：`node.instructionDelivered`（状態の `deliveredSeq`・`deliveredAt`）。子の mcp が `child.inbox` を `ackThrough` 付きで呼んだときに記録する（`api/handlers/child-inbox-handlers.ts`）。CLI の子への差し戻しの理由も同じ | **ない**：指示と、そのあとの子の報告を結ぶ印がない。「届いたあと、その子が最初に出した報告（`report.added`）」で**推定**はできる |
+| 子 → 親の報告（`report.progress`・`report.done`・`report.outOfScope`） | **ある**：`report.added`（`ReportRecord.seq`・`at`）と、親の受信箱の `inbox.added` | **ない**：統合が `inbox.fetch` で読んでも、何も記録しない（読むだけの操作）。親のセッションへの SSE の知らせも記録しない | 進み具合・知らせは、答えを待たない（届いた＝済んだでよい）。完了の報告は、**ある**：`node.stateChanged`（`accept`・`reject`。`node.review`） |
+| 子 → 親の判断の頼み（`report.decision`） | **ある**：`decision.requested`（状態の `requestedSeq`。時刻はイベントの `at`） | **ない**（上と同じ） | **イベントはある**：`decision.answered`（`at`・`actor`。人か統合か）。ただし状態の `DecisionRecord` には、答えの `seq`・時刻が**ない**（`answer`・`answeredBy` だけ） |
+| 子 → 親の範囲の広げの頼み（`scope.extend`） | **ある**：`scope.extensionRequested`（`requestedSeq`） | **ない**（上と同じ） | **ある**：`scope.extensionDecided`（状態の `decidedSeq`・`decidedBy`）。時刻は状態に**ない**（イベントの `at` にはある） |
+| 人の答え（判断待ちへ。人 → 子） | **ある**：`decision.answered`（`actor` が人）。答えと一緒に、止まっていた子の再開（`node.stateChanged` の `resume`）を積む（`api/handlers/state-handlers.ts`） | **ない**：子が答えを読んだ印がない（再開の記録はある） | 子が次に報告した（推定） |
+| 親の依頼（起動・停止など。daemon → 親） | **ある**：`node.parentRequested` | **ない** | **ある**：`node.parentReported`（`done`・`failed`） |
+
+### 9.2 足りないものと、足し方
+
+| 足りないもの | 足し方 | 新しいイベントが要るか |
+|:--|:--|:--|
+| 判断の答えの時刻 | 状態を畳む所（`events.ts` の `decision.answered`）で、`answeredSeq`・`answeredAt` を `DecisionRecord` に足す | 要らない（イベントにはもうある） |
+| 拡張の判定の時刻 | 同じく、`decidedAt` を `ExtensionRecord` に足す | 要らない |
+| 子 → 親のやり取りが「届いた」（統合が読んだ） | **新しいイベント `inbox.acknowledged { nodeId, throughSeq }`** を足す。統合の mcp が `inbox.fetch` を `ackThrough` 付きで呼んだら記録する（子の `child.inbox` の `ackThrough` と同じ作り）。人が画面で見たことは記録しない（画面を開くたびに記録が増えるため） | **要る**（契約・mcp・記録の版の変更。#89 の外の別の Issue にする案） |
+| 指示に対する「済んだ」 | 推定で出す（届いたあとの最初の報告）。画面には「推定」と小さく出す。確かに結ぶには、報告に「どの指示への返事か」（`replyTo: seq`）を足す | 推定なら要らない。確かに結ぶなら要る（別の Issue） |
+| 人の答えが子に「届いた」 | 子が `decision.get` で答えを読んだときに記録する案（`decision.delivered`）。いまは、再開（`resume`）の記録を「届いた」の代わりにする | 代わりで済ませるなら要らない |
+
+**勧め**：まず、新しいイベントなしで出せる所（送った・指示の届いた・答えの時刻・判定の時刻・完了の受理）だけで出す。子 → 親の「届いた」は、記録がない間は**段を飛ばして「送った」から「済んだ」へ**進める（画面には「届いたかは分からない」の印）。`inbox.acknowledged` は別の Issue で足す。
+
+### 9.3 表示モデルに足す値の案（`ui-view.ts`）
+
+```ts
+export const UI_FLOW_STAGES = ["sent", "delivered", "done"] as const;
+export type UiFlowStage = (typeof UI_FLOW_STAGES)[number];
+
+export interface UiFlow {
+  readonly id: string;                 // 元のイベントの seq から作る（例 "f-123"）
+  readonly kind: "instruction" | "report" | "done" | "decision" | "extension" | "answer" | "parentRequest";
+  readonly dir: "up" | "down";         // up: 子 → 親、down: 親（または人）→ 子
+  readonly from: string;               // ノード ID、または "human"
+  readonly to: string;                 // ノード ID、または "human"
+  readonly stage: UiFlowStage;
+  readonly sentAt: string;
+  readonly deliveredAt?: string;
+  readonly doneAt?: string;
+  /** 「届いた」の記録がない種類（子 → 親）。画面は「届いたかは分からない」を示す。 */
+  readonly deliveryUnknown?: true;
+  /** 「済んだ」を推定で出した（指示のあとの最初の報告など）。 */
+  readonly doneInferred?: true;
+}
+// UiView に readonly flows: readonly UiFlow[] を足す。新しい順に UI_LIMITS.flows（例 200）件まで。
+// 済んでから時間がたったもの（例 24 時間）は載せない。文字（指示の本文など）は載せない（種類と時刻と ID だけ）。
+```
+
+- 段の決め方（純粋な関数 `flowStageOf`。vm と単体の試験で確かめる）：
+  - 指示：`deliveredSeq` なし → `sent`。あり → `delivered`。そのあと子の報告あり → `done`（`doneInferred`）。
+  - 報告（進み具合・知らせ）：`done`（`deliveryUnknown`）。
+  - 完了の報告：受理か差し戻しの前 → `sent`（`deliveryUnknown`）。あと → `done`。
+  - 判断の頼み：`status: open` → `sent`（`deliveryUnknown`）。`answered`・`closed` → `done`（`doneAt` は `answeredAt`・`closedAt`）。
+  - 拡張の頼み：`open` → `sent`。判定済み → `done`（`doneAt` は `decidedAt`）。
+  - 人の答え：`sent` のあと、子の再開の記録で `delivered`、次の報告で `done`（`doneInferred`）。
+- 統合ノードには、いまの見える範囲（自分の部分木）だけを返す（ほかの値と同じ）。
+
+### 9.4 見本と本番の名前を合わせる案
+
+- 段の名前は、見本も本番も **`sent`・`delivered`・`done`** の 3 つにそろえる（見本では `data-stage="sent"` のように持たせる）。画面の言葉は、
+  - `sent`：「送った（まだ届いていない）」
+  - `delivered`：「届いた（返事を待っている）」
+  - `done`：「済んだ」
+- 種類の名前も、見本は 9.3 の `kind` を使う（`instruction`・`report`・`done`・`decision`・`extension`・`answer`・`parentRequest`）。
+- 見本には、「届いたかは分からない」（`deliveryUnknown`）と「推定」（`doneInferred`）の見せ方も 1 つずつ入れてもらう（本番では、子 → 親のやり取りはしばらくこの形になるため）。
+- 動きの結び付けの案：`sent` は線の上を点が進む（まだ届いていない）、`delivered` は点が相手の箱に着いて、箱の縁がゆっくり光る（返事を待っている）、`done` は線が一度だけ光って落ち着く。動きは段が変わったときだけ（8 節の「動きは変化のときだけ」に合わせる）。
