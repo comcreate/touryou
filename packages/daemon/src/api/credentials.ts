@@ -12,7 +12,11 @@ import type { RevokedStore } from "./revoked-store.js";
 import type { TokenRepository } from "./token-repository.js";
 
 export type Principal =
-  | { readonly role: "human" }
+  | {
+      readonly role: "human";
+      /** 画面のセッションのトークンで認証した（`human-token` でない）。ログで見分けるための印で、権限は変わらない。 */
+      readonly via?: "uiSession";
+    }
   | { readonly role: "integrator" | "child"; readonly nodeId: string };
 
 export type NodeRoleForToken = "integrator" | "child";

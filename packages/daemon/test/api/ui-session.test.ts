@@ -241,10 +241,12 @@ describe("画面のセッションが通る入口", () => {
         return { ok: true, value: { purged: ["a"] } };
       },
     } as never);
+    const logs: { event: string }[] = [];
     server = createApiServer({
       credentials: createCredentialStore({ humanToken: HUMAN }),
       getState: state,
       handlers,
+      logger: (e: { event: string }) => void logs.push(e),
     } as never);
     const { url } = await server.listen(0);
     const session = await sessionOf(url);
@@ -262,6 +264,15 @@ describe("画面のセッションが通る入口", () => {
     expect(body.error?.code).toBe("confirmationRequired");
     expect(calls).toEqual([]);
     expect(lines.length).toBe(1);
+    // ログで、画面のセッションの操作と分かる（値は書かない）
+    const marked = logs.filter((e) => e.event === "uiSessionRequest");
+    expect(marked).toEqual([
+      expect.objectContaining({
+        operation: "node.purge",
+        requestId: "11111111-1111-4111-8111-111111111111",
+      }),
+    ]);
+    expect(JSON.stringify(logs)).not.toContain(session);
   });
 
   it("交換の本文は JSON だけを受ける", async () => {

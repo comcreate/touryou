@@ -109,6 +109,13 @@ export type ApiLogEvent =
       readonly at: string;
     }
   | { readonly event: "bindSucceeded"; readonly nodeId: string; readonly at: string }
+  /** `POST /v1/request` を、画面のセッション（`touryou ui` のチケットから交換したもの）で受けた。トークン・チケットは書かない。 */
+  | {
+      readonly event: "uiSessionRequest";
+      readonly requestId: string;
+      readonly operation: DaemonOperation;
+      readonly at: string;
+    }
   /** `POST /v1/hook`: 結んだものと別の `session_id` を拒否した。ID は書かない。 */
   | { readonly event: "hookSessionMismatch"; readonly at: string }
   | {
@@ -442,7 +449,7 @@ export function createApiServer(deps: ApiDeps): ApiServer {
   const authenticate = (token: string | undefined, touch = true): Principal | undefined =>
     deps.credentials.authenticate(token) ??
     (token !== undefined && uiSessions.isSession(token, touch)
-      ? { role: "human" as const }
+      ? { role: "human" as const, via: "uiSession" as const }
       : undefined);
 
   const rl = deps.rateLimit ?? {};
@@ -809,6 +816,10 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       ...(principal.role === "human" ? {} : { caller: { nodeId: principal.nodeId } }),
       params: params.value,
     };
+    // 画面のセッションの操作は、ログに印を残す（記録の行為者は、人間のまま）
+    if (principal.role === "human" && principal.via === "uiSession") {
+      log({ event: "uiSessionRequest", requestId, operation, at: now() });
+    }
     if (inProgress.size >= maxEntries) {
       counters.count("rateLimited", "inProgressTable");
       return tooMany(res, 1);
