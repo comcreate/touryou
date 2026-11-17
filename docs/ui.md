@@ -12,7 +12,7 @@ daemon の窓口が、状態を見るための HTML 画面を配る。**状態�
 | --- | --- | --- |
 | `GET /ui` | なし | HTML（状態を含まない） |
 | `GET /ui/app.js`・`GET /ui/app.css` | なし | 画面の JS・CSS |
-| `GET /ui/graph.js` | なし | 関係図の束（#89。下の「関係図の束」。画面から呼ぶのは、作り直しのあと） |
+| `GET /ui/graph.js` | なし | 関係図の束（#89。下の「関係図の束」。HTML が `app.js` のあとに読む） |
 | `GET /v1/ui/state` | 人間のトークン・画面のセッションだけ（それ以外は 403） | 表示モデル（`uiViewOf`。`{ok:true,value}`） |
 | `GET /v1/events` | 人間のトークン・画面のセッションだけ（それ以外は 403） | SSE（変更の通知。下の「更新（SSE）」） |
 | `POST /v1/ui/ticket` | `human-token` だけ（画面のセッション・ノードは 403） | 画面を開くチケット `{ok:true,value:{ticket}}`（60 秒・1 回だけ） |
@@ -146,8 +146,15 @@ daemon の窓口が、状態を見るための HTML 画面を配る。**状態�
 - **図の形**：横向きの木（根が左）。人とのやり取り（判断・範囲の頼み・答え・根の報告。段を飛ばすもの）は、木の右に置く「人」の箱へ、行の間と縦の通り道を通して描く。人の答えを待つものだけ柿色。ノードどうしで段を飛ばすやり取りは描かない。
 - **束の試験**（`packages/daemon/test/ui/scan.test.ts`）：禁じた API の不在（HTML を解釈する名前は、中身を消す `.innerHTML=""` の形だけ）・`createElementNS` は自前の 1 か所・外に出す名前・ライセンスの表示・`UI_GRAPH_JS` が lockfile の版から束ね直したものと一致すること・gzip 20 KB 以下。
 - **ブラウザの試験**（`browser.test.ts`・`real-ui.test.ts`）：Playwright を依存に加えず、環境にあるもの（`TOURYOU_PLAYWRIGHT` のパスか `playwright`）を使う。無ければ飛ばす。
-  - **いまの CI では飛ばされる**（Playwright がない）。手元では、`TOURYOU_PLAYWRIGHT=$(npm root -g)/playwright pnpm --filter @touryou/daemon test` で流す。
-  - **CI で流す道（案。まだ入れていない）**：`ci.yml` の ubuntu のジョブにだけ、版を固定した Playwright（公開から 14 日以上）を、`npx --yes playwright@<版> install --with-deps chromium` で入れる手順を足し、`TOURYOU_PLAYWRIGHT` をそのパスに向ける。依存（`package.json`）には加えない。入れるかどうかは、利用者が決める。
+  - **CI**：`ci.yml` の **ubuntu・node 22 のジョブ 1 つだけ**で流す。版を固定した Playwright（いまは `1.64.1`。公開から 14 日以上）を、`npm install --prefix "${RUNNER_TEMP}/playwright" --ignore-scripts playwright@<版>` で一時の場所に入れ、`playwright install --with-deps chromium` でブラウザを入れる。依存（`package.json`・lockfile）には加えない。macOS のジョブ（`ci-macos.yml`）と node 24 のジョブでは流さない。ワークフローの権限は増やさない。外から取るのは、その Playwright とブラウザだけ。
+  - **飛ばさない**：そのジョブでは `TOURYOU_REQUIRE_PLAYWRIGHT=1` を付けるので、Playwright が見つからないと、試験は飛ばずに落ちる。ほかのジョブと手元では、見つからなければ飛ばす。
+  - **手元**：`TOURYOU_PLAYWRIGHT=$(npm root -g)/playwright pnpm --filter @touryou/daemon test` で流す。
+  - **Playwright の版上げ**：`ci.yml` の版を、公開から 14 日以上たった版に上げる（ライセンスは Apache-2.0 のままかを確かめる）。
+- **画面からの呼び出し**（`app.js`）：
+  - `/ui` の HTML は、`app.js` のあとに `graph.js` を読む。`app.js` は、`window.touryouGraph` を 1 か所で取り出し、`draw`・`destroy` が関数のときだけ使う。`graph.js` が読めない・描けないときは、一覧だけを出す（図は飾り。一覧だけで読める）。
+  - 「やり取り」の欄の「図」「一覧」で切り替える（既定は図）。一覧にすると `destroy` で図を片付ける。状態が変わったとき（`lastSeq` が進んだとき）だけ描き直す（拡大・移動を保つ）。
+  - 図の見た目は `app.css`（`.board`・`.gnode`・`.line`・`.pip` など）。「動きを止める」（`.still`）と OS の「視差効果を減らす」（`prefers-reduced-motion`）で、線の流れと玉も止まる。
+  - 画面写し（`docs/images`）は、`TOURYOU_UI_SHOTS=<ディレクトリ>` を付けて `real-ui.test.ts` を流すと、作り物の値で撮れる。
 - **手での版上げ**（npm は Dependabot の外）：
   1. `packages/daemon/package.json` の 3 つの版を、公開から 14 日以上たった版に、`^`・`~` なしで上げる（`pnpm --filter @touryou/daemon add -D -E <名前>@<版>`）。
   2. ライセンス（MIT のままか）と、推移の依存（いまは `@babel/runtime` だけ）を確かめる。

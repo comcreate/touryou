@@ -1,9 +1,10 @@
 /**
- * 本物の `/ui` を、daemon の API サーバーから開く Playwright の試験（#89 の PR-5 の土台）。
- * いまの CSP（`UI_HEADERS`）のまま、`/ui/graph.js` を同じ origin から読み、`window.touryouGraph` で図を描けることを確かめる。
- * 画面（app.js）から図を呼ぶのは PR-4 のあと。それまでは、試験の中で `<script src>` を足して読む（CSP の `'self'` の内）。
+ * 本物の `/ui` を、daemon の API サーバーから開く Playwright の試験（#89 の PR-5）。
+ * いまの CSP（`UI_HEADERS`）のまま、画面が `/ui/graph.js` を読み、`#graph` に関係図を描くこと、
+ * 図と一覧を切り替えられること、「動きを止める」と OS の `prefers-reduced-motion` で図の動きが止まることを確かめる。
+ * 画面写し（`docs/images/ui-light.png`・`ui-dark.png`）は、`TOURYOU_UI_SHOTS=<ディレクトリ>` のときだけ撮る（値は作り物）。
  */
-import { foldEvents, type OrchEvent, uiViewOf } from "@touryou/core";
+import { foldEvents, type OrchEvent } from "@touryou/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createCredentialStore } from "../../src/api/credentials.js";
 import { type ApiServer, createApiServer } from "../../src/api/server.js";
@@ -11,20 +12,31 @@ import { type Browser, type Page, type Pw, pw, type Win } from "./playwright.js"
 
 const HUMAN = "human-token-human-token-human-token-1234";
 let n = 0;
-const ev = (body: unknown): OrchEvent =>
+const ev = (body: unknown, actor: unknown = { system: true }): OrchEvent =>
   ({
     seq: ++n,
-    at: "2026-10-20T00:00:00Z",
+    at: new Date(Date.now() - (60 - n) * 60_000).toISOString(),
     requestId: `r${n}`,
-    actor: { system: true },
+    actor,
     ...(body as object),
   }) as OrchEvent;
-const created = (nodeId: string, role: string, parentId: string | null) => [
-  ev({ type: "node.created", payload: { nodeId, role, parentId, dependsOn: [] } }),
+const created = (nodeId: string, role: string, parentId: string | null, objective: string) => [
+  ev({
+    type: "node.created",
+    payload: {
+      nodeId,
+      role,
+      parentId,
+      dependsOn: [],
+      objective,
+      acceptanceCriteria: ["x"],
+      scope: { writableLocations: ["src"], forbiddenLocations: [], allowedCommands: [] },
+    },
+  }),
   ev({ type: "node.stateChanged", payload: { nodeId, event: { type: "start" } } }),
 ];
 
-describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で graph.js を読む）", () => {
+describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係図を描く）", () => {
   let server: ApiServer;
   let browser: Browser | undefined;
   let page: Page;
@@ -32,13 +44,36 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で graph.j
   const problems: string[] = [];
   const state = (() => {
     const r = foldEvents([
-      ...created("root", "integrator", null),
-      ...created("a", "implement", "root"),
-      ...created("b", "review", "root"),
+      ...created("root", "integrator", null, "状態画面の作り直しをまとめる"),
+      ...created("ui-a", "implement", "root", "画面に関係図を出す"),
+      ...created("ui-b", "review", "root", "関係図のレビュー"),
+      ...created("ui-c", "implement", "root", "一覧の見せ方を直す"),
+      ev({ type: "node.instructed", payload: { nodeId: "ui-a", text: "x" } }, { nodeId: "root" }),
+      // 人からの指示（段を飛ばす。木の外の「人」の箱から）
+      ev({ type: "node.instructed", payload: { nodeId: "ui-c", text: "x" } }),
+      ev({
+        type: "decision.requested",
+        payload: { decisionId: "d1", nodeId: "ui-b", question: "どちらにしますか" },
+      }),
     ]);
     if (!r.ok) throw new Error(r.error.cause);
     return r.value;
   })();
+  const ticket = async (): Promise<string> => {
+    const res = await fetch(`${url}/v1/ui/ticket`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${HUMAN}` },
+    });
+    const body = (await res.json()) as { value: { ticket: string } };
+    return body.value.ticket;
+  };
+  const csp = () => page.evaluate(() => (window as Win).__csp ?? []);
+  const animations = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll("#graph path.line, #graph .pip")].map(
+        (e) => getComputedStyle(e).animationName,
+      ),
+    );
 
   beforeAll(async () => {
     server = createApiServer({
@@ -48,7 +83,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で graph.j
     });
     url = (await server.listen(0)).url;
     browser = await (pw as Pw).chromium.launch();
-    page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+    page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     page.on("console", (m) => {
       if (m.type() === "error") problems.push(`${m.type()}: ${m.text()}`);
     });
@@ -60,7 +95,8 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で graph.j
         );
       });
     });
-    await page.goto(`${url}/ui`);
+    await page.goto(`${url}/ui#ticket=${await ticket()}`);
+    await page.waitForSelector("#graph .gnode");
   }, 60_000);
 
   afterAll(async () => {
@@ -68,40 +104,48 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で graph.j
     await server?.close();
   });
 
-  it("/ui を開いても、CSP の違反もエラーもない", async () => {
-    await page.waitForSelector("body");
-    expect(await page.evaluate(() => (window as Win).__csp ?? [])).toEqual([]);
+  it("画面が graph.js を読み、#graph に図を描く。CSP の違反もエラーもない", async () => {
+    expect(await page.locator("#graph .gnode").count()).toBe(5); // 4 つのノードと「人」の箱
+    expect(await page.locator("#graph svg.glink path.line").count()).toBeGreaterThan(0);
+    expect(await page.evaluate(() => document.getElementById("list")?.hidden)).toBe(true);
+    expect(await page.evaluate(() => document.getElementById("view-switch")?.hidden)).toBe(false);
+    expect(await csp()).toEqual([]);
     expect(problems).toEqual([]);
   });
 
-  it("/ui/graph.js を同じ origin から読める。外に出すのは window.touryouGraph（draw・destroy）だけ", async () => {
-    await page.addScriptTag({ url: "/ui/graph.js" });
-    expect(
-      await page.evaluate(() =>
-        Object.keys((window as unknown as { touryouGraph: object }).touryouGraph).sort(),
-      ),
-    ).toEqual(["destroy", "draw"]);
-    expect(await page.evaluate(() => (window as Win).__csp ?? [])).toEqual([]);
+  it("図と一覧を切り替えられる。一覧にすると図は片付き、図に戻すと描き直す", async () => {
+    await page.click("#show-list");
+    expect(await page.evaluate(() => document.getElementById("graph")?.hidden)).toBe(true);
+    expect(await page.evaluate(() => document.getElementById("list")?.hidden)).toBe(false);
+    expect(await page.locator("#graph .gnode").count()).toBe(0);
+    expect(await page.locator("#show-list[aria-pressed=true]").count()).toBe(1);
+    await page.click("#show-graph");
+    await page.waitForSelector("#graph .gnode");
+    expect(await page.locator("#graph .gnode").count()).toBe(5);
+    expect(await page.locator("#show-graph[aria-pressed=true]").count()).toBe(1);
   });
 
-  it("表示モデル（uiViewOf）を渡すと描け、destroy で消える。CSP の違反はない", async () => {
-    const view = JSON.parse(JSON.stringify(uiViewOf(state)));
-    const count = await page.evaluate(async (v: unknown) => {
-      const g = (
-        window as unknown as {
-          touryouGraph: { draw(h: HTMLElement, v: unknown): Promise<void>; destroy(): void };
-        }
-      ).touryouGraph;
-      const host = document.createElement("div");
-      host.id = "graph-test";
-      document.body.append(host);
-      await g.draw(host, v);
-      const drawn = host.querySelectorAll(".gnode").length;
-      g.destroy();
-      return [drawn, host.querySelectorAll(".gnode").length];
-    }, view);
-    expect(count).toEqual([3, 0]);
-    expect(await page.evaluate(() => (window as Win).__csp ?? [])).toEqual([]);
+  it("「動きを止める」で、図の線も玉も止まる。戻すと動く", async () => {
+    expect((await animations()).some((a) => a !== "none")).toBe(true);
+    await page.click("#still");
+    expect(new Set(await animations())).toEqual(new Set(["none"]));
+    await page.click("#still");
+    expect((await animations()).some((a) => a !== "none")).toBe(true);
+  });
+
+  it("prefers-reduced-motion のとき、図の線も玉も動かない", async () => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    expect(new Set(await animations())).toEqual(new Set(["none"]));
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    expect(await csp()).toEqual([]);
     expect(problems).toEqual([]);
+  });
+
+  it.runIf(process.env.TOURYOU_UI_SHOTS !== undefined)("画面写し（明・暗）", async () => {
+    const dir = process.env.TOURYOU_UI_SHOTS as string;
+    for (const scheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+      await page.screenshot({ path: `${dir}/ui-${scheme}.png`, fullPage: true });
+    }
   });
 });

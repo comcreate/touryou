@@ -237,6 +237,11 @@ describe("画面の資産（走査）", () => {
       "Math",
       "AbortController",
       "TextDecoder",
+      // 関係図（#89 の PR-5）：/ui/graph.js の入口と、見せ方の切り替えのボタンの押された印
+      "touryouGraph",
+      "draw",
+      "destroy",
+      "ariaPressed",
       // #89: 画面の作り直し（表示モデルの値・時刻・写すボタン・動きを止める・たたむ欄）
       "title",
       "lastActivityAt",
@@ -300,7 +305,8 @@ describe("画面の資産（走査）", () => {
   it("HTML に、インラインの script・style・イベント属性・javascript: を置かない（script は src だけ）", () => {
     const scripts = [...UI_HTML.matchAll(/<script\b[^>]*>/g)].map((m) => m[0]);
     expect(scripts.length).toBeGreaterThan(0);
-    for (const s of scripts) expect(s).toMatch(/\bsrc="\/ui\/app\.js"/);
+    // script は app.js と、そのあとの graph.js（関係図。#89）の 2 つだけ
+    expect(scripts).toEqual(['<script src="/ui/app.js">', '<script src="/ui/graph.js">']);
     expect(UI_HTML).not.toMatch(/<script\b[^>]*>\s*[^<\s]/);
     expect(UI_HTML).not.toMatch(/<style\b/i);
     expect(UI_HTML).not.toMatch(/\sstyle\s*=/i);
@@ -1221,5 +1227,29 @@ describe("画面の使い勝手（#13）", () => {
     expect(body).toContain("e.name = fieldName");
     expect(body).toContain("e.id = fieldName + '-' + fieldSeq");
     expect(UI_HTML).toContain('<input id="token" name="token"');
+  });
+});
+
+describe("関係図の呼び出し（#89 の PR-5）", () => {
+  it("app.js が図に触れるのは、window.touryouGraph の draw・destroy だけ。graph.js がなくても一覧で動く", () => {
+    const uses = [...UI_JS.matchAll(/touryouGraph\.?(\w*)/g)].map((m) => m[0]);
+    expect(uses).toEqual(["touryouGraph"]); // 1 か所で取り出し、そこで形を確かめる
+    expect(UI_JS).toContain(
+      "typeof g.draw === 'function' && typeof g.destroy === 'function' ? g : null",
+    );
+    expect([...UI_JS.matchAll(/\bg\.draw\(/g)]).toHaveLength(1);
+    expect(UI_JS).toContain("g.draw(document.getElementById('graph'), view)");
+    expect(UI_JS).toMatch(/\.catch\(function \(\) \{[^}]*graphMode = 'list'/); // 描けないときは一覧に戻る
+  });
+  it("見せ方の切り替え（図・一覧）があり、動きを止める（.still）と OS の設定で、図の動きも止まる", () => {
+    expect(UI_HTML).toContain('<button id="show-graph" class="quiet sm" type="button">図</button>');
+    expect(UI_HTML).toContain(
+      '<button id="show-list" class="quiet sm" type="button">一覧</button>',
+    );
+    expect(UI_CSS).toContain(".still *,.still *::before{animation:none!important");
+    expect(UI_CSS).toMatch(
+      /prefers-reduced-motion: reduce\)\{\*,\*::before\{animation:none!important/,
+    );
+    expect(UI_CSS).toContain(".line.g-sent{animation:gflow");
   });
 });

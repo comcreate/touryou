@@ -114,5 +114,14 @@ jobs:
           cache: pnpm
       - if: steps.changes.outputs.code == 'true'
         run: pnpm install --frozen-lockfile
+      - name: 画面の試験の Playwright を入れる（版を固定。依存には加えない。ubuntu の node 22 のジョブだけ。docs/ui.md の「関係図の束」）
+        if: steps.changes.outputs.code == 'true' && matrix.node == 22
+        run: |
+          dir="${RUNNER_TEMP}/playwright"
+          npm install --prefix "${dir}" --no-save --no-audit --no-fund --ignore-scripts playwright@1.64.1
+          "${dir}/node_modules/.bin/playwright" install --with-deps chromium
+          # このジョブでは、Playwright が見つからないときに画面の試験を飛ばさず、落とす
+          echo "TOURYOU_PLAYWRIGHT=${dir}/node_modules/playwright" >> "$GITHUB_ENV"
+          echo "TOURYOU_REQUIRE_PLAYWRIGHT=1" >> "$GITHUB_ENV"
       - if: steps.changes.outputs.code == 'true'
         run: bash scripts/check.sh

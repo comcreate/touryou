@@ -38,7 +38,7 @@ export const UI_HTML = `<!doctype html>
 <section id="view" hidden>
 <section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h2 id="now-title">いまあなたがすること</h2><p id="now-lead" class="lead"></p></section>
 <div id="todo" class="todo"></div>
-<section class="sec"><h2>やり取り</h2><p class="lead">親子の並びと、いちばん新しい上り（子 → 親）・下り（親・人 → 子）です。</p><div id="graph" class="board" hidden></div><div id="list" class="tlist"></div></section>
+<section class="sec"><h2>やり取り</h2><p class="lead">親子の並びと、いちばん新しい上り（子 → 親）・下り（親・人 → 子）です。</p><div id="view-switch" class="seg" role="group" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button">図</button><button id="show-list" class="quiet sm" type="button">一覧</button></div><div id="graph" class="board" hidden></div><div id="list" class="tlist"></div></section>
 <section class="sec"><h2>作業ごとのようす</h2><p class="lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。</p><div id="cards" class="cards"></div>
 <details id="finished" class="finished"><summary id="finished-summary">終わった作業</summary><div id="finished-cards" class="cards"></div></details></section>
 <details class="admin"><summary>管理（まれに使う操作）</summary><p class="warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
@@ -47,6 +47,7 @@ export const UI_HTML = `<!doctype html>
 </section>
 </main>
 <script src="/ui/app.js"></script>
+<script src="/ui/graph.js"></script>
 </body>
 </html>
 `;
@@ -136,6 +137,20 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 @keyframes arrive{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 @keyframes flash{0%{box-shadow:0 0 0 0 var(--kaki)}30%{box-shadow:0 0 0 6px var(--kaki-soft)}100%{box-shadow:0 0 0 0 transparent}}
 @keyframes open{from{opacity:0;transform:translateY(-4px)}}
+.seg{display:inline-flex;gap:4px;margin:0 0 8px}.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.board{position:relative;height:560px;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:var(--sheet);user-select:none;-webkit-user-select:none;touch-action:none}
+.gnode{box-sizing:border-box;width:220px;height:80px;padding:10px 14px;border:1px solid var(--line);border-left:5px solid var(--ai-3);border-radius:4px 12px 12px 4px;background:var(--card);display:flex;flex-direction:column;gap:4px;overflow:hidden}
+.gnode.b-turn{border-left-color:var(--kaki)}.gnode.b-finished{opacity:.55}.gnode.b-human{border-style:dashed;border-left-width:1px;border-radius:12px}
+.gt{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gs{color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.glink{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.twig{fill:none;stroke:var(--muted);stroke-width:1.5;stroke-dasharray:2 5;opacity:.6}
+.line{fill:none;stroke:var(--ai);stroke-width:2.5;stroke-dasharray:6 8}.tip{fill:var(--ai)}
+.line.down{stroke:var(--ai-2)}.tip.down{fill:var(--ai-2)}
+.line.g-sent{animation:gflow .8s linear infinite}.line.g-unknown{animation:gflow 3s linear infinite;stroke-dasharray:3 6}.line.g-delivered{animation:gflow 2.4s linear infinite}.line.g-done{opacity:.45}
+.line.wait{stroke:var(--kaki);stroke-width:3.5}.tip.wait{fill:var(--kaki)}
+.mlabel{font-size:11px;fill:var(--muted)}
+.pip{position:absolute;left:0;top:0;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:var(--ai);offset-rotate:0deg;animation:gtravel 1.6s linear infinite}
+@keyframes gflow{to{stroke-dashoffset:-14}}@keyframes gtravel{from{offset-distance:0%}to{offset-distance:100%}}
 .still *,.still *::before{animation:none!important;transition:none!important}
 @media (prefers-reduced-motion: reduce){*,*::before{animation:none!important;transition:none!important}}
 @media (max-width:640px){.now .count{font-size:44px}.now h2{font-size:18px}.top .tools{margin-left:0}}
@@ -776,6 +791,41 @@ export const UI_JS = `'use strict';
     c.appendChild(el('span', 'when', '　' + timeText(f.sentAt, Date.now())));
     return c;
   }
+  // 関係図（#89）。/ui/graph.js が出す入口の draw・destroy だけを呼ぶ。読めないときは一覧だけ
+  var graphMode = 'graph';
+  var graphSeq = -1;
+  var graphView = null;
+  function graphApi() {
+    var g = window.touryouGraph;
+    return g && typeof g.draw === 'function' && typeof g.destroy === 'function' ? g : null;
+  }
+  function dropGraph() {
+    var g = graphApi();
+    if (g && graphSeq !== -1) g.destroy();
+    graphSeq = -1;
+  }
+  function renderGraph(view, seq) {
+    var g = graphApi();
+    var on = !!g && graphMode === 'graph';
+    document.getElementById('view-switch').hidden = !g;
+    document.getElementById('graph').hidden = !on;
+    document.getElementById('list').hidden = on;
+    document.getElementById('show-graph').ariaPressed = on ? 'true' : 'false';
+    document.getElementById('show-list').ariaPressed = on ? 'false' : 'true';
+    if (!on) { dropGraph(); return; }
+    if (seq === graphSeq) return; // 変わっていなければ描き直さない（拡大・移動を保つ）
+    graphSeq = seq;
+    g.draw(document.getElementById('graph'), view).catch(function () {
+      // 描けなければ、一覧に戻す（図は飾り。一覧だけで読める）
+      graphMode = 'list';
+      dropGraph();
+      renderGraph(view, seq);
+    });
+  }
+  function showGraphMode(mode) {
+    graphMode = mode;
+    if (graphView && lastView) { graphSeq = mode === 'graph' ? -1 : graphSeq; renderGraph(graphView, lastView.seq); }
+  }
   function renderList(view) {
     var box = document.getElementById('list');
     clear(box);
@@ -1340,6 +1390,8 @@ export const UI_JS = `'use strict';
     renderTodo(v, byId);
     renderCards(v, byId);
     var drawn = renderList(v);
+    graphView = v;
+    renderGraph(v, view.lastSeq);
     seenItems = nextSeen;
     renderPurge(view.nodes);
     showAuth(false);
@@ -1360,6 +1412,7 @@ export const UI_JS = `'use strict';
       viaSession = false;
       message = '画面のセッションが切れました（使わずに 1 時間たった・開いてから 12 時間たった・daemon を起動し直した など）。/touryou:ui（または Mac のターミナルで touryou ui）で開き直してください';
     }
+    dropGraph(); graphView = null;
     token = ''; etag = ''; lastView = null; generation += 1; sseUp = false; keptList = null; purgeSignature = null; pending = null;
     if (controller) controller.abort();
     document.getElementById('approvals').hidden = true; codeDrafts.clear(); approvalErrors.clear();
@@ -1506,6 +1559,8 @@ export const UI_JS = `'use strict';
   }
 
   // 動きを止める（OS の「視差効果を減らす」でも止まる。CSS の prefers-reduced-motion）
+  document.getElementById('show-graph').addEventListener('click', function () { showGraphMode('graph'); });
+  document.getElementById('show-list').addEventListener('click', function () { showGraphMode('list'); });
   var stillBtn = document.getElementById('still');
   stillBtn.addEventListener('click', function () {
     var on = document.documentElement.classList.toggle('still');
