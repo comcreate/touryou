@@ -816,13 +816,13 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       ...(principal.role === "human" ? {} : { caller: { nodeId: principal.nodeId } }),
       params: params.value,
     };
-    // 画面のセッションの操作は、ログに印を残す（記録の行為者は、人間のまま）
-    if (principal.role === "human" && principal.via === "uiSession") {
-      log({ event: "uiSessionRequest", requestId, operation, at: now() });
-    }
     if (inProgress.size >= maxEntries) {
       counters.count("rateLimited", "inProgressTable");
       return tooMany(res, 1);
+    }
+    // 画面のセッションの操作は、受け付けたときに、ログに印を残す（記録の行為者は、人間のまま）
+    if (principal.role === "human" && principal.via === "uiSession") {
+      log({ event: "uiSessionRequest", requestId, operation, at: now() });
     }
     let resolveReply: (r: Reply) => void = () => undefined;
     const entry: InProgressEntry = {
