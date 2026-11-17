@@ -879,9 +879,33 @@ export function grantedOnlyByExtension(
   if (segments === undefined || segments.length === 0) return false;
   const granted = effective.allowedCommands
     .filter((e) => !brief.allowedCommands.includes(e))
+    // 区切り（`;`・`|` など）を含む項目は、承認した形そのものと意味が違う語の並びになるので外す
+    .filter((e) => commandWords(e)?.filter((s) => s.length > 0).length === 1)
     .map(entryWords)
     .filter((w) => commandEntryProblem(w) === undefined);
   return segments.every((seg) =>
     granted.some((w) => w.length === seg.length && w.every((x, i) => seg[i] === x)),
   );
+}
+
+/**
+ * 書き込みの道具の入力のパスを、実パスにした入力を返す（`grantedOnlyByExtension` で、実パスの作業ツリーと比べるため。#91）。
+ * 相対パスは `toolCwd` を基準にする。書き込みの道具でない・パスがない・解決できないときは、入力をそのまま返す（比べて偽になる。安全側）。
+ */
+export async function withRealWritePath(
+  toolName: string,
+  toolInput: unknown,
+  toolCwd: string,
+  resolve: ResolvePath,
+): Promise<unknown> {
+  const key = WRITE_TOOLS[toolName];
+  if (key === undefined || !isRec(toolInput)) return toolInput;
+  const p = toolInput[key];
+  if (typeof p !== "string" || p === "") return toolInput;
+  try {
+    const abs = p.startsWith("/") ? p : `${toolCwd.replace(/\/+$/, "")}/${p}`;
+    return { ...toolInput, [key]: await resolve(abs) };
+  } catch {
+    return toolInput;
+  }
 }

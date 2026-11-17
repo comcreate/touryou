@@ -1,7 +1,11 @@
 import { PLUGIN_NAME, type Scope } from "@touryou/core";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { decideToolUse, grantedOnlyByExtension } from "../../src/sdk/hook-policy.js";
+import {
+  decideToolUse,
+  grantedOnlyByExtension,
+  withRealWritePath,
+} from "../../src/sdk/hook-policy.js";
 
 const CWD = "/wt/a";
 const scope: Scope = {
@@ -712,6 +716,8 @@ describe("grantedOnlyByExtension（#91: 承認済みの拡張にだけ、明示�
     expect(w("Write", { file_path: "/w/docs/a.md" })).toBe(true);
     expect(w("Edit", { file_path: "docs/b.md" })).toBe(true);
     expect(w("NotebookEdit", { notebook_path: "/w/docs/n.ipynb" })).toBe(true);
+    expect(w("MultiEdit", { file_path: "/w/docs/m.md" })).toBe(true);
+    expect(w("MultiEdit", { file_path: "/w/src/m.ts" })).toBe(false);
     expect(w("Write", { file_path: "/w/src/a.ts" })).toBe(false);
     expect(w("Write", { file_path: "/w/other/a.ts" })).toBe(false);
     expect(w("Write", { file_path: "/w/docs/secret/k" })).toBe(false);
@@ -728,5 +734,42 @@ describe("grantedOnlyByExtension（#91: 承認済みの拡張にだけ、明示�
     expect(permit("pnpm test && git ls-files docs .sdd")).toBe(false);
     expect(permit(grep, "Read")).toBe(false);
     expect(grantedOnlyByExtension(brief, effective, "Bash", {}, "/w")).toBe(false);
+  });
+});
+
+describe("grantedOnlyByExtension の区切りを含む承認・withRealWritePath（#91）", () => {
+  const brief: Scope = {
+    writableLocations: ["src"],
+    forbiddenLocations: [".git"],
+    allowedCommands: ["pnpm test"],
+  };
+  it("区切りを含む承認の項目は、引用符で同じ語にしても明示の許可を付けない", () => {
+    const eff: Scope = { ...brief, allowedCommands: ["pnpm test", "git log; rm x"] };
+    expect(grantedOnlyByExtension(brief, eff, "Bash", { command: "git 'log;' rm x" }, "/w")).toBe(
+      false,
+    );
+    expect(grantedOnlyByExtension(brief, eff, "Bash", { command: "git log; rm x" }, "/w")).toBe(
+      false,
+    );
+  });
+  it("書き込みのパスを実パスにする（相対は道具の cwd から）。解決できなければそのまま", async () => {
+    const resolve = async (p: string) => p.replace(/^\/var\//, "/private/var/");
+    expect(await withRealWritePath("Write", { file_path: "/var/w/docs/a" }, "/x", resolve)).toEqual(
+      {
+        file_path: "/private/var/w/docs/a",
+      },
+    );
+    expect(await withRealWritePath("Edit", { file_path: "docs/a" }, "/var/w", resolve)).toEqual({
+      file_path: "/private/var/w/docs/a",
+    });
+    const fail = async (): Promise<string> => {
+      throw new Error("x");
+    };
+    expect(await withRealWritePath("Write", { file_path: "/a" }, "/w", fail)).toEqual({
+      file_path: "/a",
+    });
+    expect(await withRealWritePath("Bash", { command: "ls" }, "/w", resolve)).toEqual({
+      command: "ls",
+    });
   });
 });

@@ -119,7 +119,12 @@ import {
 import { reconcileOnStartup } from "./reconcile.js";
 import { latestLaunch, ParentRequestCliAdapter, stopDelegation } from "./sdk/cli-adapter.js";
 import { DesktopRuntimeAdapter, touryouChildCommands } from "./sdk/desktop-adapter.js";
-import { decideToolUse, grantedOnlyByExtension, resolveScope } from "./sdk/hook-policy.js";
+import {
+  decideToolUse,
+  grantedOnlyByExtension,
+  resolveScope,
+  withRealWritePath,
+} from "./sdk/hook-policy.js";
 import { createLsofProbe, nodeExec, type ProcessProbe } from "./sdk/lsof-probe.js";
 import { nodeTimers } from "./sdk/node-timers.js";
 import { nodeFsOps, resolveForWrite } from "./sdk/path-resolve.js";
@@ -1649,8 +1654,11 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     );
     if (d.allow) {
       // 起動のときの許可の一覧（ブリーフの範囲から作る。dontAsk）にない、承認済みの拡張でだけ通る Bash は、明示の許可を返す（#91）
+      // 承認済みの書き込みの場所への書き込みも同じ。書き込みのパスは、作業ツリー（実パス）と比べるため実パスにしてから渡す
+      // （macOS の /var と /private/var の食い違いで、明示の許可が付かなくなるのを防ぐ）
       const brief = log.state().nodes.find((n) => n.id === nodeId)?.scope;
-      if (brief !== undefined && grantedOnlyByExtension(brief, scope, toolName, toolInput, wt)) {
+      const input = await withRealWritePath(toolName, toolInput, here, resolveHookPath);
+      if (brief !== undefined && grantedOnlyByExtension(brief, scope, toolName, input, wt)) {
         return { allow: true, permit: "extension" };
       }
       return { allow: true };
