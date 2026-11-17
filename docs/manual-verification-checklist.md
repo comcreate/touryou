@@ -275,6 +275,7 @@
 ## G. 関係図の束 `/ui/graph.js`（Issue #89）
 
 - **前提**: daemon が動いている Mac。Chromium 系か Safari のブラウザ。
+- **作り物のデータで見るとき**: 本物の記録がなくても、`pnpm install && pnpm build` のあと `node scripts/ui-preview.mjs`（流れる線と玉も見るなら `--live`）で、一時の場所と空いたポートに画面を立てて既定のブラウザで開ける（常駐の daemon には触らない。Ctrl+C で止めると一時の場所を消す）。統合 1・子 5・孫 4 の形、答え待ち・止まっているかも・失敗・済んだ・止めた・アーカイブ、新しいものから 1 時間より前までのやり取りが入っている。子の文に混ぜた `<script>`・`<img onerror>` が文字のまま出て、ダイアログが出ないことも見る。
 - **手順**:
   1. `/touryou:ui` で状態画面を開く。開発者ツールのコンソールに、CSP の違反（`Refused to …`）が出ていないことを見る。
   2. 同じタブで `http://127.0.0.1:<port>/ui/graph.js` を開く → 先頭にライセンスの表示（`rete@…`・`MIT`）があり、`var touryouGraph=` で始まる束が返ることを見る（応答のヘッダーに `content-security-policy` があること）。
