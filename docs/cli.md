@@ -35,6 +35,14 @@ touryou reclaim <nodeId>
 - `--request-id <id>` を付けると、その識別子で要求する（前回の結果が確認できなかったときの再実行。daemon が重複を防ぐ）。付けなければ、新しく作る。
 - 応答を受け取れなかった・不正な応答のときは「結果が確認できない」として、同じ `requestId` で再実行するコマンドを出す（終了コード 1）。
 
+## 状態画面を開く `touryou ui`
+
+`touryou ui`（引数なし）: 状態画面を、既定のブラウザ（macOS の `open`）で開く。**環境変数の `TOURYOU_HUMAN_TOKEN`・`TOURYOU_DAEMON_URL` は使わない**。`$HOME/.touryou/config.json`（`TOURYOU_DAEMON_CONFIG` があればそれ）の `stateDir` から、`port`・`human-token`・`daemon-identity` を自分で読み、daemon の身元を確かめてから、使い捨てのチケット（60 秒・1 回だけ）をもらって `http://127.0.0.1:<port>/ui#ticket=<チケット>` を開く（くわしくは `docs/ui.md` の「認証」）。
+
+- トークン・チケット・URL は、標準出力・標準エラーに出さない。`open` の引数（`ps` に出る）は、使い捨てのチケットだけ。
+- 失敗（設定・`port`・`human-token` が読めない、daemon に届かない、身元が合わない、チケットをもらえない、ブラウザを開けない）は、原因と次の操作を出して終了コード 1。ブラウザを開けない（macOS でない・`open` が失敗した）ときは、「Mac のターミナルで `touryou ui` を実行してください」と出す。引数を付けたら終了コード 2。
+- plugin の `/touryou:ui` は、これを 1 回実行するだけ。
+
 ## 版の確認 `touryou --version`
 
 `touryou --version`（`-v` も同じ）は、入っている配布物の版を 1 行で出す（窓口・トークンは使わない。daemon の起動も不要）。`touryou-daemon --version`・`touryou-mcp --version` も同じ。daemon・mcp・cli の版の食い違いの切り分けに使う。

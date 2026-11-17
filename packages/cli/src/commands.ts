@@ -121,6 +121,9 @@ const USAGE = `使い方:
   touryou launchd apply --yes | status | restart | stop | uninstall --yes  [--org …]
       launchd の常駐の操作（launchctl を実行する。apply・uninstall は、利用者の同意を取ってから --yes）。詳しくは docs/launchd.md
   --request-id <id>  結果が確認できなかった要求を、同じ識別子で再実行する
+  touryou ui
+      状態画面を、既定のブラウザで開く（macOS）。人間のトークンのファイルを自分で読み、使い捨てのチケット（60 秒・1 回だけ）にして開く。
+      トークン・チケット・URL は出さない。環境変数の TOURYOU_HUMAN_TOKEN は要らない。詳しくは docs/ui.md
   -h, --help         この使い方を表示する（終了コード 0）
 終了コード: 0 成功 / 1 失敗・結果が確認できない / 2 引数の誤り`;
 

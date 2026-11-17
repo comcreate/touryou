@@ -51,6 +51,7 @@ claude plugin marketplace add comcreate/touryou
 1. daemon を起動する（`touryou-daemon --config <設定ファイル> [--port <1〜65535>]`）。窓口のポートは、`--port` → 設定の `port`（0 以外）→ stateDir の `port` のファイル（前回のポート。0600）→ 空いているポート（そのファイルに保存する）の順で決まり、再起動しても変わらない。保存したポートが使われていれば、別のポートには移らず、起動しない（理由と直し方を出す）。起動の記録（`started`）の `portSource` に、どこから決まったか（`option`・`config`・`saved`・`new`）が出る。OS が選ぶポートは一時的なポートの範囲なので、まれにほかの接続が使う。止まったら `--port` で範囲外の番号を指定する。ファイルが壊れている・権限が緩い・リンクのときは `portFileInvalid` で起動しない（権限を 0600 にするか、ファイルを消す）。新規のポートを保存できないとき、Desktop の子（`childRuntime: "desktop"`）では `portSaveFailed` で起動しない。同じ stateDir で、2 つの daemon を動かさない。
 2. 統合セッションを、この plugin つきで起動する（marketplace から入れるか、`claude --plugin-dir <plugin のパス>`）。MCP サーバー `node` は、plugin の `.mcp.json` が stdio で起動し、根のトークンは `touryou-mcp --stdio` が `$HOME/.touryou/config.json` の `stateDir` の `root-token` から読む（環境変数は使わない・要らない）。`stateDir` を標準の置き場以外にしたときも、`$HOME/.touryou/config.json` の `stateDir` をその場所にすれば読める。**トークンの値は、設定ファイルに書かない・チャットに貼らない**。
 3. `/touryou:start` で接続を確かめ、`integrator` の skill に沿って作業する。
+4. 状態画面は `/touryou:ui` で開く（`touryou ui` を 1 回実行し、使い捨てのチケットで既定のブラウザに開く。トークンの貼り付けは要らない。モデルはトークンのファイルを読まず、チケットも見ない。再読み込みしたら、もう一度 `/touryou:ui`。Claude Code がクラウドで動いているなど、ブラウザを開けないときは、Mac のターミナルで `touryou ui` を実行する。`docs/ui.md`）。
 
 daemon は、CLI の子を起動しない。親のセッションが起動する（下の「親から子を起動する流れ」）。
 

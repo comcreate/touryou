@@ -150,6 +150,7 @@ describe("画面の資産（走査）", () => {
       "clearTimeout",
       "setTimeout",
       "hash",
+      "session",
       "pathname",
       "search",
       "history",

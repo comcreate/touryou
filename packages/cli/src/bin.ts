@@ -33,6 +33,7 @@ import {
   runLaunchdService,
   SERVICE_SUBCOMMANDS,
 } from "./launchd-service.js";
+import { runUi, type UiDeps } from "./ui.js";
 
 export interface BinDeps {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -46,6 +47,8 @@ export interface BinDeps {
   readonly readStdin?: () => Promise<string>;
   /** `touryou hook` のフック入力。読み取りの上限で切れたら、`truncated: true`（途中までの `text`）。 */
   readonly readHookStdin?: () => Promise<{ readonly text: string; readonly truncated: boolean }>;
+  /** `touryou ui` の差し替え（試験用）。 */
+  readonly ui?: Partial<Pick<UiDeps, "readFile" | "verifierFor" | "openUrl">>;
   /** 待ち（daemon の再起動の待ちなど。試験で差し替える）。 */
   readonly sleep?: (ms: number) => Promise<void>;
   /** `touryou launchd apply|status|…` の外部コマンド・窓口の確認（試験で差し替える）。 */
@@ -178,6 +181,23 @@ export async function runBin(argv: readonly string[], deps: BinDeps): Promise<Co
     return runLaunchd(argv.slice(1), {
       env: deps.env,
       checkConfig: deps.launchd?.checkConfig ?? checkConfigBySpawn,
+    });
+  }
+  if (argv[0] === "ui" && !argv.includes("--help") && !argv.includes("-h")) {
+    // 状態画面を開く。human-token を自分で読み、チケットにして開く（環境変数の TOURYOU_HUMAN_TOKEN は使わない）
+    return runUi(argv.slice(1), {
+      env: deps.env,
+      ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
+      ...(deps.ui?.readFile === undefined ? {} : { readFile: deps.ui.readFile }),
+      ...(deps.ui?.verifierFor === undefined ? {} : { verifierFor: deps.ui.verifierFor }),
+      openUrl:
+        deps.ui?.openUrl ??
+        ((url) => {
+          if (process.platform !== "darwin") return false;
+          // 引数に出るのは、使い捨てのチケットだけ。標準出力・標準エラーは捨てる（URL を出さない）
+          const r = spawnSync("/usr/bin/open", [url], { stdio: "ignore", timeout: 15_000 });
+          return r.error === undefined && r.status === 0;
+        }),
     });
   }
   if (argv[0] === "child") {

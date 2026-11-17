@@ -12,8 +12,10 @@ daemon の窓口が、状態を見るための HTML 画面を配る。**状態�
 | --- | --- | --- |
 | `GET /ui` | なし | HTML（状態を含まない） |
 | `GET /ui/app.js`・`GET /ui/app.css` | なし | 画面の JS・CSS |
-| `GET /v1/ui/state` | 人間のトークンだけ（それ以外は 403） | 表示モデル（`uiViewOf`。`{ok:true,value}`） |
-| `GET /v1/events` | 人間のトークンだけ（それ以外は 403） | SSE（変更の通知。下の「更新（SSE）」） |
+| `GET /v1/ui/state` | 人間のトークン・画面のセッションだけ（それ以外は 403） | 表示モデル（`uiViewOf`。`{ok:true,value}`） |
+| `GET /v1/events` | 人間のトークン・画面のセッションだけ（それ以外は 403） | SSE（変更の通知。下の「更新（SSE）」） |
+| `POST /v1/ui/ticket` | `human-token` だけ（画面のセッション・ノードは 403） | 画面を開くチケット `{ok:true,value:{ticket}}`（60 秒・1 回だけ） |
+| `POST /v1/ui/session` | なし（本文 `{ticket}` が資格） | 画面のセッションのトークン `{ok:true,value:{session}}` |
 
 **静的な資産（`/ui`・`/ui/app.js`・`/ui/app.css`）には、回数の制限をかけない**（状態を含まず、認証もないため。`/v1/ui/state` は、主体ごとの回数の制限の対象）。
 
@@ -21,8 +23,16 @@ daemon の窓口が、状態を見るための HTML 画面を配る。**状態�
 
 ## 認証（人間のトークン）
 
-- **推奨: ページに貼り付ける。** 人間のトークンのファイルの中身を、`/ui` を開いて出る入力欄に貼る。トークンはページのメモリにだけ置く（localStorage・sessionStorage・cookie には置かない）。リロードすると、また貼る。
-- **代わりの方法: `/ui#token=…`。** フラグメントはサーバーへ送られず、ログにも残らない。ページは、読み込んだ**最初に**取り出して `history.replaceState` でアドレスから消す（試験で、最初の通信より前にあることを確かめている）。**ただし、ブラウザの履歴・ブックマーク・同期・拡張機能・シェルの履歴（`open` のコマンドなど）に、トークンを含む URL が残ることがある。** 共有の端末・同期するブラウザでは使わない。
+- **推奨: `/touryou:ui`（Claude Code）か、Mac のターミナルで `touryou ui`（`$HOME/.touryou/current/bin/touryou ui`）。** 貼り付けなしで、既定のブラウザに開く（#88）。
+  1. `touryou ui` が、`$HOME/.touryou/config.json`（または `TOURYOU_DAEMON_CONFIG`）の `stateDir` から、`port` と `human-token` を自分で読む（`TOURYOU_HUMAN_TOKEN` は要らない）。
+  2. daemon の身元を確かめる（`docs/daemon-identity.md`。今の `touryou` コマンドと同じ）。合わなければ、トークンを送らずに止まる。チケットの応答の `x-touryou-daemon-id` も、確かめた daemon と照らす。
+  3. `POST /v1/ui/ticket` でチケットをもらい、`http://127.0.0.1:<port>/ui#ticket=<チケット>` を `open` で開く。**`ps`・ブラウザの履歴に残るのは、このチケットだけ**（60 秒・1 回だけ）。トークン・チケット・URL は、標準出力・標準エラーに出さない。
+  4. 画面は、読み込んだ**最初に**フラグメントを取り出して `history.replaceState` でアドレスから消し、`POST /v1/ui/session` で、画面のセッションのトークンに交換する。チケットは、交換を試みた時点で（成否によらず）消える。
+- **画面のセッション**: `human-token` とは別の値。画面のメモリにだけ置く（localStorage・sessionStorage・cookie には置かない）。**再読み込みしたら、`/touryou:ui` でもう一度開く。** 使わないと 1 時間・発行から最長 12 時間で切れる。daemon のメモリにだけあるので、**daemon を起動し直すと、すべて切れる**。できることは人間と同じ（取り消せない操作は、今までどおり ID の打ち込みの確認つきで、daemon の確認待ちも経由する）。チケットはもらえない（`human-token` だけ）。
+- **チケットの拒否**: 誤り・期限切れ・使用済みは、同じ 401 と同じ文面で断る。失敗は接続元ごとの認証の失敗の制限（`docs/rate-limit.md`）で数え、尽きている間は、照合せずに 429（`Retry-After`）。
+- **ブラウザを開けないとき**（Claude Code がクラウドで動いている・macOS でない など）: `touryou ui` は、URL を出さずに「Mac のターミナルで `touryou ui` を実行してください」と出して止まる。
+- **予備: ページに貼り付ける。** 人間のトークンのファイルの中身を、`/ui` を開いて出る入力欄に貼る。メモリにだけ置く。リロードすると、また貼る。
+- **`/ui#token=…` は外した**（長く使えるトークンを URL に載せる道のため）。付けて開いても、フラグメントは消されるだけで、接続しない。
 - 以後の通信は `Authorization: Bearer` の header だけ。cookie を使わないので、CSRF の経路はない（操作も同じ）。
 
 ## 表示モデル（`uiViewOf`）

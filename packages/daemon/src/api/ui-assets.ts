@@ -9,7 +9,8 @@
  *   通信は `callOperation` の 1 か所だけ（事前確認・一覧の読み取りも同じ）。
  * - 操作（判断への回答・拡張要求の判定）は、`<form>` を使わず、ボタンの click で、`POST /v1/request`（`Authorization: Bearer`。cookie は使わない）で送る。
  *   送る前に、必ず確認の表示（内容と回答）を挟む。確認のたびに `requestId` を新しく作り、その確認の間は同じ ID で再送する。
- * - 人間のトークンは、読み込んだらすぐ `history.replaceState` でフラグメントを消し、メモリにだけ持つ（storage・cookie には置かない）。
+ * - 画面を開くチケット（`#ticket=`）は、読み込んだらすぐ `history.replaceState` でフラグメントを消し、`POST /v1/ui/session` でセッションのトークンに
+ *   交換する。セッションのトークン（または貼り付けた人間のトークン）は、メモリにだけ持つ（storage・cookie には置かない）。`#token=` は受け取らない。
  */
 
 import { externalCheckSummaries } from "../external-check.js";
@@ -28,7 +29,7 @@ export const UI_HTML = `<!doctype html>
 <main>
 <section id="auth" hidden>
 <h2>人間のトークン</h2>
-<p>人間のトークンのファイルの中身を、貼り付けてください（推奨）。トークンはこのページのメモリにだけ置き、保存しません。</p>
+<p>Mac のターミナルで <code>touryou ui</code> を実行すると（Claude Code では <code>/touryou:ui</code>）、貼り付けなしで開けます。再読み込みしたときも、開き直してください。使えないときは、人間のトークンのファイルの中身を貼り付けてください。トークンはこのページのメモリにだけ置き、保存しません。</p>
 <form id="auth-form"><input id="token" name="token" type="password" autocomplete="off" spellcheck="false" aria-label="人間のトークン"><button type="submit">接続</button></form>
 </section>
 <section id="approvals" class="approvals" hidden></section>
@@ -80,14 +81,14 @@ const EXTERNAL_CHECK_PREFIXES = JSON.stringify(externalCheckSummaries().map((x) 
 
 export const UI_JS = `'use strict';
 (function () {
-  // 最初に、フラグメントのトークンを取り出して、アドレスから消す（履歴に残さない）。
+  // 最初に、フラグメントのチケット（touryou ui が付ける、60 秒・1 回だけのもの）を取り出して、アドレスから消す（履歴に残さない）。
+  // 長く使える人間のトークンは、URL では受け取らない（#token= は効かない）。
   var token = '';
+  var ticket = '';
   var hash = window.location.hash;
   if (hash.length > 1) {
-    var m = /(?:^|[#&])token=([^&]*)/.exec(hash);
-    if (m) {
-      try { token = decodeURIComponent(m[1]); } catch (e) { token = ''; }
-    }
+    var m = /(?:^|[#&])ticket=([A-Za-z0-9_-]{43})(?:&|$)/.exec(hash);
+    if (m) ticket = m[1];
     window.history.replaceState(null, '', window.location.pathname + window.location.search);
   }
 
@@ -1161,8 +1162,32 @@ export const UI_JS = `'use strict';
     start();
   });
 
+  // チケットを、画面のセッションのトークンに交換する。失敗の理由は分けない（誤り・期限切れ・使用済みは同じ）。
+  function exchangeTicket(t) {
+    setStatus('接続しています');
+    return fetch('/v1/ui/session', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ticket: t }),
+    })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (body) {
+        if (body && body.ok && body.value && typeof body.value.session === 'string') token = body.value.session;
+      })
+      .catch(function () {});
+  }
+
   renderKept();
-  start();
+  if (ticket) {
+    var t0 = ticket;
+    ticket = '';
+    exchangeTicket(t0).then(function () {
+      if (token) start();
+      else rejectToken('画面を開けませんでした（チケットが使えない）。Mac のターミナルで touryou ui を実行して、開き直してください');
+    });
+  } else {
+    start();
+  }
 })();
 `;
 
