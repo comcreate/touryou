@@ -128,7 +128,7 @@ export interface UiFlow {
 // 完了の報告の doneAt は、受理・差し戻しの時刻（NodeRecord.reviewedAt。最後の 1 回だけ記録する。それより前の完了の報告には doneAt を付けない）。
 ```
 
-- 段の決め方（`flowsOf`）は research.md 9.3 のとおり。子 → 親は `deliveryUnknown`（「届いた」の記録は #102 で足す）。
+- 段の決め方（`flowsOf`）は research.md 9.3 のとおり。ただし、9.3 の `kind` の `parentRequest` と「24 時間たったものを外す」は、ここ（5 節）で外した（上のコードの注記）。子 → 親は `deliveryUnknown`（「届いた」の記録は #102 で足す）。
 - 作業の状態の 3 段（`band`）：`turn`＝人の出番（`needsHuman > 0`、または `stopIncomplete`・失敗）、`finished`＝`verified`・`reclaimable`・`archived`・`stopped`（人の決めが残らないもの）、ほかは `running`。
 - `sessionId` は足さない。止まっている子を開くコマンドは `claude attach <ノード ID>`（CLI の子は `--name <ノード ID>` で起動している）。Desktop の子（`stopDelegated`）には、コマンドでなく開き方の文を出す。
 
