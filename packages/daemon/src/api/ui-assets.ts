@@ -191,7 +191,12 @@ export const UI_JS = `'use strict';
   var SAFETY_MS = 30000;
   var THROTTLE_MS = 1000;
   var BACKOFF_MIN = 1000;
-  var BACKOFF_MAX = 30000;
+  var BACKOFF_MAX = 300000;
+  // 裏のタブ: 隠れてこの時間たったら購読を閉じ（ほかのタブに枠を空ける）、ポーリングも間を空ける
+  var HIDE_CLOSE_MS = 30000;
+  var HIDDEN_POLL_MS = 30000;
+  // 429 がこの回数続いたら、購読の再試行をやめる（見えたとき・フォーカスが来たときだけ試す。コンソールを埋めない）
+  var TOO_MANY_MAX = 3;
 
   var statusEl = document.getElementById('status');
   var authEl = document.getElementById('auth');
@@ -209,6 +214,12 @@ export const UI_JS = `'use strict';
   var drafts = new Map();
   var pending = null;
   var retryMs = 0;
+  // 購読の様子: live（つながっている）・connecting・retrying（切れて、待ってから張り直す）・paused（裏に回って閉じた）・
+  // replaced（ほかのタブに枠を譲った）・gaveUp（429 が続いた）。paused・replaced・gaveUp の間は、自分からは張り直さない
+  var sseState = 'idle';
+  var tooManyCount = 0;
+  var reconnectTimer = null;
+  var hideTimer = null;
 
   function name(table, key) { return Object.hasOwn(table, key) ? table[key] : key; }
   // 時刻（ISO 8601）を、手元の時刻と経過で出す。今日なら「14:05（3 分前）」、ほかの日は「11/16 14:05（1 日前）」。読めなければ ''。
@@ -1414,7 +1425,11 @@ export const UI_JS = `'use strict';
 
   function showConnected() {
     if (!lastView) return;
-    setStatus('つながっています（' + (sseUp ? '変わるとすぐ更新' : '2 秒ごとに確かめて更新') + (lastView.partial ? '。数が多いので一部を省いています' : '') + '）');
+    var how = sseUp ? '変わるとすぐ更新'
+      : document.hidden ? (HIDDEN_POLL_MS / 1000) + ' 秒ごとに確かめて更新'
+      : (POLL_MS / 1000) + ' 秒ごとに確かめて更新';
+    if (!sseUp && sseState === 'replaced') how = '別のタブで開いています。' + how + '。このタブを選ぶと、すぐ更新に戻ります';
+    setStatus('つながっています（' + how + (lastView.partial ? '。数が多いので一部を省いています' : '') + '）');
     statusEl.className = 'status live';
   }
   function rejectToken(message) {
@@ -1480,6 +1495,8 @@ export const UI_JS = `'use strict';
   function connectEvents(gen) {
     if (!token || gen !== generation) return;
     if (typeof TextDecoder === 'undefined') return;
+    reconnectTimer = null;
+    sseState = 'connecting';
     controller = new AbortController();
     fetch('/v1/events', { headers: { authorization: 'Bearer ' + token }, signal: controller.signal })
       .then(function (res) {
@@ -1488,8 +1505,12 @@ export const UI_JS = `'use strict';
         if (res.status === 429) {
           var seconds = parseInt(res.headers.get('retry-after') || '', 10);
           retryMs = seconds > 0 ? Math.min(seconds, 300) * 1000 : 0;
+          tooManyCount += 1;
+          if (tooManyCount >= TOO_MANY_MAX) sseState = 'gaveUp';
         }
         if (!res.ok || !res.body || !res.body.getReader) throw new Error('sse');
+        tooManyCount = 0;
+        sseState = 'live';
         var reader = res.body.getReader();
         var decoder = new TextDecoder();
         var buf = '';
@@ -1504,6 +1525,11 @@ export const UI_JS = `'use strict';
             while (end >= 0) {
               var block = buf.slice(0, end);
               buf = buf.slice(end + 2);
+              if (block.indexOf('event: replaced') >= 0) {
+                // ほかのタブに枠を譲った（daemon が閉じる）。張り直さずにポーリングに移る（見えたとき・フォーカスで張り直す）
+                sseState = 'replaced';
+                throw new Error('replaced');
+              }
               if (block.indexOf('event: seq') >= 0) requestRefresh();
               end = buf.indexOf('\\n\\n');
             }
@@ -1518,11 +1544,13 @@ export const UI_JS = `'use strict';
         sseUp = false;
         showConnected();
         if (gen !== generation || !token) return;
+        if (sseState === 'paused' || sseState === 'replaced' || sseState === 'gaveUp') return;
+        sseState = 'retrying';
         // 429 のときは、Retry-After の秒数より前には、再接続しない
         var wait = Math.max(backoff, retryMs) + Math.floor(Math.random() * 500);
         retryMs = 0;
         backoff = Math.min(backoff * 2, BACKOFF_MAX);
-        window.setTimeout(function () { connectEvents(gen); }, wait);
+        reconnectTimer = window.setTimeout(function () { connectEvents(gen); }, wait);
       });
   }
 
@@ -1530,14 +1558,48 @@ export const UI_JS = `'use strict';
   function loop(gen) {
     if (gen !== generation) return;
     var due = !sseUp || Date.now() - lastRefreshAt >= SAFETY_MS;
-    (due ? refresh() : Promise.resolve()).then(function () { timer = window.setTimeout(function () { loop(gen); }, POLL_MS); });
+    // 裏のタブは、確かめの間を空ける
+    var every = document.hidden ? HIDDEN_POLL_MS : POLL_MS;
+    (due ? refresh() : Promise.resolve()).then(function () { timer = window.setTimeout(function () { loop(gen); }, every); });
   }
+
+  // 裏に回って HIDE_CLOSE_MS たったら、購読を閉じる（ほかのタブに枠を空ける）。張り直しの待ちも取り消す
+  function pauseEvents() {
+    hideTimer = null;
+    if (!token || !document.hidden) return;
+    if (reconnectTimer !== null) { window.clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if (sseState === 'replaced' || sseState === 'gaveUp') return;
+    sseState = 'paused';
+    if (controller) controller.abort();
+  }
+  // 見えたとき・フォーカスが来たとき: 自分から止めていた購読（裏・譲った・429 が続いた）だけを張り直し、すぐ 1 回取り直す。
+  // つながっている・張り直しを待っている間は何もしない（タブどうしで、自分から交互に追い出し合わない）
+  function resumeEvents() {
+    if (!token || document.hidden) return;
+    if (sseState !== 'paused' && sseState !== 'replaced' && sseState !== 'gaveUp') return;
+    tooManyCount = 0;
+    backoff = BACKOFF_MIN;
+    requestRefresh();
+    connectEvents(generation);
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      if (hideTimer === null) hideTimer = window.setTimeout(pauseEvents, HIDE_CLOSE_MS);
+      return;
+    }
+    if (hideTimer !== null) { window.clearTimeout(hideTimer); hideTimer = null; }
+    resumeEvents();
+  });
+  window.addEventListener('focus', resumeEvents);
 
   function start() {
     generation += 1;
     if (controller) controller.abort();
     sseUp = false;
     backoff = BACKOFF_MIN;
+    sseState = 'idle';
+    tooManyCount = 0;
+    if (reconnectTimer !== null) { window.clearTimeout(reconnectTimer); reconnectTimer = null; }
     if (timer !== null) window.clearTimeout(timer);
     var gen = generation;
     // 取れなかった（トークンが拒まれた）ときは、世代が進むので、接続も周期も始めない（表示を上書きしない）。

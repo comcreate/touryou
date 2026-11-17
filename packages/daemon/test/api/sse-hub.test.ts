@@ -80,19 +80,43 @@ const rig = (spec: Partial<SseHubSpec> = {}) => {
 };
 
 describe("SSE の接続の管理（sse-hub）", () => {
-  it("加えたら、今の lastSeq をすぐ送る。上限を超えたら加えない（何も書かない）。閉じたら空く", () => {
+  it("加えたら、今の lastSeq をすぐ送る。上限なら、いちばん古い接続に replaced を送って閉じ、新しい接続を通す。閉じたら空く", () => {
     const r = rig();
     const a = new FakeSink();
     const b = new FakeSink();
     const c = new FakeSink();
     expect(r.hub.add(a, "t")).toBe(true);
+    r.advance(10);
     expect(r.hub.add(b, "t")).toBe(true);
     expect(a.text).toContain('data: {"lastSeq":10}');
-    expect(r.hub.add(c, "t")).toBe(false);
-    expect(c.written).toEqual([]);
-    a.emitClose();
-    expect(r.hub.size).toBe(1);
+    r.advance(10);
     expect(r.hub.add(c, "t")).toBe(true);
+    // いちばん古い a が譲る（中身は空。ほかのタブ・セッションの値を出さない）
+    expect(a.text).toContain("event: replaced\ndata: {}\n\n");
+    expect(a.ended).toBe(true);
+    expect(b.ended).toBe(false);
+    expect(c.text).toContain('data: {"lastSeq":10}');
+    expect(r.hub.size).toBe(2);
+    b.emitClose();
+    expect(r.hub.size).toBe(1);
+  });
+
+  it("人の側の枠が埋まっても、ノード（子・統合）の接続は閉じない", () => {
+    const r = rig();
+    const n = new FakeSink();
+    r.hub.addNode(n, "t", "n1", 0);
+    const a = new FakeSink();
+    const b = new FakeSink();
+    const c = new FakeSink();
+    r.advance(10);
+    r.hub.add(a, "t");
+    r.advance(10);
+    r.hub.add(b, "t");
+    r.advance(10);
+    expect(r.hub.add(c, "t")).toBe(true);
+    expect(n.ended).toBe(false);
+    expect(n.text).not.toContain("replaced");
+    expect(a.ended).toBe(true);
   });
 
   it("変わっていれば通知し、変わっていなければ送らない（heartbeat の前）", () => {
