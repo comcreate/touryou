@@ -1600,6 +1600,9 @@ export const UI_JS = `'use strict';
     sseState = 'idle';
     tooManyCount = 0;
     if (reconnectTimer !== null) { window.clearTimeout(reconnectTimer); reconnectTimer = null; }
+    // 前の裏の待ちが、新しい購読を閉じないように（今が裏なら、新しく数え直す）
+    if (hideTimer !== null) { window.clearTimeout(hideTimer); hideTimer = null; }
+    if (document.hidden) hideTimer = window.setTimeout(pauseEvents, HIDE_CLOSE_MS);
     if (timer !== null) window.clearTimeout(timer);
     var gen = generation;
     // 取れなかった（トークンが拒まれた）ときは、世代が進むので、接続も周期も始めない（表示を上書きしない）。
