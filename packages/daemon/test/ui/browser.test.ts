@@ -341,4 +341,60 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(await holder()).not.toBe(before);
     expect(problems).toEqual([]);
   });
+  it("draw が返す操作で、拡大・縮小・全体を見るが効く。上限・下限で止まり、描き直しで拡大が残り、全体を見るで初めの形に戻る", async () => {
+    const r = await page.evaluate(async () => {
+      type Ctl = { zoomBy(f: number): Promise<void>; fit(): Promise<void> };
+      type G = { draw(h: HTMLElement, v: unknown): Promise<Ctl>; destroy(): void };
+      const w = window as unknown as { touryouGraph: G; VIEW: unknown };
+      const host = document.getElementById("g") as HTMLElement;
+      const holder = () => host.firstElementChild as HTMLElement;
+      const k = () => Number(/scale\(([\d.]+)\)/.exec(holder().style.transform)?.[1] ?? "NaN");
+      w.touryouGraph.destroy();
+      const c = await w.touryouGraph.draw(host, w.VIEW);
+      const first = holder().style.transform;
+      const k0 = k();
+      await c.zoomBy(1.4);
+      const kIn = k();
+      await c.zoomBy(1 / 1.4);
+      const kBack = k();
+      for (let i = 0; i < 20; i++) await c.zoomBy(1.4);
+      const kMax = k();
+      for (let i = 0; i < 40; i++) await c.zoomBy(1 / 1.4);
+      const kMin = k();
+      await c.zoomBy(1.4);
+      const kept = holder().style.transform;
+      const c2 = await w.touryouGraph.draw(host, w.VIEW); // 描き直し
+      const afterRedraw = holder().style.transform;
+      await c2.fit();
+      const fitted = holder().style.transform;
+      return { k0, kIn, kBack, kMax, kMin, kept, afterRedraw, first, fitted };
+    });
+    expect(r.kIn).toBeCloseTo(r.k0 * 1.4, 5);
+    expect(r.kBack).toBeCloseTo(r.k0, 5);
+    expect(r.kMax).toBe(2);
+    expect(r.kMin).toBe(0.25);
+    expect(r.afterRedraw).toBe(r.kept); // ボタンで変えた拡大も、描き直しで残る
+    expect(r.fitted).toBe(r.first); // 全体を見るで、初めの形に戻る
+    expect(problems).toEqual([]);
+  });
+
+  it("ホイールの拡大も、同じ上限で止まる", async () => {
+    await page.mouse.move(500, 300);
+    for (let i = 0; i < 30; i++) await page.mouse.wheel(0, -400);
+    await page.waitForTimeout(200);
+    const k = await page.evaluate(() =>
+      Number(
+        /scale\(([\d.]+)\)/.exec(
+          (document.querySelector("#g > div") as HTMLElement).style.transform,
+        )?.[1],
+      ),
+    );
+    expect(k).toBe(2);
+    await page.evaluate(async () => {
+      type G = { draw(h: HTMLElement, v: unknown): Promise<unknown>; destroy(): void };
+      const w = window as unknown as { touryouGraph: G; VIEW: unknown };
+      w.touryouGraph.destroy();
+      await w.touryouGraph.draw(document.getElementById("g") as HTMLElement, w.VIEW);
+    });
+  });
 });

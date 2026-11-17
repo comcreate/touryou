@@ -17,6 +17,7 @@ export interface Loc {
   locator(selector: string): Loc;
   textContent(): Promise<string | null>;
   boundingBox(): Promise<Box | null>;
+  isVisible(): Promise<boolean>;
 }
 export interface Msg {
   type(): string;
@@ -30,6 +31,8 @@ export interface Page {
   addInitScript(f: () => void): Promise<void>;
   goto(url: string): Promise<unknown>;
   click(selector: string): Promise<void>;
+  focus(selector: string): Promise<void>;
+  keyboard: { press(key: string): Promise<void> };
   waitForFunction(f: () => boolean, a?: undefined, o?: { timeout: number }): Promise<unknown>;
   setViewportSize(s: { width: number; height: number }): Promise<void>;
   addScriptTag(o: { url: string }): Promise<unknown>;

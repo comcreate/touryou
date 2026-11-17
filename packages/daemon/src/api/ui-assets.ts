@@ -38,7 +38,7 @@ export const UI_HTML = `<!doctype html>
 <section id="view" hidden>
 <section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h2 id="now-title">いまあなたがすること</h2><p id="now-lead" class="lead"></p></section>
 <div id="todo" class="todo"></div>
-<section class="sec"><h2>やり取り</h2><p class="lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button">図</button><button id="show-list" class="quiet sm" type="button">一覧</button></div><div id="graph" class="board" hidden></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span>← 上り（子 → 親。答え待ちの頼みを先に）</span><span class="lg"><span class="sw down"></span>→ 下り（親・人 → 子）</span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span>新しいほど濃い</span><span class="lg"><span class="sw wait"></span>あなたの答え待ちのやり取り</span><span class="lg"><span class="edge go"></span>進んでいる</span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span>あなたの出番（答え待ち・止まっているかも・失敗）</span><span class="lg"><span class="edge over"></span>終わった</span><span class="lg">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
+<section class="sec"><h2>やり取り</h2><p class="lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button">図</button><button id="show-list" class="quiet sm" type="button">一覧</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" aria-label="全体を見る" title="全体を見る（初めの形に戻す）">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span>← 上り（子 → 親。答え待ちの頼みを先に）</span><span class="lg"><span class="sw down"></span>→ 下り（親・人 → 子）</span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span>新しいほど濃い</span><span class="lg"><span class="sw wait"></span>あなたの答え待ちのやり取り</span><span class="lg"><span class="edge go"></span>進んでいる</span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span>あなたの出番（答え待ち・止まっているかも・失敗）</span><span class="lg"><span class="edge over"></span>終わった</span><span class="lg">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
 <section class="sec"><h2>作業ごとのようす</h2><p class="lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
 <details id="finished" class="finished"><summary id="finished-summary">終わった作業</summary><div id="finished-cards" class="cards"></div></details></section>
 <details class="admin"><summary>管理（まれに使う操作）</summary><p class="warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
@@ -178,6 +178,7 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .mlabel{font-size:11.5px;font-weight:700;fill:var(--fg)}.mstage{font-size:11px;fill:var(--muted)}.mlabel.wait,.mstage.wait{fill:var(--kaki)}.mlabel.over,.mstage.over{opacity:.6}
 .gnode{cursor:pointer;transition:box-shadow .15s}.gnode:focus-visible{outline:3px solid var(--ai);outline-offset:2px}.gnode:hover{box-shadow:0 0 0 3px var(--grid)}
 .board .glink,.board .gback{transition:opacity .15s}.board.hot .glink{opacity:.18}.board.hot .lit .glink{opacity:1}.board.g-instant .glink,.board.g-instant .gback,.board.g-instant .gnode{transition:none}
+.board-wrap{position:relative}.zoom{position:absolute;right:10px;top:10px;display:flex;gap:4px;z-index:2}.zoom button{width:34px;height:34px;padding:0;border-radius:50%;font-size:18px;line-height:1;background:var(--sheet);color:var(--fg);border:1px solid var(--line)}.zoom button.fit{width:auto;padding:0 12px;border-radius:999px;font-size:13px}.zoom button:focus-visible{outline:3px solid var(--ai);outline-offset:2px}
 .legend{display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 0 0;font-size:12.5px;color:var(--muted)}.lg{display:inline-flex;align-items:center;gap:4px}
 .sw{display:inline-block;width:22px;height:0;border-top:2.5px dashed var(--ai)}.sw.down{border-top-color:var(--ai-2)}.sw.a1{border-top-width:3px}.sw.a3{opacity:.65}.sw.a4{opacity:.45}.sw.wait{border-top:3.5px dashed var(--kaki)}
 .edge{display:inline-block;width:4px;height:14px;border-radius:2px;background:var(--ai)}.edge.turn{background:var(--kaki)}.edge.stall{background:var(--kiiro)}.edge.fail{background:var(--shu)}.edge.over{background:var(--line)}
@@ -942,7 +943,16 @@ export const UI_JS = `'use strict';
     var g = window.touryouGraph;
     return g && typeof g.draw === 'function' && typeof g.destroy === 'function' ? g : null;
   }
+  // いまの図の拡大・縮小の操作（graph.js の draw が返すもの。描けていなければ null）
+  var graphCtl = null;
+  function zoomGraph(how) {
+    var c = graphCtl;
+    if (!c) return;
+    if (how === 'fit' && typeof c.fit === 'function') c.fit();
+    else if (typeof c.zoomBy === 'function') c.zoomBy(how === 'in' ? 1.4 : 1 / 1.4);
+  }
   function dropGraph() {
+    graphCtl = null;
     var g = graphApi();
     if (g && graphSeq !== -1) g.destroy();
     graphSeq = -1;
@@ -954,6 +964,7 @@ export const UI_JS = `'use strict';
     document.getElementById('view-switch').hidden = !g;
     document.getElementById('graph').hidden = !on;
     document.getElementById('graph-legend').hidden = !on;
+    document.getElementById('graph-zoom').hidden = !on;
     document.getElementById('list').hidden = on;
     document.getElementById('show-graph').ariaPressed = on ? 'true' : 'false';
     document.getElementById('show-list').ariaPressed = on ? 'false' : 'true';
@@ -973,6 +984,7 @@ export const UI_JS = `'use strict';
     // 枠の高さを、描いた図の高さに合わせる（子が少ないときは縮める。拡大・移動は残る）
     var fit = function (r) {
       if (mine !== graphDrawId || !r || typeof r.height !== 'number' || !(r.height > 0)) return;
+      graphCtl = r;
       box.style.height = Math.min(720, Math.max(180, Math.ceil(r.height) + 16)) + 'px';
     };
     try {
@@ -1778,6 +1790,9 @@ export const UI_JS = `'use strict';
 
   // 動きを止める（OS の「視差効果を減らす」でも止まる。CSS の prefers-reduced-motion）
   document.getElementById('show-graph').addEventListener('click', function () { showGraphMode('graph'); });
+  document.getElementById('zoom-in').addEventListener('click', function () { zoomGraph('in'); });
+  document.getElementById('zoom-out').addEventListener('click', function () { zoomGraph('out'); });
+  document.getElementById('zoom-fit').addEventListener('click', function () { zoomGraph('fit'); });
   document.getElementById('show-list').addEventListener('click', function () { showGraphMode('list'); });
   var stillBtn = document.getElementById('still');
   stillBtn.addEventListener('click', function () {

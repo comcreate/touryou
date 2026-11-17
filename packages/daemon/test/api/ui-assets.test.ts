@@ -241,6 +241,9 @@ describe("画面の資産（走査）", () => {
       "touryouGraph",
       "draw",
       "destroy",
+      // draw が返す、図の拡大・縮小の操作（graph.js の中で、いまの図にだけ効く。値は数だけ）
+      "zoomBy",
+      "fit",
       "ariaPressed",
       // 関係図の枠の高さを、描いた図に合わせる（draw の戻り値の height）
       "height",

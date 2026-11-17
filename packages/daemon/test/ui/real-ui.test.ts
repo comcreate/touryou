@@ -339,6 +339,45 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(await page.locator("#show-graph[aria-pressed=true]").count()).toBe(1);
   });
 
+  it("図の右上の「＋」「−」「全体を見る」で、拡大・縮小・初めの形に戻せる。キーボードでも押せる。一覧のときは出ない", async () => {
+    const zoomBox = page.locator("#graph-zoom");
+    expect(await zoomBox.isVisible()).toBe(true);
+    expect(await page.locator("#zoom-in").getAttribute("aria-label")).toBe("拡大する");
+    expect(await page.locator("#zoom-out").getAttribute("aria-label")).toBe("縮める");
+    expect(await page.locator("#zoom-fit").getAttribute("aria-label")).toBe("全体を見る");
+    for (const id of ["zoom-in", "zoom-out", "zoom-fit"])
+      expect(await page.locator(`#${id}`).getAttribute("title")).not.toBe(null);
+    const holder = () =>
+      page.evaluate(() => (document.querySelector("#graph > div") as HTMLElement).style.transform);
+    const first = await holder();
+    await page.click("#zoom-in");
+    await page.waitForTimeout(100);
+    const zoomed = await holder();
+    expect(zoomed).not.toBe(first);
+    await page.focus("#zoom-out");
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(100);
+    expect(await holder()).not.toBe(zoomed);
+    await page.click("#zoom-in");
+    await page.focus("#zoom-fit");
+    await page.keyboard.press(" ");
+    await page.waitForTimeout(100);
+    expect(await holder()).toBe(first);
+    // 右上に置く（枠の中の右上の隅）
+    const b = await page.locator("#graph").boundingBox();
+    const z = await zoomBox.boundingBox();
+    expect(
+      b && z && z.x + z.width <= b.x + b.width && z.x > b.x + b.width / 2 && z.y < b.y + 60,
+    ).toBe(true);
+    await page.click("#show-list");
+    expect(await zoomBox.isVisible()).toBe(false);
+    await page.click("#show-graph");
+    await page.waitForSelector("#graph .gnode");
+    expect(await zoomBox.isVisible()).toBe(true);
+    expect(await csp()).toEqual([]);
+    expect(problems).toEqual([]);
+  });
+
   it("「動きを止める」で、図の線も玉も止まる。戻すと動く", async () => {
     expect((await animations()).some((a) => a !== "none")).toBe(true);
     await page.click("#still");

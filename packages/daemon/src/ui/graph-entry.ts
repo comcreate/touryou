@@ -100,10 +100,54 @@ function teardown(): void {
   currentHost?.replaceChildren(); // area の器も片付ける
 }
 
-/** 描いた図の、画面での大きさ（拡大のあと。枠の高さを中身に合わせるのに使う）。 */
+/** 拡大の下限と上限（ホイールも、ボタンも同じ。小さすぎる・大きすぎる図にしない）。 */
+const ZOOM_MIN = 0.25;
+const ZOOM_MAX = 2;
+/** 初めて描いたときの、枠に合わせた倍率（「全体を見る」で戻す）。 */
+let fitK = 1;
+const clampZoom = (k: number): number => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, k));
+
+/**
+ * いまの図を、枠の真ん中を中心に `f` 倍する（上限・下限で止める）。描いていなければ何もしない。
+ * ゆっくり動かさず、すぐ変える（動きを止める設定でも同じ）。
+ */
+async function zoomBy(f: number): Promise<void> {
+  const a = current;
+  const h = currentHost;
+  if (a === null || h === null || !Number.isFinite(f) || f <= 0) return;
+  const k = a.area.transform.k;
+  const nk = clampZoom(k * f);
+  if (nk === k) return;
+  // ホイールと同じ数え方（rete の Zoom の wheel）：原点は、中身の左上から見た、枠の真ん中
+  const hr = h.getBoundingClientRect();
+  const cr = a.area.content.holder.getBoundingClientRect();
+  const delta = nk / k - 1;
+  await a.area.zoom(
+    nk,
+    (cr.left - (hr.left + hr.width / 2)) * delta,
+    (cr.top - (hr.top + hr.height / 2)) * delta,
+  );
+}
+
+/** 「全体を見る」：初めて描いたときの形（枠に合わせた倍率・左上）に戻す。描いていなければ何もしない。 */
+async function fitView(): Promise<void> {
+  const a = current;
+  if (a === null) return;
+  await a.area.zoom(fitK, 0, 0);
+  await a.area.translate(0, 0);
+}
+
+/**
+ * 描いた図の、画面での大きさ（枠に合わせた倍率のもの。枠の高さを中身に合わせるのに使う）と、拡大・縮小の操作。
+ * 操作は、画面のボタンから呼ぶ（外に出すグローバルは `draw`・`destroy` のまま増やさない）。いま描いている図に効く。
+ */
 export interface Drawn {
   readonly width: number;
   readonly height: number;
+  /** 枠の真ん中を中心に `f` 倍する（`ZOOM_MIN`〜`ZOOM_MAX` で止める）。 */
+  readonly zoomBy: (f: number) => Promise<void>;
+  /** 初めて描いたときの形に戻す。 */
+  readonly fit: () => Promise<void>;
 }
 
 /** `draw` の 3 つめの引数。グローバルを増やさず、画面からの受け手をここで受ける。 */
@@ -155,7 +199,7 @@ export async function draw(
     opt,
   );
   const live = (): boolean => mine === generation;
-  const none: Drawn = { width: 0, height: 0 };
+  const none: Drawn = { width: 0, height: 0, zoomBy, fit: fitView };
   const now = Date.now();
   const model = graphModelOf(view);
   const L = layoutOf(model.nodes);
@@ -197,6 +241,11 @@ export async function draw(
   area.area.content.add(drawBackdrop(trunks, width, height));
 
   area.addPipe((ctx) => {
+    // 拡大は、ホイールもボタンも、同じ下限・上限で止める
+    if (ctx.type === "zoom") {
+      const d = ctx.data as { zoom: number };
+      return { ...ctx, data: { ...ctx.data, zoom: clampZoom(d.zoom) } } as typeof ctx;
+    }
     if (ctx.type !== "render") return ctx;
     const { element, type, payload } = ctx.data as {
       element: HTMLElement;
@@ -283,6 +332,7 @@ export async function draw(
   readonly.enable(); // 置いたあとは、つなぐ・動かす・消すを止める（拡大・移動は残る）
   // 枠の幅に合わせて縮める（読める大きさを保つため、大きくはしない。小さすぎる木は 0.5 倍まで）
   const k = Math.max(0.5, Math.min(1, host.clientWidth / width));
+  fitK = k;
   // 同じ器への描き直しなら、人が変えた拡大・移動をそのまま残す（初めて描くときだけ、枠に合わせる）
   const keep = kept !== null && kept.host === host ? kept : null;
   kept = null;
@@ -293,7 +343,7 @@ export async function draw(
   relight(host, byId, hot);
   // 返す大きさは、枠に合わせた倍率（k）のもの。人が拡大・縮小したあとの描き直しでも、枠の高さは初めて描いたときの
   // 大きさのまま保つ（描き直しのたびに枠の高さが変わって、ページが跳ねないように）
-  return { width: width * k, height: height * k };
+  return { width: width * k, height: height * k, zoomBy, fit: fitView };
 }
 
 /**
