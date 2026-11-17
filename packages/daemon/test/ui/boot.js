@@ -58,26 +58,18 @@ var VIEW = {
       deliveryUnknown: true,
     },
     { id: "f6", kind: "instruction", dir: "down", from: "root", to: "d", stage: "done" },
-    // 人とのやり取り（段を飛ばす）
-    {
-      id: "h1",
-      kind: "decision",
-      dir: "up",
-      from: "c",
-      to: "human",
-      stage: "sent",
-      deliveryUnknown: true,
-    },
+    // 人の答え（人 → 子）は、親から子への下りの線（札「→ 答え」）。根と人のやり取りは線にしない
     {
       id: "h2",
       kind: "answer",
       dir: "down",
       from: "human",
-      to: "a",
+      to: "c",
       stage: "sent",
       deliveryUnknown: true,
     },
     { id: "h3", kind: "report", dir: "up", from: "root", to: "human", stage: "done" },
+    { id: "h4", kind: "answer", dir: "down", from: "human", to: "root", stage: "sent" },
   ],
 };
 window.touryouGraph.draw(document.getElementById("g"), VIEW).then(

@@ -82,7 +82,7 @@ export interface GraphNode {
   readonly depth?: number;
 }
 export interface GraphLane {
-  /** 親のノード ID。人とのやり取りなら `HUMAN`（`human` が true）。 */
+  /** 親のノード ID。 */
   readonly parent: string;
   readonly child: string;
   readonly dir: Dir;
@@ -93,9 +93,7 @@ export interface GraphLane {
   readonly label: string;
   /** 送った時刻（ミリ秒。なければ null）。 */
   readonly at: number | null;
-  /** 人とのやり取り（段を飛ばす。木の外の「人」の箱から、通り道を通して描く）。 */
-  readonly human: boolean;
-  /** 人の答えを待っている（判断・範囲の頼みが、まだ済んでいない）。柿色で描く。 */
+  /** 人の答えを待っている（子から親への判断・範囲の頼みが、まだ済んでいない）。柿色で描く。 */
   readonly waiting: boolean;
 }
 export interface GraphModel {
@@ -103,7 +101,10 @@ export interface GraphModel {
   readonly lanes: readonly GraphLane[];
 }
 
-/** 人（ノードでない相手）。木の外に 1 つの箱として置く。 */
+/**
+ * 人（ノードでない相手）。図には人の箱を置かない（利用者の決め。見本の形）。人の答え・許可・却下・切り出し（人 → 子）は、
+ * 親から子への下りの線の札で表す。根と人のやり取りは線を引かず、根の箱の「あなたの答え」の数だけで表す。
+ */
 export const HUMAN = UI_HUMAN;
 
 const own = (o: object, k: string): boolean => Object.hasOwn(o, k);
@@ -144,7 +145,10 @@ function flagsOf(
     return f;
   };
   for (const x of list(v.decisions, 100)) {
-    const f = at(idOf(rec(x)?.nodeId));
+    const d = rec(x);
+    // 閉じた判断（closedReason がある。破棄を決めた子のもの）は、答えを待っていない（画面のカードと同じ決め方）
+    if (d === null || d.closedReason !== undefined) continue;
+    const f = at(idOf(d.nodeId));
     if (f) f.wait = true;
   }
   for (const x of list(v.extensions, 100)) {
@@ -215,11 +219,14 @@ export function graphModelOf(view: unknown): GraphModel {
     const dir = f.dir === "up" || f.dir === "down" ? f.dir : null;
     const stage = STAGES.find((s) => s === f.stage);
     if (from === null || to === null || dir === null || stage === undefined) continue;
-    const [parent, child] = dir === "up" ? [to, from] : [from, to];
-    const human = parent === HUMAN;
+    const [end, child] = dir === "up" ? [to, from] : [from, to];
     if (child === HUMAN || !known.has(child)) continue;
-    // 人とのやり取りは、根でも孫でも描く（段を飛ばす）。ノードどうしは、親子の枝だけ
-    if (!human && parentOf.get(child) !== parent) continue;
+    const up = parentOf.get(child) ?? null;
+    // 人 → 子（答え・許可・却下・切り出し）は、その子の親からの下りの線で表す。根（親がない）には線を引かない
+    // 子 → 人（根の報告・頼み）も線を引かない（根の箱の「あなたの答え」の数で表す）。ノードどうしは、親子の枝だけ
+    if (up === null) continue;
+    if (end === HUMAN ? dir === "up" : end !== up) continue;
+    const parent = up;
     const key = `${parent} ${child} ${dir}`;
     if (taken.has(key)) continue;
     taken.add(key);
@@ -237,8 +244,7 @@ export function graphModelOf(view: unknown): GraphModel {
       inferred: f.doneInferred === true,
       label: kind,
       at: timeOf(f.sentAt),
-      human,
-      waiting: human && asks && dir === "up" && stage !== "done",
+      waiting: asks && dir === "up" && stage !== "done",
     });
   }
   return { nodes, lanes };

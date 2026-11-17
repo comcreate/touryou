@@ -38,7 +38,7 @@ export const UI_HTML = `<!doctype html>
 <section id="view" hidden>
 <section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h2 id="now-title">いまあなたがすること</h2><p id="now-lead" class="lead"></p></section>
 <div id="todo" class="todo"></div>
-<section class="sec"><h2>やり取り</h2><p class="lead">親子の並びと、いちばん新しい上り（子 → 親）・下り（親・人 → 子）です。</p><div id="view-switch" class="seg" role="group" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button">図</button><button id="show-list" class="quiet sm" type="button">一覧</button></div><div id="graph" class="board" hidden></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span>← 上り（子 → 親）</span><span class="lg"><span class="sw down"></span>→ 下り（親・人 → 子）</span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span>新しいほど濃い</span><span class="lg"><span class="sw wait"></span>あなたの答え待ち</span><span class="lg"><span class="edge go"></span>進んでいる</span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span>あなたの出番（答え待ち・止まっているかも・失敗）</span><span class="lg"><span class="edge over"></span>終わった</span><span class="lg">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
+<section class="sec"><h2>やり取り</h2><p class="lead">親子の並びと、いちばん新しい上り（子 → 親）・下り（親・人 → 子）です。</p><div id="view-switch" class="seg" role="group" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button">図</button><button id="show-list" class="quiet sm" type="button">一覧</button></div><div id="graph" class="board" hidden></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span>← 上り（子 → 親）</span><span class="lg"><span class="sw down"></span>→ 下り（親・人 → 子）</span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span>新しいほど濃い</span><span class="lg"><span class="sw wait"></span>あなたの答え待ちのやり取り</span><span class="lg"><span class="edge go"></span>進んでいる</span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span>あなたの出番（答え待ち・止まっているかも・失敗）</span><span class="lg"><span class="edge over"></span>終わった</span><span class="lg">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
 <section class="sec"><h2>作業ごとのようす</h2><p class="lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
 <details id="finished" class="finished"><summary id="finished-summary">終わった作業</summary><div id="finished-cards" class="cards"></div></details></section>
 <details class="admin"><summary>管理（まれに使う操作）</summary><p class="warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
@@ -156,7 +156,7 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .gnode.s-stall{border-color:var(--kiiro)}.gnode.s-stall::before{background:var(--kiiro)}
 .gnode.s-fail{border-color:var(--shu)}.gnode.s-fail::before{background:var(--shu)}
 .gnode.t-over{opacity:.55;background:var(--bg)}.gnode.t-over::before{background:var(--line)}
-.gnode.b-human{border-style:dashed}.gnode.b-human::before{display:none}
+
 .gt{font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:14px}
 .gr{display:flex;align-items:center;gap:6px;min-width:0}.gic{flex:none}
 .role-ic{fill:none;stroke:var(--muted);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
@@ -165,7 +165,7 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .galive{position:absolute;right:10px;top:10px;width:8px;height:8px;border-radius:50%;background:var(--matsu);animation:galive 3s ease-in-out infinite}
 .gbadge{position:absolute;right:-10px;top:-10px;min-width:24px;height:24px;padding:0 4px;box-sizing:border-box;border-radius:12px;background:var(--kaki);color:var(--on-strong);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
 .glink{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
-.colhead{font-size:12.5px;font-weight:700;fill:var(--muted)}
+
 .trunk{fill:none;stroke:var(--ai-3);stroke-width:4;stroke-linecap:round;opacity:.5}
 .twig{fill:none;stroke:var(--muted);stroke-width:1.5;stroke-dasharray:2 5;opacity:.6}
 .line{fill:none;stroke:var(--ai);stroke-width:2.5;stroke-dasharray:6 8}.tip{fill:var(--ai)}.port{fill:var(--ai);stroke:var(--sheet);stroke-width:2}
@@ -177,7 +177,7 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .mlabel,.mstage{paint-order:stroke;stroke:var(--sheet);stroke-width:3px;stroke-linejoin:round}
 .mlabel{font-size:11.5px;font-weight:700;fill:var(--fg)}.mstage{font-size:11px;fill:var(--muted)}.mlabel.wait,.mstage.wait{fill:var(--kaki)}.mlabel.over,.mstage.over{opacity:.6}
 .gnode{cursor:pointer;transition:box-shadow .15s}.gnode:focus-visible{outline:3px solid var(--ai);outline-offset:2px}.gnode:hover{box-shadow:0 0 0 3px var(--grid)}
-.board .glink,.board .gback{transition:opacity .15s}.board.hot .glink{opacity:.18}.board.hot .lit .glink{opacity:1}
+.board .glink,.board .gback{transition:opacity .15s}.board.hot .glink{opacity:.18}.board.hot .lit .glink{opacity:1}.board.g-instant .glink,.board.g-instant .gback,.board.g-instant .gnode{transition:none}
 .legend{display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 0 0;font-size:12.5px;color:var(--muted)}.lg{display:inline-flex;align-items:center;gap:4px}
 .sw{display:inline-block;width:22px;height:0;border-top:2.5px dashed var(--ai)}.sw.down{border-top-color:var(--ai-2)}.sw.a1{border-top-width:3px}.sw.a3{opacity:.65}.sw.a4{opacity:.45}.sw.wait{border-top:3.5px dashed var(--kaki)}
 .edge{display:inline-block;width:4px;height:14px;border-radius:2px;background:var(--ai)}.edge.turn{background:var(--kaki)}.edge.stall{background:var(--kiiro)}.edge.fail{background:var(--shu)}.edge.over{background:var(--line)}

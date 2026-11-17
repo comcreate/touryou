@@ -11,15 +11,10 @@ import {
   stageText,
 } from "../../src/ui/graph-model.js";
 import {
-  gapRowAbove,
-  humanColumnOf,
-  humanEndY,
-  humanLaneOf,
   LANE_GAP,
   laneOf,
   pathD,
   roleIconOf,
-  roundedPath,
   trunkOf,
   trunkXOf,
   twigOf,
@@ -160,7 +155,6 @@ describe("graphModelOf（図に渡す値の作り直し）", () => {
         label: "報告",
         inferred: false,
         at: null,
-        human: false,
         waiting: false,
       },
       {
@@ -172,7 +166,6 @@ describe("graphModelOf（図に渡す値の作り直し）", () => {
         label: "やり取り",
         inferred: false,
         at: null,
-        human: false,
         waiting: false,
       },
     ]);
@@ -265,8 +258,8 @@ describe("箱の状態（見本の STATE・TIER。画面の言葉とそろえる
   });
 });
 
-describe("人とのやり取り（段を飛ばす。木の外の「人」の箱）", () => {
-  it("graphModelOf：人との上り・下りは、根でも孫でも残す。答え待ちの判断・範囲の頼みだけ waiting", () => {
+describe("人とのやり取り（人の箱は置かない。利用者の決め）", () => {
+  it("graphModelOf：人の答えなどは、親から子への下りの線にする。子から親への判断・範囲の頼みで、済んでいないものだけ waiting。根と人のやり取りは線にしない", () => {
     const m = graphModelOf({
       nodes: [
         { id: "root", parentId: null },
@@ -274,103 +267,59 @@ describe("人とのやり取り（段を飛ばす。木の外の「人」の箱�
         { id: "g", parentId: "a" },
       ],
       flows: [
-        {
-          dir: "up",
-          from: "g",
-          to: "human",
-          stage: "sent",
-          kind: "decision",
-          deliveryUnknown: true,
-        },
+        { dir: "up", from: "g", to: "a", stage: "sent", kind: "decision", deliveryUnknown: true },
         { dir: "down", from: "human", to: "g", stage: "sent", kind: "answer" },
-        { dir: "up", from: "root", to: "human", stage: "done", kind: "report" },
-        { dir: "up", from: "a", to: "human", stage: "done", kind: "extension" },
-        { dir: "up", from: "human", to: "root", stage: "sent", kind: "report" }, // 人が子の側：落とす
+        { dir: "up", from: "a", to: "root", stage: "sent", kind: "extension" },
+        { dir: "down", from: "human", to: "a", stage: "done", kind: "approved" },
+        { dir: "up", from: "root", to: "human", stage: "sent", kind: "decision" }, // 根 → 人：線にしない
+        { dir: "down", from: "human", to: "root", stage: "sent", kind: "answer" }, // 人 → 根：線にしない
+        { dir: "up", from: "g", to: "human", stage: "sent", kind: "report" }, // 人あての上り：線にしない
         { dir: "down", from: "root", to: "g", stage: "sent", kind: "instruction" }, // ノードどうしの段飛ばし：落とす
-        { dir: "up", from: "nobody", to: "human", stage: "sent", kind: "report" }, // 知らないノード：落とす
+        { dir: "down", from: "human", to: "nobody", stage: "sent", kind: "answer" }, // 知らないノード：落とす
       ],
     });
-    expect(m.lanes.map((l) => [l.child, l.dir, l.human, l.waiting])).toEqual([
-      ["g", "up", true, true],
-      ["g", "down", true, false],
-      ["root", "up", true, false],
-      ["a", "up", true, false],
+    expect(m.lanes.map((l) => [l.parent, l.child, l.dir, l.label, l.waiting])).toEqual([
+      ["a", "g", "up", "判断を求む", true],
+      ["a", "g", "down", "答え", false],
+      ["root", "a", "up", "範囲の頼み", true],
+      ["root", "a", "down", "許可", false],
     ]);
+    // 済んだ頼みは柿色にしない
+    const done = graphModelOf({
+      nodes: [
+        { id: "root", parentId: null },
+        { id: "a", parentId: "root" },
+      ],
+      flows: [{ dir: "up", from: "a", to: "root", stage: "done", kind: "decision" }],
+    });
+    expect(done.lanes.map((l) => l.waiting)).toEqual([false]);
   });
+});
 
-  it("gapRowAbove：箱の上の、いちばん近い行の間（箱のない帯）", () => {
-    const L = layoutOf([
-      { id: "r", parentId: null },
-      { id: "a", parentId: "r" },
-      { id: "b", parentId: "r" },
-    ]);
-    for (const p of L.pos.values()) {
-      const g = gapRowAbove(p.y);
-      expect(g).toBeLessThan(p.y);
-      expect(p.y - g).toBeLessThanOrEqual(ROW_H);
-      // 同じ列と、右の列の葉（行に並ぶ箱）には入らない（右の列の親は、子の真ん中の高さなので、当たることがある）
-      const leaves = new Set(["a", "b"]);
-      for (const [id, q] of L.pos)
-        if (q.x === p.x || (q.x > p.x && leaves.has(id)))
-          expect(g < q.y || g > q.y + BOX_H, id).toBe(true);
-    }
-  });
-
-  it("humanLaneOf：上りは人の箱の左を右向きに指し、下りはノードの箱の上を下向きに指す。d は許した形", () => {
-    const N = { x: 400, y: 144, cy: 184, depth: 1 };
-    const H = { x: 1000, y: 40, cy: 80, depth: -1 };
-    const up = humanLaneOf(N, H, 900, "up");
-    const down = humanLaneOf(N, H, 900, "down");
-    for (const l of [up, down]) {
-      expect(l.d).toMatch(PATH_PATTERN);
-      expect(l.tip).toMatch(PATH_PATTERN);
-    }
-    expect(nums(up.tip).slice(0, 2)).toEqual([H.x, H.y + 10]); // 人の箱の左の辺の、道ごとの高さ
-    expect(nums(down.tip)[1]).toBe(N.y);
-    expect(nums(up.d).slice(0, 2)).toEqual([N.x + BOX_W - 24, N.y]); // 箱の上の辺から出る
-    expect(nums(down.d).slice(0, 2)).toEqual([H.x, H.y + 70]); // 人の箱から出る（上りと違う高さ）
-  });
-
-  it("roundedPath：点が 2 つなら直線。折れ目は Q で丸める", () => {
-    expect(
-      roundedPath([
-        [0, 0],
-        [10, 0],
-      ]),
-    ).toBe("M 0 0 L 10 0");
-    expect(
-      roundedPath([
-        [0, 0],
-        [20, 0],
-        [20, 20],
-      ]),
-    ).toMatch(/^M 0 0 L 12 0 Q 20 0 20 8 L 20 20$/);
-    expect(() => roundedPath([[0, 0]])).toThrow();
-  });
-
-  it("humanColumnOf：通り道の縦の線（上りと下り）の x は、どの箱の範囲にも入らない。人の箱は、どの箱とも重ならない", () => {
-    const xs: { id: string; parentId: string | null }[] = [{ id: "r", parentId: null }];
-    for (let i = 0; i < 6; i++) xs.push({ id: `k${i}`, parentId: i < 3 ? "r" : `k${i - 3}` });
-    for (let i = 0; i < 4; i++) xs.push({ id: `g${i}`, parentId: "k3" });
-    const L = layoutOf(xs);
-    const col = humanColumnOf(L, xs.length);
-    const boxes = [...L.pos.values()];
-    for (let slot = 0; slot < xs.length; slot++)
-      for (const x of [col.corridorX(slot), col.corridorX(slot) + LANE_GAP])
-        for (const b of boxes) expect(x < b.x || x > b.x + BOX_W).toBe(true);
-    for (const b of boxes) expect(col.human.x).toBeGreaterThan(b.x + BOX_W);
-    expect(col.width).toBe(col.human.x + BOX_W + MARGIN);
-  });
-
-  it("humanEndY：人の箱に着く高さは、道ごとに違い、箱の中に収まる", () => {
-    const H = { x: 1000, y: 40, cy: 80, depth: -1 };
-    const ys = Array.from({ length: 8 }, (_, i) => humanEndY(H, i, 8));
-    expect(new Set(ys).size).toBe(8);
-    for (const y of ys) {
-      expect(y).toBeGreaterThanOrEqual(H.y + 10);
-      expect(y).toBeLessThanOrEqual(H.y + BOX_H - 10);
-    }
-    expect(humanEndY(H, 0, 1)).toBe(H.cy);
+describe("閉じた判断は、答え待ちに数えない（カードと同じ）", () => {
+  it("閉じた判断（closedReason）だけが残る子は、答え待ちの箱にならず、柿色の線も丸い数も出ない", () => {
+    const m = graphModelOf({
+      nodes: [
+        { id: "root", parentId: null },
+        { id: "a", parentId: "root", band: "turn", needsHuman: 0 },
+        { id: "b", parentId: "root", needsHuman: 1 },
+      ],
+      decisions: [
+        { decisionId: "d1", nodeId: "a", closedReason: "discarded" },
+        { decisionId: "d2", nodeId: "b" },
+      ],
+      flows: [
+        { dir: "up", from: "a", to: "root", stage: "done", kind: "decision" },
+        { dir: "up", from: "b", to: "root", stage: "sent", kind: "decision" },
+      ],
+    });
+    const a = m.nodes.find((n) => n.id === "a");
+    const b = m.nodes.find((n) => n.id === "b");
+    expect(a?.status).not.toBe("wait");
+    expect(a?.needsHuman).toBe(0);
+    expect(b?.status).toBe("wait");
+    expect(b?.needsHuman).toBe(1);
+    expect(m.lanes.filter((l) => l.waiting).map((l) => l.child)).toEqual(["b"]);
   });
 });
 

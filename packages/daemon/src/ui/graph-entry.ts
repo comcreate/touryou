@@ -7,7 +7,7 @@
 import { type GetSchemes, NodeEditor } from "rete";
 import { AreaPlugin } from "rete-area-plugin";
 import { ReadonlyPlugin } from "rete-readonly-plugin";
-import { BOX_W, COL_GAP, type LayoutPos, layoutOf, MARGIN } from "./graph-layout.js";
+import { type LayoutPos, layoutOf } from "./graph-layout.js";
 import {
   ageClassOf,
   agoText,
@@ -16,16 +16,7 @@ import {
   graphModelOf,
   stageText,
 } from "./graph-model.js";
-import {
-  humanColumnOf,
-  humanLaneOf,
-  type Lane,
-  laneOf,
-  roleIconOf,
-  setRunnerPath,
-  trunkOf,
-  twigOf,
-} from "./graph-path.js";
+import { type Lane, laneOf, roleIconOf, setRunnerPath, trunkOf, twigOf } from "./graph-path.js";
 import { svgEl } from "./svg-el.js";
 
 // ---- 描き手 ----
@@ -62,28 +53,51 @@ interface Shape {
   readonly stage?: string;
 }
 
-/** 「人」の箱の rete の ID。ノードの ID（`ID_PATTERN`。空白を含まない）と重ならない。 */
-const HUMAN_NODE = " human";
-/** 列の見出し（見本の `colhead`）。 */
-const COLUMN_NAMES = ["いちばん上の統合", "子", "孫", "ひ孫"];
-
 let current: AreaPlugin<Schemes, never> | null = null;
 /** いまの図の合図の受け手を、まとめて外すためのもの（`destroy` で外す）。 */
 let listening: AbortController | null = null;
 let currentHost: HTMLElement | null = null;
 /** 描きの番号（世代）。`draw`・`destroy` のたびに進む。古い `draw` の続きは、番号が違えば黙って抜ける。 */
 let generation = 0;
+/**
+ * 指を置いている箱・キーボードで focus している箱の ID と、図の上の指の位置（画面の座標）。描き直しをまたいで覚えておき、
+ * 描き直したあと、同じ ID の箱があれば浮かびをすぐに付け直す（描き直しのたびに図が元の明るさに戻って点滅しないため）。
+ */
+let hoverId: string | null = null;
+let focusId: string | null = null;
+let pointer: { readonly x: number; readonly y: number } | null = null;
+/** 描き直しで残す、拡大・移動（同じ器に描き直すときだけ使う）。 */
+let kept: {
+  readonly host: HTMLElement;
+  readonly k: number;
+  readonly x: number;
+  readonly y: number;
+} | null = null;
 
 /** いまの図を消す（描いていなければ何もしない）。描いている途中の `draw` も、そこで止まる。 */
 export function destroy(): void {
+  teardown();
+  currentHost?.classList.remove("hot");
+  currentHost = null;
+  hoverId = null;
+  focusId = null;
+  pointer = null;
+  kept = null;
+}
+
+/** 図を片付ける。器の浮かびの印（hot）と、覚えた ID・指の位置・拡大・移動は残す（描き直しの前に使う）。 */
+function teardown(): void {
   generation += 1;
-  listening?.abort(); // 箱に付けた合図の受け手を、すべて外す
+  // 先に合図の受け手を外す（器を空にしたときの blur などで、覚えた ID を消さないため）
+  listening?.abort();
   listening = null;
+  if (current !== null && currentHost !== null) {
+    const t = current.area.transform;
+    kept = { host: currentHost, k: t.k, x: t.x, y: t.y };
+  }
   current?.destroy();
   current = null;
   currentHost?.replaceChildren(); // area の器も片付ける
-  currentHost?.classList.remove("hot");
-  currentHost = null;
 }
 
 /** 描いた図の、画面での大きさ（拡大のあと。枠の高さを中身に合わせるのに使う）。 */
@@ -108,17 +122,38 @@ export async function draw(
   view: unknown,
   options: DrawOptions = {},
 ): Promise<Drawn> {
-  destroy();
+  if (currentHost !== host) destroy();
+  else teardown();
   const mine = generation;
   const ac = new AbortController();
   listening = ac;
+  const opt = { signal: ac.signal };
   const onPick = typeof options.onPick === "function" ? options.onPick : null;
   /** つながりの器と、その両端のノード ID（指を置いた箱の線だけ浮かべる）。 */
   const wires: { el: HTMLElement; a: string; b: string }[] = [];
-  const hot = (id: string | null): void => {
+  const litId = (): string | null => hoverId ?? focusId;
+  const touches = (w: { a: string; b: string }, id: string | null): boolean =>
+    id !== null && (w.a === id || w.b === id);
+  const hot = (): void => {
+    const id = litId();
     host.classList.toggle("hot", id !== null);
-    for (const w of wires) w.el.classList.toggle("lit", id !== null && (w.a === id || w.b === id));
+    for (const w of wires) w.el.classList.toggle("lit", touches(w, id));
   };
+  // 図の上の指の位置を覚える（描き直したあと、どの箱の上にいるかを決めるため）
+  host.addEventListener(
+    "pointermove",
+    (e) => {
+      pointer = { x: e.clientX, y: e.clientY };
+    },
+    opt,
+  );
+  host.addEventListener(
+    "pointerleave",
+    () => {
+      pointer = null;
+    },
+    opt,
+  );
   const live = (): boolean => mine === generation;
   const none: Drawn = { width: 0, height: 0 };
   const now = Date.now();
@@ -138,7 +173,7 @@ export async function draw(
     if (kids.length > 0) trunks.push(...trunkOf(P, kidPos));
     kids.forEach((kid, i) => {
       const C = kidPos[i] as LayoutPos;
-      const mine = model.lanes.filter((l) => !l.human && l.parent === pid && l.child === kid);
+      const mine = model.lanes.filter((l) => l.parent === pid && l.child === kid);
       if (mine.length === 0) add({ kind: "twig", d: twigOf(P, C) }, pid, kid);
       for (const l of mine) {
         const s = laneShape(l, laneOf(P, C, l.dir), byId.get(kid), now);
@@ -146,26 +181,9 @@ export async function draw(
       }
     });
   }
-  // 人とのやり取り（段を飛ばす）：木の右に縦の通り道をとり、その右に「人」の箱を置く
-  const humanLanes = model.lanes.filter((l) => l.human && L.pos.has(l.child));
-  const talkers = [...new Set(humanLanes.map((l) => l.child))];
-  let width = L.width;
-  let height = L.height;
-  let H: LayoutPos | null = null;
-  if (humanLanes.length > 0) {
-    const col = humanColumnOf(L, talkers.length);
-    H = col.human;
-    width = col.width;
-    height = col.height;
-    for (const l of humanLanes) {
-      const N = L.pos.get(l.child) as LayoutPos;
-      const slot = talkers.indexOf(l.child);
-      const lane = humanLaneOf(N, H, col.corridorX(slot), l.dir, slot, talkers.length);
-      const s = laneShape(l, lane, byId.get(l.child), now);
-      add(s, l.dir === "up" ? l.child : HUMAN_NODE, l.dir === "up" ? HUMAN_NODE : l.child);
-    }
-  }
-  const depths = [...L.pos.values()].reduce((m, p) => Math.max(m, p.depth), 0);
+  // 人の箱は置かない（利用者の決め）。人の答えなどは、親から子への下りの線の札で表す
+  const width = L.width;
+  const height = L.height;
 
   const editor = new NodeEditor<Schemes>();
   const area = new AreaPlugin<Schemes, never>(host);
@@ -175,8 +193,8 @@ export async function draw(
   editor.use(readonly.root);
   editor.use(area);
   area.use(readonly.area);
-  // 背景：列の見出しと、親の幹（どのノード・つながりにも属さないので、area の中身にじかに置く）
-  area.area.content.add(drawBackdrop(trunks, depths, width, height));
+  // 背景：親の幹（どのノード・つながりにも属さないので、area の中身にじかに置く）
+  area.area.content.add(drawBackdrop(trunks, width, height));
 
   area.addPipe((ctx) => {
     if (ctx.type !== "render") return ctx;
@@ -186,28 +204,55 @@ export async function draw(
       payload: { id: string };
     };
     if (type === "node") {
-      if (payload.id === HUMAN_NODE) drawHuman(element);
-      else {
-        const n = byId.get(payload.id);
-        const box = drawNode(element, n, now);
-        if (box !== null && n !== undefined) listen(box, n.id);
-      }
+      const n = byId.get(payload.id);
+      const box = drawNode(element, n, now);
+      if (box !== null && n !== undefined) listen(box, n.id);
     } else if (type === "connection") {
       const c = payload as ReteConn;
       drawShape(element, shapes[c.shape], width, height);
-      wires.push({ el: element, a: c.source, b: c.target });
+      const w = { el: element, a: c.source, b: c.target };
+      // 描き直しの最中も、覚えた箱の線は浮かべたまま（器の hot は残してある）
+      if (touches(w, litId())) element.classList.add("lit");
+      wires.push(w);
     }
     return ctx;
   });
 
   /** 箱の合図の受け手（`addEventListener` だけ。`destroy` で `ac` ごと外れる）。 */
   function listen(box: HTMLElement, id: string): void {
-    const opt = { signal: ac.signal };
     box.tabIndex = 0;
-    box.addEventListener("pointerenter", () => hot(id), opt);
-    box.addEventListener("pointerleave", () => hot(null), opt);
-    box.addEventListener("focus", () => hot(id), opt);
-    box.addEventListener("blur", () => hot(null), opt);
+    box.addEventListener(
+      "pointerenter",
+      () => {
+        hoverId = id;
+        hot();
+      },
+      opt,
+    );
+    box.addEventListener(
+      "pointerleave",
+      () => {
+        if (hoverId === id) hoverId = null;
+        hot();
+      },
+      opt,
+    );
+    box.addEventListener(
+      "focus",
+      () => {
+        focusId = id;
+        hot();
+      },
+      opt,
+    );
+    box.addEventListener(
+      "blur",
+      () => {
+        if (focusId === id) focusId = null;
+        hot();
+      },
+      opt,
+    );
     if (onPick === null) return;
     box.addEventListener("click", () => onPick(id), opt);
     box.addEventListener(
@@ -225,7 +270,6 @@ export async function draw(
     await editor.addNode({ id: n.id });
     if (!live()) return none;
   }
-  if (H !== null) await editor.addNode({ id: HUMAN_NODE });
   for (const c of conns) {
     if (!live()) return none;
     await editor.addConnection(c);
@@ -236,15 +280,50 @@ export async function draw(
     if (p !== undefined) await area.translate(n.id, { x: p.x, y: p.y });
   }
   if (!live()) return none;
-  if (H !== null) await area.translate(HUMAN_NODE, { x: H.x, y: H.y });
-  if (!live()) return none;
   readonly.enable(); // 置いたあとは、つなぐ・動かす・消すを止める（拡大・移動は残る）
   // 枠の幅に合わせて縮める（読める大きさを保つため、大きくはしない。小さすぎる木は 0.5 倍まで）
   const k = Math.max(0.5, Math.min(1, host.clientWidth / width));
-  await area.area.zoom(k, 0, 0);
+  // 同じ器への描き直しなら、人が変えた拡大・移動をそのまま残す（初めて描くときだけ、枠に合わせる）
+  const keep = kept !== null && kept.host === host ? kept : null;
+  kept = null;
+  await area.area.zoom(keep?.k ?? k, 0, 0);
   if (!live()) return none;
-  await area.area.translate(0, 0);
+  await area.area.translate(keep?.x ?? 0, keep?.y ?? 0);
+  if (!live()) return none;
+  relight(host, byId, hot);
+  // 返す大きさは、枠に合わせた倍率（k）のもの。人が拡大・縮小したあとの描き直しでも、枠の高さは初めて描いたときの
+  // 大きさのまま保つ（描き直しのたびに枠の高さが変わって、ページが跳ねないように）
   return { width: width * k, height: height * k };
+}
+
+/**
+ * 描き直したあとの浮かびを決め直して、`transition` なしで付ける（1 枚も元の明るさに戻さない）。
+ * 指の位置の下の箱を指を置いた箱とし、focus していた箱があれば focus を戻す。その箱がなくなっていれば外す。
+ */
+function relight(host: HTMLElement, byId: ReadonlyMap<string, unknown>, hot: () => void): void {
+  const under =
+    pointer === null
+      ? null
+      : (document.elementFromPoint(pointer.x, pointer.y)?.closest<HTMLElement>(".gnode[data-id]") ??
+        null);
+  const id = under?.dataset.id;
+  hoverId = id !== undefined && byId.has(id) && host.contains(under) ? id : null;
+  if (focusId !== null) {
+    const was = focusId;
+    const box = byId.has(was)
+      ? [...host.querySelectorAll<HTMLElement>(".gnode[data-id]")].find((b) => b.dataset.id === was)
+      : undefined;
+    focusId = null;
+    // 描いている途中に、人がほかの所（答えの欄など）へ focus を移していたら、奪わない。
+    // 戻すのは、focus がどこにもない（片付けで箱ごと消えた）か、器の中にあるときだけ
+    const active = document.activeElement;
+    const free = active === null || active === document.body || host.contains(active);
+    if (box !== undefined && free) box.focus({ preventScroll: true }); // focus の合図で focusId が戻る
+  }
+  host.classList.add("g-instant");
+  hot();
+  void host.offsetWidth; // 印を付けた見た目を先に確定させてから、transition を戻す
+  host.classList.remove("g-instant");
 }
 
 /** 線 1 本の形と見え方。終わった作業の線は止める。人の答えを待つものだけ柿色（`wait`）。 */
@@ -252,44 +331,24 @@ function laneShape(l: GraphLane, lane: Lane, child: GraphNode | undefined, now: 
   const finished = child?.tier === "over";
   const stage = finished ? "done" : l.stage === "sent" && l.unknown ? "unknown" : l.stage;
   // 新しいほど濃い（a1〜a4）。答え待ちの柿色（wait）と、終わった子の薄い灰（over）は、CSS でこれを上書きする
-  const extra = ` ${ageClassOf(l.at, now)}${l.human ? " human" : ""}${l.waiting && !finished ? " wait" : ""}${finished ? " over" : ""}`;
+  const extra = ` ${ageClassOf(l.at, now)}${l.waiting && !finished ? " wait" : ""}${finished ? " over" : ""}`;
   return {
     kind: "lane",
     d: lane.d,
     lane,
     look: `${l.dir}${extra} g-${stage}`,
-    label: `${l.dir === "up" ? "← " : "→ "}${l.label}${l.at === null ? "" : `　${agoText(now - l.at)}`}${l.human ? `　${stageText(l)}` : ""}`,
-    stage: l.human ? "" : stageText(l),
+    label: `${l.dir === "up" ? "← " : "→ "}${l.label}${l.at === null ? "" : `　${agoText(now - l.at)}`}`,
+    stage: stageText(l),
   };
 }
 
-function drawBackdrop(
-  trunks: readonly string[],
-  depths: number,
-  w: number,
-  h: number,
-): HTMLElement {
+function drawBackdrop(trunks: readonly string[], w: number, h: number): HTMLElement {
   const box = el("div", "gback");
   const svg = svgEl("svg", { class: "glink", width: w, height: h, viewBox: `0 0 ${w} ${h}` });
-  for (let d = 0; d <= depths; d++)
-    svg.append(
-      svgEl(
-        "text",
-        { class: "colhead", x: MARGIN + d * (BOX_W + COL_GAP) + 4, y: MARGIN - 18 },
-        COLUMN_NAMES[Math.min(d, COLUMN_NAMES.length - 1)] as string,
-      ),
-    );
+  // 列の見出し（いちばん上の統合・子・孫）は置かない（利用者の決め。親子は線と箱の位置で分かる）
   for (const d of trunks) svg.append(svgEl("path", { class: "trunk", d }));
   box.append(svg);
   return box;
-}
-
-function drawHuman(element: HTMLElement): void {
-  element.replaceChildren();
-  const box = el("div", "gnode b-human t-go");
-  box.dataset.id = "human";
-  box.append(el("span", "gt", "人（あなた）"), el("span", "gs", "答える・決める"));
-  element.append(box);
 }
 
 /** 箱（見本の `drawNode`）：題・役割の印と「何分前」・状態の言葉と印・動いている点・人の答えの数。 */

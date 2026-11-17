@@ -50,7 +50,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       ...created("ui-b", "review", "root", "関係図のレビュー"),
       ...created("ui-c", "implement", "root", "一覧の見せ方を直す"),
       ev({ type: "node.instructed", payload: { nodeId: "ui-a", text: "x" } }, { nodeId: "root" }),
-      // 人からの指示（段を飛ばす。木の外の「人」の箱から）
+      // 人からの指示（人の箱は描かない。親 root から子への下りの線で表す）
       ev({ type: "node.instructed", payload: { nodeId: "ui-c", text: "x" } }),
       // 人から子への、範囲の頼みの却下（札は「指示」でなく「却下」。#115）と、範囲の頼みの知らせ（内部の言葉を言い換える）
       ev({
@@ -81,6 +81,21 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
         type: "inbox.added",
         payload: { id: "st1", kind: "info", nodeId: LONG, summary: stallSummary(LONG, 12) },
       }),
+      // 閉じた判断だけが残る子（止めて破棄を決めた。閉じた判断は答え待ちに数えない。カードと図で同じ札になる）
+      ...created("ui-d", "implement", "root", "閉じた判断だけが残る子"),
+      ev({
+        type: "decision.requested",
+        payload: { decisionId: "d9", nodeId: "ui-d", question: "閉じる問い" },
+      }),
+      ev({
+        type: "node.stateChanged",
+        payload: { nodeId: "ui-d", event: { type: "stop", mode: "immediate" } },
+      }),
+      ev({
+        type: "node.stateChanged",
+        payload: { nodeId: "ui-d", event: { type: "confirmStopped" } },
+      }),
+      ev({ type: "node.discardDecided", payload: { nodeId: "ui-d", noTip: true } }),
       ...created("ui-old", "implement", "root", "前の画面を片付ける"),
       ev({
         type: "node.stateChanged",
@@ -141,7 +156,8 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   });
 
   it("画面が graph.js を読み、#graph に図を描く。CSP の違反もエラーもない", async () => {
-    expect(await page.locator("#graph .gnode").count()).toBe(7); // 6 つのノードと「人」の箱
+    expect(await page.locator("#graph .gnode").count()).toBe(7); // 7 つのノードだけ（「人」の箱は描かない）
+    expect(await page.locator('#graph .gnode[data-id="human"]').count()).toBe(0);
     expect(await page.locator("#graph svg.glink path.line").count()).toBeGreaterThan(0);
     expect(await page.evaluate(() => document.getElementById("list")?.hidden)).toBe(true);
     expect(await page.evaluate(() => document.getElementById("view-switch")?.hidden)).toBe(false);
@@ -164,9 +180,9 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(body).not.toContain("範囲の拡張要求");
   });
 
-  it("人から子への範囲の頼みの却下の線の札は「却下」（「指示」でない）", async () => {
+  it("人から子への範囲の頼みの却下の線の札は「却下」（「指示」でない）。親から子への下りの線に出る", async () => {
     const labels = await page.evaluate(() =>
-      [...document.querySelectorAll("#graph text.mlabel")].map((e) => e.textContent ?? ""),
+      [...document.querySelectorAll("#graph text.mlabel.down")].map((e) => e.textContent ?? ""),
     );
     expect(labels.some((t) => t.startsWith("→ 却下"))).toBe(true);
   });
@@ -248,6 +264,30 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(old?.chips[0]).toBe("済んだ");
   });
 
+  it("同じ表示モデルから、カードの状態の札と、図の箱の状態の言葉が、子ごとに同じ（閉じた判断だけが残る子も）", async () => {
+    const pairs = await page.evaluate(() =>
+      [...document.querySelectorAll("#cards .card, #finished-cards .card")].map((c) => {
+        const id = c.id.replace(/^card-/, "");
+        const box = document.querySelector(`#graph .gnode[data-id="${CSS.escape(id)}"] .gst`);
+        return {
+          id,
+          card: c.children[0]?.querySelector(".chip")?.textContent ?? "",
+          graph: box?.textContent ?? null,
+        };
+      }),
+    );
+    expect(pairs.some((p) => p.id === "ui-d")).toBe(true);
+    for (const p of pairs) {
+      expect(p.graph, p.id).not.toBeNull();
+      // 図の箱は、止まっているかもの子に「　N 分」を足す。頭の言葉が同じこと
+      expect(
+        (p.graph ?? "").startsWith(p.card),
+        `${p.id}: カード「${p.card}」図「${p.graph}」`,
+      ).toBe(true);
+    }
+    expect(pairs.find((p) => p.id === "ui-d")?.card).not.toBe("● あなたの答え待ち");
+  });
+
   it("箱は見本の形：状態の言葉と印・左の縁の段・役割の印・列の見出し。止まっているかもは、くすんだ黄（カードも）", async () => {
     const box = (id: string) => page.locator(`#graph .gnode[data-id="${id}"]`);
     expect(await box("root").getAttribute("class")).toContain("t-go");
@@ -270,10 +310,10 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     }, LONG);
     expect(colors.stall).not.toBe(colors.wait);
     expect(colors.card).toBe(colors.stall);
-    expect(await page.locator("#graph text.colhead").allTextContents()).toEqual([
-      "いちばん上の統合",
-      "子",
-    ]);
+    // 列の見出し（いちばん上の統合・子・孫）は出さない（利用者の決め）
+    expect(await page.locator("#graph text.colhead").count()).toBe(0);
+    const heads = await page.locator("#graph text").allTextContents();
+    for (const t of ["いちばん上の統合", "子", "孫"]) expect(heads).not.toContain(t);
     expect(await page.locator("#graph text.mstage").count()).toBeGreaterThan(0);
   });
 
