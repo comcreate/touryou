@@ -60,7 +60,7 @@ flowchart LR
   end
   subgraph ブラウザ
     APP[app.js<br/>いまの描き手 el()] -->|fetch| S
-    APP -->|drawGraph(view) だけを呼ぶ| GR[graph.js<br/>自前の描き手 + rete]
+    APP -->|touryouGraph.draw(host, view) だけを呼ぶ| GR[graph.js<br/>自前の描き手 + rete]
   end
   A --> APP
   G --> GR
@@ -73,7 +73,7 @@ flowchart LR
 | 表示モデル | `packages/core/src/ui-view.ts` | 5 節の値を足す。`flowsOf`（やり取りの段の決め）と `humanCounts`（人の要対応の数え）を純粋な関数で |
 | 状態の畳み | `packages/core/src/events.ts` | `DecisionRecord.answeredSeq`・`answeredAt`、`ExtensionRecord.decidedAt` を足す（新しいイベントは要らない） |
 | 画面 | `packages/daemon/src/api/ui-assets.ts` | 「いまあなたがすること」・作業のカード・一覧・管理のたたみ。図は `graph.js` に任せる |
-| 図の入口 | `packages/daemon/src/ui/graph-entry.ts`（新・案） | `drawGraph(host, view)`。表示モデルから、整えた文字・確かめた ID・数だけを作り直して描く |
+| 図の入口 | `packages/daemon/src/ui/graph-entry.ts`（新・案） | `window.touryouGraph.draw(host, view)`・`destroy()`。表示モデルから、整えた文字・確かめた ID・数だけを作り直して描く |
 | 図の配置 | `packages/daemon/src/ui/graph-layout.ts`（新・案） | `layoutOf(nodes, size)`。純粋な関数 |
 | 図の線 | `packages/daemon/src/ui/graph-path.ts`（新・案） | 枝の道（角丸の折れ線）の `d` を数だけで組む。矢印の三角も |
 | SVG の要素 | `packages/daemon/src/ui/svg-el.ts`（新・案） | `svgEl(tag, attrs)`。SVG を作るのはここ 1 か所だけ |
@@ -144,7 +144,7 @@ export interface UiFlow {
 | タグの許可リスト | `div`・`span`・`p`・`button`・`textarea` | `details`・`summary`・`code` を足す（D4） | 属性は付けない。試験の「`el` に渡すタグ」の許可リストを合わせる |
 | SVG | 作らない（生成を禁止） | `svgEl(tag, attrs)` だけが作る。タグ：`svg`・`g`・`path`・`rect`・`text`・`title`。属性：`class`・`d`・`x`・`y`・`width`・`height`・`rx`・`viewBox`。`class` は、決まった名前の一覧（`SVG_CLASSES`。例：`flow-up`・`flow-down`・`stage-sent`・`stage-delivered`・`stage-done`・`await`・`branch-idle`・`band-turn` など）の中からだけ（空白で区切った複数も、どれも一覧にあるときだけ）。ほかの属性の値は数か、数で組んだ `d`・`viewBox`（`d` の命令は `M`・`L`・`C`・`Q`・`A`・`Z`）。それ以外の値は拒む | 試験で、`createElementNS`・`setAttributeNS` が `svg-el.ts` の 1 か所だけにあることを数える。`href`・`on*`・`style` 属性・`foreignObject`・`use`・`a`・`marker`・`image` は入れない。文字は `text` 要素の `textContent` だけ |
 | 動く玉（D8） | — | CSS の `offset-path` を、`graph-path.ts` の 1 か所だけで `element.style.offsetPath = "path('…')"` として設定する（中身は `d` と同じ検査を通した文字列） | 走査の SAFE に `offsetPath` を足し、使う所が 1 か所だけであることを試験で数える |
-| 図に渡す値 | — | `drawGraph(host, view)` の中で、表示モデルから作り直す：文字は `uiText` を通したもの（題・状態の名前・種類の名前・時刻）、ID は `ID_PATTERN` を通したもの、数 | 表示モデルをそのまま rete に渡さない。rete のノードのデータは ID と数だけ |
+| 図に渡す値 | — | `touryouGraph.draw(host, view)` の中で、表示モデルから作り直す：文字は `uiText` を通したもの（題・状態の名前・種類の名前・時刻）、ID は `ID_PATTERN` を通したもの、数 | 表示モデルをそのまま rete に渡さない。rete のノードのデータは ID と数だけ |
 | プロパティの許可リスト | 走査の `SAFE` | `classList`・`dataset`・`offsetPath`・`clipboard`・`writeText` などを足す | 足すものを PR-4・PR-5 の本文に表で出す |
 | 動き | 少し | CSS の `@keyframes` とクラスの付け外しだけ。`prefers-reduced-motion` で止める。画面に「動きを止める」 | 動きは意味を足すだけ。止めても色・印・文字で読める（F5） |
 
