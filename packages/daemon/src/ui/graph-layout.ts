@@ -6,10 +6,10 @@
 export const BOX_W = 220;
 export const BOX_H = 80;
 /** 列の間（親の箱の右から、子の箱の左まで）。幹と枝はこの中に描く。 */
-export const COL_GAP = 140;
+export const COL_GAP = 240;
 /** 葉 1 つ分の高さ。 */
-export const ROW_H = 104;
-export const MARGIN = 40;
+export const ROW_H = 108;
+export const MARGIN = 44;
 
 export interface LayoutInput {
   readonly id: string;

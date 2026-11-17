@@ -12,6 +12,9 @@ export interface Box {
 }
 export interface Loc {
   count(): Promise<number>;
+  getAttribute(name: string): Promise<string | null>;
+  allTextContents(): Promise<string[]>;
+  locator(selector: string): Loc;
   textContent(): Promise<string | null>;
   boundingBox(): Promise<Box | null>;
 }
@@ -31,7 +34,7 @@ export interface Page {
   close(): Promise<void>;
   waitForSelector(s: string): Promise<unknown>;
   waitForTimeout(ms: number): Promise<void>;
-  evaluate<R, A = undefined>(f: (a: A) => R, a?: A): Promise<R>;
+  evaluate<R, A = undefined>(f: (a: A) => R | Promise<R>, a?: A): Promise<R>;
   locator(s: string): Loc;
   screenshot(o: { path: string; fullPage?: boolean }): Promise<unknown>;
   emulateMedia(o: {

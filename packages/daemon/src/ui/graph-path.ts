@@ -34,125 +34,74 @@ export interface Lane {
   readonly d: string;
   /** 矢印の三角。 */
   readonly tip: string;
-  /** ラベルの左下。 */
+  /** 端子の丸（子の箱の端。人の道にはない）の真ん中。 */
+  readonly portX?: number;
+  readonly portY?: number;
+  /** 札（種類と「何分前」）の左下。段の言葉は、その外側（上りは上・下りは下）に `stageY` で置く。 */
   readonly labelX: number;
   readonly labelY: number;
+  readonly stageY: number;
+}
+
+/** 親の箱の右の辺から、幹（縦の線）までの長さ。 */
+export const TRUNK = 26;
+
+/** 親 P の幹の x。子の枝は、すべてこの幹から分かれる（見本の `tx`）。 */
+export const trunkXOf = (P: LayoutPos): number => P.x + BOX_W + TRUNK;
+
+/**
+ * 親の幹：親の箱の右の辺から短く出て、子の高さまで縦にのびる 2 本（見本の `trunk`）。
+ * 子の上りの道は、子ごとの高さで幹に着くので、矢印の先が重ならない。
+ */
+export function trunkOf(P: LayoutPos, kids: readonly LayoutPos[]): readonly string[] {
+  const tx = trunkXOf(P);
+  const ys = kids.map((k) => k.cy).concat([P.cy]);
+  return [
+    pathD([
+      ["M", P.x + BOX_W, P.cy],
+      ["L", tx, P.cy],
+    ]),
+    pathD([
+      ["M", tx, Math.min(...ys) - LANE_GAP],
+      ["L", tx, Math.max(...ys) + LANE_GAP],
+    ]),
+  ];
 }
 
 /**
- * 親 P から子 C への枝の、上り（子 → 親）か下り（親 → 子）の道。
- * `bendX` は、その子の枝が曲がる縦の線の x（外側の子ほど親の近く。`bendXOf` で決める）。
- * 角丸の折れ線：子の箱の左 ⇄ 曲がり目 ⇄ 親の高さ ⇄ 親の箱の右。
+ * 子 C の枝の、上り（子 → 親）か下り（親 → 子）の道（見本の `drawGraph` の `line`）。
+ * 上りは子の箱の左から幹へ（矢印の先は幹。左向き）、下りは幹から子の箱の左へ（矢印の先は子の箱。右向き）。
+ * 上りは枝の上、下りは枝の下を通る。
  */
-export function laneOf(P: LayoutPos, C: LayoutPos, bendX: number, dir: Dir): Lane {
-  const off = dir === "up" ? -LANE_GAP : LANE_GAP;
-  const yC = C.cy + off;
-  const yP = P.cy + off / 2;
-  const xP = P.x + BOX_W;
-  const xC = C.x;
-  const dy = yP - yC;
-  const r = Math.min(RADIUS, Math.abs(dy) / 2);
-  const s = Math.sign(dy);
-  // 子の側から親の側へ、の点の並び
-  const pts: [string, ...number[]][] =
-    r < 0.5
-      ? [
-          ["M", xC, yC],
-          ["L", xP, yP],
-        ]
-      : [
-          ["M", xC, yC],
-          ["L", bendX + r, yC],
-          ["Q", bendX, yC, bendX, yC + s * r],
-          ["L", bendX, yP - s * r],
-          ["Q", bendX, yP, bendX - r, yP],
-          ["L", xP, yP],
-        ];
-  if (dir === "up") {
-    // 子 → 親。矢印は親の箱の右の辺を指す（左向き）
-    const last = pts[pts.length - 1] as [string, number, number];
-    last[1] = xP + ARROW;
-    return {
-      d: pathD(pts),
-      tip: pathD([
-        ["M", xP, yP],
-        ["L", xP + ARROW + 2, yP - 5],
-        ["L", xP + ARROW + 2, yP + 5],
-        ["Z"],
-      ]),
-      labelX: bendX + 12,
-      labelY: yC - 6,
-    };
-  }
-  // 親 → 子。点の並びを逆にして、矢印は子の箱の左の辺を指す（右向き）
-  const rev = reverse(pts);
-  const last = rev[rev.length - 1] as [string, number, number];
-  last[1] = xC - ARROW;
+export function laneOf(P: LayoutPos, C: LayoutPos, dir: Dir): Lane {
+  const tx = trunkXOf(P);
+  const up = dir === "up";
+  const y = C.cy + (up ? -LANE_GAP : LANE_GAP);
   return {
-    d: pathD(rev),
-    tip: pathD([
-      ["M", xC, yC],
-      ["L", xC - ARROW - 2, yC - 5],
-      ["L", xC - ARROW - 2, yC + 5],
-      ["Z"],
-    ]),
-    labelX: bendX + 12,
-    labelY: yC + 15,
+    d: up
+      ? pathD([
+          ["M", C.x, y],
+          ["L", tx + ARROW, y],
+        ])
+      : pathD([
+          ["M", tx, y],
+          ["L", C.x - ARROW, y],
+        ]),
+    tip: up ? tipAt(tx, y, "left") : tipAt(C.x, y, "right"),
+    portX: C.x,
+    portY: y,
+    labelX: tx + 18,
+    labelY: up ? y - 6 : y + 15,
+    stageY: up ? y - 20 : y + 29,
   };
 }
 
-/** M・L・Q だけの道を、逆向きにする。 */
-function reverse(pts: readonly [string, ...number[]][]): [string, ...number[]][] {
-  const ends: [number, number][] = pts.map((p) => [
-    p[p.length - 2] as number,
-    p[p.length - 1] as number,
-  ]);
-  const out: [string, ...number[]][] = [["M", ...(ends[ends.length - 1] as [number, number])]];
-  for (let i = pts.length - 1; i > 0; i--) {
-    const p = pts[i] as [string, ...number[]];
-    const to = ends[i - 1] as [number, number];
-    if (p[0] === "Q") out.push(["Q", p[1] as number, p[2] as number, to[0], to[1]]);
-    else out.push(["L", to[0], to[1]]);
-  }
-  return out;
-}
-
-/** 薄い点線の枝（やり取りのまだない子）。 */
-export function twigOf(P: LayoutPos, C: LayoutPos, bendX: number): string {
-  const xP = P.x + BOX_W;
-  if (Math.abs(C.cy - P.cy) < 1)
-    return pathD([
-      ["M", xP, P.cy],
-      ["L", C.x, C.cy],
-    ]);
+/** 薄い点線の枝（やり取りのまだない子）。幹から子の箱の左まで。 */
+export function twigOf(P: LayoutPos, C: LayoutPos): string {
   return pathD([
-    ["M", xP, P.cy],
-    ["L", bendX, P.cy],
-    ["L", bendX, C.cy],
+    ["M", trunkXOf(P), C.cy],
     ["L", C.x, C.cy],
   ]);
-}
-
-/**
- * 子ごとの曲がり目の x。親の高さから遠い（外側の）子ほど、親の近くで曲げる（線を交わらせない）。
- * 子が多いときは、間を詰める（列の間からはみ出さない）。
- */
-export function bendXOf(P: LayoutPos, kids: readonly LayoutPos[], colGap: number): number[] {
-  const start = P.x + BOX_W + 16;
-  const room = colGap - 16 - 40; // 子の箱の手前に、ラベルの場所を残す
-  const order = kids
-    .map((k, i) => ({ i, dist: Math.abs(k.cy - P.cy), above: k.cy < P.cy }))
-    .sort((a, b) => b.dist - a.dist || a.i - b.i);
-  // 上の子と下の子は別々に数える（上下で同じ x を使っても交わらない）
-  const step = Math.min(10, room / Math.max(1, Math.ceil(kids.length / 2)));
-  const out = new Array<number>(kids.length).fill(start);
-  let up = 0;
-  let down = 0;
-  for (const o of order) {
-    const rank = o.above ? up++ : down++;
-    out[o.i] = start + rank * step;
-  }
-  return out;
 }
 
 /** 点の並び（縦と横の線だけ）を、角を丸めた折れ線の `d` にする。 */
@@ -186,9 +135,10 @@ export function gapRowAbove(top: number): number {
   return MARGIN - half + k * ROW_H;
 }
 
-/** 矢印の三角。先が (x, y) で、`to` の向き（右・下）を指す。 */
-function tipAt(x: number, y: number, to: "right" | "down"): string {
+/** 矢印の三角。先が (x, y) で、`to` の向き（左・右・下）を指す。 */
+function tipAt(x: number, y: number, to: "left" | "right" | "down"): string {
   const b = ARROW + 2;
+  if (to === "left") return pathD([["M", x, y], ["L", x + b, y - 5], ["L", x + b, y + 5], ["Z"]]);
   return to === "right"
     ? pathD([["M", x, y], ["L", x - b, y - 5], ["L", x - b, y + 5], ["Z"]])
     : pathD([["M", x, y], ["L", x - 5, y - b], ["L", x + 5, y - b], ["Z"]]);
@@ -219,13 +169,22 @@ export function humanColumnOf(
  * 人とのやり取りの道（段を飛ばす。research.md 6.1 の (b)）。木の右の縦の通り道を通る。
  * ノードの箱の上の辺から出て、行の間（箱のない所。`gapRowAbove`）を右へ、通り道を縦に、人の箱の左の辺へ。
  * `corridorX` は、そのノードの通り道の x（ノードごとにずらし、重ねない）。上りは人の箱を、下りはノードの箱を指す。
+ * 札は、行の間の帯に 1 行で置く（帯は狭いので、段の言葉も同じ行に続ける。`stageY` は `labelY` と同じ）。
  */
-export function humanLaneOf(N: LayoutPos, H: LayoutPos, corridorX: number, dir: Dir): Lane {
+export function humanLaneOf(
+  N: LayoutPos,
+  H: LayoutPos,
+  corridorX: number,
+  dir: Dir,
+  slot = 0,
+  slots = 1,
+): Lane {
   const up = dir === "up";
   const sx = N.x + BOX_W - (up ? 24 : 40);
   const gapY = gapRowAbove(N.y) + (up ? -4 : 4);
   const cx = corridorX + (up ? 0 : LANE_GAP);
-  const hy = H.cy + (up ? -LANE_GAP : LANE_GAP);
+  // 人の箱の左の辺に着く高さは、道ごとに分ける（矢印の先を重ねない）
+  const hy = humanEndY(H, slot * 2 + (up ? 0 : 1), slots * 2);
   const fromNode: [number, number][] = [
     [sx, N.y],
     [sx, gapY],
@@ -238,8 +197,9 @@ export function humanLaneOf(N: LayoutPos, H: LayoutPos, corridorX: number, dir: 
     return {
       d: roundedPath(pts),
       tip: tipAt(H.x, hy, "right"),
-      labelX: sx + 8,
-      labelY: gapY - 4,
+      labelX: N.x + BOX_W + 8,
+      labelY: gapY - 3,
+      stageY: gapY - 3,
     };
   }
   const pts = fromNode
@@ -249,9 +209,41 @@ export function humanLaneOf(N: LayoutPos, H: LayoutPos, corridorX: number, dir: 
   return {
     d: roundedPath(pts),
     tip: tipAt(sx, N.y, "down"),
-    labelX: sx + 8,
-    labelY: gapY - 4,
+    labelX: N.x + BOX_W + 8,
+    labelY: gapY + 11,
+    stageY: gapY + 11,
   };
+}
+
+/** 人の箱の左の辺の、`i` 本目（`n` 本中）の道が着く高さ。箱の上下 10px を残して、等しく分ける。 */
+export function humanEndY(H: LayoutPos, i: number, n: number): number {
+  const top = H.y + 10;
+  const span = BOX_H - 20;
+  return n <= 1 ? H.cy : top + (span * Math.min(i, n - 1)) / (n - 1);
+}
+
+/** 役割の印（12×12 の中。見本の `role-ic`）：統合は枝分かれ、ほかは金づち。 */
+export function roleIconOf(integrator: boolean): string {
+  return integrator
+    ? pathD([
+        ["M", 1, 6],
+        ["L", 5, 6],
+        ["M", 5, 1],
+        ["L", 5, 11],
+        ["M", 5, 1],
+        ["L", 10, 1],
+        ["M", 5, 11],
+        ["L", 10, 11],
+      ])
+    : pathD([
+        ["M", 2, 11],
+        ["L", 7, 5],
+        ["M", 4, 3],
+        ["L", 7, 1],
+        ["L", 11, 5],
+        ["L", 9, 7],
+        ["Z"],
+      ]);
 }
 
 /** 動く玉に道を設定する。中身は `d` と同じ検査を通したものだけ。 */

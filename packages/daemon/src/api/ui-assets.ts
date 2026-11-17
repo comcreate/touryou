@@ -60,7 +60,7 @@ body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 "Hiragino Kaku 
 :focus-visible{outline:3px solid var(--ai);outline-offset:2px;border-radius:4px}
 .top{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 16px;border-bottom:1px solid var(--line)}
 .top h1{font-size:17px;margin:0;letter-spacing:.04em}
-.top .tools{margin-left:auto}
+.top .tools{margin-left:auto;flex:none;max-width:100%}.tools button{white-space:nowrap}.top h1{flex:none}.top .status{flex:1 1 12em;min-width:0;overflow-wrap:anywhere}
 .status{color:var(--muted);font-size:13px}
 .status.live::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--matsu);margin-right:6px;vertical-align:middle;animation:breathe 2.4s ease-in-out infinite}
 main{padding:0 16px 48px;max-width:1040px;margin:0 auto}
@@ -92,7 +92,7 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .card.blocking{border-left:4px solid var(--blocking)}.card.request{border-left:4px solid var(--muted)}.card.failed{border-left:4px solid var(--failed)}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:start}
 .cards .card{margin:0;display:grid;gap:6px;scroll-margin-top:16px}
-.card.turn{border-color:var(--kaki);border-left:5px solid var(--kaki)}.card.finished{opacity:.8}
+.card.turn{border-color:var(--kaki);border-left:5px solid var(--kaki)}.card.turn.stall{border-color:var(--kiiro);border-left-color:var(--kiiro)}.card.finished{opacity:.8}
 .card.flash{animation:flash 1.6s ease-out}
 .ctitle{font-weight:700;font-size:15.5px;line-height:1.5}
 .meta{display:flex;flex-wrap:wrap;gap:2px 12px;font-size:12.5px;color:var(--muted)}
@@ -138,18 +138,35 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 @keyframes flash{0%{box-shadow:0 0 0 0 var(--kaki)}30%{box-shadow:0 0 0 6px var(--kaki-soft)}100%{box-shadow:0 0 0 0 transparent}}
 @keyframes open{from{opacity:0;transform:translateY(-4px)}}
 .seg{display:inline-flex;gap:4px;margin:0 0 8px}.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
-.board{position:relative;height:560px;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:var(--sheet);user-select:none;-webkit-user-select:none;touch-action:none}
-.gnode{box-sizing:border-box;width:220px;height:80px;padding:10px 14px;border:1px solid var(--line);border-left:5px solid var(--ai-3);border-radius:4px 12px 12px 4px;background:var(--card);display:flex;flex-direction:column;gap:4px;overflow:hidden}
-.gnode.b-turn{border-left-color:var(--kaki)}.gnode.b-finished{opacity:.55}.gnode.b-human{border-style:dashed;border-left-width:1px;border-radius:12px}
-.gt{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gs{color:var(--muted);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.board{position:relative;height:420px;min-height:180px;max-height:720px;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:var(--sheet);user-select:none;-webkit-user-select:none;touch-action:none}
+.gback{position:absolute;left:0;top:0;pointer-events:none}
+.gnode{box-sizing:border-box;position:relative;width:220px;height:80px;padding:8px 14px 8px 16px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);display:flex;flex-direction:column;justify-content:center;gap:3px;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.gnode::before{content:"";position:absolute;left:3px;top:10px;bottom:10px;width:3.5px;border-radius:2px;background:var(--ai)}
+.gnode.t-turn{border:2.5px solid var(--kaki)}.gnode.t-turn::before{background:var(--kaki)}
+.gnode.s-stall{border-color:var(--kiiro)}.gnode.s-stall::before{background:var(--kiiro)}
+.gnode.s-fail{border-color:var(--shu)}.gnode.s-fail::before{background:var(--shu)}
+.gnode.t-over{opacity:.55;background:var(--bg)}.gnode.t-over::before{background:var(--line)}
+.gnode.b-human{border-style:dashed}.gnode.b-human::before{display:none}
+.gt{font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:14px}
+.gr{display:flex;align-items:center;gap:6px;min-width:0}.gic{flex:none}
+.role-ic{fill:none;stroke:var(--muted);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.gs{color:var(--muted);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gst{font-size:11.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.st-wait{color:var(--kaki)}.st-stall{color:var(--kiiro)}.st-fail{color:var(--shu)}.st-done,.st-stopped{color:var(--muted)}
+.galive{position:absolute;right:10px;top:10px;width:8px;height:8px;border-radius:50%;background:var(--matsu);animation:galive 3s ease-in-out infinite}
+.gbadge{position:absolute;right:-10px;top:-10px;min-width:24px;height:24px;padding:0 4px;box-sizing:border-box;border-radius:12px;background:var(--kaki);color:var(--on-strong);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
 .glink{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.colhead{font-size:12.5px;font-weight:700;fill:var(--muted)}
+.trunk{fill:none;stroke:var(--ai-3);stroke-width:4;stroke-linecap:round;opacity:.5}
 .twig{fill:none;stroke:var(--muted);stroke-width:1.5;stroke-dasharray:2 5;opacity:.6}
-.line{fill:none;stroke:var(--ai);stroke-width:2.5;stroke-dasharray:6 8}.tip{fill:var(--ai)}
-.line.down{stroke:var(--ai-2)}.tip.down{fill:var(--ai-2)}
-.line.g-sent{animation:gflow .8s linear infinite}.line.g-unknown{animation:gflow 3s linear infinite;stroke-dasharray:3 6}.line.g-delivered{animation:gflow 2.4s linear infinite}.line.g-done{opacity:.45}
-.line.wait{stroke:var(--kaki);stroke-width:3.5}.tip.wait{fill:var(--kaki)}
-.mlabel{font-size:11px;fill:var(--muted)}
+.line{fill:none;stroke:var(--ai);stroke-width:2.5;stroke-dasharray:6 8}.tip{fill:var(--ai)}.port{fill:var(--ai);stroke:var(--sheet);stroke-width:2}
+.line.down{stroke:var(--ai-2)}.tip.down,.port.down{fill:var(--ai-2)}
+.line.g-sent{animation:gflow .8s linear infinite}.line.g-unknown{animation:gflow 3s linear infinite;stroke-dasharray:3 6}.line.g-delivered{animation:gflow 2.4s linear infinite}
+.line.wait{stroke:var(--kaki);stroke-width:3.5}.tip.wait,.port.wait{fill:var(--kaki)}
+.line.over,.tip.over,.port.over,.line.g-done{opacity:.45}
+.mlabel,.mstage{paint-order:stroke;stroke:var(--sheet);stroke-width:3px;stroke-linejoin:round}
+.mlabel{font-size:11.5px;font-weight:700;fill:var(--fg)}.mstage{font-size:11px;fill:var(--muted)}.mlabel.wait,.mstage.wait{fill:var(--kaki)}.mlabel.over,.mstage.over{opacity:.6}
 .pip{position:absolute;left:0;top:0;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:var(--ai);offset-rotate:0deg;animation:gtravel 1.6s linear infinite}
+@keyframes galive{0%,100%{opacity:1}50%{opacity:.45}}
 @keyframes gflow{to{stroke-dashoffset:-14}}@keyframes gtravel{from{offset-distance:0%}to{offset-distance:100%}}
 .still *,.still *::before{animation:none!important;transition:none!important}
 @media (prefers-reduced-motion: reduce){*,*::before{animation:none!important;transition:none!important}}
@@ -681,13 +698,16 @@ export const UI_JS = `'use strict';
   }
   function nodeCard(n, byId, list, flows, delegated) {
     var band = n.band === 'turn' || n.band === 'finished' ? n.band : 'running';
-    var card = el('div', 'card ' + band);
+    // 出番が「止まっているかも」だけのときは、柿色（答え待ち）でなく、くすんだ黄（関係図の箱とそろえる）
+    var stalls = list.filter(function (i) { return i.stall === true; }).length;
+    var stallOnly = band === 'turn' && stalls > 0 && n.needsHuman <= stalls && n.state !== 'stopIncomplete';
+    var card = el('div', 'card ' + band + (stallOnly ? ' stall' : ''));
     if (ID_RE.test(n.id)) card.id = 'card-' + n.id;
     var head = el('div', '');
-    head.appendChild(el('span', 'chip ' + band, name(BAND_NAMES, band)));
+    head.appendChild(el('span', 'chip ' + (stallOnly ? 'stall' : band), name(BAND_NAMES, band)));
     head.appendChild(el('span', 'chip', name(STATE_NAMES, n.state)));
     // 「あなたの答え」の数は、人の操作が要るものだけ（needsHuman。進み具合・済んだ・知らせは数えない）
-    if (n.needsHuman > 0) head.appendChild(el('span', 'chip turn', 'あなたの答え ' + n.needsHuman + ' 件'));
+    if (n.needsHuman > 0) head.appendChild(el('span', 'chip ' + (stallOnly ? 'stall' : 'turn'), 'あなたの答え ' + n.needsHuman + ' 件'));
     card.appendChild(head);
     card.appendChild(el('div', 'ctitle', nodeLabel(n, 200)));
     var meta = el('div', 'meta');
@@ -826,8 +846,14 @@ export const UI_JS = `'use strict';
       dropGraph();
       renderGraph(view, seq);
     };
+    var box = document.getElementById('graph');
+    // 枠の高さを、描いた図の高さに合わせる（子が少ないときは縮める。拡大・移動は残る）
+    var fit = function (r) {
+      if (mine !== graphDrawId || !r || typeof r.height !== 'number' || !(r.height > 0)) return;
+      box.style.height = Math.min(720, Math.max(180, Math.ceil(r.height) + 16)) + 'px';
+    };
     try {
-      Promise.resolve(g.draw(document.getElementById('graph'), view)).catch(fallback);
+      Promise.resolve(g.draw(box, view)).then(fit, fallback);
     } catch (e) {
       fallback();
     }

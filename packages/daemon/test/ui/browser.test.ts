@@ -8,12 +8,12 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { bundleGraph } from "../../../../scripts/ui-graph-bundle.mjs";
-import { UI_HEADERS } from "../../src/api/ui-assets.js";
+import { UI_CSS, UI_HEADERS } from "../../src/api/ui-assets.js";
 import { type Browser, must, type Page, type Pw, pw, type Win } from "./playwright.js";
 
 const HTML =
   '<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>graph</title>' +
-  '<link rel="stylesheet" href="/graph.css"></head><body><div id="g"></div>' +
+  '<link rel="stylesheet" href="/graph.css"></head><body><div id="g" class="board"></div>' +
   '<script src="/graph.js"></script><script src="/boot.js"></script></body></html>';
 
 describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）", () => {
@@ -31,8 +31,9 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
         readFileSync(new URL("boot.js", import.meta.url), "utf8"),
         "text/javascript; charset=utf-8",
       ],
+      // 見た目は本物の画面の CSS（app.css）に、試験の枠の大きさだけを足す
       "/graph.css": [
-        readFileSync(new URL("fixture.css", import.meta.url), "utf8"),
+        `${UI_CSS}\n${readFileSync(new URL("fixture.css", import.meta.url), "utf8")}`,
         "text/css; charset=utf-8",
       ],
     };
@@ -97,9 +98,9 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
         (s: string) => getComputedStyle(document.querySelector(s) as Element).animationName,
         sel,
       );
-    expect(await anim("path.line.g-sent")).toBe("flow");
-    expect(await anim("path.line.g-unknown")).toBe("flow");
-    expect(await anim("path.line.g-delivered")).toBe("flow");
+    expect(await anim("path.line.g-sent")).toBe("gflow");
+    expect(await anim("path.line.g-unknown")).toBe("gflow");
+    expect(await anim("path.line.g-delivered")).toBe("gflow");
     expect(await anim("path.line.g-done")).toBe("none");
     // sent は root → m1 の 1 本だけ（unknown は届いたか分からないので玉を走らせない）
     expect(await page.locator(".pip").count()).toBe(1);

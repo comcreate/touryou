@@ -242,6 +242,8 @@ describe("画面の資産（走査）", () => {
       "draw",
       "destroy",
       "ariaPressed",
+      // 関係図の枠の高さを、描いた図に合わせる（draw の戻り値の height）
+      "height",
       // #89: 画面の作り直し（表示モデルの値・時刻・写すボタン・動きを止める・たたむ欄）
       "title",
       "lastActivityAt",
@@ -1132,7 +1134,7 @@ describe("画面の使い勝手（#13）", () => {
 
   it("(6) 「あなたの答え」の数は、人の操作が要るもの（needsHuman）だけ。未解決の項目すべて（openItems）は使わない（#89）", () => {
     expect(UI_JS).toContain(
-      "if (n.needsHuman > 0) head.appendChild(el('span', 'chip turn', 'あなたの答え ' + n.needsHuman + ' 件'))",
+      "if (n.needsHuman > 0) head.appendChild(el('span', 'chip ' + (stallOnly ? 'stall' : 'turn'), 'あなたの答え ' + n.needsHuman + ' 件'))",
     );
     expect(UI_JS).not.toContain("openItems");
   });
@@ -1238,11 +1240,9 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
       "typeof g.draw === 'function' && typeof g.destroy === 'function' ? g : null",
     );
     expect([...UI_JS.matchAll(/\bg\.draw\(/g)]).toHaveLength(1);
-    expect(UI_JS).toContain("g.draw(document.getElementById('graph'), view)");
+    expect(UI_JS).toContain("var box = document.getElementById('graph');");
     // 描けないとき（reject も同期の例外も）は一覧に戻る。戻すのは、いちばん新しい描きのときだけ
-    expect(UI_JS).toContain(
-      "Promise.resolve(g.draw(document.getElementById('graph'), view)).catch(fallback);",
-    );
+    expect(UI_JS).toContain("Promise.resolve(g.draw(box, view)).then(fit, fallback);");
     expect(UI_JS).toMatch(/\} catch \(e\) \{\s*fallback\(\);/);
     expect(UI_JS).toMatch(
       /var fallback = function \(\) \{\s*if \(mine !== graphDrawId\) return;\s*graphMode = 'list';/,
