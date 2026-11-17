@@ -36,6 +36,7 @@ interface Page {
   evaluate<R, A = undefined>(f: (a: A) => R, a?: A): Promise<R>;
   locator(s: string): Loc;
   screenshot(o: { path: string }): Promise<unknown>;
+  emulateMedia(o: { reducedMotion: "reduce" | "no-preference" }): Promise<void>;
   request: { get(url: string): Promise<{ headers(): Record<string, string> }> };
   mouse: {
     move(x: number, y: number, o?: { steps: number }): Promise<void>;
@@ -187,5 +188,17 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     );
     expect(holder2).not.toBe(holder);
     expect(problems).toEqual([]);
+  });
+
+  it("prefers-reduced-motion のとき、線も玉も動かない", async () => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const names = await page.evaluate(() =>
+      [...document.querySelectorAll("#g path.line, #g .pip")].map(
+        (e) => getComputedStyle(e).animationName,
+      ),
+    );
+    expect(names.length).toBeGreaterThan(0);
+    expect(new Set(names)).toEqual(new Set(["none"]));
+    await page.emulateMedia({ reducedMotion: "no-preference" });
   });
 });

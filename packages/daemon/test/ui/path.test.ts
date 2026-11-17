@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { BOX_W, COL_GAP, layoutOf } from "../../src/ui-graph/graph-layout.js";
-import { graphModelOf } from "../../src/ui-graph/graph-model.js";
-import { bendXOf, LANE_GAP, laneOf, pathD, twigOf } from "../../src/ui-graph/graph-path.js";
-import { PATH_PATTERN, svgAttrValue } from "../../src/ui-graph/svg-el.js";
+import { BOX_W, COL_GAP, layoutOf } from "../../src/ui/graph-layout.js";
+import { graphModelOf } from "../../src/ui/graph-model.js";
+import { bendXOf, LANE_GAP, laneOf, pathD, twigOf } from "../../src/ui/graph-path.js";
+import { PATH_PATTERN, svgAttrValue } from "../../src/ui/svg-el.js";
 
 const must = <T>(x: T | undefined | null): T => {
   if (x === undefined || x === null) throw new Error("missing");

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { bundleGraph, GRAPH_JS_PATH, graphModule } from "../../../../scripts/ui-graph-bundle.mjs";
 import { UI_GRAPH_JS } from "../../ui-graph/ui-graph-js.js";
 
-const DIR = new URL("../../src/ui-graph/", import.meta.url);
+const DIR = new URL("../../src/ui/", import.meta.url);
 const files = readdirSync(DIR).filter((f) => f.endsWith(".ts"));
 /** 文字列・コメントを除いた、自前のコード。 */
 const codeOf = (f: string): string =>
@@ -17,7 +17,7 @@ const codeOf = (f: string): string =>
 const src = (f: string): string => readFileSync(new URL(f, DIR), "utf8");
 const all = files.map(src).join("\n");
 
-/** 図の自前のコード（束ねる前の `ui-graph/*.ts`）の走査。いまの app.js の走査と同じ決まり（#89。設計の下書き 6 節）。 */
+/** 図の自前のコード（束ねる前の `src/ui/*.ts`）の走査。いまの app.js の走査と同じ決まり（#89。設計の下書き 6 節）。 */
 describe("図の自前のコード（走査）", () => {
   const FORBIDDEN: readonly [string, RegExp][] = [
     ["innerHTML", /innerHTML/],
@@ -108,35 +108,85 @@ describe("図の自前のコード（走査）", () => {
   });
 });
 
+/** 束に禁じた API の一覧（名前と、見つける形）。 */
+const BANNED: readonly [string, RegExp][] = [
+  ["eval", /\beval\s*\(/],
+  ["new Function・Function(", /new\s+Function\b|\bFunction\s*\(/],
+  ["document.write", /document\s*\.\s*write/],
+  ["<style> の差し込み", /createElement\(\s*["'`]style|<style/i],
+  ["adoptedStyleSheets・CSSStyleSheet", /adoptedStyleSheets|CSSStyleSheet|insertRule/],
+  ['setAttribute("style"', /setAttribute\(\s*["'`]style/],
+  ["cssText", /cssText/],
+  ["動的 import・importScripts", /\bimport\s*\(|importScripts/],
+  ["postMessage・window.open", /postMessage|window\s*\.\s*open/],
+  ["storage・cookie", /localStorage|sessionStorage|document\s*\.\s*cookie|indexedDB/],
+  ["通信", /\bfetch\s*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon/],
+  ["大域の regeneratorRuntime", /regeneratorRuntime\s*=/],
+  ["文字列の setTimeout・setInterval", /set(Timeout|Interval)\s*\(\s*["'`]/],
+  ['setAttribute("on…', /setAttribute(NS)?\(\s*(null\s*,\s*)?["'`]on/i],
+  // 角括弧で、文字の名前を書いて触る形（`e["innerHTML"]` など。下の数えからも、すり抜けない）
+  [
+    "角括弧の文字の名前で、危ない名前に触る",
+    /\[\s*["'`](?:\w*HTML\w*|srcdoc|on[a-z]+|eval|Function|write\w*|cookie|setAttribute\w*|src|href)["'`]\s*\]/i,
+  ],
+];
+/** HTML を解釈する名前。出てきてよいのは `.innerHTML=""` のあとが `;`・`,`・`}`・`)` で終わる形だけ。 */
+const HTML_SINKS =
+  /innerHTML|outerHTML|insertAdjacentHTML|srcdoc|setHTML|createContextualFragment|DOMParser/g;
+const EMPTY_INNER_HTML = /\.innerHTML\s*=\s*(?:""|''|``)\s*(?=[;,})])/g;
+
+/** 束（文字）から、禁じた API を見つけて、その名前を返す。 */
+export function bannedIn(js: string): string[] {
+  const found = BANNED.filter(([, re]) => re.test(js)).map(([name]) => name);
+  const sinks = [...js.matchAll(HTML_SINKS)].length;
+  const allowed = [...js.matchAll(EMPTY_INNER_HTML)].length;
+  if (sinks !== allowed)
+    found.push(`HTML を解釈する名前（${sinks} か所。許す形は ${allowed} か所）`);
+  return found;
+}
+
+describe("禁止の API の見つけ方（すり抜ける書き方を見つける）", () => {
+  it.each([
+    'a.innerHTML=""+x;',
+    'a.innerHTML = "" + html;',
+    "a.innerHTML+=x;",
+    'a.innerHTML="<b>";',
+    'e["innerHTML"]=x;',
+    "e['outerHTML']=x;",
+    "e[`insertAdjacentHTML`](0,x);",
+    'a.outerHTML="";',
+    "x=a.innerHTML;",
+    'f.srcdoc="x";',
+    'f["srcdoc"]=x;',
+    'e["onclick"]=x;',
+    'a.setAttribute("onload","x");',
+    'Function("x")();',
+    "setTimeout('x()',1);",
+  ])("%s を見つける", (code) => {
+    expect(bannedIn(code)).not.toEqual([]);
+  });
+  it("中身を消すだけの形は通す", () => {
+    expect(bannedIn('a.innerHTML="";b.innerHTML=""}c(d.innerHTML=""),e.innerHTML="",f')).toEqual(
+      [],
+    );
+  });
+});
+
 /** 束ねたあとの graph.js（ライブラリを含む）。いまの走査の外なので、禁止の API の不在を確かめる（版を上げるたびに通す）。 */
 describe("束ねた graph.js（禁止の API の不在）", async () => {
   const js = await bundleGraph();
-  const BANNED: readonly [string, RegExp][] = [
-    ["eval", /\beval\s*\(/],
-    ["new Function・Function(", /new\s+Function\b|\bFunction\s*\(/],
-    ["document.write", /document\s*\.\s*write/],
-    ["<style> の差し込み", /createElement\(\s*["'`]style|<style/i],
-    ["adoptedStyleSheets・CSSStyleSheet", /adoptedStyleSheets|CSSStyleSheet|insertRule/],
-    ["insertAdjacentHTML", /insertAdjacentHTML/],
-    ["innerHTML・outerHTML への空でない代入", /(?:inner|outer)HTML\s*(?:\+?=)\s*(?!""|''|``)/],
-    ["outerHTML を読む", /outerHTML(?!\s*=)/],
-    ["innerHTML を読む", /innerHTML(?!\s*=)/],
-    ['setAttribute("style"', /setAttribute\(\s*["'`]style/],
-    ["cssText", /cssText/],
-    ["動的 import・importScripts", /\bimport\s*\(|importScripts/],
-    ["postMessage・window.open", /postMessage|window\s*\.\s*open/],
-    ["storage・cookie", /localStorage|sessionStorage|document\s*\.\s*cookie|indexedDB/],
-    ["通信", /\bfetch\s*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon/],
-    ["大域の regeneratorRuntime", /regeneratorRuntime\s*=/],
-    ["文字列の setTimeout・setInterval", /set(Timeout|Interval)\s*\(\s*["'`]/],
-    ["srcdoc", /srcdoc/],
-    ['setAttribute("on…', /setAttribute(NS)?\(\s*(null\s*,\s*)?["'`]on/i],
-  ];
-  for (const [name, re] of BANNED)
-    it(`${name} がない`, () => {
-      const m = re.exec(js);
-      expect(m === null ? "" : js.slice(Math.max(0, m.index - 60), m.index + 60), name).toBe("");
-    });
+  it('禁じた API がない（innerHTML は `=""` で中身を消す形だけ）', () => {
+    expect(bannedIn(js)).toEqual([]);
+    expect([...js.matchAll(EMPTY_INNER_HTML)].length).toBe(1); // rete-area-plugin の destroy の 1 か所
+  });
+
+  it("ライセンスの表示（MIT）が、束の頭に残る", () => {
+    expect(js.startsWith("/*!")).toBe(true);
+    for (const name of ["rete@2.0.6", "rete-area-plugin@2.3.2", "rete-readonly-plugin@2.0.2"])
+      expect(js).toContain(`${name} — MIT — (c) Vitaliy Stoliarov`);
+    expect(js).toContain("@babel/runtime@");
+    expect(js).toContain("Permission is hereby granted, free of charge");
+  });
 
   it("SVG を作るのは自前の svgEl の 1 か所だけ（ライブラリは createElementNS・setAttributeNS を使わない）", () => {
     const ns = [...js.matchAll(/createElementNS/g)];
@@ -165,7 +215,7 @@ describe("束ねた graph.js（禁止の API の不在）", async () => {
   });
 
   it("外に出すのは window.touryouGraph（draw・destroy）の 1 つだけ。rete-connection-plugin は入らない。大きさ（gzip）は 20 KB 以下", () => {
-    expect(js).toMatch(/^"use strict";var touryouGraph=|^var touryouGraph=/);
+    expect(js).toMatch(/\*\/\n(?:"use strict";)?var touryouGraph=/);
     expect(js).not.toMatch(/\b(window|globalThis|self)\.[A-Za-z_$][\w$]*\s*=[^=]/); // ほかの名前を大域に置かない
     const g = runInNewContext(`${js};touryouGraph`, {}) as Record<string, unknown>;
     expect(Object.keys(g).sort()).toEqual(["destroy", "draw"]);

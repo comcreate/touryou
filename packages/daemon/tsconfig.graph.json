@@ -5,5 +5,5 @@
     "lib": ["ES2022", "DOM"],
     "types": ["node"]
   },
-  "include": ["src/ui-graph", "test/ui-graph"]
+  "include": ["src/ui", "test/ui"]
 }

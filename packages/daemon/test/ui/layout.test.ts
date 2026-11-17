@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOX_H, BOX_W, COL_GAP, layoutOf, MARGIN, ROW_H } from "../../src/ui-graph/graph-layout.js";
+import { BOX_H, BOX_W, COL_GAP, layoutOf, MARGIN, ROW_H } from "../../src/ui/graph-layout.js";
 
 const n = (id: string, parentId: string | null = null) => ({ id, parentId });
 const at = (L: ReturnType<typeof layoutOf>, id: string) => {

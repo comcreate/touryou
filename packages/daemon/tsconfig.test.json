@@ -8,5 +8,5 @@
     "types": ["node"]
   },
   "include": ["src", "test"],
-  "exclude": ["src/ui-graph", "test/ui-graph"]
+  "exclude": ["src/ui", "test/ui"]
 }

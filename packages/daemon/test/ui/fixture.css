@@ -105,8 +105,8 @@ body {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .line,
-  .pip {
+  #g .line,
+  #g .pip {
     animation: none;
   }
 }
