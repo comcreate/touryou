@@ -5,7 +5,7 @@ type: "adr"
 status: "approved"
 sdd-phase: "implement"
 created: "2026-11-11"
-updated: "2026-11-15"
+updated: "2026-11-17"
 depends-on: ["spec-touryou", "design-touryou"]
 tags: ["claude-code", "mcp", "orchestration"]
 category: "developer-tooling"
@@ -213,3 +213,9 @@ category: "developer-tooling"
 - **Decision**: `touryou ui` が、`$HOME/.touryou/config.json` の `stateDir` から `port` と `human-token` を自分で読み、daemon の身元を確かめ（`docs/daemon-identity.md`）、`POST /v1/ui/ticket`（`human-token` だけ）でチケット（32 バイトの乱数・60 秒・1 回だけ・メモリだけ）をもらい、`http://127.0.0.1:<port>/ui#ticket=<チケット>` を macOS の `open` で開く。画面は、フラグメントを消してから `POST /v1/ui/session` で画面のセッションのトークンに交換する（チケットは試した時点で消える）。画面のセッションは人間と同じ主体として認証し、使わないと 1 時間・最長 12 時間で切れ、daemon のメモリにだけあるので起動し直すと切れる。チケットの誤り・期限切れ・使用済みは同じ 401 で断り、接続元ごとの認証の失敗の制限で数え、尽きたら照合せずに 429。`/ui#token=` の受け口は外し、貼り付けは予備に残す。ブラウザを開けない環境では、URL を出さずに「Mac のターミナルで `touryou ui` を実行してください」で止まる。plugin の `/touryou:ui` は、`touryou ui` を 1 回実行するだけ。OTP は入れない。
 - **Rationale**: `human-token` は固定で失効の仕組みがなく、URL・`open` の引数に載せると、ブラウザの履歴・`ps`・シェルの履歴に残る（#88）。使い捨てのチケットなら、残るのは 60 秒で切れ、1 回で使えなくなる値だけで、画面のセッションも期限と失効がある。OAuth の認可コードと同じ形で、新しい暗号の実装が要らない。同じユーザーの悪意のあるプログラムは、トークンのファイルを直に読めるので、守り切らない（11-17 に利用者と決めた）。
 - **Rejected alternatives**: `#token=` のまま `open` する — 長く使えるトークンが `ps`・履歴に出る。0600 の一時 HTML で開く — トークンがファイルに残る。時刻ベースのコード — 再生を防ぐのに結局 daemon の状態が要り、2 か所で HMAC をそろえる負担が増える。端末で承認する形・OTP の併用 — 手で打つ操作が増える（OTP は後の課題）。画面のセッションを storage・cookie に置く — 再読み込みで残る代わりに、盗まれる場所と CSRF の経路が増える。
+
+## 2026-11-17 状態画面の関係図は、Rete.js を描画のプラグインなしで使い、CSP を変えずに別の束で配る
+
+- **Decision**: 状態画面に、親子の関係とやり取り（上り・下り）とその進み具合を示す関係図を足す。図は `rete`・`rete-area-plugin`・`rete-readonly-plugin`（版は完全に固定）を esbuild で束ねた `/ui/graph.js` で描き、描画のプラグイン（React・Vue・Lit）は使わず、箱と線は自前の描き手（`el()`・`svgEl()`）で描く。配置は自前の純粋な関数で計算する（elkjs は使わない）。形は横向きの木（根が左・子ごとの端子・角丸の折れ線）。CSP は変えない。SVG を作るのは `svgEl` の 1 か所、動く玉の `offset-path` も 1 か所に閉じる。自前のコードはいまの走査に、束ねたライブラリは禁止の API の不在の試験にかける。npm の依存は手で上げる。やり取りの段（`sent`・`delivered`・`done`）は記録から導き、子 → 親の「届いた」は記録がないあいだ「分からない」と示す（#102 で足す）。タグの許可リストに `details`・`summary`・`code` を足す（#89）。
+- **Rationale**: 利用者が Rete.js を選んだ（11-17）。Vue のプラグインは `<style>` を `innerHTML` で差し込み、React のプラグインは styled-components を使うので、どちらも CSP `style-src 'self'` に当たる。描画のプラグインなしなら、依存が最も少なく（見込み 17 KB・gzip）、CSP も走査の決まりも、閉じた所の追加だけで保てる。elkjs は EPL-2.0 OR GPL-3.0 で 8.2 MB あり、木の配置は自前で十分。線の交わりを減らすことが図の読みやすさに最も効く（research.md 8 節）。
+- **Rejected alternatives**: 自前の SVG だけ（調べ役の勧め）— 利用者が Rete.js を選んだ。React・Vue のプラグイン — CSP に当たる。Lit のプラグイン — R0 が通らないときの次の道として残す。elkjs・`rete-auto-arrange-plugin` — ライセンスと大きさ。CSP に `'unsafe-inline'` を足す — 守りが下がる。図に子の数の上限を設ける — 幹からの枝分かれなら親の箱は伸びず、拡大・移動で扱える（利用者の決め）。

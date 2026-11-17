@@ -7,7 +7,7 @@ sdd-phase: "implement"
 sdd-version: "5.1.0"
 impl-status: "implemented"
 created: "2026-11-14"
-updated: "2026-11-16"
+updated: "2026-11-17"
 depends-on: ["spec-touryou"]
 tags: ["claude-code", "mcp", "orchestration"]
 category: "developer-tooling"
@@ -257,7 +257,7 @@ plugin が利用者の Mac で走らせる shell script（`plugin/scripts/*.sh`�
 | NFR_005 | 窓口は 127.0.0.1 のみに bind し、ノードごとのトークンをノードの停止時に失効させる。トークンをログ・初期メッセージ・画面に出さない。画面は、`touryou ui` のチケット（60 秒・1 回だけ）を、画面のセッションのトークン（使わないと 1 時間・最長 12 時間・メモリだけ）に交換して開く（`docs/ui.md`。#88）。画面のセッションが通るのは画面の入口・`/v1/request`・`/v1/whoami` だけで、ログに `uiSessionRequest` の印を残す。チケットの失敗の制限は接続元ごとだが、接続元は 127.0.0.1 だけなので実質、全体で 1 つ。`/touryou:ui` は、画面のセッションを人の確認なしに作れないよう、前もって許可しない |
 | NFR_006 | 回収は `git worktree remove`（強制なし）と `git branch -d` のみを使う。強制は破棄の判断を経た停止ノードに限る |
 | NFR_007 | 判定ロジックは `core` の純粋関数にし、時刻・識別子・プロセス一覧は引数で受ける。fast-check で網羅する |
-| NFR_008 | 画面への反映は変更イベントの購読（SSE）で行う |
+| NFR_008 | 画面への反映は変更イベントの購読（SSE）で行う。関係図は `/ui/graph.js`（`rete`・`rete-area-plugin`・`rete-readonly-plugin` を esbuild で束ね、描画のプラグインを使わず自前で描く）を `'self'` から配り、CSP は変えない。SVG を作るのは `svgEl` の 1 か所、動く玉の `offset-path` も 1 か所に閉じる。自前のコードはいまの走査に、束ねたライブラリは禁止の API の不在の試験にかける（#89。`.sdd/task/issue-89/design-draft.md`） |
 | NFR_009 | 道具の応答に簡潔版・詳細版を設け、一覧は分割取得にする |
 | NFR_010 | 失敗の応答は原因と次の操作を持つ型（Result）にそろえる（憲法 T-001） |
 | NFR_011 | すべての状態変更をイベントとして追記する。拒否した操作も範囲違反として残す |
@@ -311,6 +311,10 @@ plugin が利用者の Mac で走らせる shell script（`plugin/scripts/*.sh`�
 | resume・fork・compact で `CLAUDE_CODE_SESSION_ID` が変わるか | 中 | 変わる場合は、合う購読がないときの扱いのとおり受信箱に落ちる |
 
 # 10. 変更履歴
+
+## v1.7
+
+- NFR_008 に、状態画面の関係図の配り方と守り（`/ui/graph.js`・CSP は変えない・SVG と `offset-path` は 1 か所・束ねたライブラリの試験）を足した。画面が「何をすればよいか」分かりにくかったため（Issue #89）。
 
 ## v1.6
 

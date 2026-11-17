@@ -117,6 +117,16 @@ daemon の窓口が、状態を見るための HTML 画面を配る。**状態�
 
 入力欄（`textarea`）は、すべて `field(name)` で作り、`name` と、ページの中で一意な `id` を付ける（ブラウザの自動入力・支援技術が欄を区別できるように。トークンの欄は `name="token"`）。
 
+## 画面の作り直し（#89。実装中）
+
+次の形に作り直している（決めは `.sdd/task/issue-89/research.md` の 7 節、設計は `design-draft.md`、見た目は `mock.html`）。入ったものから、この文書の各節に移す。
+
+- いちばん上に「いまあなたがすること」（人の操作が要るものの数と一覧、その場の操作）。作業（子）ごとのカード（題・役割・状態・最後の動き・人の要対応の数・受信箱の項目）。まれな操作は、たたんだ「管理」の欄。
+- 「要対応」の数は、人の操作が要るものだけ（いまは、解決していない受信箱の項目すべてを数えている）。
+- 止まっているかもしれない CLI の子に、`claude attach <ノード ID>` と写すボタン。
+- 関係図（横向きの木・子ごとの端子・角丸の折れ線・上りと下り・やり取りの段 `sent`・`delivered`・`done`）と、木の一覧の切り替え。
+- 守りの変更（下の「XSS・CSP」は、入るまで今のまま）：`/ui/graph.js` を足す（`rete`・`rete-area-plugin`・`rete-readonly-plugin` を束ね、描画のプラグインは使わない）。CSP は変えない。タグに `details`・`summary`・`code` を足す。SVG を作るのは `svgEl` の 1 か所、動く玉の `offset-path` も 1 か所。自前のコードはいまの走査に、束ねたライブラリは禁止の API の不在の試験にかける。
+
 ## XSS・CSP
 
 - 画面は、`textContent` と `createElement`（タグは `div`・`span`・`p` の許可リストだけ。実行時にも拒む）だけで描く。`innerHTML`・`outerHTML`・`insertAdjacentHTML`・`document.write`・`eval`・`new Function`・`setAttribute`・`on*` への代入・`location` への代入・`srcdoc`・storage・cookie・`postMessage`・`window.open`・動的 import は使わない（`ui-assets.test.ts` が走査で守らせる）。ブラケット記法の文字列キー、HTML を解釈する API（`setHTMLUnsafe`・`parseHTMLUnsafe`・`setHTML`・`createContextualFragment`・`DOMParser`）、`.href`・`.src`・`.action`・`.formAction` への代入、危ないタグ（`script`・`iframe`・`a`・`img`・`link`・`object`・`embed`・`form` など）の生成も禁じる。さらに、**許可リスト**として、`.` の後ろのプロパティ名を抜き出し、安全な集合にあるものだけを許す（新しい API を使うと、試験が落ちるので、意識して足す）。HTML にインラインの script・style・イベント属性を置かない。
