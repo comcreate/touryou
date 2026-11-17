@@ -302,13 +302,20 @@ describe("受理のあとの後片付け：削除の依頼で、セッション�
   });
 
   it("ほかの理由の失敗（未 push の変更など）は、これまでどおり受信箱に出す", () => {
-    expect(SESSION_GONE.test("unpushed commits")).toBe(false);
     for (const t of [
-      "not found",
-      "No such session",
+      "unpushed commits",
+      "claude: command not found",
+      "zsh: no such file or directory: claude",
+      "Error: config file does not exist",
       "見つからない",
+    ])
+      expect(SESSION_GONE.test(t), t).toBe(false);
+    for (const t of [
+      "Error: session sess-a not found",
+      "agent sess-a does not exist",
+      "セッションが見つからない",
       "一覧にない",
-      "already removed",
+      "claude agents --json の一覧にもない",
     ])
       expect(SESSION_GONE.test(t), t).toBe(true);
   });
@@ -352,6 +359,18 @@ describe("見張り", () => {
       },
     });
     expect(watchFindings(r.log.state(), at(90), spec).stalled).toEqual([]);
+    // 人が判定した時刻も「最後の動き」に入る（判定した直後には出さない）
+    const s0 = r.log.state();
+    const decided = {
+      ...s0,
+      extensions: s0.extensions.map((x) => ({
+        ...x,
+        status: "approved" as const,
+        decidedAt: new Date(at(80)).toISOString(),
+      })),
+    };
+    expect(watchFindings(decided, at(100), spec).stalled).toEqual([]);
+    expect(watchFindings(decided, at(111), spec).stalled.map((x) => x.nodeId)).toEqual(["a"]);
   });
 
   it("同じ子の未解決の止まっているかもは 1 件だけ。最後の動きが進んでも、新しい知らせを並べない。解決したら、また出せる（#115）", async () => {

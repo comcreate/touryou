@@ -8,6 +8,7 @@
  *   touryou purge-release <nodeId> [--request-id <id>]
  *   touryou confirm-stopped <nodeId> [--note <根拠>] [--request-id <id>]
  *   touryou accept <nodeId> [--request-id <id>]
+ *   touryou stop <nodeId> [--yes] [--request-id <id>]
  *   touryou hook-unbind <nodeId> [--request-id <id>]
  *   eval "$(touryou hook-env <nodeId>)"
  *   touryou inbox [--detail] [--limit <1〜100>] [--offset <n>] [--since <seq>] [--request-id <id>]
@@ -80,6 +81,10 @@ const USAGE = `使い方:
       完了報告済み（done）の子を、人間が受理する（done → verified。取り消せない）。確認のために作った子の片付けに使う。
       受理すると、子のトークン・フック専用のトークンが失効し、Desktop の子の引き出しが消える。そのあとは "$HOME/.touryou/current/bin/touryou" reclaim で回収できる。
       差し戻しは、親の統合ノードだけができる。done 以外の子は invalidTransition（受理できない）
+  touryou stop <nodeId> [--yes] [--request-id <id>]
+      完了報告済み（done）の子を、受理せずに止める（done → stopping。受理の道には戻らない）。成果は消えず、作業ツリーに残る。
+      止めて停止を確かめた（stopped）あとは、touryou reclaim で破棄して回収できる。done 以外の子は止めない（動いている子は親の統合が止める）。
+      --yes がなければ、何も送らずに説明だけを出す
   touryou hook-unbind <nodeId> [--request-id <id>]
       子のフック（plugin のファイルで設定するフック）の session_id の結び付けを外す。/clear・--resume で session_id が変わって、
       フックが拒否され続けるときに使う。次に来たセッションに結び直す。外した者（人間）が記録に残る。
@@ -134,6 +139,7 @@ const ALLOWED_FLAGS: Readonly<Record<string, readonly string[]>> = {
   "purge-release": [],
   "confirm-stopped": ["--note"],
   accept: [],
+  stop: ["--yes"],
   "hook-unbind": [],
   "hook-env": [],
   inbox: ["--detail", "--limit", "--offset", "--since"],
@@ -1224,6 +1230,29 @@ export async function runCommand(
     return {
       exitCode: 0,
       stdout: `受理した: ${nodeId}（状態: ${terminalSafe(res.value.state, 40)}）\n子のトークンは失効した。回収は "$HOME/.touryou/current/bin/touryou" reclaim ${nodeId}\nrequestId: ${id}\n`,
+      stderr: "",
+    };
+  }
+
+  if (command === "stop") {
+    if (!flags.has("--yes")) {
+      return {
+        exitCode: 2,
+        stdout: "",
+        stderr: `済んだと報告した（done）子 ${nodeId} を、受理せずに止める。止めると、その子は受理できなくなる（成果は作業ツリーに残り、捨てるかは reclaim で決める）。\nよければ、--yes を付けて再実行する: "$HOME/.touryou/current/bin/touryou" stop ${nodeId} --yes\n`,
+      };
+    }
+    const res = await invoke(
+      deps.client,
+      id,
+      "node.stop",
+      { nodeId, mode: "immediate" },
+      isReviewed,
+    );
+    if (res.kind !== "ok") return fail(res);
+    return {
+      exitCode: 0,
+      stdout: `止めた: ${nodeId}（状態: ${terminalSafe(res.value.state, 40)}）\n停止を確かめたら（状態が stopped になったら）、破棄して回収できる: "$HOME/.touryou/current/bin/touryou" reclaim ${nodeId}\nrequestId: ${id}\n`,
       stderr: "",
     };
   }

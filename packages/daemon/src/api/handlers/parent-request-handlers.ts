@@ -98,9 +98,11 @@ export const sessionRefOf = (state: OrchState, nodeId: string): string | undefin
  * セッションの削除（claude rm）の依頼の失敗の理由が「そのセッションがもうない」ことを言っているか（#115）。
  * 受理のあとの後片付けでは、止めた（claude stop）時点でセッションが一覧から消えることがあり、そのときの削除の失敗は、
  * 消す必要がもうないだけなので、済んだ扱いにする（受信箱に「うまくいかなかった」を出さない）。
+ * 当てるのは、セッション・エージェントを名指して「ない」と言う文と、依頼の手順で決めた「一覧にない」の報告だけ
+ * （`command not found`・`no such file or directory` などの本当の失敗は、失敗のまま受信箱に出す）。
  */
 export const SESSION_GONE =
-  /not found|no such|does not exist|doesn't exist|unknown (session|agent)|already (removed|gone|deleted)|見つから|存在しない|一覧にない|もうない|既に(消え|ない)/i;
+  /(?:session|agent|セッション)[^\n]{0,40}(?:not found|does not exist|doesn't exist|no longer exists|見つから|存在しない)|一覧に(?:も)?ない|もう一覧になかった/i;
 
 const NEXT_SIMPLE = (r: ParentRequestRecord) =>
   `実行する前に、claude agents --json で、名前が ${r.nodeId} のセッションの id が command の id と同じかを確かめる（違えば実行せず、parent_report で outcome: failed と reason に「id が違う」と書く）。command を Bash でそのまま 1 回だけ実行する（書き換えない）。結果を parent_report（requestRef: ${r.requestRef}）で報告する: 成功は outcome: done、失敗（拒まれた・エラー）は outcome: failed と reason（出力の要点）`;

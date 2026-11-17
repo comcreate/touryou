@@ -222,8 +222,8 @@ category: "developer-tooling"
 
 ## 2026-11-17 済んだと報告した子（done）を、受理せずに止められるようにする
 
-- **Decision**: 状態遷移で、done への停止要求（`stop`）を `alreadyFinished` で断らず、猶予なしの即時停止として受け付ける（done → stopping。waiting と同じ扱い）。停止を確かめたら stopped になり、そこからは人間の破棄の判断（`node.reclaimInstruct`。`touryou reclaim --yes --expect`）で回収できる。verified・reclaimable・archived への停止は、これまでどおり `alreadyFinished`（verified は、裏のセッションの依頼の出し直しのまま）。破棄は人の操作のままにし、統合や子から破棄できないことは変えない。
+- **Decision**: 状態遷移で、done への停止要求（`stop`）を、猶予なしの即時停止として受け付ける（done → stopping。waiting と同じ扱い）。**done の子を止められるのは人だけ**にする（人間のロールに `node.stop` を足す。人が止められるのは done の子だけ。CLI は `touryou stop <nodeId> --yes`）。統合・親の `node_stop` は、done の子にはこれまでどおり `alreadyFinished` で断る。止めた done の子は受理の道に戻らない（受理は done からだけ）ので、「受理しない」を統合だけで決めさせないため。停止を確かめたら stopped になり、そこからは人間の破棄の判断（`node.reclaimInstruct`。`touryou reclaim --yes --expect`）で回収できる。成果は、破棄を決めるまで作業ツリーに残る。verified・reclaimable・archived への停止は、これまでどおり `alreadyFinished`（verified は、裏のセッションの依頼の出し直しのまま）。破棄は人の操作のままにし、統合や子から破棄できないことは変えない。
 - **Rationale**: 済んだと報告したが受理しない子を片付ける道がなかった（`node.stop` は `alreadyFinished`、破棄は `notStopped`。#115）。受理しないまま放っておくと、作業ツリーとセッションが残り続ける。done の子のプロセスは動いていないことが多いので、猶予は要らない。止めるだけなら成果は消えず、捨てるかは人間が決める（2 段階のまま）。
 - **Relation to earlier decisions**: 2026-10 の「停止要求は状態ごとに受け付けを定める（終わったノードは `alreadyFinished`）」の、「終わったノード」から done を外す。
-- **Rejected alternatives**: done から直接破棄できるようにする — 停止の確かめ（作業ツリーのプロセスがない）を飛ばすことになる。受理してから回収させる — 受理は依存先の完了になり、中身を確かめていないものを受理させることになる。
+- **Rejected alternatives**: done から直接破棄できるようにする — 停止の確かめ（作業ツリーのプロセスがない）を飛ばすことになる。受理してから回収させる — 受理は依存先の完了になり、中身を確かめていないものを受理させることになる。統合・親も done の子を止められるようにする — 止めると受理できなくなるので、人の決めるべき「受理しない」を統合が決められてしまう（レビュー）。
 

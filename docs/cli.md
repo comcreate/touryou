@@ -160,3 +160,7 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 
 子の認証（`childHome`・`claude setup-token`・`CLAUDE_CODE_OAUTH_TOKEN` など）は外した（CLI の子は、親のセッションが `claude --bg` で起動する）。
 
+## 済んだと報告した子を、受理せずに片付ける（#115）
+
+`touryou stop <nodeId> --yes`: 完了報告済み（done）の子を、受理せずに止める（猶予なしの即時停止）。止めると受理できなくなる（成果は作業ツリーに残る）。`--yes` がなければ、何も送らずに説明だけを出す。人が止められるのは done の子だけ（動いている子は親の統合が止める）。停止を確かめた（stopped）あとは、`touryou reclaim <nodeId>` の表示を見て、`--yes --expect` で破棄して回収する。
+

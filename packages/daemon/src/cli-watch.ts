@@ -91,6 +91,9 @@ export function watchFindings(
         ...state.toolDenials.filter((x) => x.nodeId === n.id).map((x) => ms(x.at)),
         ...state.instructions.filter((x) => x.nodeId === n.id).map((x) => ms(x.deliveredAt)),
         ...state.parentRequests.filter((x) => x.nodeId === n.id).map((x) => ms(x.report?.at)),
+        // 人（親）が判断に答えた・範囲の頼みを判定した時刻（答えた直後に、止まっているかもを出さない。#115）
+        ...state.decisions.filter((x) => x.nodeId === n.id).map((x) => ms(x.answeredAt)),
+        ...state.extensions.filter((x) => x.nodeId === n.id).map((x) => ms(x.decidedAt)),
         lastHookMs(n.id) ?? 0,
         spec.sinceMs ?? 0,
       ];

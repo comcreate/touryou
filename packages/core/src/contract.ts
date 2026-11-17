@@ -561,6 +561,8 @@ export const ROLE_OPERATIONS = {
     "tree.list",
     "decision.get",
     "decision.answer",
+    // 人間が止められるのは、済んだと報告した（done）が受理していない子だけ（受理せずに破棄して回収するため。#115）
+    "node.stop",
     "node.confirmStopped",
     "node.review",
     "node.bindCode",

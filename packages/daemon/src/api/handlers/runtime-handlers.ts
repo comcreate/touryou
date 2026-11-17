@@ -67,6 +67,8 @@ export interface RuntimeHandlerDeps {
 }
 
 const callerOf = (req: HandlerRequest): string => req.caller?.nodeId ?? "";
+/** 人の CLI の本体の場所（PATH に touryou がなくても、そのまま貼って動く。#115）。 */
+const CLI = '"$HOME/.touryou/current/bin/touryou"';
 const nodeOf = (state: OrchState, nodeId: string): NodeRecord | undefined =>
   state.nodes.find((n) => n.id === nodeId);
 
@@ -293,18 +295,36 @@ export function createRuntimeHandlers(deps: RuntimeHandlerDeps) {
     "node.stop": (req: HandlerRequest<"node.stop">): R<"node.stop"> => {
       const { nodeId, mode } = req.params;
       const graceMs = req.params.mode === "graceful" ? req.params.graceMs : undefined;
-      const outside = outsideSubtree(callerOf(req), nodeId);
-      if (outside) return outside;
+      const human = req.role === "human";
+      if (!human) {
+        const outside = outsideSubtree(callerOf(req), nodeId);
+        if (outside) return outside;
+      }
+      const actor = human ? ({ human: true } as const) : { nodeId: callerOf(req) };
       const before = log.state();
       const node = nodeOf(before, nodeId);
       if (node === undefined) return fail("notFound", "ノードが見つからない", "ID を確認する");
+      // 済んだと報告した（done）が受理していない子を、受理せずに止められるのは人だけ（#115）。止めると受理の道には戻らないので、
+      // 統合・親が「受理しない」を決めて成果を受理できなくする道は作らない。人が止められるのも、done の子だけ。
+      if (node.state === "done" && !human) {
+        return fail(
+          "alreadyFinished",
+          `ノード ${nodeId} は済んだと報告済み（done）で、受理せずに止められるのは人だけ`,
+          "受理するなら node_review（accept）、差し戻すなら node_review（reject）",
+          `受理せずに片付けるなら、人に頼む: ${CLI} stop ${nodeId} --yes（そのあと ${CLI} reclaim ${nodeId}）`,
+        );
+      }
+      if (human && node.state !== "done") {
+        return fail(
+          "invalidTransition",
+          `人が止められるのは、済んだと報告した（done）が受理していない子だけ（ノード ${nodeId} は ${node.state}）`,
+          "動いている子を止めるのは、親の統合に頼む（node_stop）",
+        );
+      }
       // 受理した子（verified）は、状態を変えずに、裏のセッションの停止を親に依頼し直す（受理のときの依頼の再試行。Issue #3）。
       if (node.state === "verified") {
         const bodies = sessionStopBodies(before, nodeId, req.requestId);
-        if (
-          bodies.length === 0 &&
-          !alreadyApplied(before, { nodeId: callerOf(req) }, req.requestId)
-        ) {
+        if (bodies.length === 0 && !alreadyApplied(before, actor, req.requestId)) {
           return fail(
             "alreadyFinished",
             `ノード ${nodeId} は受理済みで、止める裏のセッションの依頼を作れない（起動の報告がない・まだ報告のない依頼がある）`,
@@ -337,7 +357,7 @@ export function createRuntimeHandlers(deps: RuntimeHandlerDeps) {
       const adapter = adapterFor(nodeId);
       if (effect !== "cancelStart" && adapter === undefined) return noRuntime(nodeId);
 
-      const r = appendAtomically(log, clock, req.requestId, { nodeId: callerOf(req) }, [
+      const r = appendAtomically(log, clock, req.requestId, actor, [
         { type: "node.stateChanged", payload: { nodeId, event } },
       ]);
       if (!r.ok) return r;

@@ -389,7 +389,9 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
         return fail(
           "notStopped",
           `ノード ${nodeId} は ${node.state} で、破棄を判断できない（停止済み〔stopped〕のノードだけ）`,
-          "先に node.stop で止めて、停止を確認してから判断する",
+          node.state === "done"
+            ? `済んだと報告した（done）子は、受理しないなら、人が先に止める: "$HOME/.touryou/current/bin/touryou" stop ${nodeId} --yes（停止を確かめたあとに、もう一度これを実行する）`
+            : "先に node.stop で止めて、停止を確認してから判断する",
           "統合済みで検証済みのノードは、破棄でなく、通常の回収（node.reclaim）を使う",
         );
       }

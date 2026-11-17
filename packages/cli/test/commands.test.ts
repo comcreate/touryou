@@ -1151,6 +1151,29 @@ describe("accept（人間の受理）", () => {
   });
 });
 
+describe("stop（済んだと報告した子を、受理せずに止める。#115）", () => {
+  it("--yes がなければ、何も送らずに説明と再実行のコマンドを出す。--yes で node.stop（即時）を送る", async () => {
+    const none = fakeClient({});
+    const shown = await runCommand(["stop", "a"], deps(none.client));
+    expect(shown.exitCode).toBe(2);
+    expect(shown.stderr).toContain('"$HOME/.touryou/current/bin/touryou" stop a --yes');
+    expect(none.sent).toEqual([]);
+    const { client, sent } = fakeClient({ "node.stop": ok({ state: "stopping" }) });
+    const r = await runCommand(["stop", "a", "--yes"], deps(client));
+    expect(sent).toEqual([
+      {
+        requestId: "req-1",
+        role: "human",
+        operation: "node.stop",
+        params: { nodeId: "a", mode: "immediate" },
+      },
+    ]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).toContain("stopping");
+    expect(r.stdout).toContain('"$HOME/.touryou/current/bin/touryou" reclaim a');
+  });
+});
+
 describe("confirm-stopped（停止の宣言）", () => {
   it("node.confirmStopped を送る（--note つき・なし）。結果の状態と requestId を出す", async () => {
     const { client, sent } = fakeClient({ "node.confirmStopped": ok({ state: "stopped" }) });
