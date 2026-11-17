@@ -162,6 +162,27 @@ const resolveFailure = (deps: AnswerDeliveryDeps, decisionId: string, nodeId: st
 };
 
 /**
+ * 回答を届ける追加指示（`kind: "answer"`。状態画面のやり取りで、判断の答えと重ねないため。#115）。
+ * 種類を足す前に記録した同じ要求（kind なし）があっても、記録は同じ requestId の重複として最初のものを返すので、ぶつからない。
+ */
+function answerEntry(
+  d: DecisionRecord,
+  answer: string,
+): readonly [
+  {
+    readonly type: "node.instructed";
+    readonly payload: { nodeId: string; text: string; kind: "answer" };
+  },
+] {
+  return [
+    {
+      type: "node.instructed",
+      payload: { nodeId: d.nodeId, text: answerText(d, answer), kind: "answer" },
+    },
+  ] as const;
+}
+
+/**
  * 回答の指示を記録（済みなら、その番号を引く）し、未配送なら配送する。記録済みの指示は、同じ requestId・同じ内容の
  * 再追記（重複として最初のイベントを返す）から引く。
  */
@@ -171,7 +192,7 @@ async function recordAndDeliver(
   answer: string,
 ): Promise<Result<"delivered" | "already", Failure>> {
   const text = answerText(d, answer);
-  const entry = [{ type: "node.instructed", payload: { nodeId: d.nodeId, text } }] as const;
+  const entry = answerEntry(d, answer);
   const recorded = appendAtomically(
     deps.log,
     deps.clock,
@@ -279,9 +300,13 @@ export async function recoverAnswerDeliveries(
       const state = stateOf(deps.log.state(), d.nodeId);
       if (state === undefined || !LIVE.has(state) || !deps.canDeliver(d.nodeId)) {
         // 届けられない。すでに配送済みなら、何もしない。
-        const check = appendAtomically(deps.log, deps.clock, answerRequestId(d.decisionId), SYS, [
-          { type: "node.instructed", payload: { nodeId: d.nodeId, text: answerText(d, answer) } },
-        ]);
+        const check = appendAtomically(
+          deps.log,
+          deps.clock,
+          answerRequestId(d.decisionId),
+          SYS,
+          answerEntry(d, answer),
+        );
         const seq = check.ok ? check.value.events[0]?.seq : undefined;
         if (seq !== undefined && wasNotified(deps.log, deps.log.state(), seq)) return undefined;
         addInboxOnce(

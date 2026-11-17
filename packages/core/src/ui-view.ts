@@ -131,10 +131,28 @@ export const UI_FLOW_KINDS = [
   "decision",
   "extension",
   "answer",
+  "approved",
+  "rejected",
+  "split",
 ] as const;
 export type UiFlowKind = (typeof UI_FLOW_KINDS)[number];
 /** 人（ノードでない相手）。 */
 export const UI_HUMAN = "human";
+
+/**
+ * 追加指示のやり取りの種類（#115）。daemon が付けた種類（`node.instructed` の `kind`）だけを見る（文は見ない。だれでも書けるため）。
+ * 判断の答えは、判断の記録の側（`answer`）で描くので null（重ねない）。種類のないもの（ふつうの指示・古い記録）は「指示」。
+ */
+const INSTRUCTION_FLOW: Readonly<Record<string, UiFlowKind | null>> = {
+  answer: null,
+  extensionApproved: "approved",
+  extensionRejected: "rejected",
+  extensionSplit: "split",
+};
+function instructionKind(kind: string | undefined): UiFlowKind | null {
+  if (kind === undefined || !Object.hasOwn(INSTRUCTION_FLOW, kind)) return "instruction";
+  return INSTRUCTION_FLOW[kind] ?? null;
+}
 
 /** やり取り 1 件（#89）。本文は載せない。 */
 export interface UiFlow {
@@ -441,13 +459,15 @@ export function flowsOf(state: OrchState): UiFlow[] {
   const t = (x: string | undefined): string => uiText(x);
 
   for (const i of state.instructions) {
+    const kind = instructionKind(i.kind);
+    if (kind === null) continue;
     const to = idOf(i.nodeId);
     const reply =
       i.deliveredSeq === undefined ? undefined : firstReportAfter(i.nodeId, i.deliveredSeq);
     push(
       {
         id: `f-${i.seq}`,
-        kind: "instruction",
+        kind,
         dir: "down",
         from: actorOf(i.actor),
         to,

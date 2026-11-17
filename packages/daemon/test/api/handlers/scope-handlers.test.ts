@@ -6,6 +6,7 @@ import {
   ok,
   type Result,
   type Scope,
+  uiViewOf,
 } from "@touryou/core";
 import { describe, expect, it } from "vitest";
 import { createScopeHandlers } from "../../../src/api/handlers/scope-handlers.js";
@@ -364,6 +365,23 @@ describe("scope.decide（拡張の判定。承認でアダプタの範囲を更�
     const id2 = await ask(r, { kind: "command", value: "ls" });
     await r.decide({ extensionId: id2, decision: "reject" });
     expect(r.s().instructions.at(-1)?.text).toContain("却下");
+  });
+
+  it("判定の結果の追加指示は、状態画面のやり取りで「許可」「却下」「切り出し」になる（#115。文の頭が core と合う）", async () => {
+    const r = rig();
+    const kinds: string[] = [];
+    for (const [decision, value] of [
+      ["approve", "src/a1"],
+      ["reject", "src/a2"],
+      ["split", "src/a3"],
+    ] as const) {
+      const id = await ask(r, { kind: "write", value });
+      await r.decide({ extensionId: id, decision });
+      const last = r.s().instructions.at(-1);
+      const flow = uiViewOf(r.s()).flows.find((f) => f.id === `f-${last?.seq}`);
+      kinds.push(flow?.kind ?? "none");
+    }
+    expect(kinds).toEqual(["approved", "rejected", "split"]);
   });
 
   it("対象のノードの親（の祖先）でなければ forbidden。判定済みの再判定は拒否される", async () => {
