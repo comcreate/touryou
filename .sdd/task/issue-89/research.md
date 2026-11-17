@@ -301,3 +301,51 @@
 | D8 | まだ決めていない（動く点の作り方。3.1） |
 
 次の段：見本ができて、利用者が画面の作りを決めたら、PR-1 から進める（6.7）。
+
+## 8. 図の見た目のベストプラクティス（調べ）
+
+- 調べた日：2026-11-17（出典はすべてこの日に見た）。論文は要旨・紹介の文で確かめた範囲。
+- 見比べの見本：[mock.html](mock.html) の「やり取りの図」。案 A・B・C と、値（子 3・孫 1／子 5・孫 3）と、線の形（角丸の折れ線／曲線）を切り替えられる。
+
+### 8.1 要点
+
+| 項目 | 知見 | 出典 |
+|:--|:--|:--|
+| 何が読みやすさに効くか | 線の交わりが、調べた見た目の要素（対称・交わり・角度・直交など）の中で最も効く。のちの研究では、線の続き方（なめらかにたどれること）も効く。道をたどる仕事では、その道を横切る線の数が効く | Purchase 1997「Which aesthetic has the greatest effect on human understanding?」 https://link.springer.com/content/pdf/10.1007/3-540-63938-1_67.pdf ／ 道をたどる仕事の研究 https://arxiv.org/pdf/0810.4431.pdf |
+| 配置の型 | 木は tidy tree（Reingold–Tilford。Buchheim らが線形時間に）が定番。兄弟を詰め、親は子の上（横向きなら子の真ん中の高さ） | D3 の `d3.tree` の文書 https://d3js.org/d3-hierarchy/tree |
+| 図の型の比べ | 折れ線・階層・力学の配置を、視線の計測で比べた研究がある。答えは仕事しだい | Pohl・Schmitt・Diehl 2009 https://www.st.uni-trier.de/diehl/pubs/cae09.pdf |
+| 端子（port）と直角の線 | 層に分けた配置では、端子の位置を決めると、直角の線（orthogonal routing）できれいに引ける。端子を固定したままだと、線が一部重なって見分けにくくなることがある | ELK Layered https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-layered.html ／ Schulze ほか 2014「Drawing layered graphs with port constraints」 https://rtsys.informatik.uni-kiel.de/~biblio/downloads/papers/jvlc13.pdf ／ yFiles の直角の線 https://docs.yworks.com/yfilesflex/doc/dguide-layout/orthogonal_edge_router.html |
+| 線を束ねる（edge bundling） | 木の外の線が多いとき、木の道に沿って束ねると込み合いが減る。ただし 1 本ずつは追いにくくなる | Holten 2006「Hierarchical Edge Bundles」 https://research.tue.nl/en/publications/hierarchical-edge-bundles-visualization-of-adjacency-relations-in/ |
+| ラベル | どの線のラベルかが、まぎれなく分かることがいちばん。ほかの線や箱に重ねない。置き場所の候補（出元の近く・真ん中・行き先の近く）を絞って選ぶ | yFiles のラベルの配置 https://docs.yfiles.com/yfiles-html/dguide/label_placement/ ／ 論文 https://arxiv.org/pdf/0911.0626 ／ Tom Sawyer https://blog.tomsawyer.com/3-quick-ways-to-perfect-graph-edge-labels |
+| 動き | 分析の仕事では、動きより静止した見せ方のほうが速く正しい（動きは発表向き）。いっぽう、変わり目の動き（transition）は理解を助けることがある。使いすぎは害 | Robertson ほか 2008「Effectiveness of Animation in Trend Visualization」 https://www.microsoft.com/en-us/research/?p=145396 ／ Heer・Robertson 2007 https://vis.berkeley.edu/papers/animated_transitions/2007-AnimatedTransitions-InfoVis.pdf |
+| 動きを減らす設定 | 要らない動きを除き、利用者の設定（`prefers-reduced-motion`）に従う。くり返す動きは止められるようにする | WCAG 2.3.3 https://w3c.github.io/wcag/understanding/animation-from-interactions.html ／ 技法 C39 https://www.w3.org/WAI/WCAG22/Techniques/css/C39.html |
+| 大きいとき | 20 ほどより大きく込み合う図では、線の図より表（行列）のほうが多くの仕事で速い。道をたどる仕事だけは線の図が勝つ | Ghoniem ほか 2004 https://bibbase.org/network/publication/ghoniem-fekete-castagliola-acomparisonofthereadabilityofgraphsusingnodelinkandmatrixbasedrepresentations-2004 ／ Ren ほか 2019 https://www.cambridge.org/core/journals/network-science/article/understanding-nodelink-and-matrix-visualizations-of-networks-a-largescale-online-experiment/C293136C4761F09D4C2C328E2BC19287 |
+| 図か、時間の並びか | 「だれとだれがつながるか」は図、「どの順で何が起きたか」はシーケンス図（時間の軸）が向く。2 つは同じ中身の別の見せ方 | O'Reilly「Learning UML 2.0」8 章 https://oreilly.com/library/view/learning-uml-20/0596009828/ch08.html |
+
+### 8.2 似た道具
+
+| 道具 | 見せ方 | 私たちとの近さ |
+|:--|:--|:--|
+| Node-RED | 左から右。入口は箱の左、出口は右。線は出口から入口へ | 向きと端子の置き方が近い https://nodered.org/docs/user-guide/concepts |
+| Rete.js | 例は左から右の流れ。線の形はプラグイン（`curveStep` など）か自前。端子の位置を自前で計算する例がある | 本番の土台 https://backiee.wasmer.app/https_retejs_org/docs/guides/connection-path ／ https://1770981d.retejs.pages.dev/examples/undirected |
+| Kiali（サービスの地図） | サービスの図の上を、要求が点で流れる。速さで応答の速さ、形で失敗を示す | 動く点の使い方が近い https://v1-42.kiali.io/docs/features/tracing/ |
+| Temporal の画面 | 親の作業の出来事の列（時間の並び）から、子の作業の時間の帯を開ける | 「親 1 対 子 n」を、図でなく時間の並びで見せる例 https://temporal.io/changelog/temporal-web-ui-v2-26-0 |
+| LangGraph Studio | 節と線の図。下位の図は、はじめはたたんで出す | たたむ扱いが近い https://forum.langchain.com/t/display-subggraph-agent-in-the-ux-ui/837 |
+
+- 私たちの「統合 1 対 作業 n の木と、そのあいだの上り・下り」にいちばん近いのは、**Node-RED・Rete の左から右の図に、端子を子ごとに分けた直角の線**の組み合わせ。時間の並びは Temporal の見せ方が近い。
+
+### 8.3 私たちへの当てはめ
+
+- いまの横向きの木（案 A）は、親の右の辺の 1 か所から全部の子の線が出るので、親の近くで束になり、交わり・重なりが増える（8.1 で最も効く点に当たる）。
+- **端子を子ごとに分ける**（案 B）と、線は子の並びと同じ順に出て、外側の子ほど親の近くで曲げれば交わらない。3 本（上り・つながり・下り）は子ごとにまとまる。ラベルは、その子だけの線の上に置ける。
+- 線の形は、角丸の折れ線のほうが、3 本が同じ間を保ち、ラベルを横の線に沿わせやすい。曲線は交わりはないが、ラベルの置き場が決めにくい。
+- ラベルは、答え待ちの線だけ常に種類と時刻を出し、ほかは種類だけ。時刻は箱に指を置いたときに出す（込み合いを減らす）。
+- 動きは、流れる破線・動く点を残し、`prefers-reduced-motion` と「動きを止める」で止める（いまのまま）。答え待ち以外の流れは遅く・細くして、目を答え待ちに集める。
+- 子が 10・孫が 20 を超えたら、図は済んだ子をたたみ、一覧（案 C）を主にする。
+
+### 8.4 勧め
+
+- **案 B（端子を子ごとに分けた、角丸の折れ線）を図の形にする**。理由：線の交わりを減らすことが読みやすさに最も効く（Purchase）。端子の割り当てと直角の線は、層の配置の定番（ELK・yFiles）。Node-RED・Rete の左から右の流れと合う。
+- **案 C（木の一覧＋最後の上り・下りの列）を、図と並べて持つ**。「どこで答えを待っているか」を探す仕事は、表のほうが速い見込み（Ghoniem）で、大きくなっても崩れない。
+- 時間の並び（シーケンス図）は、作業のカードの中の「やり取り」の列で足りているので、図には足さない。
+- 決めてほしいこと：F1 図の形（案 B／A／ほか）。F2 一覧（案 C）を図と並べて持つか。F3 大きいときに図をたたむ目安（例：子 10）。
