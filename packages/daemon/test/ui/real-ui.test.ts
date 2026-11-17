@@ -442,6 +442,22 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(await page.evaluate(() => document.activeElement?.id)).toBe("card-ui-b");
     await page.waitForTimeout(1700);
     expect(await has()).toBe(false);
+    // focus がほかの所（答えの欄）へ移っていたら、描き直しのあとにカードへ奪わない
+    await page.click("#todo textarea");
+    await page.evaluate(() => {
+      const c = document.getElementById("card-ui-b");
+      if (c) c.dataset.old = "1";
+    });
+    current = { ...state, lastSeq: state.lastSeq + 2 };
+    await page.waitForFunction(
+      () => {
+        const c = document.getElementById("card-ui-b");
+        return c !== null && c.dataset.old === undefined;
+      },
+      undefined,
+      { timeout: 5000 },
+    );
+    expect(await page.evaluate(() => /^card-/.test(document.activeElement?.id ?? ""))).toBe(false);
     current = state;
   });
 
