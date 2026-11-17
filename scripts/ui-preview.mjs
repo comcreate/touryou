@@ -223,6 +223,8 @@ const server = api.createApiServer({
   credentials: creds.createCredentialStore({ humanToken: token }),
   getState: () => state,
   handlers: {},
+  // 停止の代行依頼（本物の daemon は、アダプタの能力表で決める。ここでは g5 だけ親に代行してもらう）
+  stopDelegated: (id) => id === "g5",
 });
 let timer;
 let stopping = false;
