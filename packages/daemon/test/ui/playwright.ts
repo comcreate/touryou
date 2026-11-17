@@ -25,6 +25,8 @@ export interface Msg {
 export interface Page {
   on(event: "console", f: (m: Msg) => void): void;
   on(event: "pageerror", f: (e: Error) => void): void;
+  on(event: "request", f: (r: { url(): string }) => void): void;
+  clock: { install(): Promise<void>; runFor(ms: number): Promise<void> };
   addInitScript(f: () => void): Promise<void>;
   goto(url: string): Promise<unknown>;
   click(selector: string): Promise<void>;

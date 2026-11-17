@@ -4,6 +4,7 @@
  * - 送るのは `lastSeq` の通知だけ。1 つの周期（`coalesceMs`）で、全ての接続を見る。変わっていれば通知（連続した変化は最新の 1 件にまとまる）。
  * - **背圧**: `write()` が `false` を返したら、`drain` が来るまで、その接続には何も送らない。`drainTimeoutMs` 来なければ、切る（遅い・止まった相手）。
  * - **寿命**: 接続は、`maxLifetimeMs` で閉じる（画面は、再接続する）。
+ * - **譲る**: 人の側の接続が `maxConnections` に達したら、いちばん古いものに `event: replaced` を送って閉じ、新しい接続を通す。
  * - **失効の確認**: トークンが使えるかを、通知とは独立に、`heartbeatMs` ごとに確かめる（使えなければ閉じる）。
  * - **heartbeat**: `heartbeatMs` の間、何も書かなければ、コメント行を書く。
  * - **退役**: ノードのトークンが役目の終わり（受理など）で失効したら、閉じる前に `event: retired` を 1 件送る（`retire()`。
@@ -152,6 +153,8 @@ export interface SseHubDeps {
 
 /** 退役の出来事（設計 6.3）。中身は理由の種類だけ（トークン・nodeId は載せない）。 */
 export const RETIRED_SSE_EVENT = `event: retired\ndata: ${JSON.stringify({ reason: "retired" })}\n\n`;
+/** 画面の購読の枠が埋まり、新しいタブの接続に場所を譲るために閉じるとき、閉じる前に送る 1 件（中身は空。画面は張り直さない）。 */
+export const REPLACED_SSE_EVENT = "event: replaced\ndata: {}\n\n";
 
 export interface SseHub {
   readonly size: number;
@@ -413,7 +416,26 @@ export function createSseHub(deps: SseHubDeps): SseHub {
       return true;
     },
     add(sink, token) {
-      if (conns.size - countNodes() >= spec.maxConnections) return false;
+      // 枠が埋まっていたら、いちばん古い人の側の接続（人間のトークン・画面のセッション）を、`event: replaced` を送ってから閉じる。
+      // 開き直すたびに増える古いタブが枠を占めて、今見ているタブが 429 を受け続けないように。ノード（子・統合）の接続には触らない。
+      // `replaced` の中身は空（ほかのタブ・セッションの値を出さない）
+      if (conns.size - countNodes() >= spec.maxConnections) {
+        const humans = [...conns].filter((x) => x.nodeId === undefined);
+        const oldest = humans.reduce<Conn | undefined>(
+          (a, x) => (a === undefined || x.startedMs < a.startedMs ? x : a),
+          undefined,
+        );
+        if (oldest === undefined || spec.maxConnections <= 0) return false;
+        drop(oldest);
+        if (!oldest.sink.destroyed) {
+          try {
+            oldest.sink.write(REPLACED_SSE_EVENT);
+          } catch {
+            // 書けなくても閉じる
+          }
+          oldest.sink.end();
+        }
+      }
       const now = deps.nowMs();
       const seq = deps.getSeq();
       const c: Conn = {

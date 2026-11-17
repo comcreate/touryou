@@ -1585,7 +1585,9 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     }
     const token = authenticateHuman(req, res);
     if (token === undefined) return;
-    if (sseHub.size >= (deps.sse?.maxConnections ?? 4)) {
+    // 枠が埋まっていたら、いちばん古い人の側の接続を閉じて場所を空ける（sse-hub の add。`event: replaced`）。
+    // 枠が 0 のときだけ 429
+    if ((deps.sse?.maxConnections ?? 4) <= 0) {
       counters.count("rateLimited", "sse");
       tooMany(res, 5);
       return;

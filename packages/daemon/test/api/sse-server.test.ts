@@ -169,24 +169,20 @@ describe("GET /v1/events（SSE）", () => {
     c.close();
   });
 
-  it("同時の接続は上限（既定 4）まで。超えたら 429（Retry-After）。切れたら空く", async () => {
+  it("同時の接続は上限（既定 4）まで。上限なら、いちばん古い接続に replaced を送って閉じ、新しい接続を通す（429 にしない）", async () => {
     const r = await start({ maxConnections: 2 });
     const a = await open(r);
+    await new Promise((x) => setTimeout(x, 5));
     const b = await open(r);
     expect([a.status, b.status]).toEqual([200, 200]);
-    const over = await open(r);
-    expect(over.status).toBe(429);
-    expect(over.headers["retry-after"]).toBeDefined();
+    await new Promise((x) => setTimeout(x, 5));
+    const c = await open(r);
+    expect(c.status).toBe(200);
+    await until(() => a.text().includes("event: replaced"));
+    expect(b.text()).not.toContain("event: replaced");
     a.close();
-    await until(() => true);
-    let again = await open(r);
-    for (let i = 0; i < 100 && again.status === 429; i++) {
-      await new Promise((x) => setTimeout(x, 20));
-      again = await open(r);
-    }
-    expect(again.status).toBe(200);
-    again.close();
     b.close();
+    c.close();
   });
 
   it("寿命（maxLifetimeMs）が来たら、サーバーが接続を閉じる（画面は再接続する）", async () => {
