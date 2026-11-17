@@ -768,6 +768,7 @@ export const UI_JS = `'use strict';
   // 受信箱の知らせの文を、利用者の言葉にする（#115）。daemon の文にあるノード ID は子の題に、内部の言葉は言い換える。
   // ID は、カードの ID の欄で見られる。題のないノードは ID のまま
   var titleById = new Map();
+  var DAEMON_SUMMARY_KINDS = { info: true, violation: true, stopIncomplete: true };
   var SUMMARY_WORDS = { command: 'コマンドを足す頼み', write: '書き込める場所を足す頼み' };
   function friendlySummary(text) {
     return text
@@ -787,7 +788,9 @@ export const UI_JS = `'use strict';
     head.appendChild(el('span', 'chip ' + (i.stall === true ? 'stall' : band.cls), i.stall === true ? '止まっているかも' : isStopRequest(i, delegated) ? band.label : name(KIND_NAMES, i.kind)));
     head.appendChild(el('span', 'when', timeText(i.at, Date.now())));
     row.appendChild(head);
-    var text = friendlySummary(typeof i.summary === 'string' ? i.summary : '');
+    var raw = typeof i.summary === 'string' ? i.summary : '';
+    // 言い換えは、daemon が書く種類の知らせだけ（進み具合・完了・失敗・判断は、子が書いた文なので、そのまま出す）
+    var text = Object.hasOwn(DAEMON_SUMMARY_KINDS, i.kind) ? friendlySummary(raw) : raw;
     if (Array.from(text).length > 60) {
       var d = fold('text-' + i.id, cleanText(text, 60));
       d.appendChild(el('div', 'confirm-line', text));

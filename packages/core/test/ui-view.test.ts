@@ -6,7 +6,6 @@ import {
   type OrchEvent,
   type OrchState,
   stallSummary,
-  UI_ANSWER_TEXT_PREFIX,
   UI_CUT_MARK,
   UI_LIMITS,
   UI_OPTION_MAX,
@@ -653,38 +652,36 @@ describe("uiViewOf の #89 の値（題・最後の動き・人の要対応・�
     expect(JSON.stringify(v)).not.toContain("秘密の本文");
   });
 
-  it("やり取り: 範囲の頼みの判定を届ける追加指示は、許可・却下・切り出しの種類。判断の答えの追加指示は重ねない（#115）", () => {
+  it("やり取り: daemon が種類を付けた追加指示は、許可・却下・切り出し。答えは重ねない。文の頭では見分けない（#115）", () => {
+    const ins = (text: string, kind?: string) =>
+      ev({
+        type: "node.instructed",
+        payload: { nodeId: "a", text, ...(kind === undefined ? {} : { kind }) },
+      } as never);
     const evs = [
       ...base(),
       start("a"),
-      ev({
-        type: "node.instructed",
-        payload: {
-          nodeId: "a",
-          text: "範囲の拡張の要求（コマンド ls）は却下された。範囲の内側で進める",
-        },
-      } as never),
-      ev({
-        type: "node.instructed",
-        payload: { nodeId: "a", text: "範囲の拡張の要求（コマンド ls）は承認された。使ってよい" },
-      } as never),
-      ev({
-        type: "node.instructed",
-        payload: {
-          nodeId: "a",
-          text: "範囲の拡張の要求（コマンド ls）は、作業を切り出して別に進めることになった。範囲の内側で進める",
-        },
-      } as never),
-      ev({
-        type: "node.instructed",
-        payload: { nodeId: "a", text: `${UI_ANSWER_TEXT_PREFIX}判断 d1\n選んだ選択肢: x` },
-      } as never),
-      ev({ type: "node.instructed", payload: { nodeId: "a", text: "ふつうの指示" } } as never),
+      ins("x", "extensionRejected"),
+      ins("x", "extensionApproved"),
+      ins("x", "extensionSplit"),
+      ins("答え", "answer"),
+      // 種類のない指示は、文の頭が daemon の文と同じでも、ふつうの指示（親・人が書けるため）
+      ins("【人間からの回答】判断 d1"),
+      ins("範囲の拡張の要求（コマンド ls）は承認された。使ってよい"),
     ];
     const kinds = uiViewOf(must(evs))
       .flows.filter((f) => f.dir === "down")
       .map((f) => f.kind);
-    expect(kinds.sort()).toEqual(["approved", "instruction", "rejected", "split"]);
+    expect(kinds.sort()).toEqual(["approved", "instruction", "instruction", "rejected", "split"]);
+  });
+
+  it("追加指示の種類が知らないものなら、記録を拒む", () => {
+    const r = foldEvents([
+      ...base(),
+      start("a"),
+      ev({ type: "node.instructed", payload: { nodeId: "a", text: "x", kind: "other" } } as never),
+    ]);
+    expect(r.ok).toBe(false);
   });
 
   it("やり取り: 子 → 親は届いたかは分からない。判断の頼みは答えで done、答えは子の次の報告で done（推定）", () => {

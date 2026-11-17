@@ -58,7 +58,13 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
         payload: {
           nodeId: "ui-c",
           text: "範囲の拡張の要求（コマンド ls）は却下された。範囲の内側で進める",
+          kind: "extensionRejected",
         },
+      }),
+      // 子が書いた進み具合（ID らしい語があっても、題に置き換えない）
+      ev({
+        type: "inbox.added",
+        payload: { id: "p1", kind: "progress", nodeId: "ui-c", summary: "ui-b の結果を待っている" },
       }),
       ev({
         type: "inbox.added",
@@ -152,6 +158,8 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(stall).toContain("「関係図の見た目を見本と比べる」");
     expect(stall).not.toContain(LONG);
     expect(entries.some((t) => t.includes("コマンドを足す頼み: pnpm lint"))).toBe(true);
+    // 子が書いた文は、そのまま（ほかのノードの題に置き換えない）
+    expect(entries.some((t) => t.includes("ui-b の結果を待っている"))).toBe(true);
     expect(body).not.toContain("墓標");
     expect(body).not.toContain("範囲の拡張要求");
   });
