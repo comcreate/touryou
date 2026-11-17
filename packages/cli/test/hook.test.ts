@@ -277,3 +277,23 @@ describe("実プロセス（ビルド済みの bin。`pnpm build` のあと）",
     expect(p.stdout).not.toContain(TOKEN);
   });
 });
+
+describe("承認済みの範囲の拡張（#91。トークンのある形）", () => {
+  it("permit: extension の許可は、明示の許可を返す。permit のない許可は何も出さない", async () => {
+    const r = await runHook({
+      env: ENV,
+      input: pre,
+      fetchImpl: reply(200, { ok: true, value: { decision: "allow", permit: "extension" } }),
+    });
+    expect(r.code).toBe(0);
+    expect(JSON.parse(r.stdout ?? "")).toMatchObject({
+      hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" },
+    });
+    const plain = await runHook({
+      env: ENV,
+      input: pre,
+      fetchImpl: reply(200, { ok: true, value: { decision: "allow" } }),
+    });
+    expect(plain).toEqual({ code: 0, stderr: "" });
+  });
+});

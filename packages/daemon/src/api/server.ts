@@ -1101,7 +1101,9 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       counters.count("hook", d.allow ? "allowed" : "denied");
       return send(res, 200, {
         ok: true,
-        value: d.allow ? { decision: "allow" } : { decision: "deny", reason: d.reason },
+        value: d.allow
+          ? { decision: "allow", ...(d.permit === undefined ? {} : { permit: d.permit }) }
+          : { decision: "deny", reason: d.reason },
       });
     } finally {
       releaseSlot();
@@ -1209,7 +1211,9 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     counters.count("hook", d.allow ? "allowed" : "denied");
     return send(res, 200, {
       ok: true,
-      value: d.allow ? { decision: "allow" } : { decision: "deny", reason: d.reason },
+      value: d.allow
+        ? { decision: "allow", ...(d.permit === undefined ? {} : { permit: d.permit }) }
+        : { decision: "deny", reason: d.reason },
     });
   }
 

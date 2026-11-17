@@ -95,6 +95,23 @@ const SILENT: HookResult = { code: 0, stderr: "" };
 export const CHILD_MARK = "touryou-child";
 
 /**
+ * 起動のあとに承認した拡張でだけ通る Bash（daemon が `permit: "extension"` を付けた許可。#91）。子は dontAsk で、起動のときの
+ * 許可の一覧（`--settings`）に、あとから承認したコマンドがない。終了コード 0 だけでは Claude Code が一覧で断るので、明示の許可を返す。
+ * 判定は daemon のフック（有効な範囲）が済ませている。deny の規則（禁止の場所の Edit・Read）は、Claude Code の側でそのまま効く。
+ */
+const EXTENSION_ALLOW: HookResult = {
+  code: 0,
+  stderr: "",
+  stdout: JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "allow",
+      permissionDecisionReason: "touryou: 承認済みの範囲の拡張で許可した",
+    },
+  }),
+};
+
+/**
  * 紐付けの前に、印のある作業ツリーでも通す道具か（印のある作業ツリーで、紐付けの前でも許す例外）。
  * - 紐付けを終えるための touryou の mcp の道具（`child_bind`・`whoami`）。plugin の mcp は `mcp__plugin_<plugin>_node__<道具>`、
  *   直に入れた mcp は `mcp__node__<道具>`。
@@ -247,13 +264,22 @@ async function sessionMode(
     if (res.status !== 200) return unreachable(`拒否された（HTTP ${res.status}）`);
     const j = (await res.json()) as {
       ok?: unknown;
-      value?: { decision?: unknown; reason?: unknown; noneReason?: unknown; state?: unknown };
+      value?: {
+        decision?: unknown;
+        reason?: unknown;
+        noneReason?: unknown;
+        state?: unknown;
+        permit?: unknown;
+      };
     } | null;
     if (j?.ok !== true) return unreachable("届いたが、応答の形が正しくない");
     const decision = j.value?.decision;
     const reason = typeof j.value?.reason === "string" ? j.value.reason : "";
     if (decision === "deny" && event === "PreToolUse") {
       return { code: 2, stderr: reason === "" ? "範囲外の操作" : reason };
+    }
+    if (decision === "allow" && event === "PreToolUse" && j.value?.permit === "extension") {
+      return EXTENSION_ALLOW;
     }
     // 印のある作業ツリーの PreToolUse は、daemon が許可（allow）したときだけ通す。none（紐付けの前・外れた・ノードが動いていない・
     // cwd が合わない）は拒否する。例外は、紐付けを終えるための touryou の mcp の道具だけ
@@ -367,7 +393,7 @@ async function decide(
   }
   const j = (typeof json === "object" && json !== null ? json : {}) as {
     ok?: unknown;
-    value?: { decision?: unknown; reason?: unknown };
+    value?: { decision?: unknown; reason?: unknown; permit?: unknown };
     error?: { cause?: unknown };
   };
   if (res.status !== 200 || j.ok !== true) {
@@ -375,6 +401,9 @@ async function decide(
     return fail(`daemon が拒否した（HTTP ${res.status}${cause}）`);
   }
   const decision = j.value?.decision;
+  if (decision === "allow" && event === "PreToolUse" && j.value?.permit === "extension") {
+    return EXTENSION_ALLOW;
+  }
   if (decision === "allow") return { code: 0, stderr: "" };
   if (decision === "continue" && event === "Stop") {
     const reason = typeof j.value?.reason === "string" ? j.value.reason : "";

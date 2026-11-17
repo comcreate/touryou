@@ -351,3 +351,37 @@ describe("紐付けの前の例外: ToolSearch と touryou の plugin の Skill"
     expect((await run("Skill", input)).code).toBe(2);
   });
 });
+
+describe("承認済みの範囲の拡張（#91）", () => {
+  const bash = input("PreToolUse", { tool_name: "Bash", tool_input: { command: "git ls-files" } });
+  it("permit: extension の許可は、PreToolUse の明示の許可（permissionDecision: allow）を返す", async () => {
+    const r = await runHook({
+      env: ENV,
+      input: bash,
+      readFile,
+      fetchImpl: reply({ decision: "allow", permit: "extension" }),
+    });
+    expect(r.code).toBe(0);
+    expect(JSON.parse(r.stdout ?? "")).toMatchObject({
+      hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow" },
+    });
+  });
+  it("permit のないふつうの許可は、いままでどおり何も出さない（起動のときの許可の一覧に任せる）", async () => {
+    const r = await runHook({
+      env: ENV,
+      input: bash,
+      readFile,
+      fetchImpl: reply({ decision: "allow" }),
+    });
+    expect(r).toEqual({ code: 0, stderr: "" });
+  });
+  it("拒否に permit が付いていても、拒否のまま", async () => {
+    const r = await runHook({
+      env: ENV,
+      input: bash,
+      readFile,
+      fetchImpl: reply({ decision: "deny", reason: "範囲外", permit: "extension" }),
+    });
+    expect(r).toEqual({ code: 2, stderr: "範囲外" });
+  });
+});

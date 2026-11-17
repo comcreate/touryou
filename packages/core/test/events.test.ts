@@ -4,6 +4,7 @@ import {
   applyEvent,
   type EventBody,
   effectiveScope,
+  evaluateScope,
   foldEvents,
   INBOX_KINDS,
   initialState,
@@ -1492,6 +1493,30 @@ describe("effectiveScope（有効な範囲 = ブリーフ + 承認済みの拡�
 
   it("拡張がなければブリーフの範囲のまま", () => {
     expect(effectiveScope(run(), "c")).toEqual(scope);
+  });
+
+  it("#91: 承認したコマンドは、子が打つ同じ形が、有効な範囲の判定で通る（承認していない形は止まる）", () => {
+    const lsFiles = "git ls-files docs .sdd";
+    const grep = `git grep -n -E "TODO|FIXME|XXX|HACK" -- . ':!pnpm-lock.yaml'`;
+    const s = run(
+      request("x1", "command", lsFiles),
+      approve("x1", "command", lsFiles),
+      request("x2", "command", grep),
+      approve("x2", "command", grep),
+    );
+    const eff = effectiveScope(s, "c");
+    if (eff === undefined) throw new Error("範囲がない");
+    const ok = (command: string) => evaluateScope(eff, "/w", { kind: "command", command }).allowed;
+    expect(ok(lsFiles)).toBe(true);
+    expect(ok(grep)).toBe(true);
+    // 承認していない形は、いままでどおり止まる
+    expect(ok("git ls-files src")).toBe(false);
+    expect(ok("git grep -n TODO")).toBe(false);
+    expect(ok("git push")).toBe(false);
+    // 承認前（要求だけ）は止まる
+    const before = effectiveScope(run(request("x1", "command", lsFiles)), "c");
+    if (before === undefined) throw new Error("範囲がない");
+    expect(evaluateScope(before, "/w", { kind: "command", command: lsFiles }).allowed).toBe(false);
   });
 
   it("承認済みの拡張だけを加える（open・却下は加えない）。順序は判定の順で、重複は加えない", () => {

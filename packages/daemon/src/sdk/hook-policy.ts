@@ -840,3 +840,24 @@ export async function decideToolUse(
   if (own !== undefined && CHILD_MCP_TOOL_NAMES.includes(own)) return ALLOW;
   return denyUnknown(toolName === "" ? "(ツール名が空)" : toolName);
 }
+
+/**
+ * 起動のあとに承認した拡張でだけ通る Bash か（#91）。ブリーフの範囲（起動のときの許可の一覧の元）では拒否され、
+ * 有効な範囲（ブリーフ＋承認済みの拡張）では許可されるコマンドだけが真。CLI の子（dontAsk）のフックが、明示の許可を返すかの判定に使う。
+ * フックの判定（`decideToolUse`）で許可されたあとにだけ呼ぶ（これだけで許可を決めない）。純粋関数。
+ */
+export function grantedOnlyByExtension(
+  brief: Scope,
+  effective: Scope,
+  cwd: string,
+  toolName: string,
+  toolInput: unknown,
+): boolean {
+  if (toolName !== "Bash") return false;
+  const command = (toolInput as { command?: unknown } | null)?.command;
+  if (typeof command !== "string") return false;
+  return (
+    !evaluateScope(brief, cwd, { kind: "command", command }).allowed &&
+    evaluateScope(effective, cwd, { kind: "command", command }).allowed
+  );
+}

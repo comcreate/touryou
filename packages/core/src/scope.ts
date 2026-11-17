@@ -266,6 +266,24 @@ const FIND_EXECUTING = /^-(exec|execdir|ok|okdir|delete|fprint\w*|fls)$/;
 
 const baseName = (word: string): string => word.slice(word.lastIndexOf("/") + 1).toLowerCase();
 
+/**
+ * 許可の 1 項目を語に分ける（#91）。命令と同じ字句解析で分け、引用符を外す（`git grep -E "A|B"` の許可が、子の打つ同じ形に当たる）。
+ * 区切り（`;`・`|`・`&&` など）で 2 つ以上に分かれる、裏で動かす、解析できない項目は、前の規則（空白で分けるだけ。引用符も字面のまま）に
+ * 戻す。広げるのは「引用符の外し方を命令と揃える」ことだけで、前方一致の規則（語ごとの完全一致）は変えない。
+ */
+function entryWords(entry: string): string[] {
+  const parsed = parseCommand(entry);
+  if (parsed.ok && !parsed.background) {
+    const segs = parsed.segments.filter((s) => s.words.length > 0);
+    if (segs.length === 1) return [...(segs[0] as Segment).words];
+  }
+  return entry.trim().split(/\s+/);
+}
+
+/** 語の並びの前方一致: `want` の語がすべて `have` の先頭の語に一致する。 */
+const wordsCover = (want: readonly string[], have: readonly string[]): boolean =>
+  want.length > 0 && want[0] !== "" && want.every((w, i) => have[i] === w);
+
 function checkCommand(scope: Scope, command: string): ScopeDecision {
   const parsed = parseCommand(command);
   if (!parsed.ok) return deny("unparsable", command);
@@ -284,10 +302,7 @@ function checkCommand(scope: Scope, command: string): ScopeDecision {
     ) {
       return deny("indirectExecution", seg.words.join(" "));
     }
-    const allowed = scope.allowedCommands.some((entry) => {
-      const want = entry.trim().split(/\s+/);
-      return want[0] !== "" && want.every((w, i) => seg.words[i] === w);
-    });
+    const allowed = scope.allowedCommands.some((entry) => wordsCover(entryWords(entry), seg.words));
     if (!allowed) return deny("commandNotAllowed", seg.words.join(" "));
   }
   return ALLOW;
@@ -317,11 +332,8 @@ export function commandWords(input: string): string[][] | undefined {
 }
 
 /** 語の並びの前方一致: `entry` の語がすべて `command` の先頭の語に一致する（`checkCommand` と同じ規則）。 */
-const commandCovers = (entry: string, command: string): boolean => {
-  const want = entry.trim().split(/\s+/);
-  const have = command.trim().split(/\s+/);
-  return want[0] !== "" && want.every((w, i) => have[i] === w);
-};
+const commandCovers = (entry: string, command: string): boolean =>
+  wordsCover(entryWords(entry), entryWords(command));
 
 /**
  * 子の範囲が親の範囲に収まるか（spawn・split の検査。FR_005）。

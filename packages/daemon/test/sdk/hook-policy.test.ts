@@ -1,7 +1,7 @@
 import { PLUGIN_NAME, type Scope } from "@touryou/core";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { decideToolUse } from "../../src/sdk/hook-policy.js";
+import { decideToolUse, grantedOnlyByExtension } from "../../src/sdk/hook-policy.js";
 
 const CWD = "/wt/a";
 const scope: Scope = {
@@ -656,5 +656,33 @@ describe("plugin の設定（plugin.json の name・.mcp.json のサーバーの
         }
       }
     }
+  });
+});
+
+describe("grantedOnlyByExtension（#91: 起動のあとに承認した Bash だけ、明示の許可）", () => {
+  const grep = `git grep -n -E "TODO|FIXME|XXX|HACK" -- . ':!pnpm-lock.yaml'`;
+  const brief: Scope = {
+    writableLocations: ["src"],
+    forbiddenLocations: [".git"],
+    allowedCommands: ["pnpm test"],
+  };
+  const effective: Scope = {
+    ...brief,
+    allowedCommands: ["pnpm test", "git ls-files docs .sdd", grep],
+  };
+  const bash = (command: string) =>
+    grantedOnlyByExtension(brief, effective, "/w", "Bash", { command });
+
+  it("承認した形だけが真", () => {
+    expect(bash("git ls-files docs .sdd")).toBe(true);
+    expect(bash(grep)).toBe(true);
+  });
+  it("ブリーフで通る形（起動のときの一覧にある）・承認していない形・Bash 以外は偽", () => {
+    expect(bash("pnpm test")).toBe(false);
+    expect(bash("git ls-files src")).toBe(false);
+    expect(bash("git push")).toBe(false);
+    expect(bash(`${grep}; rm -rf /`)).toBe(false);
+    expect(grantedOnlyByExtension(brief, effective, "/w", "Read", { command: grep })).toBe(false);
+    expect(grantedOnlyByExtension(brief, effective, "/w", "Bash", {})).toBe(false);
   });
 });

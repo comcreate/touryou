@@ -471,3 +471,52 @@ describe("isScopeSubset（子の範囲は親の範囲に収まる）", () => {
     );
   });
 });
+
+describe("許可の項目の引用符（#91）", () => {
+  const grep = `git grep -n -E "TODO|FIXME|XXX|HACK" -- . ':!pnpm-lock.yaml'`;
+  const s1: Scope = { ...scope, allowedCommands: [grep, "git ls-files docs .sdd"] };
+  const ok = (command: string) => evaluateScope(s1, CWD, { kind: "command", command }).allowed;
+
+  it("引用符のある許可は、命令と同じく引用符を外して比べる（同じ形・引用符の付け方だけ違う形が通る）", () => {
+    expect(ok(grep)).toBe(true);
+    expect(ok(`git grep -n -E 'TODO|FIXME|XXX|HACK' -- . ':!pnpm-lock.yaml'`)).toBe(true);
+    expect(ok("git ls-files docs .sdd")).toBe(true);
+    expect(ok("git ls-files docs .sdd extra")).toBe(true); // 前方一致（前からの規則）
+  });
+
+  it("語が違う・足りない形は止まる（広げたのは引用符の外し方だけ）", () => {
+    expect(ok(`git grep -n -E "TODO" -- .`)).toBe(false);
+    expect(ok("git grep -n -E TODO|FIXME")).toBe(false); // 引用符なしの | はパイプ
+    expect(ok("git ls-files docs")).toBe(false);
+    expect(ok(`${grep}; rm -rf /`)).toBe(false);
+    expect(ok(`${grep} | sh`)).toBe(false);
+  });
+
+  it("区切りを含む許可の項目は、前の規則（空白で分けるだけ）のまま。1 つの命令として通ることはない", () => {
+    const s2: Scope = { ...scope, allowedCommands: ["ls; rm -rf x"] };
+    expect(evaluateScope(s2, CWD, { kind: "command", command: "ls; rm -rf x" }).allowed).toBe(
+      false,
+    );
+    expect(evaluateScope(s2, CWD, { kind: "command", command: "ls" }).allowed).toBe(false);
+  });
+
+  it("isScopeSubset も同じ規則で比べる", () => {
+    const rel: Scope = {
+      writableLocations: ["src"],
+      forbiddenLocations: [".git"],
+      allowedCommands: [],
+    };
+    expect(
+      isScopeSubset(
+        { ...rel, allowedCommands: [`git grep -E 'A|B'`] },
+        { ...rel, allowedCommands: [`git grep -E "A|B"`] },
+      ),
+    ).toBe(true);
+    expect(
+      isScopeSubset(
+        { ...rel, allowedCommands: ["git grep"] },
+        { ...rel, allowedCommands: [`git grep -E "A|B"`] },
+      ),
+    ).toBe(false);
+  });
+});

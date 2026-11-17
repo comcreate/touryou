@@ -33,6 +33,7 @@ import { basename, dirname, isAbsolute, join, resolve as resolvePath } from "nod
 import {
   DEFAULT_PURGE_TOMBSTONE,
   type EventBody,
+  effectiveScope,
   type Failure,
   failure,
   isPathUnder,
@@ -118,7 +119,7 @@ import {
 import { reconcileOnStartup } from "./reconcile.js";
 import { latestLaunch, ParentRequestCliAdapter, stopDelegation } from "./sdk/cli-adapter.js";
 import { DesktopRuntimeAdapter, touryouChildCommands } from "./sdk/desktop-adapter.js";
-import { decideToolUse, resolveScope } from "./sdk/hook-policy.js";
+import { decideToolUse, grantedOnlyByExtension, resolveScope } from "./sdk/hook-policy.js";
 import { createLsofProbe, nodeExec, type ProcessProbe } from "./sdk/lsof-probe.js";
 import { nodeTimers } from "./sdk/node-timers.js";
 import { nodeFsOps, resolveForWrite } from "./sdk/path-resolve.js";
@@ -1593,9 +1594,10 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     toolInput: unknown,
     cwd: string | undefined,
     trust?: "sessionIdOnly",
-  ): Promise<{ allow: true } | { allow: false; reason: string }> => {
+  ): Promise<{ allow: true; permit?: "extension" } | { allow: false; reason: string }> => {
     cliHookAt.set(nodeId, Date.parse(clock()));
-    const scope = log.state().nodes.find((n) => n.id === nodeId)?.scope;
+    // 有効な範囲（ブリーフの範囲＋承認済みの拡張）。イベント列から毎回導くので、承認は次の呼び出しから効き、再起動でも失われない（#91）
+    const scope = effectiveScope(log.state(), nodeId);
     const tree = await deps.worktree.cwdOf(nodeId).catch(() => undefined);
     if (scope === undefined || tree === undefined) {
       return {
@@ -1645,7 +1647,14 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       },
       here,
     );
-    if (d.allow) return { allow: true };
+    if (d.allow) {
+      // 起動のときの許可の一覧（ブリーフの範囲から作る。dontAsk）にない、承認済みの拡張でだけ通る Bash は、明示の許可を返す（#91）
+      const brief = log.state().nodes.find((n) => n.id === nodeId)?.scope;
+      if (brief !== undefined && grantedOnlyByExtension(brief, scope, wt, toolName, toolInput)) {
+        return { allow: true, permit: "extension" };
+      }
+      return { allow: true };
+    }
     // session_id で引いた要求の記録は、行為者に印（trust: sessionIdOnly）を写す
     if (d.violation !== undefined)
       recordDesktopViolation(nodeId, d.violation.reason, d.violation.subject, trust);

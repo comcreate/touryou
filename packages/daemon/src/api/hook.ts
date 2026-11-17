@@ -41,7 +41,17 @@ export type HookDecider = (
   transcriptPath?: string,
   /** トークンのない（session_id で引いた）要求の信頼度（記録の行為者に写す）。 */
   trust?: "sessionIdOnly",
-) => Promise<{ readonly allow: true } | { readonly allow: false; readonly reason: string }>;
+) => Promise<
+  | {
+      readonly allow: true;
+      /**
+       * 起動のあとに承認した拡張（`scope.extensionDecided`）でだけ通る Bash（#91）。起動のときの許可の一覧（`--settings` の
+       * permissions.allow。dontAsk）には入っていないので、フックのコマンドが Claude Code へ明示の許可（permissionDecision: allow）を返す。
+       */
+      readonly permit?: "extension";
+    }
+  | { readonly allow: false; readonly reason: string }
+>;
 
 const EVENTS: ReadonlySet<string> = new Set(["PreToolUse", "PostToolUse", "Stop", "Notification"]);
 const SESSION_ID = /^[A-Za-z0-9._:-]{1,200}$/;

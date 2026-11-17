@@ -11,7 +11,13 @@
  * - 指示の本文は、人や親が書いた文。各行の頭に `> ` を付けた引用の形で返す。
  */
 
-import type { ChildInstructionView, Failure, OperationMap, Result } from "@touryou/core";
+import {
+  type ChildInstructionView,
+  effectiveScope,
+  type Failure,
+  type OperationMap,
+  type Result,
+} from "@touryou/core";
 import type { HandlerRequest } from "../server.js";
 import { appendAtomically, fail, type LogPort } from "./context.js";
 
@@ -50,6 +56,7 @@ export function createChildInboxHandlers(deps: ChildInboxHandlerDeps) {
       }
       const state = deps.log.state();
       const node = state.nodes.find((n) => n.id === nodeId);
+      const scope = effectiveScope(state, nodeId);
       if (node === undefined) return fail("notFound", "ノードが見つからない", "whoami で確かめる");
       const all = req.params.all === true;
       const ack = req.params.ackThrough;
@@ -90,13 +97,14 @@ export function createChildInboxHandlers(deps: ChildInboxHandlerDeps) {
             ...(node.acceptanceCriteria === undefined
               ? {}
               : { acceptanceCriteria: node.acceptanceCriteria.map(quote) }),
-            ...(node.scope === undefined
+            // 範囲は、承認済みの拡張を足した有効な範囲（フックの判定と同じもの。#91）
+            ...(scope === undefined
               ? {}
               : {
                   scope: {
-                    writableLocations: node.scope.writableLocations.map(quote),
-                    forbiddenLocations: node.scope.forbiddenLocations.map(quote),
-                    allowedCommands: node.scope.allowedCommands.map(quote),
+                    writableLocations: scope.writableLocations.map(quote),
+                    forbiddenLocations: scope.forbiddenLocations.map(quote),
+                    allowedCommands: scope.allowedCommands.map(quote),
                   },
                 }),
             dependsOn: node.dependsOn,
