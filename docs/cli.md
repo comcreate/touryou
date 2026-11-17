@@ -9,8 +9,8 @@ workspace では `pnpm --filter @touryou/cli exec touryou …`）。使い方は
 
 | 環境変数 | 内容 |
 |:--|:--|
-| `TOURYOU_DAEMON_URL` | daemon の窓口（例: `http://127.0.0.1:7777`。ループバックだけ） |
-| `TOURYOU_HUMAN_TOKEN` | 人間のトークン（`<stateDir>/human-token` の中身） |
+| `TOURYOU_DAEMON_URL` | daemon の窓口（例: `http://127.0.0.1:7777`。ループバックだけ）。なければ、daemon の設定の `stateDir` の `port` から作る |
+| `TOURYOU_HUMAN_TOKEN` | 人間のトークン（`<stateDir>/human-token` の中身）。なければ、そのファイルを自分で読む |
 | `TOURYOU_DAEMON_CONFIG` | daemon の設定ファイル。`stateDir` の `daemon-identity` で、トークンつきの要求の直前に毎回、daemon の身元を確かめる（`touryou-mcp` と同じ。`docs/daemon-identity.md`） |
 | `TOURYOU_CLI_ALLOW_UNVERIFIED` | **ちょうど `1`** のときだけ、`TOURYOU_DAEMON_CONFIG` なしで、身元の確認なしで動く（**開発用**。手元の開発のビルド〔`pnpm build`〕だけで効き、**配布物〔Release の tar.gz〕では効かない**。`scripts/dist-build.sh` が `packages/cli/src/dev-build.ts` の `DEV_BUILD` を `false` にする） |
 
@@ -21,7 +21,8 @@ export TOURYOU_HUMAN_TOKEN="$(cat /path/to/state/human-token)"   # トークン�
 touryou reclaim <nodeId>
 ```
 
-- `TOURYOU_DAEMON_URL`・`TOURYOU_HUMAN_TOKEN` がない、または `TOURYOU_DAEMON_CONFIG` がない（開発のビルドで `TOURYOU_CLI_ALLOW_UNVERIFIED=1` でない）ときは、何も送らずに終了コード 2。
+- **環境変数は、なくてよい**（#115）。`touryou reclaim` などの人のコマンドは、`touryou ui` と同じく、`$HOME/.touryou/config.json`（`TOURYOU_DAEMON_CONFIG` があればそれ）の `stateDir` から、窓口（`port`）・人間のトークン（`human-token`。自分だけが読める・リンクでないファイルだけ）・身元の確認の秘密を自分で読む。環境変数があれば、それを先に使う。トークンは、引数・標準出力・標準エラー・履歴に出さない。
+- 窓口・人間のトークンが、環境変数にも設定にもない、または `TOURYOU_DAEMON_CONFIG` がない（開発のビルドで `TOURYOU_CLI_ALLOW_UNVERIFIED=1` でない）ときは、何も送らずに終了コード 2。
 - daemon の身元を確かめられないとき（`daemon_identity_failed`）は、トークンを送らずに終了コード 1（操作は実行されていない）。
 - 出力・エラーを出す直前に、文字列の中の `TOURYOU_HUMAN_TOKEN` の値を `***` に置き換える（daemon や偽の窓口が、応答にトークンを入れても出さない）。中継（relay）も、トークンと本文を、失敗の文面・記録に入れない。
 - 置き換えるのは、トークンの値と完全に一致する部分だけ（一部だけを含む文字列は、そのまま出る）。

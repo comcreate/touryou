@@ -4,6 +4,7 @@
  * - daemon は子を呼ばない。記録の時刻（と、フックが来た時刻）だけで決める。
  * - 止まっているかもしれない子: 親が起動を報告した、動いている（running）CLI の子で、最後の動き（起動の報告・報告・判断の要求・
  *   範囲違反・道具の拒否・指示の受け取り・フックの呼び出し）から `stallMs` を超えたもの。同じ「最後の動き」には 1 回だけ出す。
+ *   判断の答え・範囲の頼みの判定を待っている子には出さない。同じ子の未解決の知らせがあれば、新しく出さない（#115）。
  *   判断待ち（waiting）は、人の答えを待っているので出さない。
  * - 読まれていない指示: 子が `child.inbox` で受け取らないまま、記録から `unreadMs` を超えた指示。指示ごとに 1 回だけ出す。
  * - 紐付けていない子: 親が起動を報告した（done）CLI の子で、その報告から `unboundMs` を超えても紐付け（`child_bind`）が
@@ -14,7 +15,7 @@
  */
 
 import type { EventBody, OrchState } from "@touryou/core";
-import { stallSummary } from "@touryou/core";
+import { isStallSummary, stallSummary } from "@touryou/core";
 import { appendAtomically, deriveId, type LogPort, summarize } from "./api/handlers/context.js";
 
 export interface WatchSpec {
@@ -78,7 +79,11 @@ export function watchFindings(
       !isBound(n.id)
     )
       unbound.push({ nodeId: n.id });
-    if (n.state === "running") {
+    // 判断の答え・範囲の頼みの判定を待っているだけの子は、止まっているのではないので知らせない（#115）
+    const awaiting =
+      state.decisions.some((d) => d.nodeId === n.id && d.status === "open") ||
+      state.extensions.some((x) => x.nodeId === n.id && x.status === "open");
+    if (n.state === "running" && !awaiting) {
       const times = [
         ms(launch.report?.at),
         ...state.reports.filter((x) => x.nodeId === n.id).map((x) => ms(x.at)),
@@ -148,7 +153,16 @@ export function recordWatchFindings(
       payload: { id, kind, nodeId, summary: summarize(text) },
     });
   };
+  // 同じ子の「止まっているかも」は、未解決のものを 1 件だけにする（#115。最後の動きが進んでも、古い知らせと並べない）
+  const openStall = new Set(
+    log
+      .state()
+      .inbox.filter((i) => i.resolved === undefined && isStallSummary(i.summary))
+      .map((i) => i.nodeId),
+  );
   for (const s of f.stalled) {
+    if (openStall.has(s.nodeId)) continue;
+    openStall.add(s.nodeId);
     push(
       `stall/${s.nodeId}/${s.lastMs}`,
       s.nodeId,

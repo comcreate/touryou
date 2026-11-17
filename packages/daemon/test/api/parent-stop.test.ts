@@ -8,7 +8,10 @@
 import type { EventBody, NodeEvent, ProcessInfo } from "@touryou/core";
 import { describe, expect, it } from "vitest";
 import { createBindCodes } from "../../src/api/bind.js";
-import { createParentRequestHandlers } from "../../src/api/handlers/parent-request-handlers.js";
+import {
+  createParentRequestHandlers,
+  SESSION_GONE,
+} from "../../src/api/handlers/parent-request-handlers.js";
 import type { HandlerRequest } from "../../src/api/server.js";
 import { nodeFeedOf } from "../../src/api/sse-hub.js";
 import { recordWatchFindings, watchFindings } from "../../src/cli-watch.js";
@@ -271,6 +274,46 @@ describe("2 段の停止", () => {
   });
 });
 
+describe("受理のあとの後片付け：削除の依頼で、セッションがもうない（#115）", () => {
+  it("止めた時点で一覧から消えていれば、削除の失敗は済んだ扱い。受信箱に「うまくいかなかった」を出さない", async () => {
+    const r = rig();
+    await r.launched();
+    const seq = r.ev("a", { type: "stop", mode: "immediate" });
+    await r.adapter.stop("a", { mode: "immediate", stopSeq: seq });
+    r.setProcs([]);
+    await r.call("parent.report", {
+      nodeId: "a",
+      requestRef: r.open()?.requestRef as string,
+      outcome: "done",
+    });
+    const rmRef = r.open()?.requestRef as string;
+    const req = await r.call("parent.request", { nodeId: "a" });
+    expect(req.value?.next).toContain("一覧にない");
+    await r.call("parent.report", {
+      nodeId: "a",
+      requestRef: rmRef,
+      outcome: "failed",
+      reason: "Error: session sess-a not found",
+    });
+    const s = r.log.state();
+    expect(s.inbox.some((i) => i.kind === "failure" && i.nodeId === "a")).toBe(false);
+    expect(s.inbox.some((i) => (i.summary ?? "").includes("もう一覧になかった"))).toBe(true);
+    expect(s.parentRequests.find((x) => x.requestRef === rmRef)?.report?.outcome).toBe("done");
+  });
+
+  it("ほかの理由の失敗（未 push の変更など）は、これまでどおり受信箱に出す", () => {
+    expect(SESSION_GONE.test("unpushed commits")).toBe(false);
+    for (const t of [
+      "not found",
+      "No such session",
+      "見つからない",
+      "一覧にない",
+      "already removed",
+    ])
+      expect(SESSION_GONE.test(t), t).toBe(true);
+  });
+});
+
 describe("見張り", () => {
   const spec = { stallMs: 30 * 60_000, unreadMs: 30 * 60_000 };
 
@@ -293,6 +336,41 @@ describe("見張り", () => {
     // 判断待ちは出さない
     r.ev("a", { type: "requestDecision" });
     expect(watchFindings(r.log.state(), at(90), spec).stalled).toEqual([]);
+  });
+
+  it("範囲の頼みの判定を待っているだけの子には、止まっているかもを出さない（#115）", async () => {
+    const r = rig();
+    await r.launched();
+    const at = (min: number) => Date.parse(T0) + min * 60_000;
+    r.add({
+      type: "scope.extensionRequested",
+      payload: {
+        extensionId: "x1",
+        nodeId: "a",
+        reason: "テストを足したい",
+        target: { kind: "write", value: "src/x.ts" },
+      },
+    });
+    expect(watchFindings(r.log.state(), at(90), spec).stalled).toEqual([]);
+  });
+
+  it("同じ子の未解決の止まっているかもは 1 件だけ。最後の動きが進んでも、新しい知らせを並べない。解決したら、また出せる（#115）", async () => {
+    const r = rig();
+    await r.launched();
+    const at = (min: number) => Date.parse(T0) + min * 60_000;
+    expect(
+      recordWatchFindings(r.log, () => T0, watchFindings(r.log.state(), at(31), spec), spec),
+    ).toBe(1);
+    // フックで最後の動きが進み、そのあとまた止まった（stall の鍵は lastMs ごとに違う）
+    const later = watchFindings(r.log.state(), at(100), spec, () => at(60));
+    expect(later.stalled.map((x) => x.nodeId)).toEqual(["a"]);
+    expect(recordWatchFindings(r.log, () => T0, later, spec)).toBe(0);
+    const stalls = () =>
+      r.log.state().inbox.filter((i) => (i.summary ?? "").includes("止まっているかもしれない"));
+    expect(stalls()).toHaveLength(1);
+    // 解決したら、次の止まりは知らせる
+    r.add({ type: "inbox.resolved", payload: { itemId: (stalls()[0] as { id: string }).id } });
+    expect(recordWatchFindings(r.log, () => T0, later, spec)).toBe(1);
   });
 
   it("子が受け取らないまま所定の時間を超えた指示を、指示ごとに 1 回だけ受信箱に出す（FR_009）", async () => {

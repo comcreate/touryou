@@ -94,6 +94,14 @@ export const sessionRefOf = (state: OrchState, nodeId: string): string | undefin
           state.parentRequests.some((x) => x.requestRef === withRefOf(nodeId, r.requestRef))),
     )?.report?.sessionRef;
 
+/**
+ * セッションの削除（claude rm）の依頼の失敗の理由が「そのセッションがもうない」ことを言っているか（#115）。
+ * 受理のあとの後片付けでは、止めた（claude stop）時点でセッションが一覧から消えることがあり、そのときの削除の失敗は、
+ * 消す必要がもうないだけなので、済んだ扱いにする（受信箱に「うまくいかなかった」を出さない）。
+ */
+export const SESSION_GONE =
+  /not found|no such|does not exist|doesn't exist|unknown (session|agent)|already (removed|gone|deleted)|見つから|存在しない|一覧にない|もうない|既に(消え|ない)/i;
+
 const NEXT_SIMPLE = (r: ParentRequestRecord) =>
   `実行する前に、claude agents --json で、名前が ${r.nodeId} のセッションの id が command の id と同じかを確かめる（違えば実行せず、parent_report で outcome: failed と reason に「id が違う」と書く）。command を Bash でそのまま 1 回だけ実行する（書き換えない）。結果を parent_report（requestRef: ${r.requestRef}）で報告する: 成功は outcome: done、失敗（拒まれた・エラー）は outcome: failed と reason（出力の要点）`;
 
@@ -282,15 +290,28 @@ export function createParentRequestHandlers(deps: ParentRequestHandlerDeps) {
           : `claude rm ${shellWord(ref)}${discard ? " --discard-unpushed" : ""}`;
       return {
         ok: true,
-        value: { requestRef: r.requestRef, nodeId, kind: r.kind, command, next: NEXT_SIMPLE(r) },
+        value: {
+          requestRef: r.requestRef,
+          nodeId,
+          kind: r.kind,
+          command,
+          next:
+            r.kind === "remove"
+              ? `${NEXT_SIMPLE(r)}。claude agents --json に、名前が ${r.nodeId} のセッションがもうなければ（止めた時点で消えている）、実行せずに outcome: done と reason に「一覧にない」と書いて報告する`
+              : NEXT_SIMPLE(r),
+        },
       };
     },
 
     "parent.report": async (req: HandlerRequest<"parent.report">): Promise<R<"parent.report">> => {
-      const { nodeId, requestRef, outcome, sessionRef, reason, agentState } = req.params;
+      const { nodeId, requestRef, sessionRef, reason, agentState } = req.params;
       const actor = actorOf(req);
       const state = deps.log.state();
       const r = state.parentRequests.find((x) => x.requestRef === requestRef);
+      // 削除の失敗の理由が「セッションがもうない」なら、消す必要はないので、済んだ扱いにする（#115）
+      const gone =
+        r?.kind === "remove" && req.params.outcome === "failed" && SESSION_GONE.test(reason ?? "");
+      const outcome = gone ? "done" : req.params.outcome;
       if (r === undefined || r.nodeId !== nodeId) {
         return fail(
           "notFound",
@@ -460,7 +481,15 @@ export function createParentRequestHandlers(deps: ParentRequestHandlerDeps) {
           );
         }
       } else if (r.kind === "remove") {
-        bodies.push(add("removed", "info", `子 ${nodeId} のセッションを削除した（claude rm）`));
+        bodies.push(
+          gone
+            ? add(
+                "removed",
+                "info",
+                `子 ${nodeId} のセッションは、もう一覧になかった（止めた時点で消えていた）。削除の依頼は済んだ扱いにした`,
+              )
+            : add("removed", "info", `子 ${nodeId} のセッションを削除した（claude rm）`),
+        );
       }
       if (agentState !== undefined && STALLED_AGENT_STATES.has(agentState)) {
         bodies.push(

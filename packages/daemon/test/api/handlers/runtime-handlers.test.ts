@@ -396,9 +396,19 @@ describe("node.stop（停止要求の記録 → アダプタの 2 段階停止�
     expect(call?.[1]).toEqual({ mode: "immediate", stopSeq: last?.seq });
   });
 
-  it("停止の対象でない状態（done など）は、何も書かずアダプタも呼ばずに失敗する（alreadyFinished）", async () => {
+  it("済んだと報告した（done）が受理していない子は、受理せずに止められる（猶予なしの即時停止。#115）", async () => {
     const r = rig();
     r.ev("a", { type: "reportDone" });
+    const res = await r.call("node.stop", { nodeId: "a", mode: "graceful" });
+    expect(res.ok).toBe(true);
+    expect(r.state().nodes.find((n) => n.id === "a")?.state).toBe("stopping");
+    expect(r.adapter?.stops.at(-1)?.[1]).toMatchObject({ mode: "immediate" });
+  });
+
+  it("受理済み（verified）で、止める裏のセッションの依頼を作れない子は、何も書かずアダプタも呼ばずに失敗する（alreadyFinished）", async () => {
+    const r = rig();
+    r.ev("a", { type: "reportDone" });
+    r.ev("a", { type: "accept" });
     const before = r.state().lastSeq;
     const res = await r.call("node.stop", { nodeId: "a", mode: "graceful" });
     expect(res.ok).toBe(false);

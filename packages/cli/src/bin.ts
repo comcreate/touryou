@@ -2,8 +2,8 @@
 /**
  * `touryou`（人間用コマンドの実行ファイル）。窓口と認証は、環境変数だけで受ける（引数に置かない。`ps` に出さない）。
  *
- * - `TOURYOU_DAEMON_URL`: daemon の窓口（ループバックだけ）。
- * - `TOURYOU_HUMAN_TOKEN`: 人間のトークン（`<stateDir>/human-token` の中身）。`--token` のような引数はない。
+ * - `TOURYOU_DAEMON_URL`: daemon の窓口（ループバックだけ）。なければ、daemon の設定の stateDir の port から作る（#115）。
+ * - `TOURYOU_HUMAN_TOKEN`: 人間のトークン（`<stateDir>/human-token` の中身）。なければ、そのファイルを自分で読む（#115）。`--token` のような引数はない。
  * - `TOURYOU_DAEMON_CONFIG`: daemon の設定ファイル。`stateDir` の `daemon-identity` で、トークンつきの要求の直前に毎回、daemon の身元を
  *   確かめる（touryou-mcp と同じ）。ないと動かない。環境変数 `TOURYOU_CLI_ALLOW_UNVERIFIED` が**ちょうど `1`** のときだけ、検証なしで動く
  *   （開発用。手元の開発のビルドだけで効き、配布物では効かない。`dev-build.ts`）。
@@ -42,6 +42,8 @@ export interface BinDeps {
   readonly isTTY: { readonly stdin: boolean; readonly stdout: boolean };
   readonly fetch?: typeof fetch;
   readonly readFile?: (path: string) => string;
+  /** 秘密のファイル（stateDir の port・human-token）の読み取り（試験用）。既定は、自分だけが読める・リンクでないファイルだけ。 */
+  readonly readSecret?: (path: string) => string;
   readonly newRequestId?: () => string;
   /** 標準入力の全部（`touryou child hook` のフック入力）。 */
   readonly readStdin?: () => Promise<string>;
@@ -75,7 +77,7 @@ const checkConfigBySpawn = (
 const usage = (cause: string): CommandResult => ({
   exitCode: 2,
   stdout: "",
-  stderr: `${cause}\n窓口と認証は、環境変数で渡す: TOURYOU_DAEMON_URL（daemon の窓口）・TOURYOU_HUMAN_TOKEN（人間のトークン）・TOURYOU_DAEMON_CONFIG（daemon の設定ファイル。身元の確認に使う）\n例: export TOURYOU_HUMAN_TOKEN="$(cat <stateDir>/human-token)"（トークンを、コマンドの行に直接書かない）\n`,
+  stderr: `${cause}\n窓口と認証は、daemon の設定（$HOME/.touryou/config.json の stateDir。TOURYOU_DAEMON_CONFIG で別の場所も指せる）から自分で読む（touryou ui と同じ）。daemon を起動していれば、何も渡さなくてよい。\n環境変数で渡すこともできる（あれば、こちらを先に使う）: TOURYOU_DAEMON_URL（daemon の窓口）・TOURYOU_HUMAN_TOKEN（人間のトークン）・TOURYOU_DAEMON_CONFIG（daemon の設定ファイル。身元の確認に使う）\n例: export TOURYOU_HUMAN_TOKEN="$(cat <stateDir>/human-token)"（トークンを、コマンドの行に直接書かない）\n`,
 });
 
 /** daemon の設定の `stateDir`（絶対パス）。読めない・形が違えば undefined。 */
@@ -90,6 +92,46 @@ function stateDirOf(path: string, readFile: (p: string) => string): string | und
   } catch {
     return undefined;
   }
+}
+
+const nonEmpty = (v: string | undefined): string | undefined =>
+  v === undefined || v === "" ? undefined : v;
+
+/**
+ * daemon の設定（`TOURYOU_DAEMON_CONFIG`、なければ `$HOME/.touryou/config.json`）の stateDir から、窓口（port）と
+ * 人間のトークン（human-token）を読む（#115。`touryou ui` と同じ置き場）。読めないものは undefined のまま返す。
+ */
+function localDaemonOf(
+  deps: Pick<BinDeps, "env" | "readFile" | "readSecret">,
+): { configPath: string; daemonUrl?: string; token?: string } | undefined {
+  const home = nonEmpty(deps.env.HOME);
+  const configPath =
+    nonEmpty(deps.env.TOURYOU_DAEMON_CONFIG) ??
+    (home === undefined ? undefined : `${home.replace(/\/+$/, "")}/.touryou/config.json`);
+  if (configPath === undefined) return undefined;
+  const stateDir = stateDirOf(
+    configPath,
+    deps.readFile ?? ((p) => readSecureFile(p, { forbid: 0o022, maxBytes: 1024 * 1024 })),
+  );
+  if (stateDir === undefined) return undefined;
+  const secret =
+    deps.readSecret ?? ((p: string) => readSecureFile(p, { forbid: 0o077, maxBytes: 64 * 1024 }));
+  const read = (name: string): string | undefined => {
+    try {
+      return secret(join(stateDir, name)).trim();
+    } catch {
+      return undefined;
+    }
+  };
+  const port = read("port");
+  const token = read("human-token");
+  const okPort =
+    port !== undefined && /^[0-9]{1,5}$/.test(port) && Number(port) >= 1 && Number(port) <= 65535;
+  return {
+    configPath,
+    ...(okPort ? { daemonUrl: `http://127.0.0.1:${Number(port)}` } : {}),
+    ...(token !== undefined && token.length >= 32 ? { token } : {}),
+  };
 }
 
 /** 隣の package.json の版（開発のビルドの既定）。読めなければ 0.0.0。 */
@@ -215,11 +257,20 @@ export async function runBin(argv: readonly string[], deps: BinDeps): Promise<Co
       isTTY: deps.isTTY,
     });
   }
-  const daemonUrl = deps.env.TOURYOU_DAEMON_URL;
-  const token = deps.env.TOURYOU_HUMAN_TOKEN;
-  if (daemonUrl === undefined || daemonUrl === "") return usage("TOURYOU_DAEMON_URL がない");
-  if (token === undefined || token === "") return usage("TOURYOU_HUMAN_TOKEN がない");
-  const configPath = deps.env.TOURYOU_DAEMON_CONFIG;
+  // 窓口・人間のトークン・設定の場所は、環境変数があればそれを使い、なければ daemon の設定から自分で読む（#115。touryou ui と同じ）。
+  // トークンは、メモリの中だけで使い、引数・標準出力・標準エラーに出さない（出力は redact で伏せる）
+  const local = localDaemonOf(deps);
+  const daemonUrl = nonEmpty(deps.env.TOURYOU_DAEMON_URL) ?? local?.daemonUrl;
+  const token = nonEmpty(deps.env.TOURYOU_HUMAN_TOKEN) ?? local?.token;
+  if (daemonUrl === undefined)
+    return usage(
+      "TOURYOU_DAEMON_URL がなく、daemon の設定からも窓口（stateDir の port）を読めない",
+    );
+  if (token === undefined)
+    return usage(
+      "TOURYOU_HUMAN_TOKEN がなく、daemon の設定からも人間のトークン（stateDir の human-token）を読めない",
+    );
+  const configPath = nonEmpty(deps.env.TOURYOU_DAEMON_CONFIG) ?? local?.configPath;
   let verifier: ReturnType<typeof createIdentityVerifier> | undefined;
   if (configPath !== undefined && configPath !== "") {
     // 既定は、他の人が書けない・リンクでない・自分の・ACL のないファイルだけを読む（daemon の loadConfigFile と同じ確かめ）

@@ -219,3 +219,11 @@ category: "developer-tooling"
 - **Decision**: 状態画面に、親子の関係とやり取り（上り・下り）とその進み具合を示す関係図を足す。図は `rete`・`rete-area-plugin`・`rete-readonly-plugin`（版は完全に固定）を esbuild で束ねた `/ui/graph.js` で描き、描画のプラグイン（React・Vue・Lit）は使わず、箱と線は自前の描き手（`el()`・`svgEl()`）で描く。配置は自前の純粋な関数で計算する（elkjs は使わない）。形は横向きの木（根が左・子ごとの端子・角丸の折れ線）。CSP は変えない。SVG を作るのは `svgEl` の 1 か所、動く玉の `offset-path` も 1 か所に閉じる。自前のコードはいまの走査に、束ねたライブラリは禁止の API の不在の試験にかける。npm の依存は手で上げる。やり取りの段（`sent`・`delivered`・`done`）は記録から導き、子 → 親の「届いた」は記録がないあいだ「分からない」と示す（#102 で足す）。タグの許可リストに `details`・`summary`・`code` を足す（#89）。
 - **Rationale**: 利用者が Rete.js を選んだ（11-17）。Vue のプラグインは `<style>` を `innerHTML` で差し込み、React のプラグインは styled-components を使うので、どちらも CSP `style-src 'self'` に当たる。描画のプラグインなしなら、依存が最も少なく（見込み 17 KB・gzip）、CSP も走査の決まりも、閉じた所の追加だけで保てる。elkjs は EPL-2.0 OR GPL-3.0 で 8.2 MB あり、木の配置は自前で十分。線の交わりを減らすことが図の読みやすさに最も効く（research.md 8 節）。
 - **Rejected alternatives**: 自前の SVG だけ（調べ役の勧め）— 利用者が Rete.js を選んだ。React・Vue のプラグイン — CSP に当たる。Lit のプラグイン — R0 が通らないときの次の道として残す。elkjs・`rete-auto-arrange-plugin` — ライセンスと大きさ。CSP に `'unsafe-inline'` を足す — 守りが下がる。図に子の数の上限を設ける — 幹からの枝分かれなら親の箱は伸びず、拡大・移動で扱える（利用者の決め）。
+
+## 2026-11-17 済んだと報告した子（done）を、受理せずに止められるようにする
+
+- **Decision**: 状態遷移で、done への停止要求（`stop`）を `alreadyFinished` で断らず、猶予なしの即時停止として受け付ける（done → stopping。waiting と同じ扱い）。停止を確かめたら stopped になり、そこからは人間の破棄の判断（`node.reclaimInstruct`。`touryou reclaim --yes --expect`）で回収できる。verified・reclaimable・archived への停止は、これまでどおり `alreadyFinished`（verified は、裏のセッションの依頼の出し直しのまま）。破棄は人の操作のままにし、統合や子から破棄できないことは変えない。
+- **Rationale**: 済んだと報告したが受理しない子を片付ける道がなかった（`node.stop` は `alreadyFinished`、破棄は `notStopped`。#115）。受理しないまま放っておくと、作業ツリーとセッションが残り続ける。done の子のプロセスは動いていないことが多いので、猶予は要らない。止めるだけなら成果は消えず、捨てるかは人間が決める（2 段階のまま）。
+- **Relation to earlier decisions**: 2026-10 の「停止要求は状態ごとに受け付けを定める（終わったノードは `alreadyFinished`）」の、「終わったノード」から done を外す。
+- **Rejected alternatives**: done から直接破棄できるようにする — 停止の確かめ（作業ツリーのプロセスがない）を飛ばすことになる。受理してから回収させる — 受理は依存先の完了になり、中身を確かめていないものを受理させることになる。
+
