@@ -94,6 +94,19 @@ const SILENT: HookResult = { code: 0, stderr: "" };
  */
 export const CHILD_MARK = "touryou-child";
 
+/** 作業ツリーの中を探す読み取りだけのコマンド（daemon が `permit: "readOnlySearch"` を付けた許可。#92）。理由は EXTENSION_ALLOW と同じ。 */
+const SEARCH_ALLOW: HookResult = {
+  code: 0,
+  stderr: "",
+  stdout: JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "PreToolUse",
+      permissionDecision: "allow",
+      permissionDecisionReason: "touryou: 作業ツリーの中を探す読み取りだけのコマンドとして許可した",
+    },
+  }),
+};
+
 /**
  * 起動のあとに承認した拡張でだけ通る Bash（daemon が `permit: "extension"` を付けた許可。#91）。子は dontAsk で、起動のときの
  * 許可の一覧（`--settings`）に、あとから承認したコマンドがない。終了コード 0 だけでは Claude Code が一覧で断るので、明示の許可を返す。
@@ -278,6 +291,9 @@ async function sessionMode(
     if (decision === "deny" && event === "PreToolUse") {
       return { code: 2, stderr: reason === "" ? "範囲外の操作" : reason };
     }
+    if (decision === "allow" && event === "PreToolUse" && j.value?.permit === "readOnlySearch") {
+      return SEARCH_ALLOW;
+    }
     if (decision === "allow" && event === "PreToolUse" && j.value?.permit === "extension") {
       return EXTENSION_ALLOW;
     }
@@ -401,6 +417,9 @@ async function decide(
     return fail(`daemon が拒否した（HTTP ${res.status}${cause}）`);
   }
   const decision = j.value?.decision;
+  if (decision === "allow" && event === "PreToolUse" && j.value?.permit === "readOnlySearch") {
+    return SEARCH_ALLOW;
+  }
   if (decision === "allow" && event === "PreToolUse" && j.value?.permit === "extension") {
     return EXTENSION_ALLOW;
   }

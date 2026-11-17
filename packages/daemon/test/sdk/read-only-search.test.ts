@@ -163,3 +163,73 @@ describe("#91 との組み合わせ: 探すコマンドの許しと、承認済�
     expect(permit(`${approved} -p`)).toBe(false);
   });
 });
+
+describe("isReadOnlySearch を直に（#92 の追記: cd・パイプの後ろ・リンク）", () => {
+  // 作業ツリーの中を指すリンク `l -> a/b/c`、外を指すリンク `out -> /etc`・`x -> /outside/out/deep`。
+  // カーネルと同じに、語を前から 1 つずつたどり、たどった先がリンクならすぐ解く（`x/..` は `/outside/out`）
+  const inLinks: Record<string, string> = {
+    ...links,
+    [`${WT}/l`]: `${WT}/a/b/c`,
+    [`${WT}/x`]: "/outside/out/deep",
+  };
+  const res = async (p: string) => {
+    let cur = "";
+    for (const c of p.split("/")) {
+      if (c === "" || c === ".") continue;
+      if (c === "..") {
+        cur = cur.slice(0, Math.max(0, cur.lastIndexOf("/")));
+        continue;
+      }
+      cur = `${cur}/${c}`;
+      for (let n = 0; inLinks[cur] !== undefined && n < 8; n++) cur = inLinks[cur] as string;
+    }
+    return cur === "" ? "/" : cur;
+  };
+  const direct = (c: string, cwd = WT) => isReadOnlySearch(c, cwd, WT, res, [S]);
+  it.each([
+    "cd src && ls",
+    "cd l && ls",
+    // ls の引数の `..` は、カーネルが実パスで解く（<wt>/a/b/c から 3 つ上は <wt>）。cd の `..` だけが字句
+    "cd l && ls ../../..",
+    "find src -type f | head -50",
+    "find src | head -n 20",
+    "grep -rln foo src | sort | uniq -c | wc -l",
+    "ls src 2>/dev/null",
+  ])("通す: %s", async (c) => {
+    expect(await direct(c)).toBe(true);
+  });
+  it.each([
+    // 絞るコマンドは位置の引数を取らない（uniq の出力のファイル・ほかのファイルを読む）
+    "ls src | uniq - out.txt",
+    "ls a | uniq a/x a/y",
+    "ls a | head -c 5 a/x",
+    "ls a | head -",
+    "ls a | sort -o out",
+    "ls a | tail -f",
+    // 絞るコマンドは `|` の直後だけ
+    "ls src ; head",
+    "ls src && wc",
+    "head -n 5",
+    "ls src |& head",
+    // cd は先頭の `&&` の前だけ・1 つだけ・行き先に `..` なし
+    "cd l && cd ../../.. && ls",
+    "cd l && ls ../../../..",
+    "cd l/.. && ls",
+    "cd src/../.. && ls",
+    "cd src; ls",
+    "cd src || ls",
+    "ls && cd src && ls",
+    // 途中に外へのリンクがあり、先がまだないパス
+    "ls out/nope",
+    // 外へのリンクの `..`（カーネルは x を先に解くので、外の /outside/out に着く）
+    "ls x/..",
+    "grep -r foo x/..",
+    "find x/.. -name a",
+    "cd a && ls ../x/..",
+    "ls x/../..",
+    "ls src;",
+    "ls src &",
+  ])("断る: %s", async (c) => {
+    expect(await direct(c)).toBe(false);
+  });
+});
