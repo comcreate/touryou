@@ -1,7 +1,7 @@
 {
   "name": "touryou",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "license": "MIT",
   "description": "Composite pattern orchestrator for Claude sessions (integrator 1 : n workers)",
   "type": "module",
