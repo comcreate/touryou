@@ -286,3 +286,30 @@ describe("画面のセッションが通る入口", () => {
     expect(res.status).toBe(415);
   });
 });
+
+describe("uiSessionRequest のログ", () => {
+  it("処理中の表の上限で断った要求は、ログに印を残さない", async () => {
+    const logs: { event: string }[] = [];
+    server = createApiServer({
+      credentials: createCredentialStore({ humanToken: HUMAN }),
+      getState: state,
+      handlers: { "node.purge": () => ({ ok: true, value: { purged: [] } }) },
+      logger: (e: { event: string }) => void logs.push(e),
+      inProgress: { maxEntries: 0 },
+    } as never);
+    const { url } = await server.listen(0);
+    const ticket = (await (await ticketOf(url, HUMAN)).json()).value.ticket as string;
+    const session = (await (await exchange(url, ticket)).json()).value.session as string;
+    const res = await fetch(`${url}/v1/request`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${session}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        requestId: "22222222-2222-4222-8222-222222222222",
+        operation: "node.purge",
+        params: { nodeId: "a" },
+      }),
+    });
+    expect(res.status).toBe(429);
+    expect(logs.filter((e) => e.event === "uiSessionRequest")).toEqual([]);
+  });
+});
