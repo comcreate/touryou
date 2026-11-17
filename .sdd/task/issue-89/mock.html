@@ -5,431 +5,524 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>状態画面の見本</title>
 <!--
-  Issue #89 の画面の案（見本）。値はすべて作り物。
-  外のファイル・CDN は使わない。描画は textContent と createElement だけ（本番の決まりに合わせた書き方）。
-  関係図は、形を示す静的な SVG。上り（子 → 親）は図の上半分、下り（親 → 子）は図の下半分に分けて描く。
-  動き：線の流れ・動く点・要対応の脈打ち・カードと項目の出入り。「動きを止める」と、OS の「視差効果を減らす」で止まる。
+  Issue #89 の画面の見本（作り直し 2）。値はすべて作り物。外のファイル・CDN は使わない。
+
+  関係図について：
+  - 本番は Rete.js で描く（描画のプラグインを使わず自前で描く R0。research.md 6.1・6.5）。
+  - この見本には Rete.js を入れていない。R0 の自前の描き手が出す形を、SVG と CSS で示している。
+    箱の並び（横 1 列）・上りと下りを別のつながりにすること・拡大と移動のボタンは、
+    area のプラグインの操作（translate・zoom）を見た目で示したもの。
+
+  安全の決まり（本番に合わせたところ）：
+  - 文字は textContent、要素は createElement と、SVG は svgEl の 1 か所の createElementNS だけで作る。
+  - innerHTML・eval・style 属性の文字列は使わない。SVG の属性は数と、数で組んだ d とクラスだけ。
+  本番から外しているところ：
+  - CSS をこの <style> にまとめて書いている（本番は /ui/app.css。CSP の style-src 'self'）。
+  - 動く点に el.style.offsetPath を使う（D8 は未決定。本番で使うなら svgEl と同じく 1 か所に閉じる）。
+  - 写すボタンの navigator.clipboard（本番は走査の SAFE に clipboard・writeText を足す。6.3）。
+
+  見た目の考え：棟梁の現場の図面。明るい側は木の色の紙に墨、暗い側は夜の墨に灯り。
+  藍＝上り（子 → 親）、紫＝下り（親 → 子）、柿＝人が動くこと。目立たせるのは関係図の 1 か所だけ。
 -->
 <style>
-:root{--bg:#fff;--fg:#1d1f23;--muted:#5d6470;--line:#d9dde3;--card:#f6f7f9;--accent:#2457c5;--up:#2457c5;--up-bg:#eef3fd;--down:#7a3fb8;--down-bg:#f5effc;--warn:#a65b00;--warn-bg:#fff4e0;--danger:#b3261e;--danger-bg:#fdecea;--ok:#1e7a3c;--ok-bg:#e6f4ea;--chip:#eceff3}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#15171b;--fg:#e6e8eb;--muted:#9aa3ae;--line:#30353d;--card:#1d2026;--accent:#7aa2ff;--up:#7aa2ff;--up-bg:#18223a;--down:#c39bf0;--down-bg:#251b33;--warn:#f0b35a;--warn-bg:#3a2a10;--danger:#ff8a80;--danger-bg:#3d1714;--ok:#7bd88f;--ok-bg:#16301f;--chip:#2a2e35}}
-:root[data-theme="dark"]{--bg:#15171b;--fg:#e6e8eb;--muted:#9aa3ae;--line:#30353d;--card:#1d2026;--accent:#7aa2ff;--up:#7aa2ff;--up-bg:#18223a;--down:#c39bf0;--down-bg:#251b33;--warn:#f0b35a;--warn-bg:#3a2a10;--danger:#ff8a80;--danger-bg:#3d1714;--ok:#7bd88f;--ok-bg:#16301f;--chip:#2a2e35}
+:root{
+  --paper:#f3efe6;--sheet:#fbf9f4;--ink:#22201c;--ink-2:#5b5650;--rule:#d8d0c0;--grid:#e7e0d1;
+  --ai:#2a4f8f;--ai-soft:#dfe7f4;--murasaki:#7b3f8c;--murasaki-soft:#efe2f2;
+  --kaki:#c95a00;--kaki-soft:#fbe6d2;--matsu:#2f6b45;--matsu-soft:#dcebdf;--shu:#a3261c;--shu-soft:#f7dfdb;
+  --on-strong:#fff;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --paper:#16181c;--sheet:#1e2126;--ink:#ebe6dc;--ink-2:#a39d93;--rule:#363a42;--grid:#23262c;
+  --ai:#86a8e8;--ai-soft:#1e2a40;--murasaki:#cf9ade;--murasaki-soft:#2e2134;
+  --kaki:#ff9a3c;--kaki-soft:#3b2614;--matsu:#7fc495;--matsu-soft:#18301f;--shu:#ff8c80;--shu-soft:#3d1b18;
+  --on-strong:#16181c;
+}}
+:root[data-theme="dark"]{
+  --paper:#16181c;--sheet:#1e2126;--ink:#ebe6dc;--ink-2:#a39d93;--rule:#363a42;--grid:#23262c;
+  --ai:#86a8e8;--ai-soft:#1e2a40;--murasaki:#cf9ade;--murasaki-soft:#2e2134;
+  --kaki:#ff9a3c;--kaki-soft:#3b2614;--matsu:#7fc495;--matsu-soft:#18301f;--shu:#ff8c80;--shu-soft:#3d1b18;
+  --on-strong:#16181c;
+}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.6 system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;transition:background .3s,color .3s}
-main{max-width:980px;margin:0 auto;padding:16px}
-header{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
-h1{font-size:18px;margin:0}h2{font-size:16px;margin:24px 0 8px}
-.conn{font-size:13px;color:var(--muted)}
-.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);margin-right:6px;animation:beat 2s ease-in-out infinite}
-.note{font-size:13px;color:var(--muted)}
-.tools{display:flex;gap:6px}
-button{font:inherit;font-size:14px;padding:5px 12px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg);cursor:pointer;transition:transform .12s,background .2s,box-shadow .2s}
-button:hover{box-shadow:0 1px 4px rgba(0,0,0,.15)}button:active{transform:scale(.96)}
-button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
-button.danger{border-color:var(--danger);color:var(--danger)}
-button.small{font-size:12px;padding:1px 8px}
+html{background:var(--paper)}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font:15px/1.75 "Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;
+  font-feature-settings:"palt";transition:background .4s,color .4s}
+.wrap{max-width:1040px;margin:0 auto;padding:0 16px 48px}
+:focus-visible{outline:3px solid var(--ai);outline-offset:2px;border-radius:4px}
+.num{font-variant-numeric:tabular-nums}
 
-/* --- いまあなたがすること --- */
-.todo{border:2px solid var(--warn);background:var(--warn-bg);border-radius:10px;padding:12px 16px;animation:glow 3s ease-in-out infinite}
-.todo h2{margin:0 0 8px;font-size:17px;display:flex;align-items:center;gap:8px}
-.badge{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;border-radius:13px;background:var(--warn);color:var(--bg);font-size:14px;animation:pop .6s cubic-bezier(.3,1.6,.5,1) both}
-.todo-item{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline;padding:8px 0;border-top:1px solid var(--line);animation:slideIn .45s ease-out both}
-.todo-item:first-of-type{border-top:none}
-.todo-item.leaving{animation:slideOut .4s ease-in both}
-.todo-what{flex:1 1 320px}
-.done-msg{color:var(--ok);animation:fadeUp .4s ease-out both}
-.chip{display:inline-block;font-size:12px;padding:0 8px;border-radius:10px;background:var(--chip);color:var(--fg);margin-right:4px}
-.chip.warn{background:var(--warn);color:var(--bg)}.chip.danger{background:var(--danger);color:var(--bg)}.chip.ok{background:var(--ok);color:var(--bg)}
-.chip.up{background:var(--up);color:var(--bg)}.chip.down{background:var(--down);color:var(--bg)}
-.cmd{display:flex;gap:6px;align-items:center;margin-top:4px}
-code{font-family:ui-monospace,Menlo,monospace;font-size:13px;background:var(--card);border:1px solid var(--line);border-radius:4px;padding:1px 6px;overflow-wrap:anywhere}
+/* 上の 1 行 */
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 0;border-bottom:1px solid var(--rule)}
+.top h1{font-size:17px;margin:0;font-weight:700;letter-spacing:.04em}
+.conn{font-size:13px;color:var(--ink-2);display:flex;align-items:center;gap:6px}
+.conn .dot{width:8px;height:8px;border-radius:50%;background:var(--matsu);animation:breathe 2.4s ease-in-out infinite}
+.top .tools{margin-left:auto;display:flex;gap:6px}
 
-/* --- カード --- */
-.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;animation:fadeUp .5s ease-out both;transition:box-shadow .3s,transform .3s}
-.card:hover{transform:translateY(-2px);box-shadow:0 4px 14px rgba(0,0,0,.12)}
-.card.needs{border-left:4px solid var(--warn)}
-.card.flash{animation:flashCard 1.6s ease-out}
-.card-title{font-weight:600;margin:0 0 4px}
-.meta{font-size:13px;color:var(--muted)}
-.id{font-size:11px;color:var(--muted);font-family:ui-monospace,Menlo,monospace}
-.state-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;background:var(--muted)}
-.state-dot.run{background:var(--ok);animation:beat 1.4s ease-in-out infinite}
-.state-dot.warn{background:var(--warn);animation:beat .9s ease-in-out infinite}
-.entry{border-top:1px solid var(--line);padding:6px 0;font-size:14px}
-.entry.new{animation:newEntry 2.4s ease-out}
-.entry .when{font-size:12px;color:var(--muted)}
-.dir{font-size:11px;margin-left:4px}.dir.up{color:var(--up)}.dir.down{color:var(--down)}
-details>summary{cursor:pointer;color:var(--accent);font-size:13px;list-style:none}
-details>summary::before{content:"▸";display:inline-block;margin-right:4px;transition:transform .2s}
+button{font:inherit;font-size:14px;line-height:1.4;padding:6px 14px;border-radius:999px;border:1px solid var(--rule);
+  background:var(--sheet);color:var(--ink);cursor:pointer;transition:transform .12s,background .2s,border-color .2s}
+button:hover{border-color:var(--ink-2)}
+button:active{transform:scale(.95)}
+button.go{background:var(--kaki);border-color:var(--kaki);color:var(--on-strong);font-weight:700}
+button.quiet{background:transparent}
+button.sm{font-size:12px;padding:2px 10px}
+button.done{background:var(--matsu);border-color:var(--matsu);color:var(--on-strong)}
+
+/* いまあなたがすること */
+.now{margin:24px 0 8px;display:grid;grid-template-columns:auto 1fr;gap:4px 18px;align-items:end}
+.now .count{grid-row:span 2;font-size:64px;line-height:1;font-weight:800;color:var(--kaki);min-width:1.2ch;text-align:center}
+.now .count.bump{animation:bump .6s cubic-bezier(.3,1.6,.5,1)}
+.now h2{margin:0;font-size:22px}
+.now p{margin:0;color:var(--ink-2);font-size:14px}
+.todo{list-style:none;margin:16px 0 0;padding:0;display:grid;gap:10px}
+.task{background:var(--sheet);border:1px solid var(--rule);border-left:5px solid var(--kaki);border-radius:4px 12px 12px 4px;
+  padding:12px 16px;display:grid;gap:6px;transition:opacity .4s,transform .4s,max-height .5s,padding .5s,margin .5s}
+.task.leave{opacity:0;transform:translateX(24px)}
+.task .who{font-size:13px;color:var(--ink-2)}
+.task .who b{color:var(--ink);font-weight:700}
+.task .ask{font-size:16px;font-weight:700}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.cmd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:var(--paper);border:1px dashed var(--rule);border-radius:8px;padding:6px 10px}
+code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word-break:break-all}
+.empty{padding:16px;border:1px dashed var(--rule);border-radius:12px;color:var(--ink-2);background:var(--sheet)}
+
+/* 関係図 */
+.sec{margin-top:36px}
+.sec>h2{font-size:18px;margin:0 0 4px}
+.sec>p.lead{margin:0 0 12px;color:var(--ink-2);font-size:14px}
+.board{position:relative;background:var(--sheet);border:1px solid var(--rule);border-radius:14px;overflow-x:auto;overflow-y:hidden}
+.board svg{display:block;width:100%;min-width:760px;height:auto;touch-action:none}
+.legend{position:sticky;left:0}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 14px;border-top:1px solid var(--rule);font-size:13px;color:var(--ink-2)}
+.legend span::before{content:"";display:inline-block;width:22px;height:0;border-top:3px solid currentColor;vertical-align:middle;margin-right:6px}
+.legend .u{color:var(--ai)}.legend .d{color:var(--murasaki)}.legend .h{color:var(--kaki)}
+.legend .p::before{border-top-style:dotted;border-top-width:2px}
+.zoom{position:absolute;right:10px;top:10px;display:flex;gap:4px}
+.zoom button{width:34px;height:34px;padding:0;border-radius:50%;font-size:18px;background:var(--sheet)}
+.zoom button.fit{width:auto;padding:0 12px;border-radius:999px;font-size:13px}
+
+.gridline{stroke:var(--grid);stroke-width:1}
+.band-up{fill:var(--ai-soft);opacity:.55}.band-down{fill:var(--murasaki-soft);opacity:.55}
+.band-label{font-size:13px;font-weight:700}.band-label.u{fill:var(--ai)}.band-label.d{fill:var(--murasaki)}
+.kin{fill:none;stroke:var(--ink-2);stroke-width:1.5;stroke-dasharray:2 5;opacity:.7}
+
+.wire{fill:none;stroke-linecap:round}
+.wire.base{stroke-width:2.5;opacity:.35;stroke-dasharray:1;stroke-dashoffset:1;animation:draw 1.4s ease-out forwards}
+.wire.flow{stroke-width:2.5;stroke-dasharray:6 12;animation:flow 1.6s linear infinite;opacity:0;animation-delay:1.2s}
+.wire.flow.on{opacity:1;transition:opacity .4s}
+.up{stroke:var(--ai)}.down{stroke:var(--murasaki)}
+.human{stroke:var(--kaki)!important}
+.wire.base.human{stroke-width:4;opacity:.5}
+.wire.flow.human{stroke-width:4;stroke-dasharray:10 8;animation-duration:.7s}
+.wire.dim{opacity:.08!important}
+.wire.hot{stroke-width:4}
+.mlabel{font-size:12px;opacity:0;animation:fadein .5s ease-out forwards}
+.mlabel .k{font-weight:700}
+.mlabel.u{fill:var(--ai)}.mlabel.d{fill:var(--murasaki)}.mlabel.h{fill:var(--kaki)}
+.mlabel.dim{opacity:.15!important}
+.pip{position:absolute;left:0;top:0;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;pointer-events:none;
+  offset-rotate:0deg;animation:travel 2.6s cubic-bezier(.45,0,.55,1) infinite}
+.pip.u{background:var(--ai)}.pip.d{background:var(--murasaki)}.pip.h{background:var(--kaki);width:13px;height:13px;animation-duration:1.4s;box-shadow:0 0 0 4px var(--kaki-soft)}
+
+.node{cursor:pointer;transition:transform .25s}
+.node rect.box{fill:var(--sheet);stroke:var(--rule);stroke-width:1.5;transition:stroke .2s}
+.node:hover rect.box,.node:focus-visible rect.box,.node.hot rect.box{stroke:var(--ink)}
+.node:hover,.node.hot{transform:translateY(-3px)}
+.node.need rect.box{stroke:var(--kaki);stroke-width:2.5}
+.node .halo{fill:none;stroke:var(--kaki);stroke-width:2;opacity:0}
+.node.need .halo{animation:halo 1.8s ease-out infinite}
+.node .ttl{font-size:13.5px;font-weight:700;fill:var(--ink)}
+.node .sub{font-size:11.5px;fill:var(--ink-2)}
+.node .badge{fill:var(--kaki)}
+.node .badge-t{font-size:12px;font-weight:800;fill:var(--on-strong)}
+.node .st{font-size:11.5px;font-weight:700}
+.st-run{fill:var(--matsu)}.st-wait{fill:var(--kaki)}.st-done{fill:var(--ink-2)}.st-stall{fill:var(--shu)}
+.port{stroke:var(--sheet);stroke-width:2}
+.port.u{fill:var(--ai)}.port.d{fill:var(--murasaki)}
+
+/* 作業ごとのようす */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.card{background:var(--sheet);border:1px solid var(--rule);border-radius:12px;padding:14px 16px;display:grid;gap:8px;align-content:start;
+  scroll-margin-top:16px;transition:box-shadow .3s,border-color .3s}
+.card.flash{animation:flash 1.6s ease-out}
+.card.need{border-color:var(--kaki)}
+.card h3{margin:0;font-size:15.5px;line-height:1.5}
+.meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12.5px;color:var(--ink-2)}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:0 8px;border-radius:999px;line-height:1.8}
+.chip.run{background:var(--matsu-soft);color:var(--matsu)}
+.chip.wait{background:var(--kaki-soft);color:var(--kaki)}
+.chip.done{background:var(--grid);color:var(--ink-2)}
+.chip.stall{background:var(--shu-soft);color:var(--shu)}
+.chip.run::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor;animation:breathe 1.6s infinite}
+.spark{display:block;width:100%;height:34px}
+.spark .bar{transform-box:fill-box;transform-origin:bottom;animation:grow .7s cubic-bezier(.2,.9,.3,1.2) both}
+.spark .bar.u{fill:var(--ai)}.spark .bar.d{fill:var(--murasaki)}.spark .bar.h{fill:var(--kaki)}
+.spark .axis{stroke:var(--rule)}
+.flowlist{list-style:none;margin:0;padding:0;display:grid;gap:4px;font-size:13.5px}
+.flowlist li{display:grid;grid-template-columns:20px 1fr auto;gap:6px;align-items:start}
+.flowlist .ar{font-weight:800;text-align:center}
+.flowlist .ar.u{color:var(--ai)}.flowlist .ar.d{color:var(--murasaki)}.flowlist .ar.h{color:var(--kaki)}
+.flowlist .t{color:var(--ink-2);font-size:12px;white-space:nowrap}
+details>summary{cursor:pointer;font-size:13px;color:var(--ink-2);list-style:none;display:flex;align-items:center;gap:6px}
+details>summary::-webkit-details-marker{display:none}
+details>summary::before{content:"";width:0;height:0;border:5px solid transparent;border-left:7px solid currentColor;transition:transform .2s;transform-origin:3px 5px}
 details[open]>summary::before{transform:rotate(90deg)}
-details[open]>:not(summary){animation:fadeUp .3s ease-out both}
-.actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
-.desc{font-size:12px;color:var(--muted)}
-.irreversible{font-size:12px;color:var(--danger)}
-.blocked{background:var(--danger-bg);border-radius:6px;padding:8px;margin:6px 0}
-.admin{border:1px solid var(--line);border-radius:10px;padding:8px 16px;margin-top:24px}
-.admin>summary{font-size:16px;font-weight:600;color:var(--fg)}
-.callout{font-size:12px;color:var(--muted);border-left:3px solid var(--line);padding-left:8px;margin:4px 0}
+details[open]>:not(summary){animation:open .3s ease-out both}
+.folded{border-top:1px dashed var(--rule);padding-top:6px}
 
-/* --- 関係図 --- */
-.graph{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px;overflow-x:auto}
-.graph svg{display:block;min-width:760px;width:100%;height:auto}
-.lane-up{fill:var(--up-bg)}.lane-down{fill:var(--down-bg)}
-.lane-label{font-size:12px;font-weight:600}.lane-label.up{fill:var(--up)}.lane-label.down{fill:var(--down)}
-.g-node{cursor:pointer}
-.g-node rect{fill:var(--bg);stroke:var(--line);stroke-width:1.5;transition:stroke .2s,transform .2s}
-.g-node:hover rect{stroke:var(--accent);stroke-width:2.5}
-.g-node.root rect{stroke:var(--fg)}
-.g-node.warn rect.ring{fill:none;stroke:var(--warn);stroke-width:2.5;transform-box:fill-box;transform-origin:center;animation:ring 1.8s ease-out infinite}
-.g-node.warn rect.body{stroke:var(--warn);stroke-width:2.5}
-.g-node text{fill:var(--fg);font-size:13px;pointer-events:none}.g-node text.sub{fill:var(--muted);font-size:11px}
-.g-tree{stroke:var(--muted);stroke-width:1.2;fill:none;stroke-dasharray:2 3;opacity:.7}
-.msg{fill:none;stroke-width:2;stroke-dasharray:7 7;animation:flow 1.2s linear infinite;transition:opacity .25s}
-.msg.up{stroke:var(--up)}.msg.down{stroke:var(--down)}
-.msg.warn{stroke:var(--warn);stroke-width:2.6;animation-duration:.7s}
-.msg.draw{animation:draw 1.2s ease-out both,flow 1.2s linear 1.2s infinite}
-.m-label{font-size:11px;transition:opacity .25s}.m-label.up{fill:var(--up)}.m-label.down{fill:var(--down)}.m-label.warn{fill:var(--warn);font-weight:600}
-.packet.up{fill:var(--up)}.packet.down{fill:var(--down)}.packet.warn{fill:var(--warn)}
-svg.focus .msg,svg.focus .m-label,svg.focus .packet{opacity:.12}
-svg.focus .on{opacity:1}
-.legend{font-size:12px;color:var(--muted);margin-top:4px;display:flex;flex-wrap:wrap;gap:12px}
-.sw{display:inline-block;width:22px;height:0;border-top:2px dashed;vertical-align:middle;margin-right:4px}
-.sw.up{border-color:var(--up)}.sw.down{border-color:var(--down)}.sw.warn{border-color:var(--warn)}
+/* 管理（取り消せない操作） */
+.admin{margin-top:40px;border:2px solid var(--shu);border-radius:14px;padding:4px 16px;background:var(--sheet)}
+.admin>summary{font-size:16px;font-weight:700;color:var(--shu);padding:10px 0}
+.admin .warn{margin:0 0 12px;font-size:14px;color:var(--shu);background:var(--shu-soft);border-radius:8px;padding:8px 12px}
+.admin .op{display:grid;gap:4px;padding:10px 0;border-top:1px solid var(--rule)}
+.admin .op p{margin:0;font-size:13px;color:var(--ink-2)}
+button.danger{border-color:var(--shu);color:var(--shu);background:transparent}
+button.danger::before{content:"⚠ "}
+footer{margin-top:32px;font-size:12px;color:var(--ink-2)}
 
-/* --- 動き --- */
-@keyframes flow{to{stroke-dashoffset:-28}}
-@keyframes draw{from{stroke-dasharray:600 600;stroke-dashoffset:600}to{stroke-dasharray:600 600;stroke-dashoffset:0}}
-@keyframes ring{0%{transform:scale(1);opacity:.9}100%{transform:scale(1.18,1.5);opacity:0}}
-@keyframes beat{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.5);opacity:.55}}
-@keyframes glow{0%,100%{box-shadow:0 0 0 0 rgba(240,160,40,0)}50%{box-shadow:0 0 0 6px rgba(240,160,40,.18)}}
-@keyframes pop{0%{transform:scale(.3)}100%{transform:scale(1)}}
-@keyframes slideIn{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:none}}
-@keyframes slideOut{to{opacity:0;transform:translateX(30px);height:0;padding:0}}
-@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-@keyframes newEntry{0%{background:var(--warn-bg)}100%{background:transparent}}
-@keyframes flashCard{0%{box-shadow:0 0 0 4px var(--accent)}100%{box-shadow:0 0 0 0 transparent}}
-.still *,.still *::before{animation:none!important;transition:none!important}
-@media (prefers-reduced-motion:reduce){*,*::before{animation:none!important;transition:none!important}}
+/* 動き */
+@keyframes breathe{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes bump{0%{transform:scale(.6)}100%{transform:scale(1)}}
+@keyframes draw{to{stroke-dashoffset:0}}
+@keyframes flow{to{stroke-dashoffset:-18}}
+@keyframes fadein{to{opacity:1}}
+@keyframes travel{0%{offset-distance:0%;opacity:0}10%{opacity:1}90%{opacity:1}100%{offset-distance:100%;opacity:0}}
+@keyframes halo{0%{opacity:.9;stroke-width:2}100%{opacity:0;stroke-width:14}}
+@keyframes grow{from{transform:scaleY(0)}}
+@keyframes flash{0%{box-shadow:0 0 0 0 var(--kaki)}30%{box-shadow:0 0 0 6px var(--kaki-soft)}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes open{from{opacity:0;transform:translateY(-4px)}}
+
+.still *,.still *::before{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition:none!important}
+.still .pip{display:none}
+@media (prefers-reduced-motion:reduce){
+  *,*::before{animation-duration:0s!important;animation-delay:0s!important;animation-iteration-count:1!important;transition:none!important}
+  .pip{display:none}
+}
+@media (max-width:640px){
+  .now .count{font-size:48px}
+  .now h2{font-size:19px}
+  .top .tools{margin-left:0}
+}
 </style>
 </head>
 <body>
-<header>
-  <h1>touryou 状態画面 <span class="note">（見本・値は作り物）</span></h1>
-  <span class="conn"><span class="dot"></span>つながっています（更新は自動）<span class="note">・接続の作りは #88 で変わる</span></span>
-  <span class="tools"><button id="motion" type="button">動きを止める</button><button id="theme" type="button">明暗を切り替える</button></span>
-</header>
-<main>
-  <section class="todo" aria-labelledby="todo-h">
-    <h2 id="todo-h">いまあなたがすること <span class="badge" id="todo-count"></span></h2>
-    <div id="todo"></div>
-  </section>
-
-  <h2>関係図（やり取りの向き）</h2>
-  <div class="graph" role="img" aria-label="統合と子の関係と、上りと下りのメッセージの図">
-    <svg id="graph" viewBox="0 0 900 430" xmlns="http://www.w3.org/2000/svg">
-      <rect class="lane-up" x="0" y="0" width="900" height="182" rx="8"/>
-      <rect class="lane-down" x="0" y="248" width="900" height="182" rx="8"/>
-      <text class="lane-label up" x="12" y="20">▲ 上り（子 → 親）：報告・判断の求め・頼み</text>
-      <text class="lane-label down" x="12" y="420">▼ 下り（親 → 子）：答え・指示・依頼</text>
-
-      <!-- 親子（点線・細）。ノードの並びの真ん中を通す -->
-      <path class="g-tree" d="M180 215 L200 215"/>
-      <path class="g-tree" d="M340 215 L380 215"/>
-      <path class="g-tree" d="M520 215 L560 215"/>
-      <path class="g-tree" d="M520 226 C600 238 680 238 740 226"/>
-
-      <!-- 上り（上の帯） -->
-      <path id="u-a" class="msg up warn draw" data-a="a" data-b="p" d="M630 190 Q550 70 470 190"/>
-      <text class="m-label warn" data-a="a" data-b="p" x="502" y="118">判断を求む · 4 分前</text>
-      <path id="u-b" class="msg up warn draw" data-a="b" data-b="p" d="M270 190 Q350 70 430 190"/>
-      <text class="m-label warn" data-a="b" data-b="p" x="296" y="118">止まっているかも · 2 分前</text>
-      <path id="u-c" class="msg up draw" data-a="c" data-b="p" d="M810 190 Q650 0 490 190"/>
-      <text class="m-label up" data-a="c" data-b="p" x="610" y="80">済んだ · 1 時間前</text>
-      <path id="u-d" class="msg up draw" data-a="d" data-b="b" d="M110 190 Q190 110 255 190"/>
-      <text class="m-label up" data-a="d" data-b="b" x="128" y="140">進み具合 · 1 分前</text>
-
-      <!-- 下り（下の帯） -->
-      <path id="d-a" class="msg down draw" data-a="p" data-b="a" d="M470 240 Q550 350 630 240"/>
-      <text class="m-label down" data-a="p" data-b="a" x="508" y="316">指示 · 20 分前</text>
-      <path id="d-b" class="msg down draw" data-a="p" data-b="b" d="M430 240 Q350 350 270 240"/>
-      <text class="m-label down" data-a="p" data-b="b" x="296" y="316">依頼 · 30 分前</text>
-      <path id="d-d" class="msg down draw" data-a="b" data-b="d" d="M255 240 Q190 320 110 240"/>
-      <text class="m-label down" data-a="b" data-b="d" x="132" y="300">依頼 · 25 分前</text>
-
-      <!-- 動く点（向きが分かる） -->
-      <circle class="packet up warn" data-a="a" data-b="p" r="5"><animateMotion dur="1.6s" repeatCount="indefinite" path="M630 190 Q550 70 470 190"/></circle>
-      <circle class="packet up warn" data-a="b" data-b="p" r="5"><animateMotion dur="1.6s" repeatCount="indefinite" path="M270 190 Q350 70 430 190"/></circle>
-      <circle class="packet up" data-a="c" data-b="p" r="4"><animateMotion dur="3.2s" repeatCount="indefinite" path="M810 190 Q650 0 490 190"/></circle>
-      <circle class="packet up" data-a="d" data-b="b" r="4"><animateMotion dur="2.2s" repeatCount="indefinite" path="M110 190 Q190 110 255 190"/></circle>
-      <circle class="packet down" data-a="p" data-b="a" r="4"><animateMotion dur="2.6s" repeatCount="indefinite" path="M470 240 Q550 350 630 240"/></circle>
-      <circle class="packet down" data-a="p" data-b="b" r="4"><animateMotion dur="2.6s" repeatCount="indefinite" path="M430 240 Q350 350 270 240"/></circle>
-      <circle class="packet down" data-a="b" data-b="d" r="4"><animateMotion dur="2.2s" repeatCount="indefinite" path="M255 240 Q190 320 110 240"/></circle>
-
-      <!-- ノード（真ん中の並び） -->
-      <g class="g-node" data-node="d" data-card="card-d"><rect class="body" x="40" y="190" width="140" height="50" rx="8"/><text x="50" y="210">試験を足す</text><text class="sub" x="50" y="228">孫（左の子の下）· 実行中</text></g>
-      <g class="g-node warn" data-node="b" data-card="card-b"><rect class="ring" x="200" y="190" width="140" height="50" rx="8"/><rect class="body" x="200" y="190" width="140" height="50" rx="8"/><text x="210" y="210">設定の読み込み</text><text class="sub" x="210" y="228">子 · 止まっているかも</text></g>
-      <g class="g-node root" data-node="p"><rect class="body" x="380" y="190" width="140" height="50" rx="8"/><text x="390" y="210">統合</text><text class="sub" x="390" y="228">親 · 実行中</text></g>
-      <g class="g-node warn" data-node="a" data-card="card-a"><rect class="ring" x="560" y="190" width="140" height="50" rx="8"/><rect class="body" x="560" y="190" width="140" height="50" rx="8"/><text x="570" y="210">ログの集計</text><text class="sub" x="570" y="228">子 · 判断待ち</text></g>
-      <g class="g-node" data-node="c" data-card="card-c"><rect class="body" x="740" y="190" width="140" height="50" rx="8"/><text x="750" y="210">文書の誤字</text><text class="sub" x="750" y="228">子 · 済んだ</text></g>
-    </svg>
-  </div>
-  <div class="legend">
-    <span><span class="sw up"></span>上り（子 → 親）は上の帯</span>
-    <span><span class="sw down"></span>下り（親 → 子）は下の帯</span>
-    <span><span class="sw warn"></span>オレンジ＝人の操作が要る（速く流れる・枠が脈打つ）</span>
-    <span>細い点線＝親子。箱に指を置くと、その子のやり取りだけが浮かぶ。押すとカードへ移る</span>
-  </div>
-
-  <h2>作業ごとのようす</h2>
-  <p class="note">子 1 つを 1 枚にまとめています。人の操作が要る子を先に出します。項目の ▲ は上り（子から）、▼ は下り（子へ）。</p>
-  <div class="cards" id="cards"></div>
-  <details style="margin-top:12px"><summary>済んだ作業（2 件）</summary><div class="cards" id="done-cards" style="margin-top:8px"></div></details>
-
-  <details class="admin">
-    <summary>管理（まれに使う操作）</summary>
-    <p class="note">ふだんは使いません。ここの操作の多くは取り消せません。押すと、対象の ID を打ち込む確認が出ます。</p>
-    <h2>アーカイブした作業の削除</h2>
-    <div class="card">
-      <p class="card-title">先週の調べもの（アーカイブ済み・子 3 つ）</p>
-      <p class="meta">自動で消える日：12 月 1 日（あと 14 日）</p>
-      <div class="actions">
-        <button type="button">自動で消すのを止めておく…</button>
-        <button type="button" class="danger">いますぐ消す…</button>
-      </div>
-      <p class="irreversible">「いますぐ消す」は取り消せません。消したという記録（削除の記録）は残ります。</p>
-      <details><summary>くわしい選び方</summary>
-        <div class="actions"><button type="button">止めておく：30 日</button><button type="button">止めておく：90 日</button><button type="button">止めておく：日数を決める…</button><button type="button" class="danger">記録も残さずに消す…</button></div>
-      </details>
-    </div>
-    <h2>捨てた作業の保管</h2>
-    <div class="card">
-      <p class="meta">捨てた子の成果は、しばらく保管しています。必要ならブランチに取り出せます。</p>
-      <div class="actions"><button type="button">保管の一覧を見る</button></div>
-    </div>
-  </details>
-</main>
+<div class="wrap" id="app"></div>
 <script>
-(function () {
-  'use strict';
-  function el(tag, cls, text) {
-    var e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (text !== undefined) e.textContent = text;
-    return e;
-  }
-  var NOW = Date.now();
-  function ago(min) {
-    if (min < 1) return 'いま';
-    if (min < 60) return min + ' 分前';
-    if (min < 1440) return Math.floor(min / 60) + ' 時間前';
-    return Math.floor(min / 1440) + ' 日前';
-  }
-  function clock(min) {
-    var d = new Date(NOW - min * 60000);
-    return (d.getMonth() + 1) + '/' + d.getDate() + ' ' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
-  }
-  function copyButton(text) {
-    var b = el('button', 'small', '写す');
-    b.type = 'button';
-    b.addEventListener('click', function () {
-      if (navigator.clipboard) navigator.clipboard.writeText(text).then(function () { b.textContent = '写しました'; }, function () { b.textContent = '写せません'; });
+"use strict";
+// ---- 作り物の値（表示モデルの形。research.md 1.3・D3） ----
+const NOW = Date.parse("2026-11-17T10:00:00Z");
+const min = (m) => new Date(NOW - m * 60000).toISOString();
+const VIEW = {
+  connection: { ok: true, text: "つながっています" },
+  nodes: [
+    { id: "n-root", role: "統合", parentId: null, state: "run", title: "見本の店の注文画面を作り直し、支払いの流れを分かりやすくする", lastActivityAt: min(1), needsHuman: 0 },
+    { id: "n-a1", role: "作業", parentId: "n-root", state: "wait", title: "支払い方法の選び方の画面を作る。カードと振り込みの二つを並べ、違いを短く書く", lastActivityAt: min(3), needsHuman: 1 },
+    { id: "n-b2", role: "統合", parentId: "n-root", state: "run", title: "注文の確認のメールの文を見直し、送る時刻をそろえる", lastActivityAt: min(6), needsHuman: 0 },
+    { id: "n-b3", role: "作業", parentId: "n-b2", state: "stall", title: "メールの文の雛形を三つ作り、試験の宛先で送って確かめる", lastActivityAt: min(42), needsHuman: 1, cli: true },
+    { id: "n-c4", role: "作業", parentId: "n-root", state: "done", title: "注文の一覧の並び順を、新しい順にする", lastActivityAt: min(55), needsHuman: 0 }
+  ],
+  // dir: up（子 → 親）・down（親 → 子）。human：人の操作が要る
+  messages: [
+    { from: "n-a1", to: "n-root", dir: "up", kind: "判断を求める", at: min(3), human: true, text: "振り込みの期限の文を「3 日以内」と「7 日以内」のどちらにしますか。" },
+    { from: "n-root", to: "n-a1", dir: "down", kind: "頼み", at: min(20), text: "支払い方法の選び方の画面を作ってください。" },
+    { from: "n-b2", to: "n-root", dir: "up", kind: "進み", at: min(6), text: "雛形の二つめまでできました。" },
+    { from: "n-root", to: "n-b2", dir: "down", kind: "頼み", at: min(30), text: "確認のメールを見直してください。" },
+    { from: "n-b3", to: "n-b2", dir: "up", kind: "止まっているかも", at: min(42), human: true, text: "42 分、動きがありません。" },
+    { from: "n-b2", to: "n-b3", dir: "down", kind: "答え", at: min(44), text: "宛先は試験用のものだけにしてください。" },
+    { from: "n-c4", to: "n-root", dir: "up", kind: "済んだ", at: min(55), text: "新しい順に並べ替えました。試験は通っています。" },
+    { from: "n-root", to: "n-c4", dir: "down", kind: "頼み", at: min(70), text: "一覧の並び順を直してください。" }
+  ],
+  // 人が答える／確かめること
+  todo: [
+    { id: "t1", nodeId: "n-a1", type: "decision", ask: "振り込みの期限の文を、どちらにしますか。", options: ["3 日以内", "7 日以内"] },
+    { id: "t2", nodeId: "n-b3", type: "stall", ask: "42 分、動きがありません。止まっていないか、子の画面を開いて確かめてください。" }
+  ],
+  // 済んだ子の受信箱（たたむだけ。D6）
+  doneInbox: { "n-c4": ["済んだ：新しい順に並べ替えました", "進み：試験を足しました", "進み：一覧の型を直しました"] }
+};
+
+// ---- 描く道具（本番の el() と svgEl() に合わせる） ----
+const TAGS = new Set(["div","span","p","button","h1","h2","h3","ul","li","b","code","details","summary","section","header","footer"]);
+function el(tag, cls, text) {
+  if (!TAGS.has(tag)) throw new Error("tag");
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = String(text);
+  return e;
+}
+const SVG_TAGS = new Set(["svg","g","path","rect","circle","text","tspan","title","line"]);
+const SVG_ATTRS = new Set(["class","d","x","y","x1","y1","x2","y2","cx","cy","r","width","height","rx","viewBox","pathLength","tabindex","role","aria-label","text-anchor"]);
+function svgEl(tag, attrs, text) {           // SVG を作るのは、ここ 1 か所だけ
+  if (!SVG_TAGS.has(tag)) throw new Error("svg tag");
+  const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const k in attrs) { if (!SVG_ATTRS.has(k)) throw new Error("svg attr"); e.setAttribute(k, String(attrs[k])); }
+  if (text !== undefined) e.textContent = String(text);
+  return e;
+}
+const ago = (iso) => { const m = Math.round((NOW - Date.parse(iso)) / 60000); return m < 1 ? "いま" : m < 60 ? m + " 分前" : Math.floor(m / 60) + " 時間前"; };
+const clock = (iso) => { const d = new Date(Date.parse(iso) + 9 * 3600000); return String(d.getUTCHours()).padStart(2,"0") + ":" + String(d.getUTCMinutes()).padStart(2,"0"); };
+const STATE = { run: ["動いています", "run"], wait: ["あなたの答え待ち", "wait"], done: ["済んだ", "done"], stall: ["止まっているかも", "stall"] };
+const byId = Object.fromEntries(VIEW.nodes.map(n => [n.id, n]));
+const short = (s, n) => s.length > n ? s.slice(0, n - 1) + "…" : s;
+
+const app = document.getElementById("app");
+
+// ---- 上の 1 行 ----
+const bar0 = el("header", "top");
+bar0.append(el("h1", "", "touryou 状態画面"));
+const conn = el("span", "conn");
+conn.append(el("span", "dot"), el("span", "", VIEW.connection.text + "（入り方は #88 で変わります）"));
+bar0.append(conn);
+const tools = el("div", "tools");
+const stillBtn = el("button", "quiet sm", "動きを止める");
+stillBtn.setAttribute("aria-pressed", "false");
+stillBtn.addEventListener("click", () => {
+  const on = document.documentElement.classList.toggle("still");
+  stillBtn.textContent = on ? "動きを戻す" : "動きを止める";
+  stillBtn.setAttribute("aria-pressed", String(on));
+});
+const themeBtn = el("button", "quiet sm", "明るさを切り替える");
+themeBtn.addEventListener("click", () => {
+  const r = document.documentElement;
+  const dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  r.dataset.theme = dark ? "light" : "dark";
+});
+tools.append(stillBtn, themeBtn);
+bar0.append(tools);
+app.append(bar0);
+
+// ---- いまあなたがすること ----
+const nowSec = el("section", "now");
+const countEl = el("div", "count num", VIEW.todo.length);
+countEl.setAttribute("aria-hidden", "true");
+const nowH = el("h2", "", "");
+const nowP = el("p", "", "答えると、その子の作業が先へ進みます。");
+nowSec.append(countEl, nowH, nowP);
+const todoList = el("ul", "todo");
+app.append(nowSec, todoList);
+function updateCount() {
+  const n = todoList.children.length;
+  countEl.textContent = n;
+  countEl.classList.remove("bump"); void countEl.offsetWidth; countEl.classList.add("bump");
+  nowH.textContent = n ? "あなたの答えを待っている作業が " + n + " 件あります" : "いま、あなたがすることはありません";
+  nowP.textContent = n ? "答えると、その子の作業が先へ進みます。" : "新しい問いが来ると、ここに出ます。";
+  if (!n && !todoList.nextElementSibling?.classList.contains("empty")) todoList.after(el("p", "empty", "子は自分で進めています。下の図で、やり取りのようすを見られます。"));
+}
+function finish(li, msg) {
+  const row = li.querySelector(".row");
+  row.replaceChildren(el("span", "chip run", msg));
+  setTimeout(() => { li.classList.add("leave"); setTimeout(() => { li.remove(); updateCount(); }, 420); }, 900);
+}
+for (const t of VIEW.todo) {
+  const n = byId[t.nodeId];
+  const li = el("li", "task");
+  const who = el("div", "who"); who.append(el("b", "", short(n.title, 40)), document.createTextNode("（" + n.role + "）から ・ " + ago(n.lastActivityAt)));
+  li.append(who, el("div", "ask", t.ask));
+  const row = el("div", "row");
+  if (t.type === "decision") {
+    for (const o of t.options) { const b = el("button", "go", o + " にする"); b.addEventListener("click", () => finish(li, "「" + o + "」と答えました")); row.append(b); }
+    const d = el("details"); d.append(el("summary", "", "自分の言葉で答える"), el("p", "", "（本番は、ここに入力欄が出ます）"));
+    li.append(row, d);
+  } else {
+    const cmd = el("div", "cmd");
+    cmd.append(el("span", "", "端末に貼って、子の画面を開きます："));
+    const code = el("code", "", "claude attach " + n.id);
+    const copy = el("button", "sm", "写す");
+    copy.addEventListener("click", () => {
+      const done = () => { copy.textContent = "写しました"; copy.classList.add("done"); setTimeout(() => { copy.textContent = "写す"; copy.classList.remove("done"); }, 1600); };
+      if (navigator.clipboard) navigator.clipboard.writeText(code.textContent).then(done, done); else done();
     });
-    return b;
+    cmd.append(code, copy);
+    const ok = el("button", "quiet", "確かめた");
+    ok.addEventListener("click", () => finish(li, "確かめた、と記しました"));
+    row.append(ok);
+    li.append(cmd, row);
   }
-  var KIND = { progress: '進み具合', done: '済んだ', violation: '止められた操作', info: '知らせ', decision: '判断を求む', stall: '止まっているかも', instruct: '指示', request: '依頼' };
-  // dir: up（子 → 親）か down（親 → 子）
-  var CHILDREN = [
-    { key: 'a', title: 'ログの集計を直す', role: '調べ役', state: '判断待ち', dot: 'warn', last: 4, id: 'n-sample-a1', needs: 2, entries: [
-      { kind: 'decision', dir: 'up', min: 4, text: '集計の単位を「日」と「時」のどちらにしますか。日にすると古い記録とそろいます。時にすると細かく見られますが、出力が長くなります。' },
-      { kind: 'violation', dir: 'up', min: 9, text: '書き込みが止められました：scripts/report.sh（作業の範囲の外）', blocked: true },
-      { kind: 'instruct', dir: 'down', min: 20, text: '集計の関数を分けてから、試験を足す。' }
-    ] },
-    { key: 'b', title: '設定の読み込みを調べる', role: '作業役', state: '止まっているかも', dot: 'warn', last: 27, id: 'n-sample-b2', needs: 1, entries: [
-      { kind: 'stall', dir: 'up', min: 2, text: '25 分、報告も道具の使用もありません。入力を待って止まっているかもしれません。', attach: true },
-      { kind: 'request', dir: 'down', min: 30, text: '設定の読み込みの順を調べる。' }
-    ] },
-    { key: 'd', title: '試験を足す（孫）', role: '作業役', state: '実行中', dot: 'run', last: 1, id: 'n-sample-c3', needs: 0, entries: [
-      { kind: 'progress', dir: 'up', min: 1, text: '境界の試験を 3 つ足した。' },
-      { kind: 'request', dir: 'down', min: 25, text: '読み込みの境界の試験を足す。' }
-    ] }
-  ];
-  var DONE = [
-    { key: 'c', title: '文書の誤字を直す', role: '作業役', state: '済んだ（受け入れ済み）', dot: '', last: 62, id: 'n-sample-d4', needs: 0, entries: [{ kind: 'done', dir: 'up', min: 62, text: '誤字を 4 か所直した。根拠：差分と試験の結果。' }] },
-    { key: 'e', title: '先週の調べもの', role: '調べ役', state: 'アーカイブ済み', dot: '', last: 4320, id: 'n-sample-e5', needs: 0, entries: [{ kind: 'info', dir: 'up', min: 4320, text: '前の日の知らせ（アーカイブした子のもの）。' }] }
-  ];
+  todoList.append(li);
+}
+updateCount();
 
-  // --- いまあなたがすること（答えると、行がすべって消え、数が減る） ---
-  var todo = document.getElementById('todo');
-  var count = document.getElementById('todo-count');
-  var left = 0;
-  function setCount(n) {
-    left = n;
-    count.textContent = String(n);
-    count.style.animation = 'none';
-    void count.offsetWidth;
-    count.style.animation = '';
-    if (n === 0) {
-      todo.appendChild(el('p', 'done-msg', 'いまはありません。子が動いているあいだ、ここは空のままです。'));
+// ---- 関係図（Rete.js R0 の見た目を SVG で示す） ----
+const g = el("section", "sec");
+g.append(el("h2", "", "やり取りの図"), el("p", "lead", "上の帯は子から親への報告、下の帯は親から子への頼み。オレンジの線が、あなたの答えを待っているやり取りです。箱を押すと、その作業の詳しいようすへ移ります。"));
+const board = el("div", "board");
+const W = 1040, H = 440, MID = 220, BW = 170, BH = 84;
+const svg = svgEl("svg", { viewBox: "0 0 " + W + " " + H, role: "img", "aria-label": "作業の関係とやり取りの図" });
+board.append(svg);
+// 横 1 列（深さ優先で親のすぐ隣に子。research.md 6.1 の layoutOf の形）
+const order = []; (function walk(id) { order.push(id); VIEW.nodes.filter(n => n.parentId === id).forEach(c => walk(c.id)); })("n-root");
+const GAP = (W - 40 - BW * order.length) / (order.length - 1);
+const pos = {}; order.forEach((id, i) => pos[id] = { x: 20 + i * (BW + GAP), y: MID - BH / 2 });
+const cx = (id) => pos[id].x + BW / 2;
+const world = svgEl("g", {});
+svg.append(world);
+for (let x = 0; x <= W; x += 40) world.append(svgEl("line", { class: "gridline", x1: x, y1: 0, x2: x, y2: H }));
+world.append(svgEl("rect", { class: "band-up", x: 0, y: 0, width: W, height: MID - BH / 2 - 6 }));
+world.append(svgEl("rect", { class: "band-down", x: 0, y: MID + BH / 2 + 6, width: W, height: H - MID - BH / 2 - 6 }));
+world.append(svgEl("text", { class: "band-label u", x: 14, y: 22 }, "上り　子 → 親（報告・問い）"));
+world.append(svgEl("text", { class: "band-label d", x: 14, y: H - 12 }, "下り　親 → 子（頼み・答え）"));
+// 親子のつながり（点線。真ん中の列）
+for (const n of VIEW.nodes) if (n.parentId) {
+  const a = pos[n.parentId], b = pos[n.id];
+  const x1 = a.x + BW, x2 = b.x;
+  if (x2 > x1) world.append(svgEl("path", { class: "kin", d: "M" + x1 + " " + MID + " H" + x2 }));
+}
+const wires = []; const pips = [];
+VIEW.messages.forEach((m, i) => {
+  const up = m.dir === "up";
+  const xa = cx(m.from) + (up ? -18 : 18), xb = cx(m.to) + (up ? 18 : -18);
+  const y0 = up ? MID - BH / 2 : MID + BH / 2;
+  const span = Math.abs(xb - xa);
+  const h = Math.min(150, 50 + span * 0.18);
+  const yc = up ? y0 - h * 2 : y0 + h * 2;               // 二次ベジェの制御点。頂点は y0 ∓ h
+  const d = "M" + xa + " " + y0 + " Q" + (xa + xb) / 2 + " " + yc + " " + xb + " " + y0;
+  const cls = (up ? "up" : "down") + (m.human ? " human" : "");
+  const base = svgEl("path", { class: "wire base " + cls, d, pathLength: 1 });
+  base.style.animationDelay = (i * 0.12) + "s";        // 本番は CSS の :nth-child で決める
+  const flow = svgEl("path", { class: "wire flow " + cls, d });
+  flow.append(svgEl("title", {}, m.kind + "：" + m.text));
+  world.append(base, flow);
+  setTimeout(() => flow.classList.add("on"), 1200 + i * 120);
+  const ax = (xa + xb) / 2, ay = up ? y0 - h - 8 : y0 + h + 18;
+  const lab = svgEl("text", { class: "mlabel " + (m.human ? "h" : up ? "u" : "d"), x: ax, y: ay, "text-anchor": "middle" });
+  lab.append(svgEl("tspan", { class: "k" }, m.kind), svgEl("tspan", {}, "　" + ago(m.at)));
+  lab.style.animationDelay = (0.8 + i * 0.12) + "s";
+  world.append(lab);
+  wires.push({ m, base, flow, lab });
+  pips.push({ d, cls: m.human ? "h" : up ? "u" : "d", delay: i * 0.33 });
+});
+// 箱
+for (const id of order) {
+  const n = byId[id], p = pos[id];
+  const node = svgEl("g", { class: "node" + (n.needsHuman ? " need" : ""), tabindex: 0, role: "button", "aria-label": n.title + "。" + STATE[n.state][0] });
+  node.dataset.id = id;
+  node.append(svgEl("rect", { class: "halo", x: p.x, y: p.y, width: BW, height: BH, rx: 12 }));
+  node.append(svgEl("rect", { class: "box", x: p.x, y: p.y, width: BW, height: BH, rx: 12 }));
+  node.append(svgEl("text", { class: "ttl", x: p.x + 12, y: p.y + 24 }, short(n.title, 11)));
+  node.append(svgEl("text", { class: "sub", x: p.x + 12, y: p.y + 44 }, n.role + "　" + ago(n.lastActivityAt)));
+  node.append(svgEl("text", { class: "st st-" + n.state, x: p.x + 12, y: p.y + 68 }, STATE[n.state][0]));
+  if (n.needsHuman) {
+    node.append(svgEl("circle", { class: "badge", cx: p.x + BW - 4, cy: p.y + 4, r: 12 }));
+    node.append(svgEl("text", { class: "badge-t", x: p.x + BW - 4, y: p.y + 8.5, "text-anchor": "middle" }, n.needsHuman));
+  }
+  // 出入口：上＝上り、下＝下り（Rete の socket にあたる）
+  node.append(svgEl("circle", { class: "port u", cx: p.x + BW / 2 - 18, cy: p.y, r: 5 }), svgEl("circle", { class: "port u", cx: p.x + BW / 2 + 18, cy: p.y, r: 5 }));
+  node.append(svgEl("circle", { class: "port d", cx: p.x + BW / 2 - 18, cy: p.y + BH, r: 5 }), svgEl("circle", { class: "port d", cx: p.x + BW / 2 + 18, cy: p.y + BH, r: 5 }));
+  node.append(svgEl("title", {}, n.title));
+  const hot = (on) => {
+    node.classList.toggle("hot", on);
+    for (const w of wires) {
+      const mine = w.m.from === id || w.m.to === id;
+      for (const e of [w.base, w.flow]) { e.classList.toggle("dim", on && !mine); e.classList.toggle("hot", on && mine); }
+      w.lab.classList.toggle("dim", on && !mine);
     }
-  }
-  function resolve(row) {
-    row.className = 'todo-item leaving';
-    setTimeout(function () { todo.removeChild(row); setCount(left - 1); }, 400);
-  }
-  var todos = [
-    { chip: '判断を求む', cls: 'warn', what: '「ログの集計を直す」が、集計の単位を聞いています。', act: function (box, row) {
-      var a = el('div', 'actions');
-      ['日にする', '時にする', '自由に答える…'].forEach(function (t, i) { var b = el('button', i === 0 ? 'primary' : '', t); b.type = 'button'; if (i < 2) b.addEventListener('click', function () { resolve(row); }); a.appendChild(b); });
-      box.appendChild(a);
-    } },
-    { chip: '範囲を広げる頼み', cls: 'danger', what: '「ログの集計を直す」が、scripts/report.sh への書き込みを頼んでいます。', act: function (box, row) {
-      var a = el('div', 'actions');
-      [['広げる（この 1 つだけ許す）…', 'primary'], ['断る（そのままにする）', ''], ['子に別の道を伝える…', '']].forEach(function (p, i) { var b = el('button', p[1], p[0]); b.type = 'button'; if (i === 1) b.addEventListener('click', function () { resolve(row); }); a.appendChild(b); });
-      box.appendChild(a);
-      box.appendChild(el('p', 'desc', '広げると、子はこの場所に書けるようになります。断ると、子には「範囲の外」と伝わり、子は別のやり方を考えます。'));
-    } },
-    { chip: '止まっているかも', cls: 'warn', what: '「設定の読み込みを調べる」が 25 分動いていません。子のセッションを開いて確かめてください。', act: function (box) {
-      var c = el('div', 'cmd');
-      var cmd = 'touryou attach n-sample-b2';
-      c.appendChild(el('code', '', cmd));
-      c.appendChild(copyButton(cmd));
-      box.appendChild(c);
-      box.appendChild(el('p', 'desc', '端末にこのコマンドを貼って開きます（コマンドの形は仮。実装の段で決める）。'));
-    } }
-  ];
-  todos.forEach(function (t, i) {
-    var row = el('div', 'todo-item');
-    row.style.animationDelay = (i * 0.12) + 's';
-    row.appendChild(el('span', 'chip ' + t.cls, t.chip));
-    var box = el('div', 'todo-what');
-    box.appendChild(el('div', '', t.what));
-    t.act(box, row);
-    row.appendChild(box);
-    todo.appendChild(row);
-  });
-  setCount(todos.length);
+  };
+  node.addEventListener("pointerenter", () => hot(true)); node.addEventListener("pointerleave", () => hot(false));
+  node.addEventListener("focus", () => hot(true)); node.addEventListener("blur", () => hot(false));
+  const go = () => { const c = document.getElementById("card-" + id); c.scrollIntoView({ behavior: document.documentElement.classList.contains("still") || matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" }); c.classList.remove("flash"); void c.offsetWidth; c.classList.add("flash"); };
+  node.addEventListener("click", go);
+  node.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+  world.append(node);
+}
+// 動く点（offset-path。D8 は未決定。図の座標と画面の座標を合わせるため、点の層を svg と同じ大きさに縮める）
+const pipLayer = el("div"); pipLayer.className = "piplayer";
+board.append(pipLayer);
+for (const p of pips) {
+  const dot = el("span", "pip " + p.cls);
+  dot.style.offsetPath = "path('" + p.d + "')";
+  dot.style.animationDelay = p.delay + "s";
+  pipLayer.append(dot);
+}
+// 拡大・移動（Rete の area の zoom・translate を見た目で示す）
+let vb = { x: 0, y: 0, w: W, h: H };
+const applyVB = () => {
+  svg.setAttribute("viewBox", vb.x + " " + vb.y + " " + vb.w + " " + vb.h);
+  const s = svg.clientWidth / vb.w;
+  pipLayer.style.transform = "scale(" + s + ") translate(" + (-vb.x) + "px," + (-vb.y) + "px)";
+};
+pipLayer.style.position = "absolute"; pipLayer.style.left = "0"; pipLayer.style.top = "0"; pipLayer.style.width = W + "px"; pipLayer.style.height = H + "px"; pipLayer.style.transformOrigin = "0 0"; pipLayer.style.pointerEvents = "none";
+const zoomBy = (f) => { const cxv = vb.x + vb.w / 2, cyv = vb.y + vb.h / 2; vb.w = Math.max(W / 4, Math.min(W, vb.w / f)); vb.h = vb.w * H / W; vb.x = Math.max(0, Math.min(W - vb.w, cxv - vb.w / 2)); vb.y = Math.max(0, Math.min(H - vb.h, cyv - vb.h / 2)); applyVB(); };
+const zoom = el("div", "zoom");
+const zi = el("button", "", "＋"), zo = el("button", "", "−"), zf = el("button", "fit", "全体を見る");
+zi.setAttribute("aria-label", "拡大する"); zo.setAttribute("aria-label", "縮める");
+zi.addEventListener("click", () => zoomBy(1.4)); zo.addEventListener("click", () => zoomBy(1 / 1.4));
+zf.addEventListener("click", () => { vb = { x: 0, y: 0, w: W, h: H }; applyVB(); });
+zoom.append(zi, zo, zf); board.append(zoom);
+let drag = null;
+svg.addEventListener("pointerdown", (e) => { if (e.target.closest(".node")) return; drag = { x: e.clientX, y: e.clientY, vx: vb.x, vy: vb.y }; svg.setPointerCapture(e.pointerId); });
+svg.addEventListener("pointermove", (e) => { if (!drag) return; const s = vb.w / svg.clientWidth; vb.x = Math.max(0, Math.min(W - vb.w, drag.vx - (e.clientX - drag.x) * s)); vb.y = Math.max(0, Math.min(H - vb.h, drag.vy - (e.clientY - drag.y) * s)); applyVB(); });
+svg.addEventListener("pointerup", () => { drag = null; });
+new ResizeObserver(applyVB).observe(svg);
+const legend = el("div", "legend");
+legend.append(el("span", "u", "上り：子 → 親"), el("span", "d", "下り：親 → 子"), el("span", "h", "あなたの答え待ち"), el("span", "p", "親子のつながり"));
+board.append(legend);
+g.append(board);
+app.append(g);
 
-  // --- 子のカード ---
-  function entryRow(e) {
-    var row = el('div', 'entry');
-    var head = el('div');
-    head.appendChild(el('span', 'chip' + (e.blocked ? ' danger' : ''), KIND[e.kind]));
-    head.appendChild(el('span', 'when', clock(e.min) + '（' + ago(e.min) + '）'));
-    head.appendChild(el('span', 'dir ' + e.dir, e.dir === 'up' ? '▲ 子から' : '▼ 子へ'));
-    row.appendChild(head);
-    if (e.text.length > 40) {
-      var d = el('details');
-      d.appendChild(el('summary', '', e.text.slice(0, 40) + '…（全文を開く）'));
-      d.appendChild(el('div', '', e.text));
-      row.appendChild(d);
-    } else {
-      row.appendChild(el('div', '', e.text));
-    }
-    if (e.blocked) {
-      var b = el('div', 'blocked');
-      b.appendChild(el('div', '', '子は範囲を広げる頼みを出しています。答えは上の「いまあなたがすること」でも出せます。'));
-      var a = el('div', 'actions');
-      ['広げる…', '断る', '子に別の道を伝える…'].forEach(function (t) { var x = el('button', 'small', t); x.type = 'button'; a.appendChild(x); });
-      b.appendChild(a);
-      row.appendChild(b);
-    }
-    if (e.attach) row.appendChild(el('p', 'callout', '開き方は上の「いまあなたがすること」に、コマンドと写すボタンがあります。'));
-    return row;
+// ---- 作業ごとのようす ----
+const cs = el("section", "sec");
+cs.append(el("h2", "", "作業ごとのようす"), el("p", "lead", "最後に動いた順。棒は、この 1 時間のやり取りの数（藍は上り、紫は下り、柿は答え待ち）。"));
+const cards = el("div", "cards");
+const sorted = [...VIEW.nodes].sort((a, b) => Date.parse(b.lastActivityAt) - Date.parse(a.lastActivityAt));
+sorted.forEach((n, ci) => {
+  const c = el("div", "card" + (n.needsHuman ? " need" : "")); c.id = "card-" + n.id;
+  const [sname, scls] = STATE[n.state];
+  const head = el("div", "row"); head.append(el("span", "chip " + scls, sname));
+  if (n.needsHuman) head.append(el("span", "chip wait", "あなたの答え " + n.needsHuman + " 件"));
+  c.append(head, el("h3", "", n.title));
+  const meta = el("div", "meta");
+  meta.append(el("span", "", n.role + (n.parentId ? "（親：" + short(byId[n.parentId].title, 12) + "）" : "（いちばん上）")),
+              el("span", "num", "最後の動き " + clock(n.lastActivityAt) + "（" + ago(n.lastActivityAt) + "）"));
+  c.append(meta);
+  // やり取りの棒（作り物の数。60 分を 12 区切り）
+  const mine = VIEW.messages.filter(m => m.from === n.id || m.to === n.id);
+  const sp = svgEl("svg", { class: "spark", viewBox: "0 0 240 34" });
+  sp.append(svgEl("line", { class: "axis", x1: 0, y1: 33, x2: 240, y2: 33 }));
+  for (const m of mine) {
+    const mins = (NOW - Date.parse(m.at)) / 60000; if (mins > 75) continue;
+    const slot = 11 - Math.min(11, Math.floor(mins / 6.5));
+    const bar = svgEl("rect", { class: "bar " + (m.human ? "h" : m.dir === "up" ? "u" : "d"), x: slot * 20 + (m.dir === "up" ? 3 : 11), y: m.human ? 4 : 14, width: 7, height: m.human ? 29 : 19, rx: 2 });
+    bar.style.animationDelay = (ci * 0.08 + slot * 0.03) + "s";
+    sp.append(bar);
   }
-  var lastLabels = {};
-  function card(c, i) {
-    var k = el('div', 'card' + (c.needs > 0 ? ' needs' : ''));
-    k.id = 'card-' + c.key;
-    k.style.animationDelay = (i * 0.08) + 's';
-    k.appendChild(el('p', 'card-title', c.title));
-    var m = el('div', 'meta');
-    m.appendChild(el('span', 'chip', c.role));
-    var st = el('span', 'chip' + (c.needs > 0 ? ' warn' : ''));
-    st.appendChild(el('span', 'state-dot ' + c.dot));
-    st.appendChild(document.createTextNode(c.state));
-    m.appendChild(st);
-    var last = el('span', '', '最後の動き ' + ago(c.last));
-    lastLabels[c.key] = last;
-    m.appendChild(last);
-    if (c.needs > 0) m.appendChild(el('span', '', ' · 要対応 ' + c.needs));
-    k.appendChild(m);
-    var idl = el('div', 'id', 'ID ' + c.id + ' ');
-    idl.appendChild(copyButton(c.id));
-    k.appendChild(idl);
-    var list = el('div');
-    list.id = 'list-' + c.key;
-    c.entries.forEach(function (e) { list.appendChild(entryRow(e)); });
-    k.appendChild(list);
-    var more = el('details');
-    more.appendChild(el('summary', '', 'この子への操作'));
-    var acts = el('div', 'actions');
-    var s = el('button', '', '止める…'); s.type = 'button'; acts.appendChild(s);
-    var u = el('button', '', '結び付けを外す…'); u.type = 'button'; acts.appendChild(u);
-    more.appendChild(acts);
-    more.appendChild(el('p', 'desc', '止める：子の作業を止めます（あとで再開できます）。'));
-    more.appendChild(el('p', 'desc', '結び付けを外す：子のセッションと見張りのつながりを切ります。ふだんは要りません。'));
-    k.appendChild(more);
-    return k;
+  c.append(sp);
+  const fl = el("ul", "flowlist");
+  for (const m of mine.slice(0, 3)) {
+    const li = el("li");
+    const up = m.dir === "up";
+    const other = byId[m.from === n.id ? m.to : m.from];
+    li.append(el("span", "ar " + (m.human ? "h" : up ? "u" : "d"), up ? "↑" : "↓"));
+    const body = el("span");
+    const sum = (m.from === n.id ? "→ " : "← ") + short(other.title, 10) + "　" + m.kind;
+    if (m.text.length > 18) { const d = el("details"); d.append(el("summary", "", sum), el("p", "", m.text)); body.append(d); }
+    else body.append(el("span", "", sum + "：" + m.text));
+    li.append(body, el("span", "t num", clock(m.at)));
+    fl.append(li);
   }
-  var cards = document.getElementById('cards');
-  CHILDREN.slice().sort(function (a, b) { return b.needs - a.needs; }).forEach(function (c, i) { cards.appendChild(card(c, i)); });
-  var dc = document.getElementById('done-cards');
-  DONE.forEach(function (c, i) { dc.appendChild(card(c, i)); });
-
-  // --- 関係図：指を置くと、そのノードのやり取りだけが浮かぶ。押すとカードへ ---
-  var svg = document.getElementById('graph');
-  var marks = svg.querySelectorAll('.msg, .m-label, .packet');
-  svg.querySelectorAll('.g-node').forEach(function (g) {
-    var key = g.dataset.node;
-    g.addEventListener('mouseenter', function () {
-      svg.classList.add('focus');
-      marks.forEach(function (m) { m.classList.toggle('on', m.dataset.a === key || m.dataset.b === key); });
-    });
-    g.addEventListener('mouseleave', function () { svg.classList.remove('focus'); });
-    g.addEventListener('click', function () {
-      var t = document.getElementById(g.dataset.card || '');
-      if (!t) return;
-      var det = t.closest('details');
-      if (det) det.open = true;
-      t.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      t.classList.remove('flash'); void t.offsetWidth; t.classList.add('flash');
-    });
-  });
-
-  // --- 生きている感じ：孫から、ときどき進み具合が上ってくる（作り物） ---
-  var n = 0;
-  var steps = ['読み込みの失敗の試験を足した。', '境界の試験が通った。', '試験の名前をそろえた。'];
-  var live = setInterval(function () {
-    if (document.body.classList.contains('still')) return;
-    var list = document.getElementById('list-d');
-    var row = entryRow({ kind: 'progress', dir: 'up', min: 0, text: steps[n % steps.length] });
-    row.className = 'entry new';
-    list.insertBefore(row, list.firstChild);
-    lastLabels.d.textContent = '最後の動き いま';
-    var path = document.getElementById('u-d');
-    path.classList.remove('draw'); void path.getBBox(); path.classList.add('draw');
-    n += 1;
-    if (n >= 6) clearInterval(live);
-  }, 7000);
-
-  // --- 動きを止める・明暗 ---
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
-  var motion = document.getElementById('motion');
-  function setStill(on) {
-    document.body.classList.toggle('still', on);
-    if (on) svg.pauseAnimations(); else svg.unpauseAnimations();
-    svg.querySelectorAll('.packet').forEach(function (p) { p.style.display = on ? 'none' : ''; });
-    motion.textContent = on ? '動きを戻す' : '動きを止める';
+  c.append(fl);
+  if (n.state === "stall" && n.cli) {
+    const cmd = el("div", "cmd"); cmd.append(el("code", "", "claude attach " + n.id));
+    const b = el("button", "sm", "写す"); b.addEventListener("click", () => { navigator.clipboard?.writeText("claude attach " + n.id); b.textContent = "写しました"; b.classList.add("done"); });
+    cmd.append(b); c.append(cmd);
   }
-  setStill(reduce.matches);
-  motion.addEventListener('click', function () { setStill(!document.body.classList.contains('still')); });
-  document.getElementById('theme').addEventListener('click', function () {
-    var r = document.documentElement;
-    var dark = r.dataset.theme ? r.dataset.theme === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
-    r.dataset.theme = dark ? 'light' : 'dark';
-  });
-})();
+  const folded = VIEW.doneInbox[n.id];
+  if (folded) { const d = el("details", "folded"); d.append(el("summary", "", "済んだ作業の知らせ " + folded.length + " 件（たたんでいます）")); const ul = el("ul", "flowlist"); folded.forEach(t => ul.append(el("li", "", t))); d.append(ul); c.append(d); }
+  cards.append(c);
+});
+cs.append(cards); app.append(cs);
+
+// ---- 管理（取り消せない操作。たたんで置く） ----
+const ad = el("details", "admin");
+ad.append(el("summary", "", "管理（取り消せない操作）"));
+ad.append(el("p", "warn", "ここの操作は、あとから戻せません。押すと、作業の名前を打ち込んで確かめる画面が出ます。"));
+for (const [label, desc] of [
+  ["アーカイブした作業を消す", "記録を消し、墓標だけを残します。"],
+  ["墓標も残さずに消す", "記録も墓標も消します。いちばん強い消し方です。"],
+  ["捨てた作業の保管を消す", "保管していた成果を消します。ブランチに取り出していなければ、もう戻りません。"]
+]) { const op = el("div", "op"); const b = el("button", "danger", label); op.append(b, el("p", "", desc)); ad.append(op); }
+const keep = el("div", "op"); keep.append(el("button", "", "自動で消すのを保留する"), el("p", "", "これは戻せます。保留はいつでも解けます。")); ad.append(keep);
+app.append(ad);
+app.append(el("footer", "", "見本（Issue #89）。値はすべて作り物です。関係図は本番では Rete.js（自前の描画 R0）で描きます。"));
 </script>
 </body>
 </html>
