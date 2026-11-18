@@ -50,10 +50,15 @@ export interface UiNode {
   /** 破棄の判断（`node.reclaimInstruct`）が記録済みか。画面は、停止したノードで、指示済みなら、もう一度は出さない。 */
   readonly discarded: boolean;
   /**
-   * daemon が直接止められず、停止を親に代行してもらうノード（能力表の `stopDelegated`。Desktop の子）か。真のときだけ付ける。
+   * daemon が直接止められず、停止を親に代行してもらうノード（能力表の `stopDelegated`。Desktop の子と CLI の子）か。真のときだけ付ける。
    * 画面は、停止未完了のこのノードに、停止の宣言（`node.confirmStopped`）を出す。
    */
   readonly stopDelegated?: true;
+  /**
+   * CLI の子（親が `claude --bg` で起動し、起動を報告した子）か。真のときだけ付ける（#136）。画面は、CLI の子にだけ
+   * `claude attach` のコマンドを出し、Desktop の子の文は、CLI の子でない停止の代行のノードにだけ出す。
+   */
+  readonly cli?: true;
   /** 題: 目的（objective）の先頭を整えて `UI_TITLE_MAX` で切ったもの。目的がなければ、なし。 */
   readonly title?: string;
   /** そのノードの最後の動き（報告・受信箱の項目・指示と受け取り・判断と拡張の要求）の時刻。記録がなければ、なし。 */
@@ -287,6 +292,12 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       .filter((i) => priorityOf(i) === "failed" && !isStallSummary(i.summary))
       .map((i) => i.nodeId),
   );
+  // CLI の子: 親が起動（launch）を done で報告した子（#136）
+  const cliChildren = new Set(
+    state.parentRequests
+      .filter((r) => r.kind === "launch" && r.report?.outcome === "done")
+      .map((r) => r.nodeId),
+  );
   const nodes = cap("nodes", state.nodes, UI_LIMITS.nodes).map((n): UiNode => {
     const title = titleOf(n.objective);
     const needsHuman = human.get(n.id) ?? 0;
@@ -300,6 +311,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       openItems: counts.get(n.id) ?? 0,
       discarded: n.discarded !== undefined,
       ...(options.stopDelegated?.(n.id) === true ? { stopDelegated: true as const } : {}),
+      ...(cliChildren.has(n.id) ? { cli: true as const } : {}),
       ...(title === "" ? {} : { title }),
       ...(at === undefined ? {} : { lastActivityAt: uiText(at) }),
       needsHuman,

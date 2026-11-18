@@ -183,6 +183,11 @@ export interface ApiDeps {
    */
   readonly stopDelegated?: (nodeId: string) => boolean;
   /**
+   * 画面に出す `claude attach` を打つ場所（repoRoot。#136）。`claude attach`・`claude agents` は打った場所で絞られるため、
+   * 画面は `cd <ここ> && claude attach <ノード ID>` の形で出す。表示モデルの応答にだけ載せ、記録には残さない。
+   */
+  readonly attachDir?: string;
+  /**
    * 画面の表示モデルに出す、取り消せない操作の確認待ち（`confirmation-gate.ts`）。コードは含まない。`confirmationsVersion` は、
    * 確認待ちが変わるたびに増える数で、表示モデルのキャッシュの鍵と、SSE の変化の通知に足す（記録の seq は変わらないため）。
    */
@@ -1439,6 +1444,7 @@ export function createApiServer(deps: ApiDeps): ApiServer {
               deps.stopDelegated === undefined ? {} : { stopDelegated: deps.stopDelegated },
             ),
             ...(deps.confirmations === undefined ? {} : { confirmations: deps.confirmations() }),
+            ...(deps.attachDir === undefined ? {} : { attachDir: deps.attachDir }),
           },
         }),
       };
