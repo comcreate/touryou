@@ -287,6 +287,33 @@ const previewOf = (loss?: unknown[], tips?: unknown) =>
   });
 
 describe("reclaim（FR_029: 失われるものを表示してから、破棄を指示する）", () => {
+  it("先端がないときも、照合の値（12 桁）と「なし」の行を出す（Issue #137）", async () => {
+    const { client } = fakeClient({ "node.reclaimPreview": previewOf([]) });
+    const r = await runCommand(["reclaim", "n1"], deps(client));
+    expect(r.stdout).toContain(`照合の値: ${DG_NONE}`);
+    expect(r.stdout).toContain("なし（ブランチがない）");
+    expect(DG_NONE).toMatch(/^[0-9a-f]{12}$/);
+  });
+
+  it("daemon が作業ツリーの情報を確かめられない（factsMissing）なら、--yes でも破棄を指示せず、理由と次の操作を出す（Issue #137）", async () => {
+    const { client, sent } = fakeClient({
+      "node.reclaimPreview": ok({
+        reclaimable: false,
+        unmet: ["discardRequired", "factsMissing"],
+        blockers: [],
+        loss: [],
+      }),
+      "node.reclaimInstruct": ok({ accepted: true }),
+    });
+    const r = await runCommand(["reclaim", "n1", "--yes", "--expect", DG_NONE], deps(client));
+    expect(r.exitCode).toBe(1);
+    expect(ops(sent)).toEqual(["node.reclaimPreview"]);
+    expect(r.stdout).not.toContain("回収を指示した");
+    expect(r.stderr).toContain("回収できない");
+    expect(r.stderr).toContain("破棄は指示していない");
+    expect(r.stderr).toContain("git worktree list");
+  });
+
   it("--yes は --expect が要る。表示（--yes なし）には、照合の値と、そのまま使える再実行の案内が出る。送るのは表示の要求だけ", async () => {
     const { client, sent } = fakeClient({
       "node.reclaimPreview": previewOf([LOSS], { n1: "a".repeat(40), n2: "b".repeat(64) }),
@@ -783,6 +810,8 @@ describe("touryou purge の照合（--yes には --expect）", () => {
     expect(nodeIdsDigest(["n1", "n2"])).toBe("1838b884792c");
     expect(nodeIdsDigest(["a-b", "a", "a.b", "a:b"])).toBe("0d4122142225");
     expect(tipsDigest({})).toBe(tipsDigest(undefined));
+    // 先端がない（空）ときも、ふだんと同じ 12 桁の 16 進（「-」を混ぜない。Issue #137）
+    expect(tipsDigest({})).toMatch(/^[0-9a-f]{12}$/);
   });
 });
 

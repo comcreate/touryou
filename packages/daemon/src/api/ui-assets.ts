@@ -25,7 +25,20 @@ export const UI_HTML = `<!doctype html>
 <link rel="stylesheet" href="/ui/app.css">
 </head>
 <body>
-<p id="live" class="sr" aria-live="polite"></p><header class="top"><h1>touryou 状態画面</h1><span id="status" class="status">未接続</span><span class="tools"><button id="still" class="quiet sm" type="button">動きを止める</button></span></header>
+<p id="live" class="sr" aria-live="polite"></p><header class="top"><h1>touryou 状態画面</h1><span id="status" class="status">未接続</span><span class="tools"><button id="open-settings" class="quiet sm gear" type="button" aria-label="設定" title="設定" aria-haspopup="dialog" aria-controls="settings"><span aria-hidden="true">⚙</span></button></span></header>
+<dialog id="settings" class="settings" aria-labelledby="settings-title"><h2 id="settings-title">設定</h2>
+<fieldset><legend>アクセシビリティ</legend>
+<label class="opt"><input id="set-still" type="checkbox"> 動きを止める</label><p class="note">新しい項目の入る動き・線を流れる玉・光る縁などを止めます。OS の「視差効果を減らす」を入れているときは、ここを切っていても止まります。</p>
+<div role="radiogroup" aria-labelledby="set-theme-label" class="opts"><span id="set-theme-label" class="opts-label">明暗</span>
+<label class="opt"><input type="radio" name="set-theme" value="auto" checked> OS に合わせる</label>
+<label class="opt"><input type="radio" name="set-theme" value="light"> 明るい</label>
+<label class="opt"><input type="radio" name="set-theme" value="dark"> 暗い</label></div></fieldset>
+<fieldset><legend>言語</legend>
+<div role="radiogroup" aria-labelledby="set-lang-label" class="opts"><span id="set-lang-label" class="opts-label">画面の言語</span>
+<label class="opt"><input type="radio" name="set-lang" value="ja" checked> 日本語</label>
+<label class="opt"><input type="radio" name="set-lang" value="en" disabled> English</label></div><p class="note">English は、次の版で選べるようにします（いまは日本語だけ）。</p></fieldset>
+<p class="note">選んだものは、このブラウザに残ります。</p>
+<div class="settings-actions"><button id="close-settings" type="button">閉じる</button></div></dialog>
 <main>
 <section id="auth" hidden>
 <h2>人間のトークン</h2>
@@ -53,7 +66,9 @@ export const UI_HTML = `<!doctype html>
 `;
 
 export const UI_CSS = `:root{color-scheme:light dark;--bg:#f3efe6;--sheet:#fbf9f4;--fg:#22201c;--muted:#5b5650;--line:#d8d0c0;--card:#fbf9f4;--blocking:#a3261c;--failed:#a3261c;--ok:#2f6b45;--ai:#2a4f8f;--ai-2:#4b6492;--ai-3:#6b7891;--kaki:#b85200;--kaki-soft:#fbe6d2;--kiiro:#7a6000;--kiiro-soft:#f4ecc8;--shu:#a3261c;--shu-soft:#f7dfdb;--matsu:#2f6b45;--matsu-soft:#dcebdf;--grid:#e7e0d1;--on-strong:#fff}
-@media (prefers-color-scheme: dark){:root{--bg:#16181c;--sheet:#1e2126;--fg:#ebe6dc;--muted:#a39d93;--line:#363a42;--card:#1e2126;--blocking:#ff8c80;--failed:#ff8c80;--ok:#7fc495;--ai:#8fb0ea;--ai-2:#8aa2cc;--ai-3:#8d97aa;--kaki:#ff9a3c;--kaki-soft:#3b2614;--kiiro:#d9b84a;--kiiro-soft:#332b10;--shu:#ff8c80;--shu-soft:#3d1b18;--matsu:#7fc495;--matsu-soft:#18301f;--grid:#23262c;--on-strong:#16181c}}
+@media (prefers-color-scheme: dark){:root:not(.theme-light){--bg:#16181c;--sheet:#1e2126;--fg:#ebe6dc;--muted:#a39d93;--line:#363a42;--card:#1e2126;--blocking:#ff8c80;--failed:#ff8c80;--ok:#7fc495;--ai:#8fb0ea;--ai-2:#8aa2cc;--ai-3:#8d97aa;--kaki:#ff9a3c;--kaki-soft:#3b2614;--kiiro:#d9b84a;--kiiro-soft:#332b10;--shu:#ff8c80;--shu-soft:#3d1b18;--matsu:#7fc495;--matsu-soft:#18301f;--grid:#23262c;--on-strong:#16181c}}
+:root.theme-dark{color-scheme:dark;--bg:#16181c;--sheet:#1e2126;--fg:#ebe6dc;--muted:#a39d93;--line:#363a42;--card:#1e2126;--blocking:#ff8c80;--failed:#ff8c80;--ok:#7fc495;--ai:#8fb0ea;--ai-2:#8aa2cc;--ai-3:#8d97aa;--kaki:#ff9a3c;--kaki-soft:#3b2614;--kiiro:#d9b84a;--kiiro-soft:#332b10;--shu:#ff8c80;--shu-soft:#3d1b18;--matsu:#7fc495;--matsu-soft:#18301f;--grid:#23262c;--on-strong:#16181c}
+:root.theme-light{color-scheme:light}
 *{box-sizing:border-box}
 html{background:var(--bg)}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 "Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif}
@@ -72,6 +87,18 @@ button:disabled{opacity:.5;cursor:not-allowed}
 button.primary,button.go{background:var(--kaki);border-color:var(--kaki);color:var(--on-strong);font-weight:700}
 button.quiet{background:transparent}
 button.sm{font-size:12.5px;padding:2px 10px}
+button.gear{font-size:16px;line-height:1;padding:3px 8px}
+dialog.settings{background:var(--sheet);color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:16px 20px;width:min(28rem,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto}
+dialog.settings::backdrop{background:rgba(0,0,0,.35)}
+dialog.settings h2{margin:0 0 8px;font-size:17px}
+dialog.settings fieldset{border:1px solid var(--line);border-radius:8px;margin:10px 0;padding:8px 12px}
+dialog.settings legend{font-weight:600;padding:0 4px}
+.settings .opt{display:flex;align-items:center;gap:8px;margin:4px 0}
+.settings .opt input{flex:none;min-width:0;width:auto;margin:0;padding:0}
+.settings .opts{margin-top:8px}
+.settings .opts-label{display:block;color:var(--muted);font-size:13px}
+.settings .note{color:var(--muted);font-size:12.5px;margin:2px 0 6px}
+.settings-actions{text-align:right;margin-top:8px}
 button.danger{border-color:var(--shu);color:var(--shu);background:transparent}
 button.done{background:var(--matsu);border-color:var(--matsu);color:var(--on-strong)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;margin:-1px;padding:0;border:0}
@@ -209,6 +236,33 @@ const EXTERNAL_CHECK_PREFIXES = JSON.stringify(externalCheckSummaries().map((x) 
 
 export const UI_JS = `'use strict';
 (function () {
+  // 設定の窓（#139）。描く前に当てる（読み込みの一瞬だけ違う明暗で描かないように）。選んだものはブラウザに残す（残せないときも、その場では効く）。
+  // localStorage を使うのは、この 2 つの関数の中だけ（鍵は 1 つ。書くのは still・theme・lang だけ。トークン・チケット・ID は書かない）
+  var SETTINGS_KEY = 'touryou.ui.settings';
+  function settingsOf(o) {
+    var v = o !== null && typeof o === 'object' ? o : {};
+    return {
+      still: v.still === true,
+      theme: v.theme === 'light' || v.theme === 'dark' ? v.theme : 'auto',
+      lang: v.lang === 'en' ? 'en' : 'ja',
+    };
+  }
+  function loadSettings() {
+    try { return settingsOf(JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || 'null')); } catch (e) { return settingsOf(null); }
+  }
+  function saveSettings(x) {
+    var v = settingsOf(x);
+    try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ still: v.still, theme: v.theme, lang: v.lang })); } catch (e) { /* 残せなくても動く */ }
+  }
+  function applySettings(x) {
+    var root = document.documentElement;
+    root.classList.toggle('still', x.still);
+    root.classList.toggle('theme-light', x.theme === 'light');
+    root.classList.toggle('theme-dark', x.theme === 'dark');
+  }
+  var settings = loadSettings();
+  applySettings(settings);
+
   // 最初に、フラグメントのチケット（touryou ui が付ける、60 秒・1 回だけのもの）を取り出して、アドレスから消す（履歴に残さない）。
   // 長く使える人間のトークンは、URL では受け取らない（#token= は効かない）。
   var token = '';
@@ -295,10 +349,15 @@ export const UI_JS = `'use strict';
     return '';
   }
   // 止まっているかもしれない子を開くコマンド。CLI の子は --name <ノード ID> で起動しているので、claude attach で開ける。
-  // Desktop の子（stopDelegated）と、ID の形でないものは ''（コマンドを出さない）
+  // CLI の子だけ（表示モデルの cli）。ID の形でないものは ''（コマンドを出さない）。
+  // claude attach・claude agents は、打った場所で絞られるので、repoRoot（表示モデルの attachDir）に移ってから打つ形にする（#136）
+  var attachDir = '';
+  function shellQuote(s) { return "'" + s.replace(/'/g, "'\\\\''") + "'"; }
   function attachCommand(n) {
-    if (!n || n.stopDelegated === true || typeof n.id !== 'string' || !ID_RE.test(n.id)) return '';
-    return 'claude attach ' + n.id;
+    if (!n || n.cli !== true || typeof n.id !== 'string' || !ID_RE.test(n.id)) return '';
+    var attach = 'claude attach ' + n.id;
+    // 制御文字（改行など）を含む場所は、貼ったときに行が分かれるので、移る部分を付けない
+    return attachDir && !/[\\u0000-\\u001f\\u007f]/.test(attachDir) ? 'cd ' + shellQuote(attachDir) + ' && ' + attach : attach;
   }
   // ノードの呼び名（題がなければ ID）。
   function nodeLabel(n, max) { return n && typeof n.title === 'string' && n.title !== '' ? cleanText(n.title, max) : n ? n.id : ''; }
@@ -705,6 +764,9 @@ export const UI_JS = `'use strict';
           row.appendChild(el('code', '', cmd));
           row.appendChild(copyButton(cmd));
           card.appendChild(row);
+          card.appendChild(el('p', 'desc', '開くと、子の紐付けが外れることがあります。子が「紐付けをやり直して」と言ったら、統合の会話で、この子の紐付けのコードの出し直し（node_bindCode）を頼んでください。'));
+        } else if (node && node.cli === true) {
+          card.appendChild(el('p', 'desc', 'この子は CLI で動いています。端末でリポジトリに移ってから claude agents を開き、この題の子を開いて確かめてください。'));
         } else {
           card.appendChild(el('p', 'desc', 'この子は Desktop で動いています。Desktop で、この題の子を開いて確かめてください。'));
         }
@@ -1139,6 +1201,8 @@ export const UI_JS = `'use strict';
   // 送れない理由（フェイルクローズ）。送れるなら ''。失われるものが分からないまま、取り消せない指示は出さない。
   function reclaimBlocked(v) {
     if (v.loss === undefined) return '失われるものの情報が得られませんでした（古い daemon です）。' + CLI_HINT;
+    // daemon が作業ツリーの情報を確かめられないノードは、破棄を決めても回収できない（指示済みの表示と、回収の結果が食い違う。#137）。
+    if (v.unmet.indexOf('factsMissing') !== -1) return 'daemon が、作業ツリーの情報を確かめられません（置き場の外にある・別の場所に登録されている・git を調べられない、など）。破棄を指示しても回収できないので、指示できません。' + CLI_HINT;
     var unknown = v.loss.filter(function (l) { return l && (l.unknown === true || l.workingTreeUnknown === true); });
     if (unknown.length) {
       var ids = unknown.map(function (l) { return cleanText(String(l.nodeId), 128); }).join('、');
@@ -1622,6 +1686,7 @@ export const UI_JS = `'use strict';
   }
 
   function render(view) {
+    attachDir = typeof view.attachDir === 'string' ? view.attachDir : '';
     renderApprovals(view.confirmations);
     var flows = Array.isArray(view.flows) ? view.flows : [];
     var v = { nodes: view.nodes, inbox: view.inbox, decisions: view.decisions, extensions: view.extensions, flows: flows };
@@ -1864,16 +1929,50 @@ export const UI_JS = `'use strict';
       .catch(function () {});
   }
 
-  // 動きを止める（OS の「視差効果を減らす」でも止まる。CSS の prefers-reduced-motion）
   document.getElementById('show-graph').addEventListener('click', function () { showGraphMode('graph'); });
   document.getElementById('zoom-in').addEventListener('click', function () { zoomGraph('in'); });
   document.getElementById('zoom-out').addEventListener('click', function () { zoomGraph('out'); });
   document.getElementById('zoom-fit').addEventListener('click', function () { zoomGraph('fit'); });
   document.getElementById('show-list').addEventListener('click', function () { showGraphMode('list'); });
-  var stillBtn = document.getElementById('still');
-  stillBtn.addEventListener('click', function () {
-    var on = document.documentElement.classList.toggle('still');
-    stillBtn.textContent = on ? '動きを戻す' : '動きを止める';
+  var settingsBox = document.getElementById('settings');
+  var openSettings = document.getElementById('open-settings');
+  var stillBox = document.getElementById('set-still');
+  var themeRadios = settingsBox.querySelectorAll('input[name="set-theme"]');
+  function showSettings() {
+    stillBox.checked = settings.still;
+    themeRadios.forEach(function (r) { r.checked = r.value === settings.theme; });
+    settingsBox.showModal();
+    stillBox.focus();
+  }
+  openSettings.addEventListener('click', showSettings);
+  document.getElementById('close-settings').addEventListener('click', function () { settingsBox.close(); });
+  // Esc でも閉じる（dialog の既定）。閉じたら、開く前のボタンへ focus を戻す
+  settingsBox.addEventListener('close', function () { openSettings.focus(); });
+  // 窓の中は Tab で回る（最後から最初へ、最初から最後へ）
+  settingsBox.addEventListener('keydown', function (e) {
+    if (e.key !== 'Tab') return;
+    var f = [];
+    settingsBox.querySelectorAll('input:not([disabled]),button:not([disabled])').forEach(function (x) {
+      if (x.type !== 'radio' || x.checked) f.push(x);
+    });
+    if (f.length === 0) return;
+    var first = f[0];
+    var last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+  stillBox.addEventListener('change', function () {
+    settings.still = stillBox.checked;
+    applySettings(settings);
+    saveSettings(settings);
+  });
+  themeRadios.forEach(function (r) {
+    r.addEventListener('change', function () {
+      if (!r.checked) return;
+      settings.theme = r.value === 'light' || r.value === 'dark' ? r.value : 'auto';
+      applySettings(settings);
+      saveSettings(settings);
+    });
   });
 
   renderKept();

@@ -175,6 +175,8 @@ export interface GitPorts {
         worktreePath: string;
         headCommit?: string;
         headUnknown?: true;
+        /** 作業ツリーもブランチも、もうない（消すものがない。Issue #137）。 */
+        gone?: true;
       }
     | undefined
   >;
@@ -823,7 +825,8 @@ export function createGitPorts(
     factsFor: (nodeId) =>
       serial(async () => {
         const path = pathOf(nodeId);
-        if ((await isRegistered(nodeId)) !== true) {
+        const registered = await isRegistered(nodeId);
+        if (registered !== true) {
           // 強制の回収で、作業ツリーは消えたがブランチだけ残った（途中の失敗）ノード: 消すべきものが残っていない作業ツリーとして
           // 事実を返し、判定を通して、ブランチの削除をやり直せるようにする（破棄の判断は、ハンドラが記録で確かめる）。
           if (!dirExists(path) && (await branchExists(branchOf(nodeId)))) {
@@ -833,6 +836,15 @@ export function createGitPorts(
               clean: true,
               ...(await headFields(nodeId)),
             };
+          }
+          // 作業ツリーもブランチも、もうない（Issue #137）: 作業ツリーの一覧を取れて、登録がなく、場所もないときだけ、
+          // 消すものがないことを `gone` で返す。使ってよいのは、人が破棄を決めた停止ノードだけ（ハンドラが確かめる）。
+          if (registered === false && !dirExists(path)) {
+            // `branchExists` は git の失敗も「ない」にするので、ブランチがないことは、先端の取得で確かめ直す
+            // （`rev-parse --verify -q` が code 1 のときだけ「ない」。失敗〔headUnknown〕・先端あり なら、gone にしない）。
+            const head = await headFields(nodeId);
+            if (head.headUnknown === true || head.headCommit !== undefined) return undefined;
+            return { worktreePath: path, merged: false, clean: true, gone: true as const };
           }
           return undefined;
         }

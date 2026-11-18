@@ -18,6 +18,11 @@ export interface Loc {
   textContent(): Promise<string | null>;
   boundingBox(): Promise<Box | null>;
   isVisible(): Promise<boolean>;
+  focus(): Promise<void>;
+  click(): Promise<void>;
+  isDisabled(): Promise<boolean>;
+  isChecked(): Promise<boolean>;
+  evaluate<R>(f: (e: Element) => R): Promise<R>;
 }
 export interface Msg {
   type(): string;
@@ -32,6 +37,8 @@ export interface Page {
   addInitScript(f: () => void): Promise<void>;
   goto(url: string): Promise<unknown>;
   click(selector: string): Promise<void>;
+  check(selector: string): Promise<void>;
+  getByRole(role: string, o?: { name: string }): Loc;
   focus(selector: string): Promise<void>;
   keyboard: { press(key: string): Promise<void> };
   waitForFunction(f: () => boolean, a?: undefined, o?: { timeout: number }): Promise<unknown>;
@@ -60,6 +67,7 @@ export interface Browser {
     viewport: { width: number; height: number };
     deviceScaleFactor?: number;
   }): Promise<Page>;
+  newContext(): Promise<{ newPage(): Promise<Page>; close(): Promise<void> }>;
   close(): Promise<void>;
 }
 export type Pw = { chromium: { launch(): Promise<Browser> } };

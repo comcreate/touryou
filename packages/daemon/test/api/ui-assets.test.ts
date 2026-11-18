@@ -22,7 +22,9 @@ describe("画面の資産（走査）", () => {
     ["location.assign・replace", /location\s*\.\s*(assign|replace)\s*\(/],
     ["srcdoc", /srcdoc/],
     ["文字列の setTimeout・setInterval", /set(Timeout|Interval)\s*\(\s*['"`]/],
-    ["storage・cookie", /localStorage|sessionStorage|document\s*\.\s*cookie|indexedDB/],
+    // localStorage だけは、設定（動きを止める・明暗・言語）を残すために、1 か所で狭く許す（#139。下の「localStorage の使い所」の試験）。
+    // トークン・チケットを残さないこと、ほかの保存先を使わないことは、そのまま守る
+    ["sessionStorage・cookie・indexedDB", /sessionStorage|document\s*\.\s*cookie|indexedDB/],
     ["importScripts・動的 import", /importScripts|\bimport\s*\(/],
     ["postMessage・window.open", /postMessage|window\s*\.\s*open/],
     ["ブラケット記法の文字列キー（メンバーの参照）", /[\w$)\]]\s*\[\s*['"`]/],
@@ -46,11 +48,71 @@ describe("画面の資産（走査）", () => {
     });
   }
 
+  describe("localStorage の使い所（#139。設定を残すためだけに、狭く許す）", () => {
+    const fnOf = (name: string): string => {
+      const at = UI_JS.indexOf(`function ${name}(`);
+      expect(at, name).toBeGreaterThan(0);
+      const end = UI_JS.indexOf("\n  }\n", at);
+      return UI_JS.slice(at, end);
+    };
+    it("使うのは loadSettings・saveSettings の中だけ。鍵は touryou.ui.settings の 1 つだけ", () => {
+      const uses = UI_JS.match(/window\.localStorage\b/g) ?? [];
+      expect(uses).toHaveLength(2);
+      expect(fnOf("loadSettings")).toContain("window.localStorage.getItem(SETTINGS_KEY)");
+      expect(fnOf("saveSettings")).toContain("window.localStorage.setItem(SETTINGS_KEY,");
+      // localStorage の名前は、ほかで参照しない（window の外の別名・ブラケット記法も含めて）
+      const rest = UI_JS.replace(fnOf("loadSettings"), "").replace(fnOf("saveSettings"), "");
+      expect(rest.replace(/\/\/[^\n]*/g, "")).not.toMatch(/localStorage/);
+      expect(UI_JS.match(/var SETTINGS_KEY = '([^']*)'/)?.[1]).toBe("touryou.ui.settings");
+      expect(UI_JS.match(/localStorage\.(getItem|setItem|removeItem|clear)\(/g)?.length).toBe(2);
+    });
+    it("書く値は still・theme・lang だけ（形を確かめた値）", () => {
+      const save = fnOf("saveSettings");
+      expect(save).toContain("var v = settingsOf(x);");
+      expect(save).toContain("JSON.stringify({ still: v.still, theme: v.theme, lang: v.lang })");
+    });
+    it("読み出した値は形を確かめ、知らない鍵・形の違う値は捨てる", () => {
+      const src = fnOf("settingsOf");
+      const settingsOf = runInNewContext(
+        `(${src.replace("function settingsOf(", "function (")}\n  })`,
+      ) as (o: unknown) => unknown;
+      expect(settingsOf(null)).toEqual({ still: false, theme: "auto", lang: "ja" });
+      expect(settingsOf({ still: "yes", theme: "neon", lang: "fr", token: "t" })).toEqual({
+        still: false,
+        theme: "auto",
+        lang: "ja",
+      });
+      expect(settingsOf({ still: true, theme: "dark", lang: "en" })).toEqual({
+        still: true,
+        theme: "dark",
+        lang: "en",
+      });
+    });
+    it("トークン・チケット・ノード ID を残さない（保存の関数に、その名前が出てこない）", () => {
+      for (const f of ["loadSettings", "saveSettings", "settingsOf"]) {
+        expect(fnOf(f), f).not.toMatch(/token|ticket|session|nodeId|\.id\b/i);
+      }
+    });
+  });
+
   it("許可リスト: `.` の後ろのプロパティ名は、安全な集合にあるものだけ（文字列・コメントを除く）", () => {
     const SAFE = new Set([
       // 要素・文字列・集合・配列・Promise の、安全な操作
       // 移った先のカードへ focus を移すため（tabIndex = -1。カードを Tab の並びには入れない）
       "tabIndex",
+      // 設定の窓（#139）。localStorage は、loadSettings・saveSettings の中だけ（上の「localStorage の使い所」の試験で確かめる）
+      "still",
+      "theme",
+      "lang",
+      "localStorage",
+      "getItem",
+      "setItem",
+      "querySelectorAll",
+      "checked",
+      "showModal",
+      "close",
+      "type",
+      "shiftKey",
       "textContent",
       "className",
       "hidden",
@@ -277,6 +339,8 @@ describe("画面の資産（走査）", () => {
       "classList",
       "toggle",
       "documentElement",
+      "cli",
+      "attachDir",
     ]);
     const code = UI_JS.replace(/'(?:[^'\\\n]|\\.)*'/g, "''").replace(/\/\/[^\n]*/g, "");
     const used = new Set([...code.matchAll(/\.\s*([A-Za-z_$][\w$]*)/g)].map((m) => m[1] as string));
@@ -1069,8 +1133,11 @@ describe("画面の使い勝手（#13）", () => {
     expect(i, prefix).toBeGreaterThan(-1);
     return UI_JS.slice(i, UI_JS.indexOf("\n", i));
   };
+  const uiContext: Record<string, unknown> = {};
   const api = runInNewContext(
     [
+      lineOf("var attachDir ="),
+      lineOf("function shellQuote("),
       lineOf("var PRIORITY_NAMES ="),
       lineOf("var EXTERNAL_CHECK_PREFIXES ="),
       lineOf("var UNREACHABLE_TEXT ="),
@@ -1088,7 +1155,7 @@ describe("画面の使い勝手（#13）", () => {
       lineOf("function nodeLabel("),
       "({ inboxBand: inboxBand, fetchFailureText: fetchFailureText, UNREACHABLE_TEXT: UNREACHABLE_TEXT, timeText: timeText, agoText: agoText, stageText: stageText, attachCommand: attachCommand, nodeLabel: nodeLabel })",
     ].join("\n"),
-    {},
+    uiContext,
   ) as {
     inboxBand(i: Record<string, unknown>, delegated: Set<string>): { cls: string; label: string };
     fetchFailureText(status: number): string;
@@ -1177,12 +1244,34 @@ describe("画面の使い勝手（#13）", () => {
     expect(api.stageText({ stage: "x" })).toBe("");
   });
 
-  it("(#89) 止まっているかもの子を開くコマンドは claude attach <ノード ID>。Desktop の子・ID の形でないものには出さない。セッションの ID は使わない", () => {
-    expect(api.attachCommand({ id: "n-a1" })).toBe("claude attach n-a1");
-    expect(api.attachCommand({ id: "n-a1", stopDelegated: true })).toBe("");
-    expect(api.attachCommand({ id: "a b; rm -rf" })).toBe("");
+  it("(#89・#136) 止まっているかもの子を開くコマンドは、CLI の子にだけ出す。repoRoot に移ってから claude attach <ノード ID>。ID の形でないものには出さない。セッションの ID は使わない", () => {
+    uiContext.attachDir = "";
+    expect(api.attachCommand({ id: "n-a1", cli: true })).toBe("claude attach n-a1");
+    // CLI の子にも stopDelegated は付く（#136）。cli で見分ける
+    expect(api.attachCommand({ id: "n-a1", cli: true, stopDelegated: true })).toBe(
+      "claude attach n-a1",
+    );
+    expect(api.attachCommand({ id: "n-a1", stopDelegated: true })).toBe(""); // Desktop の子
+    expect(api.attachCommand({ id: "n-a1" })).toBe("");
+    expect(api.attachCommand({ id: "a b; rm -rf", cli: true })).toBe("");
     expect(api.attachCommand(undefined)).toBe("");
+    uiContext.attachDir = "/r/my repo's";
+    expect(api.attachCommand({ id: "n-a1", cli: true })).toBe(
+      "cd '/r/my repo'\\''s' && claude attach n-a1",
+    );
+    // 引用符・空白・展開の字を含んでも、1 つの語として渡る（試験の外で bash に通して確かめた）
+    uiContext.attachDir = "/r/x'; touch y; echo '$(z)";
+    expect(api.attachCommand({ id: "n-a1", cli: true })).toBe(
+      "cd '/r/x'\\''; touch y; echo '\\''$(z)' && claude attach n-a1",
+    );
+    // 改行などの制御文字を含む場所には、移る部分を付けない
+    uiContext.attachDir = "/r/a\nb";
+    expect(api.attachCommand({ id: "n-a1", cli: true })).toBe("claude attach n-a1");
+    uiContext.attachDir = "";
     expect(UI_JS).not.toContain("sessionId");
+    expect(UI_JS).toContain(
+      "attachDir = typeof view.attachDir === 'string' ? view.attachDir : '';",
+    );
   });
 
   it("(#89) 「止まっているかも」は、daemon の知らせ（stall）があるときだけ出す（時刻から推し量らない）", () => {
@@ -1203,7 +1292,7 @@ describe("画面の使い勝手（#13）", () => {
     expect(UI_CSS).toContain(
       ".still *,.still *::before{animation:none!important;transition:none!important}",
     );
-    expect(UI_JS).toContain("document.documentElement.classList.toggle('still')");
+    expect(UI_JS).toContain("root.classList.toggle('still', x.still)"); // 設定の窓の「動きを止める」（#139）
     expect(UI_JS).not.toMatch(/\.animate\(|requestAnimationFrame/);
   });
 

@@ -60,6 +60,26 @@ describe("uiViewOf の stopDelegated", () => {
   });
 });
 
+describe("uiViewOf の cli（#136）", () => {
+  it("親が起動（launch）を done で報告した子にだけ cli を付ける。failed・未報告・ほかの依頼には付けない", () => {
+    const req = (ref: string, kind: string) =>
+      ev({
+        type: "node.parentRequested",
+        payload: { nodeId: "a", requestRef: ref, kind, worktree: "/w/a" },
+      } as never);
+    const rep = (ref: string, outcome: string) =>
+      ev({
+        type: "node.parentReported",
+        payload: { nodeId: "a", requestRef: ref, outcome },
+      } as never);
+    const of = (events: OrchEvent[]) => uiViewOf(must(events)).nodes.find((x) => x.id === "a");
+    expect(of(base())).not.toHaveProperty("cli");
+    expect(of([...base(), req("r1", "launch")])).not.toHaveProperty("cli");
+    expect(of([...base(), req("r1", "launch"), rep("r1", "failed")])).not.toHaveProperty("cli");
+    expect(of([...base(), req("r1", "launch"), rep("r1", "done")])?.cli).toBe(true);
+  });
+});
+
 describe("uiViewOf（画面の表示モデル）", () => {
   it("ノード・未解決の項目（優先度の降順）・件数を返す。解決済みの項目は含めない", () => {
     const s = must([

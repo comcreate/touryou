@@ -89,6 +89,15 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       }),
       // 止まっているかもの子（長い ID。狭い窓で、はみ出さないことも見る）と、済んだ子
       ...created(LONG, "investigate", "root", "関係図の見た目を見本と比べる"),
+      // CLI の子（親が起動を報告した。#136: attach のコマンドは CLI の子にだけ出す）
+      ev({
+        type: "node.parentRequested",
+        payload: { nodeId: LONG, requestRef: "pr-long", kind: "launch", worktree: "/w/long" },
+      }),
+      ev({
+        type: "node.parentReported",
+        payload: { nodeId: LONG, requestRef: "pr-long", outcome: "done" },
+      }),
       ev({
         type: "inbox.added",
         payload: { id: "st1", kind: "info", nodeId: LONG, summary: stallSummary(LONG, 12) },
@@ -139,6 +148,12 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     });
     const body = (await res.json()) as { value: { ticket: string } };
     return body.value.ticket;
+  };
+  // 開き直す（再読み込みの代わり。チケットは 1 回きりなので、新しいチケットで開く。ブラウザに残したものは続く）
+  const reopen = async (): Promise<void> => {
+    await page.goto("about:blank");
+    await page.goto(`${url}/ui#ticket=${await ticket()}`);
+    await page.waitForSelector("#graph .gnode");
   };
   const csp = () => page.evaluate(() => (window as Win).__csp ?? []);
   const animations = () =>
@@ -524,12 +539,114 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(problems).toEqual([]);
   });
 
-  it("「動きを止める」で、図の線も玉も止まる。戻すと動く", async () => {
+  it("頭の帯の「設定」で設定の窓が開く。キーボードで開け、窓の中は Tab で回り、Esc・閉じるで閉じて、ボタンへ focus が戻る", async () => {
+    expect(await page.locator("header .tools #still").count()).toBe(0); // 頭の帯から「動きを止める」はなくなった
+    const btn = page.locator("#open-settings");
+    expect([await btn.getAttribute("aria-label"), await btn.getAttribute("title")]).toEqual([
+      "設定",
+      "設定",
+    ]);
+    await btn.focus();
+    await page.keyboard.press("Enter");
+    expect(await page.locator("#settings").evaluate((d) => (d as HTMLDialogElement).open)).toBe(
+      true,
+    );
+    expect(await page.getByRole("dialog", { name: "設定" }).count()).toBe(1);
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("set-still");
+    // 動きを止める → 明暗（選んだ 1 つ）→ 言語（選んだ 1 つ）→ 閉じる → また動きを止める
+    const order: string[] = [];
+    for (let k = 0; k < 4; k += 1) {
+      await page.keyboard.press("Tab");
+      order.push(
+        await page.evaluate(() => {
+          const a = document.activeElement as HTMLInputElement | null;
+          return a?.id || `${a?.name}:${a?.value}`;
+        }),
+      );
+    }
+    expect(order).toEqual(["set-theme:auto", "set-lang:ja", "close-settings", "set-still"]);
+    await page.keyboard.press("Shift+Tab");
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("close-settings");
+    await page.keyboard.press("Escape");
+    expect(await page.locator("#settings").evaluate((d) => (d as HTMLDialogElement).open)).toBe(
+      false,
+    );
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("open-settings");
+    await btn.click();
+    await page.click("#close-settings");
+    expect(await page.locator("#settings").evaluate((d) => (d as HTMLDialogElement).open)).toBe(
+      false,
+    );
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("open-settings");
+    // 言語の欄の場所（中身は #140。English はまだ選べない）
+    expect(await page.locator('input[name="set-lang"][value="en"]').isDisabled()).toBe(true);
+  });
+
+  it("設定の窓の「動きを止める」で、図の線も玉も止まる。戻すと動く。再読み込みのあとも残る", async () => {
     expect((await animations()).some((a) => a !== "none")).toBe(true);
-    await page.click("#still");
+    await page.click("#open-settings");
+    await page.click("#set-still");
     expect(new Set(await animations())).toEqual(new Set(["none"]));
-    await page.click("#still");
+    await page.click("#close-settings");
+    await reopen();
+    expect(new Set(await animations())).toEqual(new Set(["none"]));
+    await page.click("#open-settings");
+    expect(await page.locator("#set-still").isChecked()).toBe(true);
+    await page.click("#set-still");
+    await page.click("#close-settings");
     expect((await animations()).some((a) => a !== "none")).toBe(true);
+    expect(await csp()).toEqual([]);
+    expect(problems).toEqual([]);
+  });
+
+  it("設定の窓の明暗で、OS に合わせる・明るい・暗いが切り替わり、再読み込みのあとも残る", async () => {
+    const bg = () =>
+      page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor);
+    await page.emulateMedia({ colorScheme: "light" });
+    const light = await bg();
+    await page.click("#open-settings");
+    await page.check('input[name="set-theme"][value="dark"]');
+    await page.click("#close-settings");
+    const dark = await bg();
+    expect(dark).not.toBe(light);
+    await reopen();
+    expect(await bg()).toBe(dark);
+    // OS が暗くても「明るい」を選べば明るい
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.click("#open-settings");
+    await page.check('input[name="set-theme"][value="light"]');
+    expect(await bg()).toBe(light);
+    await page.check('input[name="set-theme"][value="auto"]');
+    expect(await bg()).toBe(dark);
+    await page.click("#close-settings");
+    await page.emulateMedia({ colorScheme: "light" });
+    expect(await bg()).toBe(light);
+    expect(await csp()).toEqual([]);
+    expect(problems).toEqual([]);
+  });
+
+  it("ブラウザに残せないとき（localStorage が使えない）も、設定の窓は動く", async () => {
+    const ctx = await (browser as Browser).newContext();
+    const p2 = await ctx.newPage();
+    await p2.addInitScript(() => {
+      Object.defineProperty(window, "localStorage", {
+        get() {
+          throw new Error("blocked");
+        },
+      });
+    });
+    const errs: string[] = [];
+    p2.on("pageerror", (e: Error) => errs.push(e.message));
+    await p2.goto(`${url}/ui#ticket=${await ticket()}`);
+    await p2.waitForSelector("#graph .gnode");
+    await p2.click("#open-settings");
+    await p2.click("#set-still");
+    expect(await p2.evaluate(() => document.documentElement.classList.contains("still"))).toBe(
+      true,
+    );
+    await p2.click("#close-settings");
+    expect(errs).toEqual([]);
+    await ctx.close();
   });
 
   it("prefers-reduced-motion のとき、図の線も玉も動かない", async () => {
@@ -548,13 +665,18 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
       await page.screenshot({ path: `${dir}/ui-${scheme}.png`, fullPage: true });
     }
+    // 設定の窓（#139）
+    await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+    await page.click("#open-settings");
+    await page.screenshot({ path: `${dir}/ui-settings.png` });
+    await page.click("#close-settings");
   });
 
-  it("狭い窓でも、横にはみ出さない。いちばん上の帯の「動きを止める」が切れない", async () => {
+  it("狭い窓でも、横にはみ出さない。いちばん上の帯の「設定」が切れない", async () => {
     for (const width of [1280, 900, 600, 390]) {
       await page.setViewportSize({ width, height: 900 });
       const r = await page.evaluate(() => {
-        const b = (document.getElementById("still") as HTMLElement).getBoundingClientRect();
+        const b = (document.getElementById("open-settings") as HTMLElement).getBoundingClientRect();
         return {
           over: document.documentElement.scrollWidth - document.documentElement.clientWidth,
           right: b.right,
