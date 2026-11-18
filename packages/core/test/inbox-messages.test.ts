@@ -81,6 +81,22 @@ describe("知らせの文の表（#140）", () => {
     expect(isInboxMessage(m.msg)).toBe(true);
   });
 
+  it("値の名前が 名前Key で表の鍵なら、{名前} を同じ言語のその文にする（入力待ちの種類の言葉）。知らない鍵は残す", () => {
+    const m = inboxMessage("needsInput", { node: "c1", labelKey: "labelPermissionPrompt" });
+    expect(m.summary).toBe(
+      "子 c1 が止まっている（許可の確認）。人が子のセッションを開いて（attach）応える",
+    );
+    expect(inboxMessageText("en", m.msg)).toBe(
+      "Child c1 is stuck (permission prompt). A person should open (attach to) the child's session and respond",
+    );
+    // 知らない種類は、種類の名前をそのまま値に入れる
+    expect(inboxMessage("needsInput", { node: "c1", label: "new_type" }).summary).toContain(
+      "（new_type）",
+    );
+    expect(fillMessage("{label}", { labelKey: "nope" }, "en")).toBe("{label}");
+    expect(fillMessage("{label}", { labelKey: "labelIdlePrompt" })).toBe("{label}"); // 言語を渡さなければ、置き換えない
+  });
+
   it("fillMessage：無い名前はそのまま残す。知らない鍵は、文にしない（画面は summary を出す）", () => {
     expect(fillMessage("a {x} b {y}", { x: 1 })).toBe("a 1 b {y}");
     expect(isInboxMessageKey("nope")).toBe(false);
