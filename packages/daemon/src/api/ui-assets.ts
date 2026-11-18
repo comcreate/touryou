@@ -13,7 +13,14 @@
  *   交換する。セッションのトークン（または貼り付けた人間のトークン）は、メモリにだけ持つ（storage・cookie には置かない）。`#token=` は受け取らない。
  */
 
+import { INBOX_MESSAGES, LIST_SEPS } from "@touryou/core";
 import { externalCheckSummaries } from "../external-check.js";
+import { UI_TEXT } from "../ui/i18n.js";
+
+// 画面の文字の表と、知らせの文の表（#140）。app.js に、そのまま JS の値として埋め込む
+const UI_TEXT_JSON = JSON.stringify(UI_TEXT);
+const INBOX_MESSAGES_JSON = JSON.stringify(INBOX_MESSAGES);
+const LIST_SEPS_JSON = JSON.stringify(LIST_SEPS);
 
 export const UI_HTML = `<!doctype html>
 <html lang="ja">
@@ -25,38 +32,38 @@ export const UI_HTML = `<!doctype html>
 <link rel="stylesheet" href="/ui/app.css">
 </head>
 <body>
-<p id="live" class="sr" aria-live="polite"></p><header class="top"><h1>touryou 状態画面</h1><span id="status" class="status">未接続</span><span class="tools"><button id="open-settings" class="quiet sm gear" type="button" aria-label="設定" title="設定" aria-haspopup="dialog" aria-controls="settings"><span aria-hidden="true">⚙</span></button></span></header>
-<dialog id="settings" class="settings" aria-labelledby="settings-title"><h2 id="settings-title">設定</h2>
-<fieldset><legend>アクセシビリティ</legend>
-<label class="opt"><input id="set-still" type="checkbox"> 動きを止める</label><p class="note">新しい項目の入る動き・線を流れる玉・光る縁などを止めます。OS の「視差効果を減らす」を入れているときは、ここを切っていても止まります。</p>
-<div role="radiogroup" aria-labelledby="set-theme-label" class="opts"><span id="set-theme-label" class="opts-label">明暗</span>
-<label class="opt"><input type="radio" name="set-theme" value="auto" checked> OS に合わせる</label>
-<label class="opt"><input type="radio" name="set-theme" value="light"> 明るい</label>
-<label class="opt"><input type="radio" name="set-theme" value="dark"> 暗い</label></div></fieldset>
-<fieldset><legend>言語</legend>
-<div role="radiogroup" aria-labelledby="set-lang-label" class="opts"><span id="set-lang-label" class="opts-label">画面の言語</span>
-<label class="opt"><input type="radio" name="set-lang" value="ja" checked> 日本語</label>
-<label class="opt"><input type="radio" name="set-lang" value="en" disabled> English</label></div><p class="note">English は、次の版で選べるようにします（いまは日本語だけ）。</p></fieldset>
-<p class="note">選んだものは、このブラウザに残ります。</p>
-<div class="settings-actions"><button id="close-settings" type="button">閉じる</button></div></dialog>
+<p id="live" class="sr" aria-live="polite"></p><header class="top"><h1 data-t="page.title">touryou 状態画面</h1><span id="status" class="status" data-t="conn.none">未接続</span><span class="tools"><button id="open-settings" class="quiet sm gear" type="button" data-t-aria="settings.title" data-t-title="settings.title" aria-label="設定" title="設定" aria-haspopup="dialog" aria-controls="settings"><span aria-hidden="true">⚙</span></button></span></header>
+<dialog id="settings" class="settings" aria-labelledby="settings-title"><h2 id="settings-title" data-t="settings.title">設定</h2>
+<fieldset><legend data-t="settings.a11y">アクセシビリティ</legend>
+<label class="opt"><input id="set-still" type="checkbox"> <span data-t="settings.still">動きを止める</span></label><p class="note" data-t="settings.stillNote">新しい項目の入る動き・線を流れる玉・光る縁などを止めます。OS の「視差効果を減らす」を入れているときは、ここを切っていても止まります。</p>
+<div role="radiogroup" aria-labelledby="set-theme-label" class="opts"><span id="set-theme-label" class="opts-label" data-t="settings.theme">明暗</span>
+<label class="opt"><input type="radio" name="set-theme" value="auto" checked> <span data-t="settings.themeAuto">OS に合わせる</span></label>
+<label class="opt"><input type="radio" name="set-theme" value="light"> <span data-t="settings.themeLight">明るい</span></label>
+<label class="opt"><input type="radio" name="set-theme" value="dark"> <span data-t="settings.themeDark">暗い</span></label></div></fieldset>
+<fieldset><legend data-t="lang.label">言語</legend>
+<div role="radiogroup" aria-labelledby="set-lang-label" class="opts"><span id="set-lang-label" class="opts-label" data-t="lang.screen">画面の言語</span>
+<label class="opt"><input type="radio" name="set-lang" value="ja" checked> <span lang="ja">日本語</span></label>
+<label class="opt"><input type="radio" name="set-lang" value="en"> <span lang="en">English</span></label></div><p class="note" data-t="lang.note">daemon が書く知らせも、選んだ言語で出します。子や統合が書いた文と、古い知らせは、書かれたままの言葉で出します。</p></fieldset>
+<p class="note" data-t="settings.kept">選んだものは、このブラウザに残ります。</p>
+<div class="settings-actions"><button id="close-settings" type="button" data-t="settings.close">閉じる</button></div></dialog>
 <main>
 <section id="auth" hidden>
-<h2>人間のトークン</h2>
-<p>Mac のターミナルで <code>touryou ui</code> を実行すると（Claude Code では <code>/touryou:ui</code>）、貼り付けなしで開けます。再読み込みしたときも、開き直してください。使えないときは、人間のトークンのファイルの中身を貼り付けてください。トークンはこのページのメモリにだけ置き、保存しません。</p>
-<form id="auth-form"><input id="token" name="token" type="password" autocomplete="off" spellcheck="false" aria-label="人間のトークン"><button type="submit">接続</button></form>
+<h2 data-t="auth.title">人間のトークン</h2>
+<p><span data-t="auth.lead1">Mac のターミナルで </span><code>touryou ui</code><span data-t="auth.lead2"> を実行すると（Claude Code では </span><code>/touryou:ui</code><span data-t="auth.lead3">）、貼り付けなしで開けます。再読み込みしたときも、開き直してください。使えないときは、人間のトークンのファイルの中身を貼り付けてください。トークンはこのページのメモリにだけ置き、保存しません。</span></p>
+<form id="auth-form"><input id="token" name="token" type="password" autocomplete="off" spellcheck="false" data-t-aria="auth.title" aria-label="人間のトークン"><button type="submit" data-t="auth.connect">接続</button></form>
 </section>
 <section id="approvals" class="approvals" hidden></section>
 <section id="confirm" class="confirm" hidden></section>
 <p id="notice" class="notice" hidden></p>
 <section id="view" hidden>
-<section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h2 id="now-title">いまあなたがすること</h2><p id="now-lead" class="lead"></p></section>
+<section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h2 id="now-title" data-t="now.title">いまあなたがすること</h2><p id="now-lead" class="lead"></p></section>
 <div id="todo" class="todo"></div>
-<section class="sec"><h2>やり取り</h2><p class="lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button">図</button><button id="show-list" class="quiet sm" type="button">一覧</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" aria-label="全体を見る" title="全体を見る（初めの形に戻す）">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span>← 上り（子 → 親。答え待ちの頼みを先に）</span><span class="lg"><span class="sw down"></span>→ 下り（親・人 → 子）</span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span>新しいほど濃い</span><span class="lg"><span class="sw wait"></span>あなたの答え待ちのやり取り</span><span class="lg"><span class="edge go"></span>進んでいる</span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span>あなたの出番（答え待ち・止まっているかも・失敗）</span><span class="lg"><span class="edge over"></span>終わった</span><span class="lg">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
-<section class="sec"><h2>作業ごとのようす</h2><p class="lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
-<details id="finished" class="finished"><summary id="finished-summary">終わった作業</summary><div id="finished-cards" class="cards"></div></details></section>
-<details class="admin"><summary>管理（まれに使う操作）</summary><p class="warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
-<h2>アーカイブした作業の最終削除と、自動の削除の保留</h2><div id="purge"></div>
-<h2>捨てた作業の保管</h2><div id="kept"></div></details>
+<section class="sec"><h2 data-t="flows.title">やり取り</h2><p class="lead" data-t="flows.lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span><span data-t="legend.up">← 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">→ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
+<section class="sec"><h2 data-t="cards.title">作業ごとのようす</h2><p class="lead" data-t="cards.lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
+<details id="finished" class="finished"><summary id="finished-summary" data-t="cards.finishedTitle">終わった作業</summary><div id="finished-cards" class="cards"></div></details></section>
+<details class="admin"><summary data-t="admin.title">管理（まれに使う操作）</summary><p class="warn" data-t="admin.warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
+<h2 data-t="admin.purge">アーカイブした作業の最終削除と、自動の削除の保留</h2><div id="purge"></div>
+<h2 data-t="admin.kept">捨てた作業の保管</h2><div id="kept"></div></details>
 </section>
 </main>
 <script src="/ui/app.js"></script>
@@ -239,12 +246,17 @@ export const UI_JS = `'use strict';
   // 設定の窓（#139）。描く前に当てる（読み込みの一瞬だけ違う明暗で描かないように）。選んだものはブラウザに残す（残せないときも、その場では効く）。
   // localStorage を使うのは、この 2 つの関数の中だけ（鍵は 1 つ。書くのは still・theme・lang だけ。トークン・チケット・ID は書かない）
   var SETTINGS_KEY = 'touryou.ui.settings';
+  function browserLang() {
+    var b = typeof navigator === 'object' && navigator ? navigator.language : undefined;
+    return typeof b === 'string' && /^ja(?:-|$)/i.test(b) ? 'ja' : 'en';
+  }
   function settingsOf(o) {
     var v = o !== null && typeof o === 'object' ? o : {};
     return {
       still: v.still === true,
       theme: v.theme === 'light' || v.theme === 'dark' ? v.theme : 'auto',
-      lang: v.lang === 'en' ? 'en' : 'ja',
+      // 覚えた言語がなければ、ブラウザの言語（ja で始まれば日本語、ほかは英語。i18n.ts の pickLang と同じ。試験で照らす）
+      lang: v.lang === 'en' || v.lang === 'ja' ? v.lang : browserLang(),
     };
   }
   function loadSettings() {
@@ -276,17 +288,70 @@ export const UI_JS = `'use strict';
     window.history.replaceState(null, '', window.location.pathname + window.location.search);
   }
 
+  // 画面の言語（#140）。文字は表（ui/i18n.ts の UI_TEXT）から引き、daemon が書いた知らせ（msg つき）は core の表で文にする。
+  // msg のない知らせ（古い記録・子や統合が書いた文）は、summary のまま出す（利用者の決め）。差し込んだ文は textContent で入れる
+  var TEXT = ${UI_TEXT_JSON};
+  var MESSAGES = ${INBOX_MESSAGES_JSON};
+  var SEPS = ${LIST_SEPS_JSON};
+  var PLACEHOLDER = /[{]([a-z][A-Za-z0-9]*)[}]/g;
+  var lang = settings.lang;
+  function t(key, args) {
+    if (!Object.hasOwn(TEXT, key)) return key;
+    return TEXT[key][lang].replace(PLACEHOLDER, function (all, nm) { return args && Object.hasOwn(args, nm) ? String(args[nm]) : all; });
+  }
+  // core の inboxMessageText と同じ規則（試験で照らす）。表にない鍵・形の合わないものは null
+  function msgText(m) {
+    if (!m || typeof m !== 'object' || typeof m.key !== 'string' || !Object.hasOwn(MESSAGES, m.key)) return null;
+    var args = m.args && typeof m.args === 'object' ? m.args : {};
+    var filled = {};
+    if (m.parts && typeof m.parts === 'object') {
+      var names = Object.keys(m.parts);
+      for (var k = 0; k < names.length; k += 1) {
+        var l = m.parts[names[k]];
+        if (!l || !Array.isArray(l.items) || typeof l.sep !== 'string' || !Object.hasOwn(SEPS, l.sep)) return null;
+        var texts = [];
+        for (var j = 0; j < l.items.length; j += 1) {
+          var s = msgText(l.items[j]);
+          if (s === null) return null;
+          texts.push(s);
+        }
+        filled[names[k]] = texts.join(SEPS[l.sep][lang]);
+      }
+    }
+    return MESSAGES[m.key][lang].replace(PLACEHOLDER, function (all, nm) {
+      if (Object.hasOwn(args, nm)) return String(args[nm]);
+      if (Object.hasOwn(filled, nm)) return filled[nm];
+      var ref = nm + 'Key';
+      if (Object.hasOwn(args, ref) && typeof args[ref] === 'string' && Object.hasOwn(MESSAGES, args[ref])) return MESSAGES[args[ref]][lang];
+      return all;
+    });
+  }
+  function itemText(i) {
+    var s = msgText(i.msg);
+    return s !== null ? s : typeof i.summary === 'string' ? i.summary : '';
+  }
+  // ページに書いてある文字（data-t の鍵）と、html の lang（属性は使わず、プロパティで入れる）
+  function applyLang() {
+    document.documentElement.lang = lang;
+    document.title = t('page.title');
+    document.querySelectorAll('[data-t]').forEach(function (e) { e.textContent = t(e.dataset.t); });
+    document.querySelectorAll('[data-t-aria]').forEach(function (e) { e.ariaLabel = t(e.dataset.tAria); });
+    document.querySelectorAll('[data-t-title]').forEach(function (e) { e.title = t(e.dataset.tTitle); });
+  }
+  applyLang();
+
   var TAGS = { div: true, span: true, p: true, button: true, textarea: true, details: true, summary: true, code: true, h3: true };
   var TEXT_MAX = 4000;
   var FORBIDDEN = /[\\p{Cc}\\p{Cf}]/u;
-  var STATE_NAMES = { pending: '起動を待っている', running: '動いている', waiting: '待っている', done: '済んだと報告（確かめ待ち）', verified: '受け入れた', stopping: '止めている', stopIncomplete: '止まりきっていない', stopped: '止めた', reclaimable: '片付けられる', archived: 'アーカイブした' };
-  var ROLE_NAMES = { integrator: '統合', implement: '作業', review: 'レビュー', investigate: '調べ', merge: 'まとめ' };
+  var STATE_NAMES = { pending: 'state.pending', running: 'state.running', waiting: 'state.waiting', done: 'state.done', verified: 'state.verified', stopping: 'state.stopping', stopIncomplete: 'state.stopIncomplete', stopped: 'state.stopped', reclaimable: 'state.reclaimable', archived: 'state.archived' };
+  var ROLE_NAMES = { integrator: 'role.integrator', implement: 'role.implement', review: 'role.review', investigate: 'role.investigate', merge: 'role.merge' };
   // 受信箱の項目の種類（利用者の言葉）。「止まっているかも」は、daemon の知らせ（stall）があるときだけ（画面で推し量らない）
-  var KIND_NAMES = { decision: '判断を求む', answer: '答え', violation: '止められた操作', failure: 'うまくいかなかった', stopIncomplete: '止まりきっていない', done: '済んだ', progress: '進み具合', info: '知らせ', digest: 'まとめ' };
-  var BAND_NAMES = { turn: 'あなたの出番', running: '進んでいる', finished: '終わった' };
-  var FLOW_KIND_NAMES = { instruction: '指示', report: '報告', done: '済んだの報告', decision: '判断を求む', extension: '範囲の頼み', answer: '答え', approved: '許可', rejected: '却下', split: '切り出し' };
+  var KIND_NAMES = { decision: 'kind.decision', answer: 'kind.answer', violation: 'kind.violation', failure: 'kind.failure', stopIncomplete: 'kind.stopIncomplete', done: 'kind.done', progress: 'kind.progress', info: 'kind.info', digest: 'kind.digest' };
+  var BAND_NAMES = { turn: 'band.turn', running: 'band.running', finished: 'band.finished' };
+  var FLOW_KIND_NAMES = { instruction: 'flow.instruction', report: 'flow.report', done: 'flow.done', decision: 'flow.decision', extension: 'flow.extension', answer: 'flow.answer', approved: 'flow.approved', rejected: 'flow.rejected', split: 'flow.split' };
   var EXTERNAL_CHECK_PREFIXES = ${EXTERNAL_CHECK_PREFIXES};
-  var PRIORITY_NAMES = { blocking: '要判断', failed: '失敗', completed: '完了', progress: '進捗', info: '情報' };
+  var EXTERNAL_CHECK_KEYS = { externalCheck: true, externalCheckMore: true };
+  var PRIORITY_NAMES = { blocking: 'priority.blocking', failed: 'priority.failed', completed: 'priority.completed', progress: 'priority.progress', info: 'priority.info' };
   var POLL_MS = 2000;
   var SAFETY_MS = 30000;
   var THROTTLE_MS = 1000;
@@ -305,6 +370,7 @@ export const UI_JS = `'use strict';
   var viewEl = document.getElementById('view');
   var timer = null;
   var lastView = null;
+  var lastRaw = null;
   var sseUp = false;
   var generation = 0;
   var backoff = BACKOFF_MIN;
@@ -323,29 +389,29 @@ export const UI_JS = `'use strict';
   var reconnectTimer = null;
   var hideTimer = null;
 
-  function name(table, key) { return Object.hasOwn(table, key) ? table[key] : key; }
+  function name(table, key) { return Object.hasOwn(table, key) ? t(table[key]) : key; }
   // 時刻（ISO 8601）を、手元の時刻と経過で出す。今日なら「14:05（3 分前）」、ほかの日は「11/16 14:05（1 日前）」。読めなければ ''。
   function timeText(iso, nowMs) {
-    var t = typeof iso === 'string' ? Date.parse(iso) : NaN;
-    if (!(t === t)) return '';
-    var d = new Date(t);
+    var ms = typeof iso === 'string' ? Date.parse(iso) : NaN;
+    if (!(ms === ms)) return '';
+    var d = new Date(ms);
     var today = new Date(nowMs);
     var hm = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
     var sameDay = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate();
-    return (sameDay ? '' : (d.getMonth() + 1) + '/' + d.getDate() + ' ') + hm + '（' + agoText(nowMs - t) + '）';
+    return t('time.at', { when: (sameDay ? '' : (d.getMonth() + 1) + '/' + d.getDate() + ' ') + hm, ago: agoText(nowMs - ms) });
   }
   function agoText(ms) {
     var m = Math.floor(ms / 60000);
-    if (m < 1) return 'いま';
-    if (m < 60) return m + ' 分前';
-    if (m < 1440) return Math.floor(m / 60) + ' 時間前';
-    return Math.floor(m / 1440) + ' 日前';
+    if (m < 1) return t('time.now');
+    if (m < 60) return t('time.minAgo', { n: m });
+    if (m < 1440) return t('time.hourAgo', { n: Math.floor(m / 60) });
+    return t('time.dayAgo', { n: Math.floor(m / 1440) });
   }
   // やり取りの段の言葉。届いたかの記録がない（deliveryUnknown）・推定（doneInferred）は、そう言う
   function stageText(f) {
-    if (f.stage === 'sent') return f.deliveryUnknown ? '送った（届いたかは分からない）' : '送った（まだ届いていない）';
-    if (f.stage === 'delivered') return '届いた（返事を待っている）';
-    if (f.stage === 'done') return f.doneInferred ? '済んだ（推定）' : '済んだ';
+    if (f.stage === 'sent') return t(f.deliveryUnknown ? 'stage.sentUnknown' : 'stage.sent');
+    if (f.stage === 'delivered') return t('stage.delivered');
+    if (f.stage === 'done') return t(f.doneInferred ? 'stage.doneInferred' : 'stage.done');
     return '';
   }
   // 止まっているかもしれない子を開くコマンド。CLI の子は --name <ノード ID> で起動しているので、claude attach で開ける。
@@ -387,10 +453,10 @@ export const UI_JS = `'use strict';
   }
   // 自由入力の回答の検査。制御文字・書式制御文字は、サーバーの検証と同じ規則（タブ・改行は可）。上限（TEXT_MAX）は、サーバー（64 KiB）より厳しい。問題がなければ ''。
   function checkAnswer(text) {
-    if (text.trim() === '') return '回答が空です（空白だけは送れません）';
+    if (text.trim() === '') return t('answer.empty');
     var n = Array.from(text).length;
-    if (n > TEXT_MAX) return '長すぎます（' + n + ' 文字。' + TEXT_MAX + ' 文字以下）';
-    if (hasForbidden(text)) return '使えない文字（制御文字・書式制御文字）を含んでいます';
+    if (n > TEXT_MAX) return t('answer.tooLong', { n: n, max: TEXT_MAX });
+    if (hasForbidden(text)) return t('answer.forbidden');
     return '';
   }
   // 通知。bad が真なら、失敗として赤で出す。
@@ -409,18 +475,18 @@ export const UI_JS = `'use strict';
   function describeFailure(r) {
     var e = r.body && r.body.error;
     var base = e && typeof e.code === 'string' ? e.code + ': ' + String(e.cause || '').slice(0, 300) : 'HTTP ' + r.status;
-    if (r.status === 429) base += '（' + (r.retry > 0 ? r.retry + ' 秒' : 'しばらく') + '待ってから、もう一度送る）';
+    if (r.status === 429) base += r.retry > 0 ? t('fail.waitSec', { n: r.retry }) : t('fail.waitAWhile');
     var hint = failureHint(e && e.code);
     // 先端が変わった（または確かめられない）ときは、同じ内容では、何度送っても通らない。確かめ直させる
     if (hint) return base + '\\n' + hint;
     // 再送して意味があるのは、待てば通りうるもの（429。ネットワークの失敗は、sendPending の catch）だけ。判断の失敗（4xx）は、同じ内容では、結果が変わらない
-    if (r.status === 429) return base + '\\n同じ内容で、もう一度送れます（同じ要求として扱われ、二重には実行されません）。';
-    return base + '\\n同じ内容を送り直しても、結果は変わりません。「戻る」で、状態を確かめてから、やり直してください。';
+    if (r.status === 429) return base + '\\n' + t('fail.resendable');
+    return base + '\\n' + t('fail.sameResult');
   }
   // 失敗の種類ごとの案内。なければ ''。
   function failureHint(code) {
-    if (code === 'confirmationRequired') return 'まだ実行していません。ページのいちばん上の「確認待ち」の欄に、daemon を起動した端末に出たコードを打って、確認してください。';
-    if (code === 'tipMismatch' || code === 'tipUnknown') return '表示したあとで、先端が変わった（または確かめられない）ため、何も指示していません。もう一度、「破棄して回収を指示…」から、内容を確かめ直してください。';
+    if (code === 'confirmationRequired') return t('fail.confirmationRequired');
+    if (code === 'tipMismatch' || code === 'tipUnknown') return t('fail.tipMismatch');
     return '';
   }
   function renderConfirm() {
@@ -428,7 +494,7 @@ export const UI_JS = `'use strict';
     clear(box);
     if (!pending) { box.hidden = true; return; }
     box.hidden = false;
-    box.appendChild(el('div', 'confirm-title', pending.title + '（確認）'));
+    box.appendChild(el('div', 'confirm-title', t('confirm.title', { title: pending.title })));
     pending.lines.forEach(function (line) {
       var row = el('div', 'confirm-line');
       row.appendChild(el('span', 'tag', line[0]));
@@ -439,7 +505,7 @@ export const UI_JS = `'use strict';
     var typedBox = null;
     if (pending.typed !== undefined && !pending.blocked) {
       // 長い ID を手で打たなくてよいように、文字列は、1 回のクリックで全体が選ばれる（コピーして、欄に貼り付けられる）
-      var typedLine = el('p', '', '取り消せません。確認のため、次の文字列を、そのまま打ち込むか、コピーして貼り付けてください: ');
+      var typedLine = el('p', '', t('confirm.typed'));
       typedLine.appendChild(el('span', 'typed-value', pending.typed));
       box.appendChild(typedLine);
       typedBox = field('typed');
@@ -454,7 +520,7 @@ export const UI_JS = `'use strict';
     // 429 のときは、Retry-After の秒数のあいだ、送れない（時間が来たら、自動で、押せるようになる）
     var left = pending.retryAt ? Math.ceil((pending.retryAt - Date.now()) / 1000) : 0;
     var waiting = left > 0;
-    var send = el('button', 'primary', pending.sending ? '送信中…' : waiting ? 'あと ' + left + ' 秒待つ' : 'この内容で送る');
+    var send = el('button', 'primary', pending.sending ? t('confirm.sending') : waiting ? t('confirm.wait', { n: left }) : t('confirm.send'));
     var refreshSend = function () {
       send.disabled = pending.sending || waiting || Boolean(pending.blocked) || (pending.typed !== undefined && !typedMatches(pending.typed, pending.typedValue));
     };
@@ -472,7 +538,7 @@ export const UI_JS = `'use strict';
       window.setTimeout(function () { if (pending === shown) renderConfirm(); }, 500);
     }
     send.addEventListener('click', sendPending);
-    var back = el('button', '', '戻る');
+    var back = el('button', '', t('confirm.back'));
     back.disabled = pending.sending;
     back.addEventListener('click', function () { pending = null; renderConfirm(); });
     actions.appendChild(send);
@@ -490,7 +556,7 @@ export const UI_JS = `'use strict';
   // done: 成功の通知（文字列、または、結果の値を受け取って文字列を返す関数）。opts.typed: 打ち込ませる文字列（取り消せない操作）。opts.blocked: 送れない理由（出して、送らせない）。opts.after: 成功のあとに呼ぶ関数。
   function openConfirm(title, lines, operation, params, done, opts) {
     if (pending && pending.sending) return;
-    if (!window.crypto || !window.crypto.randomUUID) { notice('このブラウザでは、操作できません（crypto.randomUUID がありません）', true); return; }
+    if (!window.crypto || !window.crypto.randomUUID) { notice(t('err.noCrypto'), true); return; }
     notice('');
     var o = opts || {};
     pending = { title: title, lines: lines, operation: operation, params: params, done: done, requestId: window.crypto.randomUUID(), sending: false, error: '', retryAt: 0, typed: o.typed, typedValue: '', blocked: o.blocked || '', after: o.after, justOpened: true };
@@ -508,7 +574,7 @@ export const UI_JS = `'use strict';
       body: JSON.stringify({ requestId: requestId, operation: operation, params: params })
     })
       .then(function (res) {
-        if (res.status === 401) { rejectToken('トークンが正しくありません'); return null; }
+        if (res.status === 401) { rejectToken(t('err.badToken')); return null; }
         var retry = res.status === 429 ? parseInt(res.headers.get('retry-after') || '', 10) : 0;
         return res.json().then(
           function (body) { return { status: res.status, body: body, retry: retry }; },
@@ -519,7 +585,7 @@ export const UI_JS = `'use strict';
   // 読み取りの操作（事前確認・一覧）の結果。{ ok: true, value } か { ok: false, error: { code, cause, status } }（通知は出さない。
   // 失敗の種類（tipMismatch など）を、呼び出し側が区別できる）。ネットワークの失敗は code が 'network'、401 はトークンを破棄して null。
   function readOperationResult(operation, params) {
-    if (!window.crypto || !window.crypto.randomUUID) return Promise.resolve({ ok: false, error: { code: 'unsupported', cause: 'このブラウザでは、操作できません（crypto.randomUUID がありません）', status: 0 } });
+    if (!window.crypto || !window.crypto.randomUUID) return Promise.resolve({ ok: false, error: { code: 'unsupported', cause: t('err.noCrypto'), status: 0 } });
     return callOperation(operation, params, window.crypto.randomUUID())
       .then(function (r) {
         if (r === null) return null;
@@ -527,14 +593,14 @@ export const UI_JS = `'use strict';
         var e = r.body && r.body.error;
         return { ok: false, error: { code: e && typeof e.code === 'string' ? e.code : 'http', cause: e ? String(e.cause || '').slice(0, 300) : 'HTTP ' + r.status, status: r.status } };
       })
-      .catch(function () { return { ok: false, error: { code: 'network', cause: 'daemon に接続できません', status: 0 } }; });
+      .catch(function () { return { ok: false, error: { code: 'network', cause: t('err.noDaemon'), status: 0 } }; });
   }
   // 読み取りの操作。成功なら値、失敗なら通知（赤）に理由を出して null。
   function readOperation(operation, params) {
     return readOperationResult(operation, params).then(function (r) {
       if (r === null) return null;
       if (r.ok) return r.value;
-      notice('失敗: ' + r.error.code + ': ' + r.error.cause, true);
+      notice(t('err.failed', { code: r.error.code, cause: r.error.cause }), true);
       return null;
     });
   }
@@ -564,7 +630,7 @@ export const UI_JS = `'use strict';
       })
       .catch(function () {
         p.sending = false;
-        p.error = '送れませんでした（daemon に接続できません）。\\n同じ内容で、もう一度送れます（同じ要求として扱われ、二重には実行されません）。';
+        p.error = t('err.sendNetwork') + '\\n' + t('fail.resendable');
         if (pending === p) renderConfirm();
       });
   }
@@ -575,16 +641,16 @@ export const UI_JS = `'use strict';
     var keep = active && active.dataset ? active.dataset.draft : '';
     var areas = new Map();
     var live = new Set();
-    var CLOSED_REASON = { discarded: '破棄を決めた子のため、答えても届きません' };
+    var CLOSED_REASON = { discarded: 'decision.closedDiscarded' };
     list.forEach(function (d) {
       live.add(d.id);
       var closed = d.closedReason;
-      var card = taskCard(closed ? 'task closed' : 'task', 'd-' + d.id, closed ? '閉じた判断' : '判断を求む', closed ? '' : 'turn', byId.get(d.nodeId), d.nodeId);
-      var question = d.question || '（質問の記録なし）';
+      var card = taskCard(closed ? 'task closed' : 'task', 'd-' + d.id, t(closed ? 'decision.closed' : 'decision.ask'), closed ? '' : 'turn', byId.get(d.nodeId), d.nodeId);
+      var question = d.question || t('decision.noQuestion');
       card.appendChild(el('div', 'ask', question));
       // 閉じた判断は、理由を示し、回答の操作を出さない（答えても届かないため）。
       if (closed) {
-        card.appendChild(el('p', 'error', CLOSED_REASON[closed] || '閉じています'));
+        card.appendChild(el('p', 'error', Object.hasOwn(CLOSED_REASON, closed) ? t(CLOSED_REASON[closed]) : t('decision.closedOther')));
         box.appendChild(card);
         return;
       }
@@ -596,15 +662,15 @@ export const UI_JS = `'use strict';
         b.disabled = o.truncated;
         if (o.truncated) anyCut = true;
         b.addEventListener('click', function () {
-          openConfirm('判断への回答', [['ノード', d.nodeId], ['判断', question], ['回答（選択肢）', o.text]], 'decision.answer', { decisionId: d.id, choice: o.text }, answerDoneText);
+          openConfirm(t('decision.answerTitle'), [[t('line.node'), d.nodeId], [t('line.decision'), question], [t('line.answerChoice'), o.text]], 'decision.answer', { decisionId: d.id, choice: o.text }, answerDoneText);
         });
         opts.appendChild(b);
       });
       card.appendChild(opts);
-      if (anyCut) card.appendChild(el('p', 'error', '長すぎる（または、表示できない文字を含む・数が多い）選択肢があります。長すぎるため、自由入力で回答してください'));
+      if (anyCut) card.appendChild(el('p', 'error', t('decision.optionsCut')));
       var area = field('answer');
       area.maxLength = TEXT_MAX;
-      area.placeholder = '自由入力で回答（' + TEXT_MAX + ' 文字まで）';
+      area.placeholder = t('decision.freePlaceholder', { max: TEXT_MAX });
       area.dataset.draft = d.id;
       area.value = drafts.get(d.id) || '';
       area.addEventListener('input', function () { drafts.set(d.id, area.value); });
@@ -612,14 +678,14 @@ export const UI_JS = `'use strict';
       card.appendChild(area);
       var problem = el('p', 'error', '');
       problem.hidden = true;
-      var free = el('button', '', '自由入力で回答する');
+      var free = el('button', '', t('decision.freeSend'));
       free.addEventListener('click', function () {
         var text = area.value;
         var why = checkAnswer(text);
         problem.textContent = why;
         problem.hidden = why === '';
         if (why !== '') return;
-        openConfirm('判断への回答', [['ノード', d.nodeId], ['判断', question], ['回答（自由入力）', text]], 'decision.answer', { decisionId: d.id, text: text }, answerDoneText);
+        openConfirm(t('decision.answerTitle'), [[t('line.node'), d.nodeId], [t('line.decision'), question], [t('line.answerFree'), text]], 'decision.answer', { decisionId: d.id, text: text }, answerDoneText);
       });
       card.appendChild(free);
       card.appendChild(problem);
@@ -635,32 +701,32 @@ export const UI_JS = `'use strict';
 
   // 拡張要求の判定（scope.decide）。許可する対象は、daemon が記録済みの対象をそのまま使う（画面の表示と一致する）。
   // 対象が隠れている（絶対パス・.. ・制御文字・長すぎる、など）ときは、承認・切り出しをさせない（却下だけ）。
-  var DECISION_LABELS = { approve: '承認', reject: '却下', split: '切り出し' };
-  var DECISION_NOTES = { split: 'この対象は許可しない。子には、作業を切り出して進めるよう通知される' };
-  var KIND_LABELS = { write: '書き込みの場所', command: 'コマンド' };
+  var DECISION_LABELS = { approve: 'ext.approve', reject: 'ext.reject', split: 'ext.split' };
+  var DECISION_NOTES = { split: 'ext.splitNote' };
+  var KIND_LABELS = { write: 'ext.kindWrite', command: 'ext.kindCommand' };
   function renderExtensions(list, box, byId) {
     list.forEach(function (x) {
-      var card = taskCard('task', 'x-' + x.id, '範囲を広げる頼み', 'turn', byId.get(x.nodeId), x.nodeId);
-      card.appendChild(el('div', 'ask', (x.kind ? name(KIND_LABELS, x.kind) + 'を広げたい: ' : '') + x.reason));
-      card.appendChild(el('p', 'desc', '承認すると、子はこの対象を使えるようになります。却下すると、子には範囲の外と伝わり、別のやり方を考えます。切り出すと、別の作業として分けます。'));
-      card.appendChild(el('div', 'confirm-line', x.targetHidden ? '対象: （表示できない）' : '対象: ' + x.target));
+      var card = taskCard('task', 'x-' + x.id, t('ext.title'), 'turn', byId.get(x.nodeId), x.nodeId);
+      card.appendChild(el('div', 'ask', x.kind ? t('ext.ask', { kind: name(KIND_LABELS, x.kind), reason: x.reason }) : x.reason));
+      card.appendChild(el('p', 'desc', t('ext.desc')));
+      card.appendChild(el('div', 'confirm-line', t('ext.target', { target: x.targetHidden ? t('ext.hidden') : x.target })));
       var opts = el('div', 'opts');
       ['approve', 'reject', 'split'].forEach(function (decision) {
-        var b = el('button', '', DECISION_LABELS[decision]);
+        var b = el('button', '', t(DECISION_LABELS[decision]));
         b.disabled = x.targetHidden && decision !== 'reject';
         b.addEventListener('click', function () {
           openConfirm(
-            '範囲の頼みの' + DECISION_LABELS[decision],
-            [['ノード', x.nodeId], ['種類', x.kind ? name(KIND_LABELS, x.kind) : '（不明）'], ['対象', x.targetHidden ? '（表示できない）' : x.target], ['理由', x.reason], ['判定', DECISION_LABELS[decision] + (Object.hasOwn(DECISION_NOTES, decision) ? '（' + DECISION_NOTES[decision] + '）' : '')]],
+            t('ext.confirmTitle', { decision: t(DECISION_LABELS[decision]) }),
+            [[t('line.node'), x.nodeId], [t('line.kind'), x.kind ? name(KIND_LABELS, x.kind) : t('line.unknown')], [t('line.target'), x.targetHidden ? t('ext.hidden') : x.target], [t('line.reason'), x.reason], [t('line.verdict'), Object.hasOwn(DECISION_NOTES, decision) ? t('ext.verdictNote', { decision: t(DECISION_LABELS[decision]), note: t(DECISION_NOTES[decision]) }) : t(DECISION_LABELS[decision])]],
             'scope.decide',
             { extensionId: x.id, decision: decision },
-            '範囲の頼みを' + DECISION_LABELS[decision] + 'しました'
+            t('ext.done', { decision: t(DECISION_LABELS[decision]) })
           );
         });
         opts.appendChild(b);
       });
       card.appendChild(opts);
-      if (x.targetHidden) card.appendChild(el('p', 'error', '対象に、表示できない文字・絶対パス・.. ・長すぎる値などが含まれるため、承認・切り出しはできません（却下だけできます）。子に、相対パス・単純なコマンドで要求し直すよう依頼してください。'));
+      if (x.targetHidden) card.appendChild(el('p', 'error', t('ext.hiddenNote')));
       box.appendChild(card);
     });
   }
@@ -670,12 +736,14 @@ export const UI_JS = `'use strict';
   function isStopRequest(i, delegated) {
     if (i.kind !== 'stopIncomplete') return false;
     if (delegated.has(i.nodeId)) return true;
+    // daemon が鍵と値で書いた依頼は、鍵で見分ける（#140）。鍵のない古い記録だけ、文面の先頭で見分ける
+    if (i.msg && typeof i.msg === 'object' && Object.hasOwn(EXTERNAL_CHECK_KEYS, i.msg.key)) return true;
     var summary = typeof i.summary === 'string' ? i.summary : '';
     return EXTERNAL_CHECK_PREFIXES.some(function (p) { return summary.indexOf(p) === 0; });
   }
   // 受信箱の帯（色）と名前。停止の代行依頼は、赤の「失敗」でなく「停止の代行依頼」。
   function inboxBand(i, delegated) {
-    if (isStopRequest(i, delegated)) return { cls: 'request', label: '停止の代行依頼' };
+    if (isStopRequest(i, delegated)) return { cls: 'request', label: t('inbox.stopRequest') };
     var cls = i.priority === 'blocking' || i.priority === 'failed' ? i.priority : '';
     return { cls: cls, label: name(PRIORITY_NAMES, i.priority) };
   }
@@ -702,7 +770,7 @@ export const UI_JS = `'use strict';
     var who = el('div', 'who');
     who.appendChild(el('span', 'chip ' + chip, label));
     who.appendChild(el('span', 'strong', n ? nodeLabel(n, 60) : nodeId));
-    if (n) who.appendChild(el('span', '', '（' + name(ROLE_NAMES, n.role) + '）' + (n.lastActivityAt ? '・最後の動き ' + timeText(n.lastActivityAt, Date.now()) : '')));
+    if (n) who.appendChild(el('span', '', n.lastActivityAt ? t('who.roleLast', { role: name(ROLE_NAMES, n.role), when: timeText(n.lastActivityAt, Date.now()) }) : t('who.role', { role: name(ROLE_NAMES, n.role) })));
     card.appendChild(who);
     return card;
   }
@@ -719,14 +787,14 @@ export const UI_JS = `'use strict';
     var b = el('button', 'sm copy');
     b.appendChild(el('span', 'copy-ico'));
     var name = function (label, cls) { b.ariaLabel = label; b.title = label; b.className = cls; };
-    name('写す', 'sm copy');
+    name(t('copy.label'), 'sm copy');
     var back = null;
     b.addEventListener('click', function () {
       var said = function (ok) {
-        name(ok ? '写しました' : '写せません（文字を選んでコピーしてください）', ok ? 'sm copy done' : 'sm copy failed');
-        announce(ok ? '写しました' : '写せません。文字を選んでコピーしてください');
+        name(t(ok ? 'copy.done' : 'copy.failedLabel'), ok ? 'sm copy done' : 'sm copy failed');
+        announce(t(ok ? 'copy.done' : 'copy.failed'));
         if (back !== null) window.clearTimeout(back);
-        back = window.setTimeout(function () { back = null; name('写す', 'sm copy'); }, COPY_BACK_MS);
+        back = window.setTimeout(function () { back = null; name(t('copy.label'), 'sm copy'); }, COPY_BACK_MS);
       };
       if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(function () { said(true); }, function () { said(false); });
       else said(false);
@@ -754,41 +822,41 @@ export const UI_JS = `'use strict';
       var node = byId.get(i.nodeId);
       if (i.stall === true) {
         n += 1;
-        var card = taskCard('task stall', 'i-' + i.id, '止まっているかも', 'stall', node, i.nodeId);
-        card.appendChild(el('div', 'ask', 'daemon が、この子は入力を待って止まっているかもしれないと知らせています。子の画面を開いて確かめてください。'));
-        if (i.at) card.appendChild(el('div', 'when', '知らせ: ' + timeText(i.at, Date.now())));
+        var card = taskCard('task stall', 'i-' + i.id, t('stall.chip'), 'stall', node, i.nodeId);
+        card.appendChild(el('div', 'ask', t('stall.ask')));
+        if (i.at) card.appendChild(el('div', 'when', t('stall.when', { when: timeText(i.at, Date.now()) })));
         var cmd = attachCommand(node);
         if (cmd) {
           var row = el('div', 'cmd');
-          row.appendChild(el('span', '', '端末に貼って、子の画面を開きます:'));
+          row.appendChild(el('span', '', t('stall.paste')));
           row.appendChild(el('code', '', cmd));
           row.appendChild(copyButton(cmd));
           card.appendChild(row);
-          card.appendChild(el('p', 'desc', '開くと、子の紐付けが外れることがあります。子が「紐付けをやり直して」と言ったら、統合の会話で、この子の紐付けのコードの出し直し（node_bindCode）を頼んでください。'));
+          card.appendChild(el('p', 'desc', t('stall.rebind')));
         } else if (node && node.cli === true) {
-          card.appendChild(el('p', 'desc', 'この子は CLI で動いています。端末でリポジトリに移ってから claude agents を開き、この題の子を開いて確かめてください。'));
+          card.appendChild(el('p', 'desc', t('stall.cli')));
         } else {
-          card.appendChild(el('p', 'desc', 'この子は Desktop で動いています。Desktop で、この題の子を開いて確かめてください。'));
+          card.appendChild(el('p', 'desc', t('stall.desktop')));
         }
         box.appendChild(card);
       } else if (isStopRequest(i, delegated)) {
         n += 1;
-        var req = taskCard('task request', 'i-' + i.id, '停止の代行依頼', 'request', node, i.nodeId);
-        req.appendChild(el('div', 'ask', delegated.has(i.nodeId) ? 'daemon は、この子を直接止められません。親（または人）が止めてから、「止めたと宣言…」で知らせてください。' : 'daemon は、Desktop の子の状態を確かめられません。Desktop で子ごとに確かめ、止まっていれば、その子の「止めたと宣言…」で知らせてください（手順は、docs の「Desktop の子」の説明）。'));
+        var req = taskCard('task request', 'i-' + i.id, t('inbox.stopRequest'), 'request', node, i.nodeId);
+        req.appendChild(el('div', 'ask', t(delegated.has(i.nodeId) ? 'stopReq.delegated' : 'stopReq.desktop')));
         if (node && node.state === 'stopIncomplete' && node.stopDelegated === true && ID_RE.test(node.id)) req.appendChild(confirmStoppedBox(node.id));
         box.appendChild(req);
       }
     });
     renderDecisions(closed, box, byId);
-    if (n === 0) box.appendChild(el('p', 'empty', '子は自分で進めています。新しい問いや頼みが来ると、ここに出ます。'));
+    if (n === 0) box.appendChild(el('p', 'empty', t('todo.empty')));
     var countEl = document.getElementById('now-count');
     countEl.textContent = String(n);
     var cls = n === 0 ? 'count zero' : 'count';
     if (lastCount !== -1 && n !== lastCount) { countFlip = !countFlip; cls += countFlip ? ' bump-a' : ' bump-b'; }
     countEl.className = cls;
     lastCount = n;
-    document.getElementById('now-title').textContent = n ? 'いまあなたがすること（' + n + ' 件）' : 'いま、あなたがすることはありません';
-    document.getElementById('now-lead').textContent = n ? '答えると、その子の作業が先へ進みます。' : '';
+    document.getElementById('now-title').textContent = n ? t('now.titleN', { n: n }) : t('now.none');
+    document.getElementById('now-lead').textContent = n ? t('now.lead') : '';
   }
 
   // 作業ごとのようす: 子 1 つを 1 枚のカードに。あなたの出番を先に、ほかは最後に動いた順。終わった作業は、たたんだ欄へ
@@ -813,15 +881,15 @@ export const UI_JS = `'use strict';
     var finished = view.nodes.filter(function (n) { return n.band === 'finished'; }).sort(byActivity);
     turn.concat(running).forEach(function (n) { box.appendChild(nodeCard(n, byId, items.get(n.id) || [], view.flows, delegated)); });
     finished.forEach(function (n) { fin.appendChild(nodeCard(n, byId, items.get(n.id) || [], view.flows, delegated)); });
-    if (!turn.length && !running.length) box.appendChild(el('p', 'empty', view.nodes.length ? '動いている作業はありません' : '作業はまだありません'));
+    if (!turn.length && !running.length) box.appendChild(el('p', 'empty', t(view.nodes.length ? 'cards.noneRunning' : 'work.none')));
     document.getElementById('finished').hidden = finished.length === 0;
-    document.getElementById('finished-summary').textContent = '終わった作業（' + finished.length + ' 件。たたんでいます）';
+    document.getElementById('finished-summary').textContent = t('cards.finished', { n: finished.length });
   }
   // 子ごとの状態の札（図の箱の 3 行目と同じ印と言葉。graph-model.ts の STATUS_TEXT・RUN_TEXT と同じ決め方・同じ言葉。試験で照らす）。
   // 図の束（/ui/graph.js）には頼らない（束が読めなくても、カードは同じ言葉を出す）
   var STATUS_CHIP = { run: 'running', wait: 'turn', stall: 'stall', fail: 'failed', done: 'finished', stopped: 'finished' };
-  var STATUS_TEXT = { run: '動いている', wait: '● あなたの答え待ち', stall: '‖ 止まっているかも', fail: '✕ 失敗', done: '済んだ', stopped: '■ 止めた' };
-  var RUN_TEXT = { pending: '起動を待っている', running: '動いている', waiting: '待っている', done: '済んだと報告（確かめ待ち）', stopping: '止めている', stopIncomplete: '■ 止まりきっていない' };
+  var STATUS_TEXT = { run: 'status.run', wait: 'status.wait', stall: 'status.stall', fail: 'status.fail', done: 'status.done', stopped: 'status.stopped' };
+  var RUN_TEXT = { pending: 'run.pending', running: 'run.running', waiting: 'run.waiting', done: 'run.done', stopping: 'run.stopping', stopIncomplete: 'run.stopIncomplete' };
   var cardStatus = new Map();
   function statusesOf(view) {
     var waits = new Set();
@@ -838,7 +906,7 @@ export const UI_JS = `'use strict';
     view.nodes.forEach(function (n) {
       var st = n.band === 'finished' ? (n.state === 'stopped' ? 'stopped' : 'done') : waits.has(n.id) ? 'wait' : fails.has(n.id) ? 'fail' : stalls.has(n.id) ? 'stall' : 'run';
       // 言葉は、図と同じく、止まりきっていないを失敗の札にする前に決める（動いている扱いなら「■ 止まりきっていない」）
-      var text = st === 'run' && Object.hasOwn(RUN_TEXT, n.state) ? RUN_TEXT[n.state] : STATUS_TEXT[st];
+      var text = t(st === 'run' && Object.hasOwn(RUN_TEXT, n.state) ? RUN_TEXT[n.state] : STATUS_TEXT[st]);
       if (n.state === 'stopIncomplete' && st === 'run') st = 'fail';
       m.set(n.id, { status: st, text: text });
     });
@@ -892,15 +960,15 @@ export const UI_JS = `'use strict';
     // 頭の札: 状態の札 1 つと、答えがあれば「あなたの答え N 件」
     var head = el('div', '');
     head.appendChild(el('span', 'chip ' + STATUS_CHIP[status], st ? cleanText(st.text, 40) : name(STATE_NAMES, n.state)));
-    if (n.needsHuman > 0) head.appendChild(el('span', 'chip turn', 'あなたの答え ' + n.needsHuman + ' 件'));
+    if (n.needsHuman > 0) head.appendChild(el('span', 'chip turn', t('card.needsHuman', { n: n.needsHuman })));
     card.appendChild(head);
     card.appendChild(el('h3', '', nodeLabel(n, 200)));
     var meta = el('div', 'meta');
     var parent = n.parentId === null ? null : byId.get(n.parentId);
-    meta.appendChild(el('span', '', name(ROLE_NAMES, n.role) + (n.parentId === null ? '（いちばん上）' : '（親：' + (parent ? nodeLabel(parent, 13) : n.parentId) + '）')));
+    meta.appendChild(el('span', '', n.parentId === null ? t('card.roleTop', { role: name(ROLE_NAMES, n.role) }) : t('card.roleParent', { role: name(ROLE_NAMES, n.role), parent: parent ? nodeLabel(parent, 13) : n.parentId })));
     // 最後の動き。表示モデルに時刻がない（いちばん上の統合が、指示を出しただけ など）ときは、その子のいちばん新しいやり取りの時刻
     var last = n.lastActivityAt || latestFlowAt(n.id, flows);
-    if (last) meta.appendChild(el('span', 'when', '最後の動き ' + timeText(last, Date.now())));
+    if (last) meta.appendChild(el('span', 'when', t('card.last', { when: timeText(last, Date.now()) })));
     card.appendChild(meta);
     card.appendChild(sparkOf(n.id, flows, Date.now()));
     // 最近のやり取り（新しい順に 3 件）
@@ -921,7 +989,7 @@ export const UI_JS = `'use strict';
     // 受信箱の項目は、たたむ（新しい順）
     if (list.length) {
       var sorted = list.slice().sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });
-      var d = fold('inbox-' + n.id, (band === 'finished' ? '済んだ作業の知らせ ' : '知らせ ') + sorted.length + ' 件（たたんでいます）');
+      var d = fold('inbox-' + n.id, t(band === 'finished' ? 'card.inboxFinished' : 'card.inbox', { n: sorted.length }));
       sorted.forEach(function (i) { d.appendChild(entryRow(i, delegated)); });
       card.appendChild(d);
     }
@@ -936,10 +1004,10 @@ export const UI_JS = `'use strict';
     var up = f.dir === 'up';
     var other = f.from === selfId ? f.to : f.from;
     // 人とのやり取りは「あなた」（画面のほかの所の「あなたの答え」「あなたの出番」とそろえる）。相手の題は 10 字で切る（見本の short(題, 10)）
-    var who = other === 'human' ? 'あなた' : byId.has(other) ? nodeLabel(byId.get(other), 11) : other;
+    var who = other === 'human' ? t('flow.you') : byId.has(other) ? nodeLabel(byId.get(other), 11) : other;
     var line = el('div', 'fl');
     line.appendChild(el('span', 'ar ' + (isAwaiting(f) ? 'h' : up ? 'u' : 'd'), up ? '↑' : '↓'));
-    var sum = (f.from === selfId ? '→ ' : '← ') + who + '　' + name(FLOW_KIND_NAMES, f.kind);
+    var sum = t('flow.sum', { dir: f.from === selfId ? '→' : '←', who: who, kind: name(FLOW_KIND_NAMES, f.kind) });
     var text = typeof f.text === 'string' ? cleanText(f.text, 400) : '';
     if (text && Array.from(text).length > FLOW_INLINE_MAX) {
       var d = el('details', 'fbody');
@@ -947,7 +1015,7 @@ export const UI_JS = `'use strict';
       d.appendChild(el('p', '', text));
       line.appendChild(d);
     } else {
-      line.appendChild(el('span', 'fbody', text ? sum + '：' + text : sum));
+      line.appendChild(el('span', 'fbody', text ? t('flow.withText', { sum: sum, text: text }) : sum));
     }
     line.appendChild(el('span', 't', clockText(f.sentAt)));
     return line;
@@ -956,26 +1024,27 @@ export const UI_JS = `'use strict';
   // ID は、カードの ID の欄で見られる。題のないノードは ID のまま
   var titleById = new Map();
   var DAEMON_SUMMARY_KINDS = { info: true, violation: true, stopIncomplete: true };
-  var SUMMARY_WORDS = { command: 'コマンドを足す頼み', write: '書き込める場所を足す頼み' };
+  var SUMMARY_WORDS = { command: 'summary.command', write: 'summary.write' };
   function friendlySummary(text) {
-    return text
-      .replace(/[\\w:.-]+/g, function (w) {
-        var t = titleById.get(w);
-        return typeof t === 'string' && t !== '' ? '「' + cleanText(t, 40) + '」' : w;
-      })
-      .replace(/範囲の拡張要求(?:（(command|write)）)?/g, function (all, k) {
-        return k ? SUMMARY_WORDS[k] : '範囲の頼み';
-      });
+    var out = text.replace(/[\\w:.-]+/g, function (w) {
+      var title = titleById.get(w);
+      return typeof title === 'string' && title !== '' ? t('summary.title', { title: cleanText(title, 40) }) : w;
+    });
+    // 日本語の文（daemon の summary）の内部の言葉だけを言い換える（英語の文は、表の文がもう利用者の言葉）
+    return lang !== 'ja' ? out : out.replace(/範囲の拡張要求(?:（(command|write)）)?/g, function (all, k) {
+      return t(k ? SUMMARY_WORDS[k] : 'summary.scope');
+    });
   }
   function entryRow(i, delegated) {
     var band = inboxBand(i, delegated);
     var row = el('div', 'entry');
     markNew(row, 'e-' + i.id);
     var head = el('div', '');
-    head.appendChild(el('span', 'chip ' + (i.stall === true ? 'stall' : band.cls), i.stall === true ? '止まっているかも' : isStopRequest(i, delegated) ? band.label : name(KIND_NAMES, i.kind)));
+    head.appendChild(el('span', 'chip ' + (i.stall === true ? 'stall' : band.cls), i.stall === true ? t('stall.chip') : isStopRequest(i, delegated) ? band.label : name(KIND_NAMES, i.kind)));
     head.appendChild(el('span', 'when', timeText(i.at, Date.now())));
     row.appendChild(head);
-    var raw = typeof i.summary === 'string' ? i.summary : '';
+    // daemon が書いた知らせ（msg つき）は、選んだ言語の文。msg のない知らせは、summary のまま（#140 の利用者の決め）
+    var raw = itemText(i);
     // 言い換えは、daemon が書く種類の知らせだけ（進み具合・完了・失敗・判断は、子が書いた文なので、そのまま出す）
     var text = Object.hasOwn(DAEMON_SUMMARY_KINDS, i.kind) ? friendlySummary(raw) : raw;
     if (Array.from(text).length > 60) {
@@ -993,31 +1062,31 @@ export const UI_JS = `'use strict';
     var any = false;
     // 停止したノードだけ、破棄の判断（回収の指示）ができる。指示済みなら、もう一度は出さない
     if (n.state === 'stopped') {
-      if (n.discarded) { box.appendChild(el('span', 'tag', '破棄を指示済み（回収は統合ノードが行う）')); any = true; }
+      if (n.discarded) { box.appendChild(el('span', 'tag', t('ops.discarded'))); any = true; }
       else if (ID_RE.test(n.id)) {
-        var reclaim = el('button', 'danger', '破棄して回収を指示…');
+        var reclaim = el('button', 'danger', t('ops.reclaim'));
         reclaim.addEventListener('click', function () { startReclaim(n.id); });
         box.appendChild(reclaim);
-        box.appendChild(el('p', 'irreversible', '取り消せません。止めた子の作業ツリーとブランチを消すよう、統合に指示します。'));
+        box.appendChild(el('p', 'irreversible', t('ops.reclaimNote')));
         any = true;
       }
     }
     // 停止を親に代行してもらうノード（stopDelegated。Desktop の子）が停止未完了なら、止めたと宣言できる
     if (n.state === 'stopIncomplete' && n.stopDelegated === true && ID_RE.test(n.id)) {
       box.appendChild(confirmStoppedBox(n.id));
-      box.appendChild(el('p', 'irreversible', '取り消せません。親が Desktop でこの子を止めたと記録し、停止済みに進めます。'));
+      box.appendChild(el('p', 'irreversible', t('ops.declareNote')));
       any = true;
     }
     // 動いている子だけ、フックの結び付けを外せる。止まったノードにはフックが来ない。結び付けの有無は出さない（docs/ui.md）
     if (n.role !== 'integrator' && (n.state === 'running' || n.state === 'waiting') && ID_RE.test(n.id)) {
       box.appendChild(hookUnbindButton(n.id));
-      box.appendChild(el('p', 'desc', '取り消せます。子のセッションを入れ直して、フックが拒まれ続けるときだけ使います。次に来たセッションに結び直します。'));
+      box.appendChild(el('p', 'desc', t('ops.unbindNote')));
       any = true;
     }
     // ID と「写す」は、いつも、この中に出す（カードの表には出さない）
     var idl = el('div', 'idline', 'ID ' + n.id);
     if (ID_RE.test(n.id)) idl.appendChild(copyButton(n.id));
-    var d = fold('ops-' + n.id, any ? 'この子への操作' : 'この子の ID');
+    var d = fold('ops-' + n.id, t(any ? 'ops.title' : 'ops.idTitle'));
     d.appendChild(idl);
     if (any) d.appendChild(box);
     return d;
@@ -1035,9 +1104,9 @@ export const UI_JS = `'use strict';
     return lastFlow(flows, from, to);
   }
   function flowCell(f, up, n) {
-    if (!f) return el('span', 'when', n.parentId === null ? '（いちばん上）' : 'まだない');
-    var c = el('span', isAwaiting(f) ? 'await' : up ? 'up' : 'down', (up ? '↑ ' : '↓ ') + name(FLOW_KIND_NAMES, f.kind) + '・' + stageText(f));
-    c.appendChild(el('span', 'when', '　' + timeText(f.sentAt, Date.now())));
+    if (!f) return el('span', 'when', t(n.parentId === null ? 'list.top' : 'list.noFlow'));
+    var c = el('span', isAwaiting(f) ? 'await' : up ? 'up' : 'down', t('list.flow', { dir: up ? '↑' : '↓', kind: name(FLOW_KIND_NAMES, f.kind), stage: stageText(f) }));
+    c.appendChild(el('span', 'when', t('list.flowWhen', { when: timeText(f.sentAt, Date.now()) })));
     return c;
   }
   // 関係図（#89）。/ui/graph.js が出す入口の draw・destroy だけを呼ぶ。読めないときは一覧だけ
@@ -1096,7 +1165,7 @@ export const UI_JS = `'use strict';
     try {
       // 箱を押したら、その子のカードへ移って光らせる（一覧の「詳しく」と同じ）。graph.js から返るのは ID だけ
       var pick = function (id) { if (typeof id === 'string' && ID_RE.test(id)) openCard(id); };
-      Promise.resolve(g.draw(box, view, { onPick: pick })).then(fit, fallback);
+      Promise.resolve(g.draw(box, view, { onPick: pick, lang: lang })).then(fit, fallback);
     } catch (e) {
       fallback();
     }
@@ -1109,9 +1178,9 @@ export const UI_JS = `'use strict';
     var box = document.getElementById('list');
     clear(box);
     var nodes = view.nodes;
-    if (!nodes.length) { box.appendChild(el('p', 'empty', '作業はまだありません')); return 0; }
+    if (!nodes.length) { box.appendChild(el('p', 'empty', t('work.none'))); return 0; }
     var head = el('div', 'trow thead');
-    ['作業', '状態', '↑ 上り（子 → 親。答え待ちの頼みを先に）', '↓ 最後の下り（親・人 → 子）'].forEach(function (t) { head.appendChild(el('span', '', t)); });
+    ['list.hWork', 'list.hState', 'list.hUp', 'list.hDown'].forEach(function (k) { head.appendChild(el('span', '', t(k))); });
     box.appendChild(head);
     var kids = new Map();
     nodes.forEach(function (n) {
@@ -1126,17 +1195,17 @@ export const UI_JS = `'use strict';
         seen.add(n.id);
         var band = n.band === 'turn' || n.band === 'finished' ? n.band : 'running';
         var row = el('div', 'trow ' + band);
-        var t = el('span', 'tname');
-        t.style.paddingLeft = (depth * 18) + 'px';
-        if (depth) t.appendChild(el('span', 'when', '└'));
-        t.appendChild(el('span', 'strong', nodeLabel(n, 28)));
+        var cell = el('span', 'tname');
+        cell.style.paddingLeft = (depth * 18) + 'px';
+        if (depth) cell.appendChild(el('span', 'when', '└'));
+        cell.appendChild(el('span', 'strong', nodeLabel(n, 28)));
         if (ID_RE.test(n.id)) {
-          var go = el('button', 'sm quiet', '詳しく');
+          var go = el('button', 'sm quiet', t('list.more'));
           go.addEventListener('click', function () { openCard(n.id); });
-          t.appendChild(go);
+          cell.appendChild(go);
         }
-        row.appendChild(t);
-        row.appendChild(el('span', 'chip ' + band, name(STATE_NAMES, n.state) + (n.needsHuman > 0 ? '・答え ' + n.needsHuman : '')));
+        row.appendChild(cell);
+        row.appendChild(el('span', 'chip ' + band, n.needsHuman > 0 ? t('list.stateAnswers', { state: name(STATE_NAMES, n.state), n: n.needsHuman }) : name(STATE_NAMES, n.state)));
         row.appendChild(flowCell(n.parentId === null ? null : upFlow(view.flows, n.id, n.parentId), true, n));
         row.appendChild(flowCell(n.parentId === null ? null : lastFlow(view.flows, n.parentId, n.id), false, n));
         box.appendChild(row);
@@ -1182,11 +1251,11 @@ export const UI_JS = `'use strict';
 
   // ---- 回収の指示（人間による破棄の判断。取り消せない）----
   var EXPECT_TIPS_MAX = 256;
-  var CLI_HINT = 'cli（touryou reclaim <ノード ID>）で、確かめてください。';
+  function cliHint() { return t('reclaim.cliHint'); }
   var UNMET_NAMES = {
-    stateNotEligible: '状態が、回収の対象でない', discardRequired: '破棄の判断が要る', factsMissing: '事実が足りない',
-    notMerged: '統合されていない', dirty: '未保存の変更がある', dependentsIncomplete: '依存先が未完了', openDecision: '未回答の判断がある',
-    descendantsNotReclaimable: '配下が回収できない', processesRunning: 'プロセスが動いている', processesUnknown: 'プロセスを調べられない'
+    stateNotEligible: 'unmet.stateNotEligible', discardRequired: 'unmet.discardRequired', factsMissing: 'unmet.factsMissing',
+    notMerged: 'unmet.notMerged', dirty: 'unmet.dirty', dependentsIncomplete: 'unmet.dependentsIncomplete', openDecision: 'unmet.openDecision',
+    descendantsNotReclaimable: 'unmet.descendantsNotReclaimable', processesRunning: 'unmet.processesRunning', processesUnknown: 'unmet.processesUnknown'
   };
   // 事前確認（node.reclaimPreview）の結果の形。tips は、あれば、ノード ID から先端（文字列）への対応。
   function isReclaimPreview(v) {
@@ -1200,74 +1269,74 @@ export const UI_JS = `'use strict';
   }
   // 送れない理由（フェイルクローズ）。送れるなら ''。失われるものが分からないまま、取り消せない指示は出さない。
   function reclaimBlocked(v) {
-    if (v.loss === undefined) return '失われるものの情報が得られませんでした（古い daemon です）。' + CLI_HINT;
+    if (v.loss === undefined) return t('reclaim.noLoss') + cliHint();
     // daemon が作業ツリーの情報を確かめられないノードは、破棄を決めても回収できない（指示済みの表示と、回収の結果が食い違う。#137）。
-    if (v.unmet.indexOf('factsMissing') !== -1) return 'daemon が、作業ツリーの情報を確かめられません（置き場の外にある・別の場所に登録されている・git を調べられない、など）。破棄を指示しても回収できないので、指示できません。' + CLI_HINT;
+    if (v.unmet.indexOf('factsMissing') !== -1) return t('reclaim.factsMissing') + cliHint();
     var unknown = v.loss.filter(function (l) { return l && (l.unknown === true || l.workingTreeUnknown === true); });
     if (unknown.length) {
-      var ids = unknown.map(function (l) { return cleanText(String(l.nodeId), 128); }).join('、');
-      return '失われるものを調べられなかったノードがあります（' + ids + '）。失われるものが分からないまま、破棄は指示できません。' + CLI_HINT;
+      var ids = unknown.map(function (l) { return cleanText(String(l.nodeId), 128); }).join(t('sep.list'));
+      return t('reclaim.lossUnknown', { ids: ids }) + cliHint();
     }
     var n = v.tips ? Object.keys(v.tips).length : 0;
-    if (n > EXPECT_TIPS_MAX) return 'ノードが多すぎて、先端の照合ができません（' + n + ' 件。' + EXPECT_TIPS_MAX + ' 件まで）。' + CLI_HINT;
+    if (n > EXPECT_TIPS_MAX) return t('reclaim.tooMany', { n: n, max: EXPECT_TIPS_MAX }) + cliHint();
     return '';
   }
   function lossText(l) {
     var parts = [];
-    parts.push(typeof l.aheadCommits === 'number' ? '統合されていないコミット ' + l.aheadCommits + ' 件' : '統合されていないコミットの数は不明');
-    parts.push(l.uncommitted ? '追跡中のファイルの未保存の変更あり' : '未保存の変更なし');
-    parts.push('未追跡のファイル ' + Number(l.untracked) + ' 件');
-    return parts.join('。');
+    parts.push(typeof l.aheadCommits === 'number' ? t('loss.ahead', { n: l.aheadCommits }) : t('loss.aheadUnknown'));
+    parts.push(t(l.uncommitted ? 'loss.uncommitted' : 'loss.clean'));
+    parts.push(t('loss.untracked', { n: Number(l.untracked) }));
+    return parts.join(t('sep.sentence'));
   }
   // 確認の表示（事前確認の結果）。パスは含まれない。件名は、信頼できない入力なので、整える。
   function reclaimLines(nodeId, v) {
     var lines = [
-      ['対象', nodeId],
-      ['内容', '破棄の判断は、取り消せません。停止したノードの作業ツリーとブランチが、強制して消えます。記録されるのは、この対象だけです（配下の停止ノードは、別に指示が必要です）']
+      [t('line.target'), nodeId],
+      [t('line.content'), t('reclaim.content')]
     ];
-    v.unmet.slice(0, 10).forEach(function (u) { lines.push(['満たしていない条件', name(UNMET_NAMES, String(u))]); });
-    if (v.unmet.length > 10) lines.push(['満たしていない条件', 'ほか ' + (v.unmet.length - 10) + ' 件']);
+    v.unmet.slice(0, 10).forEach(function (u) { lines.push([t('line.unmet'), name(UNMET_NAMES, String(u))]); });
+    if (v.unmet.length > 10) lines.push([t('line.unmet'), t('more.n', { n: v.unmet.length - 10 })]);
     v.blockers.slice(0, 10).forEach(function (b) {
       var cmd = b && b.kind === 'process' && typeof b.command === 'string' ? cleanText(b.command, 33) : '';
-      var who = b && b.kind === 'process' ? 'プロセス ' + Number(b.pid) + (cmd ? '（' + cmd + '）' : '') : 'ノード ' + cleanText(String(b && b.nodeId), 128);
-      lines.push(['原因', who + '（' + name(UNMET_NAMES, String(b && b.reason)) + '）']);
+      var who = b && b.kind === 'process' ? (cmd ? t('blocker.processCmd', { pid: Number(b.pid), cmd: cmd }) : t('blocker.process', { pid: Number(b.pid) })) : t('blocker.node', { id: cleanText(String(b && b.nodeId), 128) });
+      lines.push([t('line.cause'), t('blocker.line', { who: who, reason: name(UNMET_NAMES, String(b && b.reason)) })]);
     });
-    if (v.blockers.length > 10) lines.push(['原因', 'ほか ' + (v.blockers.length - 10) + ' 件']);
+    if (v.blockers.length > 10) lines.push([t('line.cause'), t('more.n', { n: v.blockers.length - 10 })]);
     var loss = v.loss || [];
-    var lossHead = '失われるもの（この対象と配下。配下は、それぞれの指示のときに失われる）';
-    if (!loss.length) lines.push([lossHead, 'なし']);
-    else lines.push([lossHead, loss.length + ' 件のノード']);
+    var lossHead = t('loss.head');
+    if (!loss.length) lines.push([lossHead, t('loss.none')]);
+    else lines.push([lossHead, t('loss.nodes', { n: loss.length })]);
     loss.slice(0, NODE_LIST_MAX).forEach(function (l) {
-      lines.push(['  ノード ' + cleanText(String(l.nodeId), 128), lossText(l)]);
+      lines.push([t('loss.node', { id: cleanText(String(l.nodeId), 128) }), lossText(l)]);
       (Array.isArray(l.untrustedSubjects) ? l.untrustedSubjects : []).slice(0, 5).forEach(function (subject) {
-        lines.push(['  コミットの件名（信頼できない入力）', cleanText(String(subject), 100)]);
+        lines.push([t('loss.subject'), cleanText(String(subject), 100)]);
       });
     });
-    if (loss.length > NODE_LIST_MAX) lines.push(['  失われるもの', 'ほか ' + (loss.length - NODE_LIST_MAX) + ' 件（表示を省略。破棄の対象には、すべて含まれる）']);
+    if (loss.length > NODE_LIST_MAX) lines.push([t('loss.moreHead'), t('loss.more', { n: loss.length - NODE_LIST_MAX })]);
     var tips = v.tips || {};
     var tipIds = Object.keys(tips).sort();
     tipIds.slice(0, NODE_LIST_MAX).forEach(function (k) {
-      lines.push(['ブランチの先端（' + cleanText(k, 128) + '）', cleanText(tips[k].slice(0, 12), 12)]);
+      lines.push([t('tip.line', { id: cleanText(k, 128) }), cleanText(tips[k].slice(0, 12), 12)]);
     });
-    if (tipIds.length > NODE_LIST_MAX) lines.push(['ブランチの先端', 'ほか ' + (tipIds.length - NODE_LIST_MAX) + ' 件（すべて、照合に含める）']);
-    lines.push(['照合', '見せた先端を、そのまま、指示に添えます。指示の時点で、先端が変わっていたら、何も記録されません']);
+    if (tipIds.length > NODE_LIST_MAX) lines.push([t('tip.head'), t('tip.more', { n: tipIds.length - NODE_LIST_MAX })]);
+    lines.push([t('tip.check'), t('tip.checkNote')]);
     return lines;
   }
   function startReclaim(nodeId) {
     readOperationResult('node.reclaimPreview', { nodeId: nodeId }).then(function (r) {
       if (r === null) return;
-      if (!r.ok) { notice('失敗: ' + r.error.code + ': ' + r.error.cause, true); return; }
+      if (!r.ok) { notice(t('err.failed', { code: r.error.code, cause: r.error.cause }), true); return; }
       var v = r.value;
-      if (!isReclaimPreview(v)) { notice('事前確認の結果の形が不正です', true); return; }
+      if (!isReclaimPreview(v)) { notice(t('err.badPreview'), true); return; }
       // 見せた先端（tips）を、作り直さずに、そのまま渡す。daemon が、今の先端と照合する（違えば tipMismatch）。
       var params = { nodeId: nodeId, expectTips: v.tips || {} };
-      openConfirm('回収の指示（破棄）', reclaimLines(nodeId, v), 'node.reclaimInstruct', params, '破棄を指示しました（' + nodeId + '）。実際の回収は、統合ノードが行います', { typed: nodeId, blocked: reclaimBlocked(v) });
+      openConfirm(t('reclaim.title'), reclaimLines(nodeId, v), 'node.reclaimInstruct', params, t('reclaim.done', { id: nodeId }), { typed: nodeId, blocked: reclaimBlocked(v) });
     });
   }
 
   // ---- 最終削除・保留・保管（取り消せない操作は、対象の ID を打ち込ませる）----
   var REASON_MAX = 200;
-  var HOLD_CHOICES = [{ label: '無期限', days: 0 }, { label: '30 日', days: 30 }, { label: '90 日', days: 90 }];
+  var HOLD_CHOICES = [{ label: 'hold.forever', days: 0 }, { label: 'hold.days30', days: 30 }, { label: 'hold.days90', days: 90 }];
   var HOLD_MAX_DAYS = 365;
   var NODE_LIST_MAX = 20;
   var EXPECT_NODE_IDS_MAX = 2000;
@@ -1277,8 +1346,8 @@ export const UI_JS = `'use strict';
   // ---- 停止の宣言（取り消せないので、対象のノード ID を打ち込ませる）----
   function checkNote(text) {
     if (text.trim() === '') return '';
-    if (Array.from(text).length > REASON_MAX) return '根拠が長すぎます（' + REASON_MAX + ' 文字以下）';
-    if (Array.from(text).some(function (ch) { return FORBIDDEN.test(ch); })) return '根拠に、使えない文字（制御文字・書式制御文字）が含まれています';
+    if (Array.from(text).length > REASON_MAX) return t('note.tooLong', { max: REASON_MAX });
+    if (Array.from(text).some(function (ch) { return FORBIDDEN.test(ch); })) return t('note.forbidden');
     return '';
   }
   // 見せたものを送る: 確認に出す根拠と、送る根拠は、同じ整えた値（前後の空白を削り、連続する空白を 1 つにする）
@@ -1288,10 +1357,10 @@ export const UI_JS = `'use strict';
   }
   function confirmStoppedLines(nodeId, note) {
     return [
-      ['ノード', nodeId],
-      ['内容', '親が Desktop でこのノードのタスクを止めた（またはアーカイブした）と宣言し、停止未完了から停止済みに進める'],
-      ['記録', '宣言した者（人間）と根拠を残し、受信箱の停止の代行依頼を解決済みにする'],
-      ['根拠', cleanText(note, REASON_MAX) === '' ? '（なし）' : cleanText(note, REASON_MAX)]
+      [t('line.node'), nodeId],
+      [t('line.content'), t('declare.content')],
+      [t('line.record'), t('declare.record')],
+      [t('line.basis'), cleanText(note, REASON_MAX) === '' ? t('line.none') : cleanText(note, REASON_MAX)]
     ];
   }
   function confirmStoppedBox(nodeId) {
@@ -1299,19 +1368,19 @@ export const UI_JS = `'use strict';
     var area = field('stop-note');
     area.rows = 1;
     area.maxLength = REASON_MAX;
-    area.placeholder = '止めた根拠（任意。' + REASON_MAX + ' 文字まで）';
+    area.placeholder = t('declare.placeholder', { max: REASON_MAX });
     area.value = noteDrafts.get(nodeId) || '';
     area.addEventListener('input', function () { noteDrafts.set(nodeId, area.value); });
     var problem = el('p', 'error', '');
     problem.hidden = true;
-    var b = el('button', '', '止めたと宣言…');
+    var b = el('button', '', t('declare.button'));
     b.addEventListener('click', function () {
       var why = checkNote(area.value);
       problem.textContent = why;
       problem.hidden = why === '';
       if (why !== '') return;
       var note = area.value;
-      openConfirm('停止の宣言', confirmStoppedLines(nodeId, note), 'node.confirmStopped', confirmStoppedParams(nodeId, note), '止めたと宣言しました（' + nodeId + '）', { typed: nodeId, after: function () { noteDrafts.delete(nodeId); } });
+      openConfirm(t('declare.title'), confirmStoppedLines(nodeId, note), 'node.confirmStopped', confirmStoppedParams(nodeId, note), t('declare.done', { id: nodeId }), { typed: nodeId, after: function () { noteDrafts.delete(nodeId); } });
     });
     box.appendChild(area);
     box.appendChild(b);
@@ -1320,41 +1389,41 @@ export const UI_JS = `'use strict';
   }
   // 回答の結果。再開しなかった子（notResumed）があれば、ID と理由を添える。理由は固定の文に写し、知らない記号・形の違う ID は出さない。10 件で切り「ほか N 件」
   var NOT_RESUMED_TEXT = {
-    discarded: '破棄の判断を経たため',
-    stoppedAfterStopIncomplete: '停止未完了のあと止め直したため。新しい子でやり直す',
-    stoppedByOther: '判断のほかに止められたため'
+    discarded: 'notResumed.discarded',
+    stoppedAfterStopIncomplete: 'notResumed.stoppedAfterStopIncomplete',
+    stoppedByOther: 'notResumed.stoppedByOther'
   };
   function answerDoneText(value) {
     var list = value && Array.isArray(value.notResumed) ? value.notResumed : [];
     var parts = [];
     list.forEach(function (x) {
       if (!x || typeof x.nodeId !== 'string' || !ID_RE.test(x.nodeId)) return;
-      var why = '理由は不明';
-      if (x.reason === 'discarded' || x.reason === 'stoppedAfterStopIncomplete' || x.reason === 'stoppedByOther') why = NOT_RESUMED_TEXT[x.reason];
-      parts.push(x.nodeId + '（' + why + '）');
+      var why = t('notResumed.unknown');
+      if (x.reason === 'discarded' || x.reason === 'stoppedAfterStopIncomplete' || x.reason === 'stoppedByOther') why = t(NOT_RESUMED_TEXT[x.reason]);
+      parts.push(t('notResumed.item', { id: x.nodeId, why: why }));
     });
-    if (parts.length === 0) return '回答を送りました';
-    var more = parts.length > 10 ? '、ほか ' + (parts.length - 10) + ' 件' : '';
-    return '回答を送りました。再開しなかった子: ' + parts.slice(0, 10).join('、') + more;
+    if (parts.length === 0) return t('answer.sent');
+    var more = parts.length > 10 ? t('sep.list') + t('more.n', { n: parts.length - 10 }) : '';
+    return t('answer.sentSkipped', { list: parts.slice(0, 10).join(t('sep.list')) + more });
   }
   // フックの結び付けを外す。取り消せる操作（次に来たセッションに結び直すだけ）なので、打ち込みはない
   function hookUnbindLines(nodeId) {
     return [
-      ['ノード', nodeId],
-      ['内容', '（/clear・--resume で session_id が変わって、フックが拒否され続けるとき）フック（plugin のファイルで設定するフック）の session_id の結び付けを外す。次に来たセッションに結び直す'],
-      ['記録', '外した者（人間）を残す'],
-      ['注意', 'トークンが漏れた疑いがあるときは、外さずに、子を止めてトークンを失効させる']
+      [t('line.node'), nodeId],
+      [t('line.content'), t('unbind.content')],
+      [t('line.record'), t('unbind.record')],
+      [t('line.caution'), t('unbind.caution')]
     ];
   }
   function hookUnbindDoneText(nodeId, value) {
-    if (value && value.duplicate === true) return 'すでに記録済みです（再送。もう一度は外していません）（' + nodeId + '）';
-    if (value && value.unbound === true) return 'フックの結び付けを外しました（' + nodeId + '）。次に来たセッションに結び直します';
-    return 'フックの結び付けはありませんでした（記録だけ残しました）（' + nodeId + '）';
+    if (value && value.duplicate === true) return t('unbind.duplicate', { id: nodeId });
+    if (value && value.unbound === true) return t('unbind.done', { id: nodeId });
+    return t('unbind.none', { id: nodeId });
   }
   function hookUnbindButton(nodeId) {
-    var b = el('button', '', 'フックの結び付けを外す…');
+    var b = el('button', '', t('unbind.button'));
     b.addEventListener('click', function () {
-      openConfirm('フックの結び付けを外す', hookUnbindLines(nodeId), 'node.hookUnbind', { nodeId: nodeId }, function (value) { return hookUnbindDoneText(nodeId, value); });
+      openConfirm(t('unbind.title'), hookUnbindLines(nodeId), 'node.hookUnbind', { nodeId: nodeId }, function (value) { return hookUnbindDoneText(nodeId, value); });
     });
     return b;
   }
@@ -1376,7 +1445,7 @@ export const UI_JS = `'use strict';
   // 保留の成功の通知。daemon が決めた期限（結果の until）を出す。無期限なら、その旨。
   function holdDoneText(nodeId, value) {
     var until = value && typeof value.until === 'string' ? cleanText(value.until, 40) : '';
-    return '保留しました（' + nodeId + '）。期限: ' + (until === '' ? '無期限' : until);
+    return t('hold.done', { id: nodeId, until: until === '' ? t('hold.forever') : until });
   }
   // 保留の params。日数は days で送り、期限は daemon の時計で決める（端末の時計は使わない）。days が 0 なら、無期限（days なし）。
   function holdParams(nodeId, days, reason) {
@@ -1387,19 +1456,19 @@ export const UI_JS = `'use strict';
   }
   // 日数の入力（「その他」）: 1〜365 の整数だけ。不正なら 0。
   function parseDays(text) {
-    var t = text.trim();
-    if (!/^[0-9]{1,3}$/.test(t)) return 0;
-    var n = Number(t);
+    var s = text.trim();
+    if (!/^[0-9]{1,3}$/.test(s)) return 0;
+    var n = Number(s);
     return n >= 1 && n <= HOLD_MAX_DAYS ? n : 0;
   }
   function checkDays(text) {
-    return parseDays(text) === 0 ? '日数は、1〜' + HOLD_MAX_DAYS + ' の整数で指定してください' : '';
+    return parseDays(text) === 0 ? t('hold.badDays', { max: HOLD_MAX_DAYS }) : '';
   }
   // 保留の理由の検査（任意。空は可）。問題がなければ ''。
   function checkReason(text) {
     if (text.trim() === '') return '';
-    if (Array.from(text).length > REASON_MAX) return '理由が長すぎます（' + REASON_MAX + ' 文字以下）';
-    if (Array.from(text).some(function (ch) { return FORBIDDEN.test(ch); })) return '理由に、使えない文字（制御文字・書式制御文字）が含まれています';
+    if (Array.from(text).length > REASON_MAX) return t('reason.tooLong', { max: REASON_MAX });
+    if (Array.from(text).some(function (ch) { return FORBIDDEN.test(ch); })) return t('reason.forbidden');
     return '';
   }
   // 信頼できない文字列（コミットの件名・タイトル）を、端末・画面に出す前に整える（制御文字・書式制御文字を空白に。1 行。長さを切る）。
@@ -1415,42 +1484,41 @@ export const UI_JS = `'use strict';
   }
   // 最終削除の確認の表示（事前確認の結果）。
   function purgeLines(rootId, v, tombstone) {
-    var ids = v.nodeIds.slice(0, NODE_LIST_MAX).map(function (x) { return cleanText(x, 128); }).join('、');
-    var more = v.nodeIds.length > NODE_LIST_MAX ? '、ほか ' + (v.nodeIds.length - NODE_LIST_MAX) + ' 件' : '';
+    var ids = v.nodeIds.slice(0, NODE_LIST_MAX).map(function (x) { return cleanText(x, 128); }).join(t('sep.list'));
+    var more = v.nodeIds.length > NODE_LIST_MAX ? t('sep.list') + t('more.n', { n: v.nodeIds.length - NODE_LIST_MAX }) : '';
     var lines = [
-      ['木の根', rootId],
-      ['削除されるノード', v.nodeIds.length + ' 件（' + ids + more + '）'],
-      ['アーカイブ日', cleanText(v.archivedAt, 40) + '（経過 ' + v.elapsedDays + ' 日 / 保持期間 ' + v.retentionDays + ' 日）'],
-      ['消した跡（題だけを残す記録）', (tombstone === false ? '残さない' : tombstone === true ? '残す' : '設定の既定に従う') + '（題: ' + cleanText(v.tombstoneTitle, 100) + '）']
+      [t('purge.root'), rootId],
+      [t('purge.nodes'), t('purge.nodesValue', { n: v.nodeIds.length, ids: ids + more })],
+      [t('purge.archivedAt'), t('purge.archivedValue', { at: cleanText(v.archivedAt, 40), elapsed: v.elapsedDays, retention: v.retentionDays })],
+      [t('purge.tombstone'), t('purge.tombstoneValue', { how: t(tombstone === false ? 'purge.tombNo' : tombstone === true ? 'purge.tombYes' : 'purge.tombDefault'), title: cleanText(v.tombstoneTitle, 100) })]
     ];
-    if (typeof v.discardedRefs === 'number' && v.discardedRefs > 0) lines.push(['一緒に消える保管', v.discardedRefs + ' 件の、破棄した成果（取り出すなら、先に保管の一覧から）']);
-    if (v.hold && typeof v.hold === 'object') lines.push(['保留', '保留中（ノード ' + cleanText(String(v.hold.nodeId || ''), 128) + (v.hold.until ? '。' + cleanText(String(v.hold.until), 40) + ' まで' : '。無期限') + '）。保留は自動の削除だけを止める。この最終削除は、保留を無視して消す']);
+    if (typeof v.discardedRefs === 'number' && v.discardedRefs > 0) lines.push([t('purge.kept'), t('purge.keptValue', { n: v.discardedRefs })]);
+    if (v.hold && typeof v.hold === 'object') lines.push([t('purge.hold'), t('purge.holdValue', { id: cleanText(String(v.hold.nodeId || ''), 128), until: v.hold.until ? t('hold.untilDate', { date: cleanText(String(v.hold.until), 40) }) : t('hold.forever') })]);
     v.blockers.slice(0, 10).forEach(function (b) {
-      lines.push(['実行できない理由', cleanText(String(b && b.code), 60) + ': ' + cleanText(String(b && b.cause), 300)]);
+      lines.push([t('purge.blocker'), cleanText(String(b && b.code), 60) + ': ' + cleanText(String(b && b.cause), 300)]);
     });
     return lines;
   }
   // 今の保留の状態（事前確認の hold）。取れなければ、取れなかったと出す（なし、とは言わない）。
   function holdStatusLine(rootId) {
     return readOperationResult('node.purgePreview', { nodeId: rootId }).then(function (r) {
-      if (r === null || !r.ok) return '（取得できなかった）';
+      if (r === null || !r.ok) return t('hold.statusFailed');
       var h = r.value && r.value.hold;
-      if (!h || typeof h !== 'object') return 'なし';
-      var until = typeof h.until === 'string' ? cleanText(h.until, 40) + ' まで' : '無期限';
-      var reason = typeof h.reason === 'string' && h.reason !== '' ? '。理由: ' + cleanText(h.reason, 200) : '';
-      return '保留中（ノード ' + cleanText(String(h.nodeId || ''), 128) + '。' + until + reason + '）';
+      if (!h || typeof h !== 'object') return t('loss.none');
+      var until = typeof h.until === 'string' ? t('hold.untilDate', { date: cleanText(h.until, 40) }) : t('hold.forever');
+      return typeof h.reason === 'string' && h.reason !== '' ? t('hold.statusReason', { id: cleanText(String(h.nodeId || ''), 128), until: until, reason: cleanText(h.reason, 200) }) : t('hold.status', { id: cleanText(String(h.nodeId || ''), 128), until: until });
     });
   }
   function startPurge(rootId, tombstone) {
     readOperation('node.purgePreview', { nodeId: rootId }).then(function (v) {
       if (v === null) return;
-      if (!isPurgePreview(v)) { notice('事前確認の結果の形が不正です', true); return; }
+      if (!isPurgePreview(v)) { notice(t('err.badPreview'), true); return; }
       // 見せた木（削除されるノード）を渡す。見せたあとで木が変わっていたら、daemon が消さない（purgeStale）。
       var params = tombstone === undefined ? { nodeId: rootId } : { nodeId: rootId, tombstone: tombstone };
       params.expectNodeIds = v.nodeIds;
-      var blocked = v.purgeable ? '' : 'この木は、いま最終削除できません（上の理由を取り除いてから、もう一度確認してください）';
-      if (v.nodeIds.length > EXPECT_NODE_IDS_MAX) blocked = '木のノードが多すぎて、安全に確認できません（' + v.nodeIds.length + ' 件。' + EXPECT_NODE_IDS_MAX + ' 件まで）';
-      openConfirm('最終削除', purgeLines(rootId, v, tombstone), 'node.purge', params, '最終削除しました（' + rootId + '）', { typed: rootId, blocked: blocked });
+      var blocked = v.purgeable ? '' : t('purge.blocked');
+      if (v.nodeIds.length > EXPECT_NODE_IDS_MAX) blocked = t('purge.tooMany', { n: v.nodeIds.length, max: EXPECT_NODE_IDS_MAX });
+      openConfirm(t('purge.title'), purgeLines(rootId, v, tombstone), 'node.purge', params, t('purge.done', { id: rootId }), { typed: rootId, blocked: blocked });
     });
   }
   function renderPurge(nodes) {
@@ -1462,22 +1530,22 @@ export const UI_JS = `'use strict';
     daysDrafts.forEach(function (_v, key) { if (roots.indexOf(key) < 0) daysDrafts.delete(key); });
     var box = document.getElementById('purge');
     clear(box);
-    if (!roots.length) { box.appendChild(el('p', 'empty', '最終削除の対象になりうる、アーカイブ済みの木はありません')); return; }
+    if (!roots.length) { box.appendChild(el('p', 'empty', t('purge.empty'))); return; }
     roots.forEach(function (id) {
       var card = el('div', 'card');
-      card.appendChild(el('span', 'tag', 'アーカイブ済みの木'));
+      card.appendChild(el('span', 'tag', t('purge.tag')));
       card.appendChild(el('span', '', id));
       var del = el('div', 'opts');
-      var b1 = el('button', '', '最終削除…（消した跡は設定の既定）');
+      var b1 = el('button', '', t('purge.button'));
       b1.addEventListener('click', function () { startPurge(id, undefined); });
-      var b2 = el('button', '', '消した跡も残さずに最終削除…');
+      var b2 = el('button', '', t('purge.buttonNoTomb'));
       b2.addEventListener('click', function () { startPurge(id, false); });
       del.appendChild(b1);
       del.appendChild(b2);
       card.appendChild(del);
       var area = field('hold-reason');
       area.maxLength = REASON_MAX;
-      area.placeholder = '自動の最終削除を保留する理由（任意。' + REASON_MAX + ' 文字まで）';
+      area.placeholder = t('hold.reasonPlaceholder', { max: REASON_MAX });
       area.value = reasonDrafts.get(id) || '';
       area.addEventListener('input', function () { reasonDrafts.set(id, area.value); });
       card.appendChild(area);
@@ -1493,34 +1561,34 @@ export const UI_JS = `'use strict';
         var params = holdParams(id, days, area.value);
         var reason = area.value;
         holdStatusLine(id).then(function (current) {
-          openConfirm('自動の最終削除の保留', [['木の根', id], ['今の保留', current], ['新しい期限', days > 0 ? '保留した時点から ' + label + ' 後（期限は、daemon の時計で決める。実際の期限は、保留した直後の通知に出る）。今の保留は、置き換わる' : '無期限。今の保留は、置き換わる'], ['理由', reason.trim() === '' ? '（なし）' : reason]], 'node.purgeHold', params, function (value) { return holdDoneText(id, value); });
+          openConfirm(t('hold.title'), [[t('purge.root'), id], [t('hold.current'), current], [t('hold.newUntil'), days > 0 ? t('hold.newUntilDays', { label: label }) : t('hold.newUntilForever')], [t('line.reason'), reason.trim() === '' ? t('line.none') : reason]], 'node.purgeHold', params, function (value) { return holdDoneText(id, value); });
         });
       };
       HOLD_CHOICES.forEach(function (c) {
-        var b = el('button', '', '自動削除を保留（' + c.label + '）…');
-        b.addEventListener('click', function () { askHold(c.label, c.days); });
+        var b = el('button', '', t('hold.button', { label: t(c.label) }));
+        b.addEventListener('click', function () { askHold(t(c.label), c.days); });
         hold.appendChild(b);
       });
       var daysArea = field('hold-days');
       daysArea.rows = 1;
       daysArea.maxLength = 3;
       daysArea.inputMode = 'numeric';
-      daysArea.placeholder = '日数（1〜' + HOLD_MAX_DAYS + '）';
+      daysArea.placeholder = t('hold.daysPlaceholder', { max: HOLD_MAX_DAYS });
       daysArea.value = daysDrafts.get(id) || '';
       daysArea.addEventListener('input', function () { daysDrafts.set(id, daysArea.value); });
-      var custom = el('button', '', '指定した日数で保留…');
+      var custom = el('button', '', t('hold.custom'));
       custom.addEventListener('click', function () {
         var bad = checkDays(daysArea.value);
         if (bad !== '') { problem.textContent = bad; problem.hidden = false; return; }
         var n = parseDays(daysArea.value);
-        askHold(n + ' 日', n);
+        askHold(t('hold.nDays', { n: n }), n);
       });
       hold.appendChild(daysArea);
       hold.appendChild(custom);
-      var rel = el('button', '', '保留を解除…');
+      var rel = el('button', '', t('release.button'));
       rel.addEventListener('click', function () {
         holdStatusLine(id).then(function (current) {
-          openConfirm('保留の解除', [['木の根', id], ['今の保留', current], ['内容', '保留を解除する（解除後は、保持期間と予告の条件を、改めて満たすまで消えない）']], 'node.purgeRelease', { nodeId: id }, '保留を解除しました（' + id + '）');
+          openConfirm(t('release.title'), [[t('purge.root'), id], [t('hold.current'), current], [t('line.content'), t('release.content')]], 'node.purgeRelease', { nodeId: id }, t('release.done', { id: id }));
         });
       });
       hold.appendChild(rel);
@@ -1535,7 +1603,7 @@ export const UI_JS = `'use strict';
     readOperation('node.discardedList', {}).then(function (v) {
       keptLoading = false;
       if (v === null) return;
-      if (!v || !Array.isArray(v.items) || typeof v.max !== 'number') { notice('保管の一覧の形が不正です', true); return; }
+      if (!v || !Array.isArray(v.items) || typeof v.max !== 'number') { notice(t('kept.badList'), true); return; }
       keptList = v;
       renderKept();
     });
@@ -1543,42 +1611,42 @@ export const UI_JS = `'use strict';
   function renderKept() {
     var box = document.getElementById('kept');
     clear(box);
-    var load = el('button', '', keptList ? '一覧を読み込み直す' : '一覧を読み込む');
+    var load = el('button', '', t(keptList ? 'kept.reload' : 'kept.load'));
     load.addEventListener('click', loadKept);
     box.appendChild(load);
     if (!keptList) return;
-    box.appendChild(el('p', 'empty', '保管: ' + keptList.items.length + ' 件 / 上限 ' + keptList.max + ' 件（自動では更新しません。取り出す・消すのあとは、読み込み直します）'));
+    box.appendChild(el('p', 'empty', t('kept.count', { n: keptList.items.length, max: keptList.max })));
     keptList.items.forEach(function (i) {
       if (typeof i.key !== 'string' || typeof i.tip !== 'string') return;
       var keyOk = ID_RE.test(i.key); // ID の形でない key には、操作を出さない（daemon も、ID の形でない target を拒む）
       var card = el('div', 'card');
       card.appendChild(el('span', 'tag', cleanText(i.key, 128)));
-      card.appendChild(el('span', 'tag', i.nodeId ? 'ノード ' + cleanText(i.nodeId, 128) : '孤立'));
-      card.appendChild(el('span', 'tag', '先端 ' + cleanText(i.tip.slice(0, 12), 12)));
+      card.appendChild(el('span', 'tag', i.nodeId ? t('blocker.node', { id: cleanText(i.nodeId, 128) }) : t('kept.orphan')));
+      card.appendChild(el('span', 'tag', t('kept.tip', { tip: cleanText(i.tip.slice(0, 12), 12) })));
       if (i.committedAt) card.appendChild(el('span', 'tag', cleanText(i.committedAt, 40)));
-      if (i.untrustedSubject) card.appendChild(el('div', '', '件名（信頼できない入力）: 「' + cleanText(i.untrustedSubject, 100) + '」'));
+      if (i.untrustedSubject) card.appendChild(el('div', '', t('kept.subject', { subject: cleanText(i.untrustedSubject, 100) })));
       var opts = el('div', 'opts');
-      var restore = el('button', '', 'ブランチに取り出す…');
+      var restore = el('button', '', t('kept.restore'));
       restore.addEventListener('click', function () {
-        openConfirm('保管の取り出し', [['保管', cleanText(i.key, 128)], ['先端', cleanText(i.tip.slice(0, 12), 12)], ['内容', '新しいブランチ（touryou/restored/<保管の名前>）を作る。既存のブランチは上書きしない。保管は残る']], 'node.discardedRestore', { target: i.key }, 'ブランチを作りました', { after: loadKept });
+        openConfirm(t('kept.restoreTitle'), [[t('kept.line'), cleanText(i.key, 128)], [t('kept.tipLine'), cleanText(i.tip.slice(0, 12), 12)], [t('line.content'), t('kept.restoreContent')]], 'node.discardedRestore', { target: i.key }, t('kept.restored'), { after: loadKept });
       });
-      var drop = el('button', '', '保管を消す…');
+      var drop = el('button', '', t('kept.drop'));
       drop.addEventListener('click', function () {
-        openConfirm('保管の削除', [['保管', cleanText(i.key, 128)], ['ノード', i.nodeId ? cleanText(i.nodeId, 128) : '孤立'], ['先端', cleanText(i.tip.slice(0, 12), 12) + '（一覧で見た先端と今の先端が違えば、消さない）']], 'node.discardedDrop', { target: i.key, expectTip: i.tip }, '保管を消しました', { typed: i.key, after: loadKept });
+        openConfirm(t('kept.dropTitle'), [[t('kept.line'), cleanText(i.key, 128)], [t('line.node'), i.nodeId ? cleanText(i.nodeId, 128) : t('kept.orphan')], [t('kept.tipLine'), t('kept.dropTip', { tip: cleanText(i.tip.slice(0, 12), 12) })]], 'node.discardedDrop', { target: i.key, expectTip: i.tip }, t('kept.dropped'), { typed: i.key, after: loadKept });
       });
       if (keyOk) {
         opts.appendChild(restore);
         opts.appendChild(drop);
         card.appendChild(opts);
       } else {
-        card.appendChild(el('p', 'error', 'この保管の名前は、ID の形でないため、画面からは操作できません（touryou discarded で操作してください）'));
+        card.appendChild(el('p', 'error', t('kept.badKey')));
       }
       box.appendChild(card);
     });
   }
 
   // ---- 取り消せない操作の確認待ち（Desktop の木）。ページのいちばん上に固定して出す（スクロールしなくても見える）----
-  var CONFIRM_OP_LABELS = { 'node.purge': '最終削除', 'node.discardedDrop': '保管の削除', 'node.reclaimInstruct': '破棄して回収の指示' };
+  var CONFIRM_OP_LABELS = { 'node.purge': 'op.purge', 'node.discardedDrop': 'op.discardedDrop', 'node.reclaimInstruct': 'op.reclaimInstruct' };
   var codeDrafts = new Map();
   var approvalErrors = new Map();
   var approvalSending = new Set();
@@ -1586,15 +1654,15 @@ export const UI_JS = `'use strict';
   // 確認待ちの 1 件の説明の行（textContent で描く）。
   function approvalLines(c) {
     return [
-      ['操作', name(CONFIRM_OP_LABELS, c.operation) + '（' + c.operation + '）'],
-      ['対象', c.target],
-      ['確認の番号', c.shortId + '…（端末の行の「確認 ' + c.shortId + '…」と同じか、見比べる）'],
-      ['期限', c.expiresAt + '（残り ' + c.attemptsLeft + ' 回まで打てる）']
+      [t('approval.op'), t('approval.opValue', { label: name(CONFIRM_OP_LABELS, c.operation), op: c.operation })],
+      [t('line.target'), c.target],
+      [t('approval.number'), t('approval.numberValue', { id: c.shortId })],
+      [t('approval.expires'), t('approval.expiresValue', { at: c.expiresAt, n: c.attemptsLeft })]
     ];
   }
   function approve(c, code) {
     if (approvalSending.has(c.confirmationId)) return;
-    if (!window.crypto || !window.crypto.randomUUID) { notice('このブラウザでは、操作できません（crypto.randomUUID がありません）', true); return; }
+    if (!window.crypto || !window.crypto.randomUUID) { notice(t('err.noCrypto'), true); return; }
     approvalSending.add(c.confirmationId);
     approvalErrors.delete(c.confirmationId);
     callOperation('confirm.approve', { confirmationId: c.confirmationId, code: code }, window.crypto.randomUUID())
@@ -1603,20 +1671,20 @@ export const UI_JS = `'use strict';
         if (r === null) return;
         if (r.status === 200 && r.body && r.body.ok === true) {
           codeDrafts.delete(c.confirmationId);
-          notice('確認して実行しました（' + name(CONFIRM_OP_LABELS, c.operation) + '）');
+          notice(t('approval.done', { label: name(CONFIRM_OP_LABELS, c.operation) }));
         } else {
           // 失敗のあと、確認待ちが消えている（5 回目の誤り・期限切れ・実行のあとの失敗）と、欄の中の理由は描かれないので、
           // ページ全体の通知（赤）にも出す
           var why = describeFailure(r);
           approvalErrors.set(c.confirmationId, why);
-          notice('確認できませんでした（' + name(CONFIRM_OP_LABELS, c.operation) + '）: ' + why, true);
+          notice(t('approval.failed', { label: name(CONFIRM_OP_LABELS, c.operation), why: why }), true);
         }
         refresh();
       })
       .catch(function () {
         approvalSending.delete(c.confirmationId);
-        approvalErrors.set(c.confirmationId, '送れませんでした（daemon に接続できません）');
-        notice('確認を送れませんでした（daemon に接続できません）', true);
+        approvalErrors.set(c.confirmationId, t('err.sendNetwork'));
+        notice(t('approval.network'), true);
         refresh();
       });
   }
@@ -1636,8 +1704,8 @@ export const UI_JS = `'use strict';
     clear(box);
     if (items.length === 0) { box.hidden = true; shownApprovals = ''; return; }
     box.hidden = false;
-    box.appendChild(el('div', 'confirm-title', '確認待ち（取り消せない操作。まだ実行していません）'));
-    box.appendChild(el('p', '', 'daemon を起動した端末に出たコードを打つと、実行します。端末の行の確認の番号と、ここの番号が同じか見比べてください。心当たりがなければ「取り消す」を押してください。'));
+    box.appendChild(el('div', 'confirm-title', t('approval.title')));
+    box.appendChild(el('p', '', t('approval.lead')));
     var first = null;
     var keep = null;
     items.forEach(function (c) {
@@ -1653,17 +1721,17 @@ export const UI_JS = `'use strict';
       area.rows = 1;
       area.spellcheck = false;
       area.autocomplete = 'off';
-      area.ariaLabel = '確認コード';
+      area.ariaLabel = t('approval.code');
       area.dataset.approval = c.confirmationId;
       area.value = codeDrafts.get(c.confirmationId) || '';
       area.addEventListener('input', function () { codeDrafts.set(c.confirmationId, area.value); });
       area.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); approve(c, area.value); } });
       card.appendChild(area);
-      var go = el('button', '', approvalSending.has(c.confirmationId) ? '送っています…' : '確認して実行する');
+      var go = el('button', '', t(approvalSending.has(c.confirmationId) ? 'approval.sending' : 'approval.run'));
       go.disabled = approvalSending.has(c.confirmationId);
       go.addEventListener('click', function () { approve(c, area.value); });
       card.appendChild(go);
-      var stop = el('button', '', '取り消す');
+      var stop = el('button', '', t('approval.cancel'));
       stop.addEventListener('click', function () { cancelApproval(c); });
       card.appendChild(stop);
       var why = approvalErrors.get(c.confirmationId);
@@ -1714,6 +1782,7 @@ export const UI_JS = `'use strict';
     showAuth(false);
     var partial = view.truncated.length > 0 || drawn < view.nodes.length;
     lastView = { seq: view.lastSeq, partial: partial };
+    lastRaw = view;
     showConnected();
   }
 
@@ -1721,31 +1790,30 @@ export const UI_JS = `'use strict';
 
   function showConnected() {
     if (!lastView) return;
-    var how = sseUp ? '変わるとすぐ更新'
-      : document.hidden ? (HIDDEN_POLL_MS / 1000) + ' 秒ごとに確かめて更新'
-      : (POLL_MS / 1000) + ' 秒ごとに確かめて更新';
-    if (!sseUp && sseState === 'replaced') how = '別のタブで開いています。' + how + '。このタブを選ぶと、すぐ更新に戻ります';
-    setStatus('つながっています（' + how + (lastView.partial ? '。数が多いので一部を省いています' : '') + '）');
+    var how = sseUp ? t('conn.live')
+      : t('conn.poll', { n: (document.hidden ? HIDDEN_POLL_MS : POLL_MS) / 1000 });
+    if (!sseUp && sseState === 'replaced') how = t('conn.replaced', { how: how });
+    setStatus(t(lastView.partial ? 'conn.partial' : 'conn.ok', { how: how }));
     statusEl.className = 'status live';
   }
   function rejectToken(message) {
     if (viaSession) {
       viaSession = false;
-      message = '画面のセッションが切れました（使わずに 1 時間たった・開いてから 12 時間たった・daemon を起動し直した など）。/touryou:ui（または Mac のターミナルで touryou ui）で開き直してください';
+      message = t('conn.sessionExpired');
     }
     dropGraph(); graphView = null;
-    token = ''; etag = ''; lastView = null; generation += 1; sseUp = false; keptList = null; purgeSignature = null; pending = null;
+    token = ''; etag = ''; lastView = null; lastRaw = null; generation += 1; sseUp = false; keptList = null; purgeSignature = null; pending = null;
     if (controller) controller.abort();
     document.getElementById('approvals').hidden = true; codeDrafts.clear(); approvalErrors.clear();
     showAuth(true); setStatus(message);
   }
 
   // 取得できないときの表示。理由と、確かめることを言う（自動で再試行は続ける）。
-  var UNREACHABLE_TEXT = 'daemon に接続できません（daemon が止まっている・再起動してポートが変わった・ネットワークの失敗）。daemon が動いているか、このページの URL のポートが今の daemon と同じかを確かめてください。再試行します';
+  function unreachableText() { return t('conn.unreachable'); }
   function fetchFailureText(status) {
-    if (status === 429) return '取得に失敗（429: 要求が多すぎます）。しばらく待ってから、再試行します';
-    if (status >= 500) return '取得に失敗（' + status + ': daemon の内部の失敗）。daemon のログを確かめてください。再試行します';
-    return '取得に失敗（' + status + '）。再試行します';
+    if (status === 429) return t('conn.fetch429');
+    if (status >= 500) return t('conn.fetch5xx', { status: status });
+    return t('conn.fetchFailed', { status: status });
   }
   function fetchState() {
     var headers = etag
@@ -1754,8 +1822,8 @@ export const UI_JS = `'use strict';
     return fetch('/v1/ui/state', { headers: headers })
       .then(function (res) {
         if (res.status === 304) { return { unchanged: true }; }
-        if (res.status === 401) { rejectToken('トークンが正しくありません'); return null; }
-        if (res.status === 403) { rejectToken('人間のトークンが必要です'); return null; }
+        if (res.status === 401) { rejectToken(t('err.badToken')); return null; }
+        if (res.status === 403) { rejectToken(t('err.needHuman')); return null; }
         if (!res.ok) { setStatus(fetchFailureText(res.status)); return null; }
         etag = res.headers.get('etag') || '';
         return res.json();
@@ -1763,12 +1831,12 @@ export const UI_JS = `'use strict';
       .then(function (body) {
         if (body && body.ok) render(body.value);
       })
-      .catch(function () { setStatus(UNREACHABLE_TEXT); });
+      .catch(function () { setStatus(unreachableText()); });
   }
 
   // 同時に 1 回だけ取る。取っている間に通知が来たら、終わってからもう 1 回取る。
   function refresh() {
-    if (!token) { showAuth(true); setStatus('未接続'); return Promise.resolve(); }
+    if (!token) { showAuth(true); setStatus(t('conn.none')); return Promise.resolve(); }
     if (refreshing) { again = true; return Promise.resolve(); }
     refreshing = true;
     lastRefreshAt = Date.now();
@@ -1796,8 +1864,8 @@ export const UI_JS = `'use strict';
     controller = new AbortController();
     fetch('/v1/events', { headers: { authorization: 'Bearer ' + token }, signal: controller.signal })
       .then(function (res) {
-        if (res.status === 401) { rejectToken('トークンが正しくありません'); return null; }
-        if (res.status === 403) { rejectToken('人間のトークンが必要です'); return null; }
+        if (res.status === 401) { rejectToken(t('err.badToken')); return null; }
+        if (res.status === 403) { rejectToken(t('err.needHuman')); return null; }
         if (res.status === 429) {
           var seconds = parseInt(res.headers.get('retry-after') || '', 10);
           retryMs = seconds > 0 ? Math.min(seconds, 300) * 1000 : 0;
@@ -1915,12 +1983,12 @@ export const UI_JS = `'use strict';
   });
 
   // チケットを、画面のセッションのトークンに交換する。失敗の理由は分けない（誤り・期限切れ・使用済みは同じ）。
-  function exchangeTicket(t) {
-    setStatus('接続しています');
+  function exchangeTicket(tk) {
+    setStatus(t('conn.connecting'));
     return fetch('/v1/ui/session', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ ticket: t }),
+      body: JSON.stringify({ ticket: tk }),
     })
       .then(function (res) { return res.ok ? res.json() : null; })
       .then(function (body) {
@@ -1938,9 +2006,11 @@ export const UI_JS = `'use strict';
   var openSettings = document.getElementById('open-settings');
   var stillBox = document.getElementById('set-still');
   var themeRadios = settingsBox.querySelectorAll('input[name="set-theme"]');
+  var langRadios = settingsBox.querySelectorAll('input[name="set-lang"]');
   function showSettings() {
     stillBox.checked = settings.still;
     themeRadios.forEach(function (r) { r.checked = r.value === settings.theme; });
+    langRadios.forEach(function (r) { r.checked = r.value === lang; });
     settingsBox.showModal();
     stillBox.focus();
   }
@@ -1974,6 +2044,21 @@ export const UI_JS = `'use strict';
       saveSettings(settings);
     });
   });
+  // 言語を選ぶと、その場で画面・図・知らせの文を描き直す（描き直さない欄〔最終削除の一覧・図〕も、印を消して描かせる）
+  langRadios.forEach(function (r) {
+    r.addEventListener('change', function () {
+      if (!r.checked) return;
+      settings.lang = r.value === 'en' ? 'en' : 'ja';
+      lang = settings.lang;
+      saveSettings(settings);
+      applyLang();
+      purgeSignature = null;
+      graphSeq = -1;
+      renderKept();
+      renderConfirm();
+      if (lastRaw) render(lastRaw);
+    });
+  });
 
   renderKept();
   if (ticket) {
@@ -1981,7 +2066,7 @@ export const UI_JS = `'use strict';
     ticket = '';
     exchangeTicket(t0).then(function () {
       if (token) start();
-      else rejectToken('画面を開けませんでした（チケットが使えない）。Mac のターミナルで touryou ui を実行して、開き直してください');
+      else rejectToken(t('conn.badTicket'));
     });
   } else {
     start();

@@ -49,7 +49,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
     browser = await (pw as Pw).chromium.launch();
-    page = await browser.newPage({ viewport: { width: 1100, height: 700 } });
+    page = await browser.newPage({ viewport: { width: 1100, height: 700 }, locale: "ja-JP" });
     page.on("console", (m) => {
       if (m.type() === "error" || m.type() === "warning") problems.push(`${m.type()}: ${m.text()}`);
     });

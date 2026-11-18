@@ -44,7 +44,10 @@ async function setup(maxConnections?: number) {
   };
   /** 1 つのタブを開く（タブごとに別の画面のセッション）。`/v1/events` を開いた回数を数える。 */
   const openTab = async (o: { clock?: boolean } = {}) => {
-    const page: Page = await browser.newPage({ viewport: { width: 900, height: 600 } });
+    const page: Page = await browser.newPage({
+      viewport: { width: 900, height: 600 },
+      locale: "ja-JP",
+    });
     const tab = { page, events: 0, states: 0 };
     page.on("request", (r) => {
       if (r.url().endsWith("/v1/events")) tab.events += 1;

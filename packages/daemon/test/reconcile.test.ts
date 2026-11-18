@@ -1,6 +1,8 @@
 import {
   type EventBody,
   INBOX_SUMMARY_MAX,
+  type InboxMessage,
+  inboxMessageText,
   type NodeEvent,
   type ProcessInfo,
   stateOf,
@@ -162,6 +164,12 @@ describe("daemon の外で動く子（Desktop）", () => {
         (i) => i.resolved === undefined && i.summary?.startsWith(EXTERNAL_CHECK_SUMMARY) === true,
       );
     expect(ask?.summary).toContain("2 件");
+    // 画面のための鍵と値（#140）。日本語の文は、これまでと同じ形（固定の文面で始まる）
+    expect(ask?.msg?.key).toBe("externalCheck");
+    expect(inboxMessageText("ja", ask?.msg as InboxMessage)).toBe(ask?.summary);
+    expect(inboxMessageText("en", ask?.msg as InboxMessage)).toMatch(
+      /^After a daemon restart: .*\(2: [a-z], [a-z]\)$/,
+    );
   });
 
   it("照合せず状態を変えない。根の受信箱に、優先度のある項目（stopIncomplete）をまとめて 1 件。再実行で重複しない", async () => {

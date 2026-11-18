@@ -4,6 +4,7 @@
  * 表示モデルをそのまま rete に渡さない。rete のノード・つながりのデータは、ID と数だけ。
  * 描画のプラグインは使わず、area のプラグインの `render` の合図を受けて、箱は `el`、線は `svgEl` で自前に描く（R0）。
  */
+
 import { type GetSchemes, NodeEditor } from "rete";
 import { AreaPlugin } from "rete-area-plugin";
 import { ReadonlyPlugin } from "rete-readonly-plugin";
@@ -17,6 +18,7 @@ import {
   stageText,
 } from "./graph-model.js";
 import { type Lane, laneOf, roleIconOf, setRunnerPath, trunkOf, twigOf } from "./graph-path.js";
+import { graphString, type Lang } from "./graph-text.js";
 import { svgEl } from "./svg-el.js";
 
 // ---- 描き手 ----
@@ -51,6 +53,8 @@ interface Shape {
   /** 札（種類と「何分前」）と、その外側の段の言葉。 */
   readonly label?: string;
   readonly stage?: string;
+  /** 線の title（言葉と段。描く言語で作っておく）。 */
+  readonly title?: string;
 }
 
 let current: AreaPlugin<Schemes, never> | null = null;
@@ -164,6 +168,8 @@ export interface Drawn {
 export interface DrawOptions {
   /** 箱を押した（クリック・Enter・Space）とき、その子のノード ID（`ID_PATTERN` を通したもの）を渡す。 */
   readonly onPick?: (nodeId: string) => void;
+  /** 図の言葉の言語（#140。画面の設定の言語）。ほかの値・なしは日本語。 */
+  readonly lang?: Lang;
 }
 
 /**
@@ -183,6 +189,7 @@ export async function draw(
   listening = ac;
   const opt = { signal: ac.signal };
   const onPick = typeof options.onPick === "function" ? options.onPick : null;
+  const lang: Lang = options.lang === "en" ? "en" : "ja";
   /** つながりの器と、その両端のノード ID（指を置いた箱の線だけ浮かべる）。 */
   const wires: { el: HTMLElement; a: string; b: string }[] = [];
   const litId = (): string | null => hoverId ?? focusId;
@@ -216,7 +223,7 @@ export async function draw(
   };
   const none: Drawn = { width: 0, height: 0, ...ctl };
   const now = Date.now();
-  const model = graphModelOf(view);
+  const model = graphModelOf(view, lang);
   const L = layoutOf(model.nodes);
   const byId = new Map(model.nodes.map((n) => [n.id, n]));
   const shapes: Shape[] = [];
@@ -235,7 +242,7 @@ export async function draw(
       const mine = model.lanes.filter((l) => l.parent === pid && l.child === kid);
       if (mine.length === 0) add({ kind: "twig", d: twigOf(P, C) }, pid, kid);
       for (const l of mine) {
-        const s = laneShape(l, laneOf(P, C, l.dir), byId.get(kid), now);
+        const s = laneShape(l, laneOf(P, C, l.dir), byId.get(kid), now, lang);
         add(s, l.dir === "up" ? kid : pid, l.dir === "up" ? pid : kid);
       }
     });
@@ -269,7 +276,7 @@ export async function draw(
     };
     if (type === "node") {
       const n = byId.get(payload.id);
-      const box = drawNode(element, n, now);
+      const box = drawNode(element, n, now, lang);
       if (box !== null && n !== undefined) listen(box, n.id);
     } else if (type === "connection") {
       const c = payload as ReteConn;
@@ -397,18 +404,35 @@ function relight(host: HTMLElement, byId: ReadonlyMap<string, unknown>, hot: () 
 }
 
 /** 線 1 本の形と見え方。終わった作業の線は止める。人の答えを待つものだけ柿色（`wait`）。 */
-function laneShape(l: GraphLane, lane: Lane, child: GraphNode | undefined, now: number): Shape {
+function laneShape(
+  l: GraphLane,
+  lane: Lane,
+  child: GraphNode | undefined,
+  now: number,
+  lang: Lang,
+): Shape {
   const finished = child?.tier === "over";
   const stage = finished ? "done" : l.stage === "sent" && l.unknown ? "unknown" : l.stage;
   // 新しいほど濃い（a1〜a4）。答え待ちの柿色（wait）と、終わった子の薄い灰（over）は、CSS でこれを上書きする
   const extra = ` ${ageClassOf(l.at, now)}${l.waiting && !finished ? " wait" : ""}${finished ? " over" : ""}`;
+  const arrow = l.dir === "up" ? "← " : "→ ";
+  const label =
+    l.at === null
+      ? `${arrow}${l.label}`
+      : graphString(lang, "graph.laneAgo", {
+          arrow,
+          label: l.label,
+          ago: agoText(now - l.at, lang),
+        });
+  const stageWords = stageText(l, lang);
   return {
     kind: "lane",
     d: lane.d,
     lane,
     look: `${l.dir}${extra} g-${stage}`,
-    label: `${l.dir === "up" ? "← " : "→ "}${l.label}${l.at === null ? "" : `　${agoText(now - l.at)}`}`,
-    stage: stageText(l),
+    label,
+    stage: stageWords,
+    title: graphString(lang, "graph.lineTitle", { label, stage: stageWords }),
   };
 }
 
@@ -422,18 +446,29 @@ function drawBackdrop(trunks: readonly string[], w: number, h: number): HTMLElem
 }
 
 /** 箱（見本の `drawNode`）：題・役割の印と「何分前」・状態の言葉と印・動いている点・人の答えの数。 */
-function drawNode(element: HTMLElement, n: GraphNode | undefined, now: number): HTMLElement | null {
+function drawNode(
+  element: HTMLElement,
+  n: GraphNode | undefined,
+  now: number,
+  lang: Lang,
+): HTMLElement | null {
   if (n === undefined) return null;
   element.replaceChildren();
   const box = el("div", `gnode t-${n.tier} s-${n.status}`);
   box.dataset.id = n.id;
-  box.ariaLabel = `${n.title}。${n.statusText}`;
+  box.ariaLabel = graphString(lang, "graph.boxLabel", { title: n.title, status: n.statusText });
   const row = el("div", "gr");
   const icon = svgEl("svg", { class: "gic", width: 12, height: 12, viewBox: "0 0 12 12" });
   icon.append(svgEl("path", { class: "role-ic", d: roleIconOf(n.integrator) }));
   row.append(
     icon,
-    el("span", "gs", `${n.role}${n.lastAt === null ? "" : `　${agoText(now - n.lastAt)}`}`),
+    el(
+      "span",
+      "gs",
+      n.lastAt === null
+        ? n.role
+        : graphString(lang, "graph.roleAgo", { role: n.role, ago: agoText(now - n.lastAt, lang) }),
+    ),
   );
   box.append(el("span", "gt", n.title), row, el("span", `gst st-${n.status}`, n.statusText));
   if (n.alive) box.append(el("span", "galive"));
@@ -454,7 +489,7 @@ function drawShape(element: HTMLElement, s: Shape | undefined, w: number, h: num
     const lane = s.lane;
     const look = s.look ?? "";
     const line = svgEl("path", { class: `line ${look}`, d: s.d });
-    line.append(svgEl("title", {}, `${s.label ?? ""}：${s.stage ?? ""}`));
+    line.append(svgEl("title", {}, s.title ?? ""));
     svg.append(line, svgEl("path", { class: `tip ${look}`, d: lane.tip }));
     if (lane.portX !== undefined && lane.portY !== undefined)
       svg.append(

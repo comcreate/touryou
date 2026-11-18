@@ -21,6 +21,7 @@ import {
   type EventBody,
   findRunningProcesses,
   formatProcesses,
+  messagePart,
   type OrchState,
   type ProcessInfo,
   stateOf,
@@ -29,6 +30,7 @@ import {
   appendAtomically,
   deriveId,
   type LogPort,
+  notice,
   summarize,
   waitRequestKey,
 } from "./api/handlers/context.js";
@@ -90,7 +92,12 @@ export async function reconcileOnStartup(deps: ReconcileDeps): Promise<Reconcile
   if ((external.length > 0 && root !== undefined) || stale.length > 0) {
     const key = `reconcile-external-${run}`;
     const shown = external.slice(0, 5).map((n) => n.id);
-    const more = external.length > shown.length ? ` ほか ${external.length - shown.length} 件` : "";
+    const nodes = {
+      nodes: {
+        sep: "comma" as const,
+        items: shown.map((id) => messagePart("value", { value: id })),
+      },
+    };
     const bodies: EventBody[] = [...resolveExternalCheckBodies(stale)];
     if (external.length > 0 && root !== undefined) {
       bodies.push({
@@ -99,8 +106,12 @@ export async function reconcileOnStartup(deps: ReconcileDeps): Promise<Reconcile
           id: deriveId("inbox", "system", key, "external"),
           kind: "stopIncomplete",
           nodeId: root.id,
-          summary: summarize(
-            `${EXTERNAL_CHECK_SUMMARY}（${external.length} 件: ${shown.join("、")}${more}）`,
+          ...notice(
+            external.length > shown.length ? "externalCheckMore" : "externalCheck",
+            external.length > shown.length
+              ? { count: external.length, more: external.length - shown.length }
+              : { count: external.length },
+            nodes,
           ),
         },
       });

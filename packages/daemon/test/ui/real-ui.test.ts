@@ -4,7 +4,7 @@
  * 図と一覧を切り替えられること、「動きを止める」と OS の `prefers-reduced-motion` で図の動きが止まることを確かめる。
  * 画面写し（`docs/images/ui-light.png`・`ui-dark.png`）は、`TOURYOU_UI_SHOTS=<ディレクトリ>` のときだけ撮る（値は作り物）。
  */
-import { foldEvents, type OrchEvent, stallSummary } from "@touryou/core";
+import { foldEvents, inboxMessage, type OrchEvent, stallSummary } from "@touryou/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createCredentialStore } from "../../src/api/credentials.js";
 import { type ApiServer, createApiServer } from "../../src/api/server.js";
@@ -85,6 +85,16 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
           kind: "info",
           nodeId: "ui-c",
           summary: "範囲の拡張要求（command）: pnpm lint",
+        },
+      }),
+      // daemon が書いた知らせ（msg つき。#140）。英語の画面では、英語の文になる
+      ev({
+        type: "inbox.added",
+        payload: {
+          id: "u1",
+          kind: "info",
+          nodeId: "ui-c",
+          ...inboxMessage("unreadInstruction", { node: "ui-c", seq: 3, minutes: 10 }),
         },
       }),
       // 止まっているかもの子（長い ID。狭い窓で、はみ出さないことも見る）と、済んだ子
@@ -171,7 +181,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     });
     url = (await server.listen(0)).url;
     browser = await (pw as Pw).chromium.launch();
-    page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    page = await browser.newPage({ viewport: { width: 1280, height: 900 }, locale: "ja-JP" });
     page.on("console", (m) => {
       if (m.type() === "error") problems.push(`${m.type()}: ${m.text()}`);
     });
@@ -578,8 +588,8 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       false,
     );
     expect(await page.evaluate(() => document.activeElement?.id)).toBe("open-settings");
-    // 言語の欄の場所（中身は #140。English はまだ選べない）
-    expect(await page.locator('input[name="set-lang"][value="en"]').isDisabled()).toBe(true);
+    // 言語の欄（#140）。English も選べる
+    expect(await page.locator('input[name="set-lang"][value="en"]').isDisabled()).toBe(false);
   });
 
   it("設定の窓の「動きを止める」で、図の線も玉も止まる。戻すと動く。再読み込みのあとも残る", async () => {
@@ -626,7 +636,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   });
 
   it("ブラウザに残せないとき（localStorage が使えない）も、設定の窓は動く", async () => {
-    const ctx = await (browser as Browser).newContext();
+    const ctx = await (browser as Browser).newContext({ locale: "ja-JP" });
     const p2 = await ctx.newPage();
     await p2.addInitScript(() => {
       Object.defineProperty(window, "localStorage", {
@@ -645,6 +655,75 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       true,
     );
     await p2.click("#close-settings");
+    expect(errs).toEqual([]);
+    await ctx.close();
+  });
+
+  it("言語（#140）: ブラウザが英語なら英語の画面。設定で日本語にすると、その場で画面・図・知らせが切り替わり、再読み込みのあとも残る", async () => {
+    const ctx = await (browser as Browser).newContext({ locale: "en-US" });
+    const p2 = await ctx.newPage();
+    const errs: string[] = [];
+    p2.on("pageerror", (e: Error) => errs.push(e.message));
+    const open = async () => {
+      await p2.goto("about:blank");
+      await p2.goto(`${url}/ui#ticket=${await ticket()}`);
+      await p2.waitForSelector("#graph .gnode");
+    };
+    const cjk = /[\u3040-\u30ff\u3400-\u9fff]/;
+    const textOf = (sel: string) =>
+      p2.evaluate((s: string) => document.querySelector(s)?.textContent ?? "", sel);
+    const all = (sel: string) =>
+      p2.evaluate(
+        (s: string) => [...document.querySelectorAll(s)].map((e) => e.textContent ?? ""),
+        sel,
+      );
+    await open();
+    expect(await p2.evaluate(() => document.documentElement.lang)).toBe("en");
+    expect(await p2.evaluate(() => document.title)).toBe("touryou status");
+    for (const sel of [
+      "h1",
+      "#now-title",
+      "#status",
+      "#graph-legend",
+      "#view-switch",
+      ".admin > summary",
+    ])
+      expect(cjk.test(await textOf(sel)), sel).toBe(false);
+    // 図の箱の状態の言葉・カードの札も英語
+    const states = await all("#graph .gst");
+    expect(states.length).toBeGreaterThan(0);
+    for (const t of states) expect(cjk.test(t), t).toBe(false);
+    expect(await p2.evaluate(() => document.getElementById("open-settings")?.ariaLabel)).toBe(
+      "Settings",
+    );
+    // daemon が書いた知らせ（msg つき）は英語。msg のない知らせ・子が書いた文は、書かれたまま（利用者の決め）
+    const entries = await all(".entry");
+    expect(entries.some((t) => t.includes("has not picked up instruction #3 after 10 min"))).toBe(
+      true,
+    );
+    expect(entries.some((t) => t.includes("ui-b の結果を待っている"))).toBe(true);
+    // 設定で日本語を選ぶと、その場で切り替わる
+    await p2.click("#open-settings");
+    await p2.check('input[name="set-lang"][value="ja"]');
+    await p2.click("#close-settings");
+    expect(await p2.evaluate(() => document.documentElement.lang)).toBe("ja");
+    expect(await textOf("#now-title")).toMatch(cjk);
+    expect((await all("#graph .gst")).some((t) => cjk.test(t))).toBe(true);
+    expect(
+      (await all(".entry")).some((t) =>
+        t.includes("指示（番号 3）を 10 分たっても受け取っていない"),
+      ),
+    ).toBe(true);
+    // 再読み込みのあとも残る（ブラウザが英語でも、覚えた日本語）
+    await open();
+    expect(await p2.evaluate(() => document.documentElement.lang)).toBe("ja");
+    expect(await textOf("h1")).toBe("touryou 状態画面");
+    // 英語に戻すと、覚えた値も英語
+    await p2.click("#open-settings");
+    await p2.check('input[name="set-lang"][value="en"]');
+    await p2.click("#close-settings");
+    await open();
+    expect(await p2.evaluate(() => document.documentElement.lang)).toBe("en");
     expect(errs).toEqual([]);
     await ctx.close();
   });
@@ -670,6 +749,16 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     await page.click("#open-settings");
     await page.screenshot({ path: `${dir}/ui-settings.png` });
     await page.click("#close-settings");
+    // 英語の画面（#140）
+    const ctx = await (browser as Browser).newContext({ locale: "en-US" });
+    const en = await ctx.newPage();
+    await en.setViewportSize({ width: 1280, height: 900 });
+    await en.goto(`${url}/ui#ticket=${await ticket()}`);
+    await en.waitForSelector("#graph .gnode");
+    await en.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
+    await en.mouse.move(1, 1);
+    await en.screenshot({ path: `${dir}/ui-en.png`, fullPage: true });
+    await ctx.close();
   });
 
   it("狭い窓でも、横にはみ出さない。いちばん上の帯の「設定」が切れない", async () => {

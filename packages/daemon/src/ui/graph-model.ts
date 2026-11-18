@@ -1,33 +1,35 @@
 /**
  * 関係図に渡す値の作り直し（#89。純粋な関数）。表示モデル（形を信じない）から、整えた文字・確かめた ID・数だけを作る。
  */
+
 import { ID_PATTERN } from "../../../core/src/ids.js";
 import { UI_HUMAN, uiText } from "../../../core/src/ui-view.js";
 import type { Dir } from "./graph-path.js";
+import { type GraphTextKey, graphString, type Lang } from "./graph-text.js";
 
 export const STAGES = ["sent", "delivered", "done"] as const;
 export type Stage = (typeof STAGES)[number];
-/** 役割の名前（画面の `ROLE_NAMES` とそろえる）。 */
-const ROLE_NAMES: Readonly<Record<string, string>> = {
-  integrator: "統合",
-  implement: "作業",
-  review: "レビュー",
-  investigate: "調べ",
-  merge: "まとめ",
+/** 役割の名前の鍵（画面の `ROLE_NAMES` と同じ鍵。文字は ui/i18n.ts の表。#140）。 */
+const ROLE_NAMES: Readonly<Record<string, GraphTextKey>> = {
+  integrator: "role.integrator",
+  implement: "role.implement",
+  review: "role.review",
+  investigate: "role.investigate",
+  merge: "role.merge",
 };
 const BANDS = ["turn", "running", "finished"] as const;
 type Band = (typeof BANDS)[number];
 /** やり取りの種類（画面の `FLOW_KIND_NAMES` とそろえる）。 */
-const KIND_NAMES: Readonly<Record<string, string>> = {
-  instruction: "指示",
-  report: "報告",
-  done: "済んだの報告",
-  decision: "判断を求む",
-  extension: "範囲の頼み",
-  answer: "答え",
-  approved: "許可",
-  rejected: "却下",
-  split: "切り出し",
+const KIND_NAMES: Readonly<Record<string, GraphTextKey>> = {
+  instruction: "flow.instruction",
+  report: "flow.report",
+  done: "flow.done",
+  decision: "flow.decision",
+  extension: "flow.extension",
+  answer: "flow.answer",
+  approved: "flow.approved",
+  rejected: "flow.rejected",
+  split: "flow.split",
 };
 
 /**
@@ -37,22 +39,22 @@ const KIND_NAMES: Readonly<Record<string, string>> = {
  */
 export type NodeStatus = "run" | "wait" | "stall" | "fail" | "done" | "stopped";
 export type Tier = "go" | "turn" | "over";
-export const STATUS_TEXT: Readonly<Record<NodeStatus, string>> = {
-  run: "動いている",
-  wait: "● あなたの答え待ち",
-  stall: "‖ 止まっているかも",
-  fail: "✕ 失敗",
-  done: "済んだ",
-  stopped: "■ 止めた",
+export const STATUS_TEXT: Readonly<Record<NodeStatus, GraphTextKey>> = {
+  run: "status.run",
+  wait: "status.wait",
+  stall: "status.stall",
+  fail: "status.fail",
+  done: "status.done",
+  stopped: "status.stopped",
 };
 /** 動いている（run）ときの、状態ごとの言葉。画面の `STATE_NAMES` と同じ言葉（試験で照らす）。 */
-export const RUN_TEXT: Readonly<Record<string, string>> = {
-  pending: "起動を待っている",
-  running: "動いている",
-  waiting: "待っている",
-  done: "済んだと報告（確かめ待ち）",
-  stopping: "止めている",
-  stopIncomplete: "■ 止まりきっていない",
+export const RUN_TEXT: Readonly<Record<string, GraphTextKey>> = {
+  pending: "run.pending",
+  running: "run.running",
+  waiting: "run.waiting",
+  done: "run.done",
+  stopping: "run.stopping",
+  stopIncomplete: "run.stopIncomplete",
 };
 export const tierOf = (s: NodeStatus): Tier =>
   s === "wait" || s === "stall" || s === "fail"
@@ -125,12 +127,12 @@ const count = (x: unknown): number =>
   typeof x === "number" && Number.isInteger(x) && x > 0 ? Math.min(x, 999) : 0;
 
 /** 「何分前」（画面の `agoText` とそろえる）。 */
-export function agoText(ms: number): string {
+export function agoText(ms: number, lang: Lang = "ja"): string {
   const m = Math.floor(Math.max(0, ms) / 60000);
-  if (m < 1) return "いま";
-  if (m < 60) return `${m} 分前`;
-  if (m < 1440) return `${Math.floor(m / 60)} 時間前`;
-  return `${Math.floor(m / 1440)} 日前`;
+  if (m < 1) return graphString(lang, "time.now");
+  if (m < 60) return graphString(lang, "time.minAgo", { n: m });
+  if (m < 1440) return graphString(lang, "time.hourAgo", { n: Math.floor(m / 60) });
+  return graphString(lang, "time.dayAgo", { n: Math.floor(m / 1440) });
 }
 
 /** ノードの、人に関わる項目の有無（表示モデルの受信箱・判断・拡張要求から）。札は、答え待ち・失敗・止まっているかもの順に決める（app.js の `statusesOf` と同じ）。 */
@@ -167,7 +169,7 @@ function flagsOf(
 }
 
 /** 表示モデル（形を信じない）から、描く値だけを作り直す。 */
-export function graphModelOf(view: unknown): GraphModel {
+export function graphModelOf(view: unknown, lang: Lang = "ja"): GraphModel {
   const v = rec(view) ?? {};
   const nodes: GraphNode[] = [];
   const known = new Set<string>();
@@ -198,11 +200,17 @@ export function graphModelOf(view: unknown): GraphModel {
       id,
       parentId: idOf(n.parentId),
       title: n.title === undefined ? id : uiText(n.title, 80),
-      role: roleKey === "" ? "作業" : (ROLE_NAMES[roleKey] as string),
+      role: graphString(
+        lang,
+        roleKey === "" ? "role.implement" : (ROLE_NAMES[roleKey] as GraphTextKey),
+      ),
       integrator: roleKey === "integrator",
       status: stopIncomplete && status === "run" ? "fail" : status,
       tier: stopIncomplete ? "turn" : tierOf(status),
-      statusText: status === "run" ? (RUN_TEXT[state] ?? STATUS_TEXT.run) : STATUS_TEXT[status],
+      statusText: graphString(
+        lang,
+        status === "run" ? (RUN_TEXT[state] ?? STATUS_TEXT.run) : STATUS_TEXT[status],
+      ),
       alive: status === "run" && state === "running",
       needsHuman: count(n.needsHuman),
       lastAt: timeOf(n.lastActivityAt),
@@ -236,10 +244,12 @@ export function graphModelOf(view: unknown): GraphModel {
     const seen = taken.get(key);
     // すでに出した線があれば、それが答え待ちでなく、これが答え待ちのときだけ置き換える
     if (seen !== undefined && (!waiting || (lanes[seen] as GraphLane).waiting)) continue;
-    const kind =
+    const kind = graphString(
+      lang,
       typeof f.kind === "string" && own(KIND_NAMES, f.kind)
-        ? (KIND_NAMES[f.kind] as string)
-        : "やり取り";
+        ? (KIND_NAMES[f.kind] as GraphTextKey)
+        : "flow.other",
+    );
     const lane: GraphLane = {
       parent,
       child,
@@ -260,11 +270,13 @@ export function graphModelOf(view: unknown): GraphModel {
 }
 
 /** やり取りの段の言葉（画面の `stageText` とそろえる）。 */
-export function stageText(l: Pick<GraphLane, "stage" | "unknown" | "inferred">): string {
-  if (l.stage === "sent")
-    return l.unknown ? "送った（届いたかは分からない）" : "送った（まだ届いていない）";
-  if (l.stage === "delivered") return "届いた（返事を待っている）";
-  return l.inferred ? "済んだ（推定）" : "済んだ";
+export function stageText(
+  l: Pick<GraphLane, "stage" | "unknown" | "inferred">,
+  lang: Lang = "ja",
+): string {
+  if (l.stage === "sent") return graphString(lang, l.unknown ? "stage.sentUnknown" : "stage.sent");
+  if (l.stage === "delivered") return graphString(lang, "stage.delivered");
+  return graphString(lang, l.inferred ? "stage.doneInferred" : "stage.done");
 }
 
 /** やり取りの新しさの段（見本の a1〜a4）。5 分・30 分・1 時間で区切る。時刻がなければいちばん古い段。 */

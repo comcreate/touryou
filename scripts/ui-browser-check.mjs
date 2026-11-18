@@ -370,6 +370,7 @@ const browser = await chromium.launch({
 const out = {};
 for (const scheme of ["light", "dark"]) {
   const ctx = await browser.newContext({
+    locale: "ja-JP",
     colorScheme: scheme,
     viewport: { width: 900, height: 900 },
   });
@@ -398,7 +399,7 @@ for (const scheme of ["light", "dark"]) {
   await ctx.close();
 }
 // 貼り付けの経路
-const ctx = await browser.newContext();
+const ctx = await browser.newContext({ locale: "ja-JP" });
 const page = await ctx.newPage();
 await page.goto(`${url}/ui`);
 out.pasteFormVisible = await page.locator("#auth").isVisible();
@@ -456,7 +457,7 @@ out.reflectMs = Date.now() - t0;
 out.statusesAfterChange = [...statuses]; // 変わった直後は 200（新しい ETag）、そのあとは 304
 // ---- 操作: 判断への回答 ----
 const ops = {};
-const pageO = await (await browser.newContext()).newPage();
+const pageO = await (await browser.newContext({ locale: "ja-JP" })).newPage();
 const opErrors = [];
 pageO.on("pageerror", (e) => opErrors.push(String(e)));
 pageO.on("dialog", (d) => {
@@ -820,7 +821,7 @@ out.operations = ops;
 
 // ---- 回収の指示----
 const rc = {};
-const pageR = await (await browser.newContext()).newPage();
+const pageR = await (await browser.newContext({ locale: "ja-JP" })).newPage();
 const rcErrors = [];
 pageR.on("pageerror", (e) => rcErrors.push(String(e)));
 pageR.on("dialog", (d) => {
@@ -927,7 +928,9 @@ await pageR.context().close();
 
 // ---- 停止の宣言----
 const cs = {};
-const pageC = await (await browser.newContext({ viewport: { width: 900, height: 900 } })).newPage();
+const pageC = await (
+  await browser.newContext({ locale: "ja-JP", viewport: { width: 900, height: 900 } })
+).newPage();
 const csErrors = [];
 pageC.on("pageerror", (e) => csErrors.push(String(e)));
 pageC.on("dialog", (d) => {
@@ -1012,7 +1015,7 @@ const dsrv = createApiServer({
 });
 const dUrl = (await dsrv.listen(0)).url;
 const dk = {};
-const pageD = await (await browser.newContext()).newPage();
+const pageD = await (await browser.newContext({ locale: "ja-JP" })).newPage();
 const dkErrors = [];
 pageD.on("pageerror", (e) => dkErrors.push(String(e)));
 await openUi(pageD, dUrl);
@@ -1044,7 +1047,9 @@ await dsrv.close();
 
 // ---- フックの結び付けを外す----
 const hu = {};
-const pageH = await (await browser.newContext({ viewport: { width: 900, height: 900 } })).newPage();
+const pageH = await (
+  await browser.newContext({ locale: "ja-JP", viewport: { width: 900, height: 900 } })
+).newPage();
 const huErrors = [];
 pageH.on("pageerror", (e) => huErrors.push(String(e)));
 pageH.on("dialog", (d) => {
@@ -1129,7 +1134,7 @@ const poll = createApiServer({
   sse: { maxConnections: 0 },
 });
 const pollUrl = (await poll.listen(0)).url;
-const page2 = await (await browser.newContext()).newPage();
+const page2 = await (await browser.newContext({ locale: "ja-JP" })).newPage();
 const pollStatuses = [];
 page2.on("response", (res) => {
   if (res.url().endsWith("/v1/ui/state")) pollStatuses.push(res.status());
@@ -1145,7 +1150,7 @@ await page2.waitForTimeout(5000);
 out.fallbackStatuses = [...pollStatuses]; // 200 のあと 304
 // 429 のときは、Retry-After（5 秒）より前に、再接続しない
 let retryRequests = 0;
-const page4 = await (await browser.newContext()).newPage();
+const page4 = await (await browser.newContext({ locale: "ja-JP" })).newPage();
 page4.on("request", (req) => {
   if (req.url().endsWith("/v1/events")) retryRequests += 1;
 });
@@ -1153,7 +1158,7 @@ await openUi(page4, pollUrl);
 await page4.waitForTimeout(4000);
 out.eventRequestsWithin4sOf429 = retryRequests; // 1（Retry-After の 5 秒より前には、再接続しない）
 // 通知が続いても、状態の取り直しは、最短 1 秒ごと（間引き）
-const pageT = await (await browser.newContext()).newPage();
+const pageT = await (await browser.newContext({ locale: "ja-JP" })).newPage();
 let stateRequests = 0;
 pageT.on("request", (req) => {
   if (req.url().endsWith("/v1/ui/state")) stateRequests += 1;
@@ -1207,7 +1212,7 @@ out.throttleWindowMs = Date.now() - tt;
     confirmationsVersion: () => gate.version(),
   });
   const cUrl = (await csrv.listen(0)).url;
-  const pageCf = await (await browser.newContext()).newPage();
+  const pageCf = await (await browser.newContext({ locale: "ja-JP" })).newPage();
   const cfErrors = [];
   pageCf.on("pageerror", (e) => cfErrors.push(String(e)));
   await openUi(pageCf, cUrl);
@@ -1370,7 +1375,7 @@ out.throttleWindowMs = Date.now() - tt;
     lastSeq: state.lastSeq + 1,
   };
   const pageU = await (
-    await browser.newContext({ viewport: { width: 900, height: 600 } })
+    await browser.newContext({ locale: "ja-JP", viewport: { width: 900, height: 600 } })
   ).newPage();
   const uxErrors = [];
   pageU.on("pageerror", (e) => uxErrors.push(String(e)));
@@ -1448,7 +1453,7 @@ await page2.context().close();
 await page.context().close();
 // 切れたら、指数バックオフで再接続する（1 回目を中断させる）
 let eventRequests = 0;
-const page3 = await (await browser.newContext()).newPage();
+const page3 = await (await browser.newContext({ locale: "ja-JP" })).newPage();
 await page3.route("**/v1/events", (route) => {
   eventRequests += 1;
   return eventRequests === 1 ? route.abort() : route.continue();

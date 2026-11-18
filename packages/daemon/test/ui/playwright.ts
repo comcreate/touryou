@@ -66,8 +66,12 @@ export interface Browser {
   newPage(o: {
     viewport: { width: number; height: number };
     deviceScaleFactor?: number;
+    /** ブラウザの言語（#140。画面は、覚えた言語がなければ、これに合わせる）。 */
+    locale?: string;
   }): Promise<Page>;
-  newContext(): Promise<{ newPage(): Promise<Page>; close(): Promise<void> }>;
+  newContext(o?: {
+    locale?: string;
+  }): Promise<{ newPage(): Promise<Page>; close(): Promise<void> }>;
   close(): Promise<void>;
 }
 export type Pw = { chromium: { launch(): Promise<Browser> } };

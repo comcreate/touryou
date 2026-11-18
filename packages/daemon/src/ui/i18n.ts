@@ -10,14 +10,18 @@
  * - daemon が書く知らせの文は、core の `INBOX_MESSAGES`。知らせに `msg` がなければ（古い記録・子や統合が書いた文）、
  *   どの言語でも `summary`（日本語）をそのまま出す（利用者の決め）。
  *
- * 画面の文字を、この表に移すのは、あとの段（#139 のマージのあと）。いまは、土台（表の形・言語の選び方・知らせの文の出し方）。
+ * 画面（app.js・HTML）の文字は `app-text.ts`、関係図（graph.js）の文字は `graph-text.ts` に置き、ここで 1 つの表にまとめる。
  */
 import { fillMessage, type InboxMessage, inboxMessageText, LANGS, type Lang } from "@touryou/core";
+import { APP_TEXT } from "./app-text.js";
+import { GRAPH_TEXT } from "./graph-text.js";
 
 export { LANGS, type Lang };
 
 /** 画面の文字の表。鍵は小文字で始まる英数字と `.`（節ごとに分ける）。 */
 export const UI_TEXT = {
+  ...APP_TEXT,
+  ...GRAPH_TEXT,
   "lang.ja": { ja: "日本語", en: "Japanese" },
   "lang.en": { ja: "英語", en: "English" },
   "lang.label": { ja: "言語", en: "Language" },

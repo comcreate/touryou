@@ -19,6 +19,7 @@ import {
   trunkXOf,
   twigOf,
 } from "../../src/ui/graph-path.js";
+import { LANGS, UI_TEXT } from "../../src/ui/i18n.js";
 import { PATH_PATTERN, svgAttrValue } from "../../src/ui/svg-el.js";
 
 const must = <T>(x: T | undefined | null): T => {
@@ -426,7 +427,12 @@ describe("箱の状態の言葉は、画面（app.js）の STATE_NAMES と同じ
     const names = runInNewContext(
       `(${UI_JS.slice(UI_JS.indexOf("{", i), UI_JS.indexOf("};", i) + 1)})`,
     ) as Record<string, string>;
-    for (const [k, v] of Object.entries(RUN_TEXT)) expect(v.replace(/^■ /, ""), k).toBe(names[k]);
-    expect(STATUS_TEXT.run).toBe(names.running);
+    // どちらも表の鍵（#140）。言葉は、両方の言語で照らす
+    for (const lang of LANGS) {
+      const word = (key: string) => UI_TEXT[key as keyof typeof UI_TEXT][lang];
+      for (const [k, v] of Object.entries(RUN_TEXT))
+        expect(word(v).replace(/^■ /, ""), `${lang} ${k}`).toBe(word(names[k] as string));
+      expect(word(STATUS_TEXT.run)).toBe(word(names.running as string));
+    }
   });
 });

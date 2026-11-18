@@ -282,6 +282,15 @@ export const INBOX_MESSAGES = {
     ja: "木 {node} を {date} 以降に自動で削除する（未回答の判断 {decisions}・未解決の項目 {items}）。止めるには touryou purge-hold {node}（人間のコマンド。期限は --until）",
     en: "Tree {node} will be deleted automatically on or after {date} ({decisions} unanswered decisions, {items} open items). To stop this, run touryou purge-hold {node} (a human command; set a deadline with --until)",
   },
+  // ── daemon の再起動のあとの照合: Desktop の子を人に確かめてもらう依頼（先頭は external-check.ts の EXTERNAL_CHECK_SUMMARY と同じ）
+  externalCheck: {
+    ja: "daemon 再起動後: 子は止まったと決めつけず、Desktop で子ごとに確かめ、アーカイブし、止まりを確かめて宣言（desktop-runtime.md）（{count} 件: {nodes}）",
+    en: "After a daemon restart: do not assume the children stopped. Check each child in Desktop, archive it, confirm it stopped, then declare it (desktop-runtime.md) ({count}: {nodes})",
+  },
+  externalCheckMore: {
+    ja: "daemon 再起動後: 子は止まったと決めつけず、Desktop で子ごとに確かめ、アーカイブし、止まりを確かめて宣言（desktop-runtime.md）（{count} 件: {nodes} ほか {more} 件）",
+    en: "After a daemon restart: do not assume the children stopped. Check each child in Desktop, archive it, confirm it stopped, then declare it (desktop-runtime.md) ({count}: {nodes} and {more} more)",
+  },
   // ── 並べる部分の項目（#140。文は値と区切りだけのこともある）
   value: { ja: "{value}", en: "{value}" },
   count: { ja: "{label} {n}", en: "{n} {label}" },

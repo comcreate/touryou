@@ -109,6 +109,8 @@ describe("図の自前のコード（走査）", () => {
       "createElement",
       "createElementNS",
       "setAttributeNS",
+      // 図の言葉の差し込み（#140。graph-text.ts の文字列の replace。DOM には触れない）
+      "replace",
     ]);
     // document・要素に対する操作として使う名前（ほかは配列・Map・数の操作）
     const DOM_LIKE =
