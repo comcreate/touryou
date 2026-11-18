@@ -4,7 +4,7 @@
 
 ### 内部の変更
 
-- **開発の道具の node-forge を 1.4.3 に上げた**（#52）: `@anthropic-ai/mcpb` が使う node-forge を、`pnpm-workspace.yaml` の `overrides` で 1.4.2 から 1.4.3 にした（公開から 14 日たった版）。Dependabot の moderate・low の知らせ 4 件を直す。配布物（`.mcpb`）には入らない。
+- **開発の道具の node-forge を 1.4.3 に上げた**（#52）: `@anthropic-ai/mcpb` が使う node-forge を、`pnpm-workspace.yaml` の `overrides` で 1.4.2 から 1.4.3 にした（公開から 14 日たった版）。Dependabot の moderate・low の知らせ 4 件を直す。配布物（tar.gz・`.mcpb`・zip）には入らない。
 
 ## 0.1.4（2026-11-18）
 

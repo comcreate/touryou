@@ -5,7 +5,7 @@ packages:
 minimumReleaseAge: 20160
 
 # Agent SDK の推移的な依存のうち、公開から 14 日未満だった版を、14 日以上前の版に固定する（2026-10-21 に確認）。
-# 既知の脆弱性（#15）を直した版のうち、公開から 14 日以上たったものへ上げる（2026-11-14 に確認）: body-parser・fast-uri・ip-address・qs・node-forge（開発だけ）。
+# 既知の脆弱性（#15）を直した版のうち、公開から 14 日以上たったものへ上げる（2026-11-14 に確認）: body-parser・fast-uri・ip-address・qs・node-forge（開発だけ。2026-11-18 に 1.4.3 へ上げた）。
 # 既知の脆弱性（#51）を直した版のうち、公開から 14 日以上たったものへ上げる（2026-11-16 に確認）: hono・@hono/node-server。
 overrides:
   "@hono/node-server": "2.1.6"
