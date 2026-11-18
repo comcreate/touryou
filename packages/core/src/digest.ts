@@ -14,6 +14,7 @@
 import type { NodeRecord, OrchState } from "./events.js";
 import type { InboxItem } from "./inbox.js";
 import { INBOX_SUMMARY_MAX, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
+import { type InboxMessage, inboxMessage, messagePart } from "./inbox-messages.js";
 import type { NodeState } from "./index.js";
 import { LIMITS } from "./limits.js";
 import { descendantsOf } from "./tree.js";
@@ -55,6 +56,8 @@ export interface Digest extends DigestFacts {
   readonly priority: Priority;
   /** 受信箱の要約（`INBOX_SUMMARY_MAX` 文字以下）。 */
   readonly summary: string;
+  /** 画面のための鍵と値（#140）。 */
+  readonly msg: InboxMessage;
   /** 時間に依存しない事実の指紋。 */
   readonly fingerprint: string;
 }
@@ -174,31 +177,73 @@ export function digestOf(state: OrchState, nodeId: string, nowMs: number): Diges
     priority,
     top.join(","),
   ].join("|");
-  return { ...facts, priority, summary: digestSummary(facts), fingerprint };
+  const m = digestMessage(facts);
+  return { ...facts, priority, summary: m.summary, msg: m.msg, fingerprint };
 }
+
+const cap = (x: string): string => x.charAt(0).toUpperCase() + x.slice(1);
 
 /**
  * 要約の文面（`INBOX_SUMMARY_MAX` 文字以下）。自由な文字列を含まない。長くなるときは、最優先の項目の ID を減らし、最後に切る。
  * 事実（`DigestFacts`）から組み立てる純粋関数（`digestOf` が使う。極端な値の試験のために公開している）。
  */
 export function digestSummary(f: DigestFacts): string {
-  const states = STATE_LABEL.filter(([s]) => (f.byState[s] ?? 0) > 0)
-    .map(([s, label]) => `${label} ${f.byState[s]}`)
-    .join("・");
-  const unresolved = GROUP_LABEL.filter(([g]) => (f.unresolved[g] ?? 0) > 0)
-    .map(([g, label]) => `${label} ${f.unresolved[g]}`)
-    .join("・");
-  const head = `配下 ${f.descendants}${states === "" ? "" : `（${states}）`}。未解決: ${unresolved}`;
-  const open =
-    f.openDecisions + f.openExtensions === 0
-      ? ""
-      : `。未回答の判断 ${f.openDecisions}・未判定の拡張要求 ${f.openExtensions}`;
-  const age =
-    f.oldestBlockingMinutes === undefined ? "" : `。最古の要判断 ${f.oldestBlockingMinutes} 分`;
+  return digestMessage(f).summary;
+}
+
+/**
+ * 要約の、日本語の文と、画面のための鍵と値（#140）。長さ合わせは日本語の文で決め、英語の文も同じ数の項目を出す。
+ * 日本語の文を最後に切ったときは、`msg` は切らない（英語では、切らない文になる）。
+ */
+export function digestMessage(f: DigestFacts): {
+  readonly summary: string;
+  readonly msg: InboxMessage;
+} {
+  const states = STATE_LABEL.filter(([s]) => (f.byState[s] ?? 0) > 0).map(([s]) =>
+    messagePart("count", { labelKey: `digestState${cap(s)}`, n: f.byState[s] ?? 0 }),
+  );
+  const unresolved = GROUP_LABEL.filter(([g]) => (f.unresolved[g] ?? 0) > 0).map(([g]) =>
+    messagePart("count", { labelKey: `digestGroup${cap(g)}`, n: f.unresolved[g] ?? 0 }),
+  );
+  const tail: InboxMessage[] = [];
+  if (f.openDecisions + f.openExtensions > 0)
+    tail.push(
+      messagePart("digestOpen", { decisions: f.openDecisions, extensions: f.openExtensions }),
+    );
+  if (f.oldestBlockingMinutes !== undefined)
+    tail.push(messagePart("digestAge", { minutes: f.oldestBlockingMinutes }));
+  const build = (n: number) =>
+    inboxMessage(
+      states.length === 0 ? "digestHeadNoStates" : "digestHead",
+      { descendants: f.descendants },
+      {
+        ...(states.length === 0 ? {} : { states: { sep: "dot", items: states } }),
+        unresolved: { sep: "dot", items: unresolved },
+        tail: {
+          sep: "none",
+          items:
+            n === 0
+              ? tail
+              : [
+                  ...tail,
+                  messagePart(
+                    "digestTop",
+                    {},
+                    {
+                      items: {
+                        sep: "comma",
+                        items: f.top.slice(0, n).map((id) => messagePart("value", { value: id })),
+                      },
+                    },
+                  ),
+                ],
+        },
+      },
+    );
   for (let n = f.top.length; n >= 0; n--) {
-    const topText = n === 0 ? "" : `。最優先: ${f.top.slice(0, n).join("、")}`;
-    const text = `${head}${open}${age}${topText}`;
-    if ([...text].length <= INBOX_SUMMARY_MAX) return text;
+    const m = build(n);
+    if ([...m.summary].length <= INBOX_SUMMARY_MAX) return m;
   }
-  return [...`${head}${open}${age}`].slice(0, INBOX_SUMMARY_MAX).join("");
+  const m = build(0);
+  return { summary: [...m.summary].slice(0, INBOX_SUMMARY_MAX).join(""), msg: m.msg };
 }

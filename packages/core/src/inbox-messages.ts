@@ -282,6 +282,85 @@ export const INBOX_MESSAGES = {
     ja: "木 {node} を {date} 以降に自動で削除する（未回答の判断 {decisions}・未解決の項目 {items}）。止めるには touryou purge-hold {node}（人間のコマンド。期限は --until）",
     en: "Tree {node} will be deleted automatically on or after {date} ({decisions} unanswered decisions, {items} open items). To stop this, run touryou purge-hold {node} (a human command; set a deadline with --until)",
   },
+  // ── 並べる部分の項目（#140。文は値と区切りだけのこともある）
+  value: { ja: "{value}", en: "{value}" },
+  count: { ja: "{label} {n}", en: "{n} {label}" },
+  nameCount: { ja: "{name} {n}", en: "{name} {n}" },
+  // ── 判断の回答で再開しなかった子
+  resumeSkipped: {
+    ja: "判断 {decision} の回答で、再開しなかった子: {children}",
+    en: "Children not resumed after the answer to decision {decision}: {children}",
+  },
+  resumeSkippedChild: { ja: "{node}（{reason}）", en: "{node} ({reason})" },
+  notResumedDiscarded: { ja: "破棄の判断を経たため", en: "a discard decision was made" },
+  notResumedStoppedAfterStopIncomplete: {
+    ja: "停止未完了のあと止め直したため。新しい子でやり直す",
+    en: "it was stopped again after an incomplete stop. Retry with a new child",
+  },
+  notResumedStoppedByOther: {
+    ja: "判断のほかに止められたため",
+    en: "it was stopped for a reason other than the decision",
+  },
+  // ── 中間統合ノードの配下の要約（digest）
+  digestHead: {
+    ja: "配下 {descendants}（{states}）。未解決: {unresolved}{tail}",
+    en: "{descendants} below ({states}). Open: {unresolved}{tail}",
+  },
+  digestHeadNoStates: {
+    ja: "配下 {descendants}。未解決: {unresolved}{tail}",
+    en: "{descendants} below. Open: {unresolved}{tail}",
+  },
+  digestOpen: {
+    ja: "。未回答の判断 {decisions}・未判定の拡張要求 {extensions}",
+    en: ". Unanswered decisions {decisions}, undecided extension requests {extensions}",
+  },
+  digestAge: {
+    ja: "。最古の要判断 {minutes} 分",
+    en: ". Oldest item needing a decision: {minutes} min",
+  },
+  digestTop: { ja: "。最優先: {items}", en: ". Top priority: {items}" },
+  digestStatePending: { ja: "未起動", en: "not started" },
+  digestStateRunning: { ja: "実行", en: "running" },
+  digestStateWaiting: { ja: "待機", en: "waiting" },
+  digestStateDone: { ja: "完了報告", en: "reported done" },
+  digestStateVerified: { ja: "受理", en: "accepted" },
+  digestStateStopping: { ja: "停止中", en: "stopping" },
+  digestStateStopIncomplete: { ja: "停止未完了", en: "stop incomplete" },
+  digestStateStopped: { ja: "停止", en: "stopped" },
+  digestStateReclaimable: { ja: "回収可", en: "reclaimable" },
+  digestStateArchived: { ja: "アーカイブ", en: "archived" },
+  digestGroupDecision: { ja: "要判断", en: "needs decision" },
+  digestGroupViolation: { ja: "範囲違反", en: "scope violation" },
+  digestGroupFailure: { ja: "失敗", en: "failure" },
+  digestGroupDone: { ja: "完了", en: "done" },
+  digestGroupProgress: { ja: "進捗", en: "progress" },
+  digestGroupInfo: { ja: "情報", en: "info" },
+  // ── 窓口（API）の警告
+  apiAlert: {
+    ja: "窓口の警告（{window}）: {kinds}。{hint}の可能性がある（daemon の記録の apiSummary に、内訳がある）",
+    en: "API alert ({window}): {kinds}. Possible cause: {hint} (the daemon log's apiSummary has the breakdown)",
+  },
+  apiWindowRange: {
+    ja: "{start}〜{end} UTC（{sec} 秒間）",
+    en: "{start} to {end} UTC ({sec} s)",
+  },
+  apiWindow: { ja: "窓（{sec} 秒間）", en: "window ({sec} s)" },
+  apiKind: { ja: "{label} {total} 件", en: "{label}: {total}" },
+  apiKindDetail: { ja: "{label} {total} 件（{detail}）", en: "{label}: {total} ({detail})" },
+  apiAuthFailed: { ja: "認証の失敗", en: "auth failures" },
+  apiRateLimited: { ja: "制限の発動", en: "rate limits hit" },
+  apiRetiredExpired: {
+    ja: "退役したトークンでの認証の失敗",
+    en: "auth failures with retired tokens",
+  },
+  apiHintBrute: {
+    ja: "トークンの総当たりや、暴走した呼び出し",
+    en: "token brute-forcing or runaway calls",
+  },
+  apiHintRetired: {
+    ja: "退役した紐付けのトークンを使い続ける呼び出し（mcp の不具合・トークンの使い回し）",
+    en: "calls that keep using a retired binding's token (an mcp bug or token reuse)",
+  },
   gitDirUnknown: {
     ja: "子 {node} の作業ツリーの git のディレクトリを確かめられないため、書き込みを拒否している。人が作業ツリー（git worktree）を確かめる",
     en: "Writes are refused because the git folder of child {node}'s worktree cannot be checked. A person should check the worktree (git worktree)",
@@ -293,14 +372,37 @@ export type InboxMessageKey = keyof typeof INBOX_MESSAGES;
 /** 知らせの値（名前 → 文字か数）。 */
 export type InboxMessageArgs = Readonly<Record<string, string | number>>;
 
-/** 受信箱の項目に付ける、画面のための知らせ（鍵と値）。 */
+/** 並べる部分の区切り。ja は「・」「、」「」、en は「, 」「, 」「」。 */
+export const LIST_SEPS = {
+  dot: { ja: "・", en: ", " },
+  comma: { ja: "、", en: ", " },
+  none: { ja: "", en: "" },
+} as const satisfies Readonly<Record<string, Readonly<Record<Lang, string>>>>;
+export type ListSep = keyof typeof LIST_SEPS;
+
+/** 並べる部分（`{名前}` の所に、項目の文を区切りでつないで入れる）。 */
+export interface InboxMessageList {
+  readonly sep: ListSep;
+  readonly items: readonly InboxMessage[];
+}
+
+/** 受信箱の項目に付ける、画面のための知らせ（鍵と値。並べる部分 `parts` は、いくつかの知らせを 1 つの所に並べる）。 */
 export interface InboxMessage {
   readonly key: string;
   readonly args: InboxMessageArgs;
+  readonly parts?: Readonly<Record<string, InboxMessageList>>;
 }
 
-/** 値の数・名前・長さの上限（記録の検査と同じ）。 */
-export const INBOX_MESSAGE_LIMITS = { args: 8, name: 32, value: 200, key: 64 } as const;
+/** 値の数・名前・長さ・並べる部分の上限（記録の検査と同じ）。`depth` は、知らせの入れ子の深さ（いちばん外を 1 と数える）。 */
+export const INBOX_MESSAGE_LIMITS = {
+  args: 8,
+  name: 32,
+  value: 200,
+  key: 64,
+  lists: 4,
+  items: 12,
+  depth: 3,
+} as const;
 const NAME = /^[a-z][A-Za-z0-9]{0,31}$/;
 const KEY = /^[a-z][A-Za-z0-9]{0,63}$/;
 
@@ -315,17 +417,18 @@ const hasControl = (s: string): boolean => [...s].some(isControl);
 export const isInboxMessageKey = (k: unknown): k is InboxMessageKey =>
   typeof k === "string" && Object.hasOwn(INBOX_MESSAGES, k);
 
-/** 記録に載せてよい形か（鍵は形だけを見る。知らない鍵は、画面が summary を出す）。 */
-export function isInboxMessage(x: unknown): x is InboxMessage {
-  if (typeof x !== "object" || x === null || Array.isArray(x)) return false;
-  const m = x as Record<string, unknown>;
-  if (Object.keys(m).some((k) => k !== "key" && k !== "args")) return false;
-  if (typeof m.key !== "string" || !KEY.test(m.key)) return false;
-  const a = m.args;
-  if (typeof a !== "object" || a === null || Array.isArray(a)) return false;
-  const entries = Object.entries(a as Record<string, unknown>);
+const isPlainObject = (x: unknown): x is Record<string, unknown> =>
+  typeof x === "object" && x !== null && !Array.isArray(x);
+
+function isMessageAt(x: unknown, depth: number): boolean {
+  if (!isPlainObject(x)) return false;
+  if (Object.keys(x).some((k) => k !== "key" && k !== "args" && k !== "parts")) return false;
+  if (typeof x.key !== "string" || !KEY.test(x.key)) return false;
+  const a = x.args;
+  if (!isPlainObject(a)) return false;
+  const entries = Object.entries(a);
   if (entries.length > INBOX_MESSAGE_LIMITS.args) return false;
-  return entries.every(
+  const argsOk = entries.every(
     ([k, v]) =>
       NAME.test(k) &&
       (typeof v === "number"
@@ -335,16 +438,45 @@ export function isInboxMessage(x: unknown): x is InboxMessage {
           // 制御文字（改行を含む）は入れない
           !hasControl(v)),
   );
+  if (!argsOk) return false;
+  if (x.parts === undefined) return true;
+  const p = x.parts;
+  if (depth >= INBOX_MESSAGE_LIMITS.depth || !isPlainObject(p)) return false;
+  const lists = Object.entries(p);
+  if (lists.length > INBOX_MESSAGE_LIMITS.lists) return false;
+  return lists.every(([name, l]) => {
+    if (!NAME.test(name) || Object.hasOwn(a, name) || !isPlainObject(l)) return false;
+    if (Object.keys(l).some((k) => k !== "sep" && k !== "items")) return false;
+    if (typeof l.sep !== "string" || !Object.hasOwn(LIST_SEPS, l.sep)) return false;
+    const items = l.items;
+    return (
+      Array.isArray(items) &&
+      items.length <= INBOX_MESSAGE_LIMITS.items &&
+      items.every((it) => isMessageAt(it, depth + 1))
+    );
+  });
+}
+
+/** 記録に載せてよい形か（鍵は形だけを見る。知らない鍵は、画面が summary を出す）。 */
+export function isInboxMessage(x: unknown): x is InboxMessage {
+  return isMessageAt(x, 1);
 }
 
 /**
  * `{名前}` を値で置き換える（無い名前は、そのまま残す）。
  * `lang` を渡すと、値の名前が `名前Key`（例 `labelKey`）で、その値が表の鍵なら、`{名前}` を、その鍵の文（同じ言語）にする
  * （入力待ちの種類のように、daemon の言葉の表から選ぶ部分を、言語に合わせるため。1 段だけ。差し込みはしない）。
+ * `parts` は、`lang` を渡したときだけ、`inboxMessageText` が渡す（並べた文）。
  */
-export function fillMessage(template: string, args: InboxMessageArgs, lang?: Lang): string {
+export function fillMessage(
+  template: string,
+  args: InboxMessageArgs,
+  lang?: Lang,
+  parts?: Readonly<Record<string, string>>,
+): string {
   return template.replace(/\{([a-z][A-Za-z0-9]*)\}/g, (all, name: string) => {
     if (Object.hasOwn(args, name)) return String(args[name]);
+    if (parts !== undefined && Object.hasOwn(parts, name)) return parts[name] as string;
     const ref = `${name}Key`;
     if (lang !== undefined && Object.hasOwn(args, ref)) {
       const k = args[ref];
@@ -354,10 +486,23 @@ export function fillMessage(template: string, args: InboxMessageArgs, lang?: Lan
   });
 }
 
-/** 言語ごとの文。鍵が表になければ undefined。 */
+/** 言語ごとの文。鍵が表になければ（並べる部分の中の鍵も）undefined。 */
 export function inboxMessageText(lang: Lang, m: InboxMessage): string | undefined {
   if (!isInboxMessageKey(m.key)) return undefined;
-  return fillMessage(INBOX_MESSAGES[m.key][lang], m.args, lang);
+  let filled: Record<string, string> | undefined;
+  if (m.parts !== undefined) {
+    filled = {};
+    for (const [name, l] of Object.entries(m.parts)) {
+      const texts: string[] = [];
+      for (const it of l.items) {
+        const t = inboxMessageText(lang, it);
+        if (t === undefined) return undefined;
+        texts.push(t);
+      }
+      filled[name] = texts.join(LIST_SEPS[l.sep][lang]);
+    }
+  }
+  return fillMessage(INBOX_MESSAGES[m.key][lang], m.args, lang, filled);
 }
 
 /** 文の中の `{名前}` の一覧（並べ替えて、重なりを除く）。 */
@@ -366,14 +511,7 @@ export const placeholdersOf = (template: string): readonly string[] =>
     ...new Set([...template.matchAll(/\{([a-z][A-Za-z0-9]*)\}/g)].map((x) => x[1] as string)),
   ].sort();
 
-/**
- * daemon が知らせを書くときの入口。日本語の `summary` と、画面のための `msg` を作る。
- * 値は、長すぎれば切る（記録の検査に通る形にする）。
- */
-export function inboxMessage<K extends InboxMessageKey>(
-  key: K,
-  args: InboxMessageArgs,
-): { readonly summary: string; readonly msg: InboxMessage } {
+const safeArgs = (args: InboxMessageArgs): InboxMessageArgs => {
   const safe: Record<string, string | number> = {};
   for (const [k, v] of Object.entries(args)) {
     safe[k] =
@@ -384,5 +522,27 @@ export function inboxMessage<K extends InboxMessageKey>(
             .join("")
             .slice(0, INBOX_MESSAGE_LIMITS.value);
   }
-  return { summary: fillMessage(INBOX_MESSAGES[key].ja, safe, "ja"), msg: { key, args: safe } };
+  return safe;
+};
+
+/** 並べる部分の 1 つの項目（`inboxMessage` の `parts` に入れる）。値は、`inboxMessage` と同じく整える。 */
+export function messagePart<K extends InboxMessageKey>(
+  key: K,
+  args: InboxMessageArgs = {},
+  parts?: Readonly<Record<string, InboxMessageList>>,
+): InboxMessage {
+  return { key, args: safeArgs(args), ...(parts === undefined ? {} : { parts }) };
+}
+
+/**
+ * daemon が知らせを書くときの入口。日本語の `summary` と、画面のための `msg` を作る。
+ * 値は、長すぎれば切る（記録の検査に通る形にする）。`parts` は、項目を並べる所（`messagePart` で作る）。
+ */
+export function inboxMessage<K extends InboxMessageKey>(
+  key: K,
+  args: InboxMessageArgs,
+  parts?: Readonly<Record<string, InboxMessageList>>,
+): { readonly summary: string; readonly msg: InboxMessage } {
+  const msg = messagePart(key, args, parts);
+  return { summary: inboxMessageText("ja", msg) ?? "", msg };
 }

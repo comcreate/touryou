@@ -205,6 +205,7 @@ export function createDigestIssuer(deps: DigestIssuerDeps): DigestIssuer {
             kind: "digest",
             nodeId,
             summary: digest.summary,
+            msg: digest.msg,
             priority: digest.priority,
           },
         });

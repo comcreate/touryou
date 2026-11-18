@@ -15,7 +15,14 @@
  * - 失敗（記録できない）は、daemon の記録（`note`）に出すだけで、窓口の動作を変えない。
  */
 
-import type { EventBody, Failure, Result } from "@touryou/core";
+import {
+  type EventBody,
+  type Failure,
+  type InboxMessage,
+  inboxMessage,
+  messagePart,
+  type Result,
+} from "@touryou/core";
 import type { ApiLogEvent } from "./api/server.js";
 
 /** 閾値の既定（1 つの窓の、種類ごとの件数）。認証の失敗の bucket の毎分の補充（30）と同じ。 */
@@ -53,9 +60,9 @@ const ALERT_ID = /^api-alert-([arx]{1,3})-/;
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
 
 const KINDS = [
-  { key: "authFailed", label: "認証の失敗", code: "a" },
-  { key: "rateLimited", label: "制限の発動", code: "r" },
-  { key: "retiredExpired", label: "退役したトークンでの認証の失敗", code: "x" },
+  { key: "authFailed", labelKey: "apiAuthFailed", code: "a" },
+  { key: "rateLimited", labelKey: "apiRateLimited", code: "r" },
+  { key: "retiredExpired", labelKey: "apiRetiredExpired", code: "x" },
 ] as const;
 type KindKey = (typeof KINDS)[number]["key"];
 
@@ -71,7 +78,10 @@ const MAX_NAMES = 8;
 const NOT_COUNTED = new Set(["expired", "retiredExpired", "hookExpired"]);
 
 /** 件数の表（名前 → 件数）の合計と、内訳の文（固定の語だけ。件数の多い順）。 */
-function summarize(counts: Readonly<Record<string, number>>): { total: number; detail: string } {
+function summarize(counts: Readonly<Record<string, number>>): {
+  total: number;
+  detail: InboxMessage[];
+} {
   let total = 0;
   const named: { name: string; n: number }[] = [];
   for (const [name, n] of Object.entries(counts)) {
@@ -83,34 +93,32 @@ function summarize(counts: Readonly<Record<string, number>>): { total: number; d
   named.sort((a, b) => b.n - a.n || (a.name < b.name ? -1 : 1));
   const detail = named
     .slice(0, MAX_NAMES)
-    .map((x) => `${x.name} ${x.n}`)
-    .join("・");
+    .map((x) => messagePart("nameCount", { name: x.name, n: x.n }));
   return { total, detail };
 }
 
 /** 退役したトークンでの失敗の件数（認証の失敗の表の `retiredExpired` だけ）。 */
 function summarizeRetired(counts: Readonly<Record<string, number>> | undefined): {
   total: number;
-  detail: string;
+  detail: InboxMessage[];
 } {
   const n = counts?.[RETIRED];
-  if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) return { total: 0, detail: "" };
-  return { total: n, detail: `${RETIRED} ${n}` };
+  if (typeof n !== "number" || !Number.isFinite(n) || n <= 0) return { total: 0, detail: [] };
+  return { total: n, detail: [messagePart("nameCount", { name: RETIRED, n })] };
 }
 
 /** 文面の結び（出した種類に応じた、考えられる理由）。 */
-function hint(fired: readonly (typeof KINDS)[number][]): string {
-  const out: string[] = [];
-  if (fired.some((k) => k.key !== RETIRED)) out.push("トークンの総当たりや、暴走した呼び出し");
-  if (fired.some((k) => k.key === RETIRED))
-    out.push("退役した紐付けのトークンを使い続ける呼び出し（mcp の不具合・トークンの使い回し）");
-  return `${out.join("、")}の可能性がある`;
+function hint(fired: readonly (typeof KINDS)[number][]): InboxMessage[] {
+  const out: InboxMessage[] = [];
+  if (fired.some((k) => k.key !== RETIRED)) out.push(messagePart("apiHintBrute"));
+  if (fired.some((k) => k.key === RETIRED)) out.push(messagePart("apiHintRetired"));
+  return out;
 }
 
 const seconds = (iso: string): string => iso.slice(0, 19);
 
 /** 窓の時刻の文（UTC。秒まで）。時刻がなければ（壁時計がない）、窓の長さだけ。 */
-function windowText(event: Extract<ApiLogEvent, { event: "apiSummary" }>): string {
+function windowText(event: Extract<ApiLogEvent, { event: "apiSummary" }>): InboxMessage {
   const sec = Math.trunc(Number(event.windowSec)) || 0;
   const { windowStart: start, windowEnd: end } = event;
   if (
@@ -119,9 +127,9 @@ function windowText(event: Extract<ApiLogEvent, { event: "apiSummary" }>): strin
     ISO_UTC.test(start) &&
     ISO_UTC.test(end)
   ) {
-    return `${seconds(start)}〜${seconds(end)} UTC（${sec} 秒間）`;
+    return messagePart("apiWindowRange", { start: seconds(start), end: seconds(end), sec });
   }
-  return `窓（${sec} 秒間）`;
+  return messagePart("apiWindow", { sec });
 }
 
 export function createApiAlert(deps: ApiAlertDeps): (event: ApiLogEvent) => void {
@@ -130,7 +138,7 @@ export function createApiAlert(deps: ApiAlertDeps): (event: ApiLogEvent) => void
   const post = (event: Extract<ApiLogEvent, { event: "apiSummary" }>): void => {
     try {
       const now = deps.monoMs();
-      const parts: string[] = [];
+      const parts: InboxMessage[] = [];
       const fired: (typeof KINDS)[number][] = [];
       for (const k of KINDS) {
         const s = k.key === RETIRED ? summarizeRetired(event.authFailed) : summarize(event[k.key]);
@@ -141,7 +149,15 @@ export function createApiAlert(deps: ApiAlertDeps): (event: ApiLogEvent) => void
         if (s.total < threshold) continue;
         const prev = last.get(k.key);
         if (prev !== undefined && now - prev < deps.minIntervalMs) continue; // 出しすぎない
-        parts.push(`${k.label} ${s.total} 件${s.detail === "" ? "" : `（${s.detail}）`}`);
+        parts.push(
+          s.detail.length === 0
+            ? messagePart("apiKind", { labelKey: k.labelKey, total: s.total })
+            : messagePart(
+                "apiKindDetail",
+                { labelKey: k.labelKey, total: s.total },
+                { detail: { sep: "dot", items: s.detail } },
+              ),
+        );
         fired.push(k);
       }
       if (fired.length === 0) return;
@@ -156,7 +172,15 @@ export function createApiAlert(deps: ApiAlertDeps): (event: ApiLogEvent) => void
           id,
           kind: "info",
           nodeId: deps.rootNodeId,
-          summary: `窓口の警告（${windowText(event)}）: ${parts.join("・")}。${hint(fired)}（daemon の記録の apiSummary に、内訳がある）`,
+          ...inboxMessage(
+            "apiAlert",
+            {},
+            {
+              window: { sep: "none", items: [windowText(event)] },
+              kinds: { sep: "dot", items: parts },
+              hint: { sep: "comma", items: hint(fired) },
+            },
+          ),
         },
       } as EventBody);
       if (!r.ok) {

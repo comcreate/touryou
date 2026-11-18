@@ -13,7 +13,7 @@
 
 ### 内部の変更
 
-- **daemon が書く受信箱の知らせを、鍵と値（`msg`）でも載せるようにした**（#140 の先の段）: 状態画面で、日本語と英語を切り替えるための土台（`packages/core/src/inbox-messages.ts`・`packages/daemon/src/ui/i18n.ts`）。日本語の `summary` は、これまでと同じ文のまま。画面の切り替えは、あとの段で入れる。
+- **daemon が書く受信箱の知らせを、鍵と値（`msg`）でも載せるようにした**（#140 の先の段）: 状態画面で、日本語と英語を切り替えるための土台（`packages/core/src/inbox-messages.ts`・`packages/daemon/src/ui/i18n.ts`）。配下の要約・窓口の警告・再開しなかった子の知らせは、項目を並べる `parts` で載せる。日本語の `summary` は、これまでと同じ文のまま。画面の切り替えは、あとの段で入れる。
 - **開発の道具の node-forge を 1.4.3 に上げた**（#52）: `@anthropic-ai/mcpb` が使う node-forge を、`pnpm-workspace.yaml` の `overrides` で 1.4.2 から 1.4.3 にした（公開から 14 日たった版）。Dependabot の moderate・low の知らせ 4 件を直す。配布物（tar.gz・`.mcpb`・zip）には入らない。
 
 ## 0.1.4（2026-11-18）

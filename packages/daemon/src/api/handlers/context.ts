@@ -17,6 +17,7 @@ import {
   type InboxMessage,
   type InboxMessageArgs,
   type InboxMessageKey,
+  type InboxMessageList,
   inboxMessage,
   LIMITS,
   type OrchEvent,
@@ -59,8 +60,9 @@ export const summarize = (text: string): string =>
 export const notice = (
   key: InboxMessageKey,
   args: InboxMessageArgs,
+  parts?: Readonly<Record<string, InboxMessageList>>,
 ): { summary: string; msg: InboxMessage } => {
-  const m = inboxMessage(key, args);
+  const m = inboxMessage(key, args, parts);
   return { summary: summarize(m.summary), msg: m.msg };
 };
 

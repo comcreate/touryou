@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
+  DIGEST_STATE_NAMES,
+  digestMessage,
   type EventBody,
   fillMessage,
   foldEvents,
   INBOX_MESSAGE_LIMITS,
   INBOX_MESSAGES,
+  INBOX_SUMMARY_MAX,
   inboxMessage,
   inboxMessageText,
   isInboxMessage,
   isInboxMessageKey,
   isStallSummary,
   LANGS,
+  messagePart,
   type OrchEvent,
   placeholdersOf,
   stallSummary,
@@ -56,7 +60,9 @@ describe("知らせの文の表（#140）", () => {
     const cjk = /[぀-ヿ㐀-鿿]/;
     for (const [key, t] of entries) {
       expect(cjk.test(t.en), `${key}.en`).toBe(false);
-      expect(cjk.test(t.ja), `${key}.ja`).toBe(true);
+      // 値と区切りだけの項目（並べる部分の項目。例 `{label} {n}`）は、日本語の文字を持たなくてよい
+      const bare = t.ja.replace(/\{[a-z][A-Za-z0-9]*\}/g, "").replace(/[\s（）]/g, "") === "";
+      if (!bare) expect(cjk.test(t.ja), `${key}.ja`).toBe(true);
     }
   });
 
@@ -128,6 +134,110 @@ describe("知らせの文の表（#140）", () => {
       },
     ])
       expect(isInboxMessage(bad), JSON.stringify(bad)).toBe(false);
+  });
+});
+
+describe("並べる部分 parts（#140）", () => {
+  it("項目を、言語ごとの区切りでつなぐ。値の鍵の参照も、項目の中で効く", () => {
+    const m = inboxMessage(
+      "resumeSkipped",
+      { decision: "d1" },
+      {
+        children: {
+          sep: "comma",
+          items: [
+            messagePart("resumeSkippedChild", { node: "c1", reasonKey: "notResumedDiscarded" }),
+            messagePart("resumeSkippedChild", {
+              node: "c2",
+              reasonKey: "notResumedStoppedByOther",
+            }),
+          ],
+        },
+      },
+    );
+    expect(m.summary).toBe(
+      "判断 d1 の回答で、再開しなかった子: c1（破棄の判断を経たため）、c2（判断のほかに止められたため）",
+    );
+    expect(inboxMessageText("en", m.msg)).toBe(
+      "Children not resumed after the answer to decision d1: c1 (a discard decision was made), c2 (it was stopped for a reason other than the decision)",
+    );
+    expect(isInboxMessage(m.msg)).toBe(true);
+  });
+
+  it("項目に知らない鍵があれば、文にしない（画面は summary を出す）", () => {
+    expect(
+      inboxMessageText("en", {
+        key: "resumeSkipped",
+        args: { decision: "d" },
+        parts: { children: { sep: "comma", items: [{ key: "laterKey", args: {} }] } },
+      }),
+    ).toBe(undefined);
+  });
+
+  it("isInboxMessage：parts の形・区切り・数・深さを見る", () => {
+    const item = { key: "value", args: { value: "a" } };
+    const ok = { key: "digestTop", args: {}, parts: { items: { sep: "comma", items: [item] } } };
+    expect(isInboxMessage(ok)).toBe(true);
+    const deep = (d: number): unknown =>
+      d === 0
+        ? item
+        : { key: "digestTop", args: {}, parts: { items: { sep: "none", items: [deep(d - 1)] } } };
+    expect(isInboxMessage(deep(INBOX_MESSAGE_LIMITS.depth - 1))).toBe(true);
+    expect(isInboxMessage(deep(INBOX_MESSAGE_LIMITS.depth))).toBe(false);
+    for (const parts of [
+      [],
+      { items: { sep: "space", items: [item] } },
+      { items: { sep: "comma", items: {} } },
+      { items: { sep: "comma", items: [item], extra: 1 } },
+      { "bad-name": { sep: "comma", items: [item] } },
+      { items: { sep: "comma", items: Array(INBOX_MESSAGE_LIMITS.items + 1).fill(item) } },
+      { items: { sep: "comma", items: [{ key: "value", args: { value: "a\nb" } }] } },
+    ])
+      expect(isInboxMessage({ key: "digestTop", args: {}, parts }), JSON.stringify(parts)).toBe(
+        false,
+      );
+    // 値と同じ名前の parts は断る（どちらを入れるか曖昧）
+    expect(
+      isInboxMessage({
+        key: "digestTop",
+        args: { items: 1 },
+        parts: { items: { sep: "comma", items: [] } },
+      }),
+    ).toBe(false);
+  });
+
+  it("要約（digest）：日本語の文は表の文から作り、状態の名前は DIGEST_STATE_NAMES と同じ。英語も同じ数の項目を出す", () => {
+    for (const [s, name] of Object.entries(DIGEST_STATE_NAMES)) {
+      const k = `digestState${s.charAt(0).toUpperCase()}${s.slice(1)}`;
+      expect(INBOX_MESSAGES[k as keyof typeof INBOX_MESSAGES]?.ja, k).toBe(name);
+    }
+    const facts = {
+      nodeId: "m1",
+      descendants: 3,
+      byState: { running: 2, stopped: 1 },
+      unresolved: { decision: 1, info: 2 },
+      openDecisions: 1,
+      openExtensions: 0,
+      top: ["i1", "i2"],
+      oldestBlockingMinutes: 5,
+    };
+    const m = digestMessage(facts);
+    expect(m.summary).toBe(
+      "配下 3（実行 2・停止 1）。未解決: 要判断 1・情報 2。未回答の判断 1・未判定の拡張要求 0。最古の要判断 5 分。最優先: i1、i2",
+    );
+    expect(inboxMessageText("ja", m.msg)).toBe(m.summary);
+    expect(inboxMessageText("en", m.msg)).toBe(
+      "3 below (2 running, 1 stopped). Open: 1 needs decision, 2 info. Unanswered decisions 1, undecided extension requests 0. Oldest item needing a decision: 5 min. Top priority: i1, i2",
+    );
+    // 長いときは、日本語の長さで最優先の ID を減らし、英語も同じ数にする
+    const long = digestMessage({
+      ...facts,
+      top: Array.from({ length: 5 }, (_, i) => `i${i}-${"x".repeat(60)}`),
+    });
+    expect([...long.summary].length).toBeLessThanOrEqual(INBOX_SUMMARY_MAX);
+    expect(inboxMessageText("ja", long.msg)).toBe(long.summary);
+    const shown = long.summary.split("、").length;
+    expect(inboxMessageText("en", long.msg)?.split(", i").length).toBe(shown);
   });
 });
 

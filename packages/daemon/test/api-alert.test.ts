@@ -1,4 +1,4 @@
-import { ok } from "@touryou/core";
+import { inboxMessageText, isInboxMessage, ok } from "@touryou/core";
 import { describe, expect, it } from "vitest";
 import type { ApiLogEvent } from "../src/api/server.js";
 import { createApiAlert } from "../src/api-alert.js";
@@ -356,5 +356,18 @@ describe("createApiAlert（窓口の 429・401 の件数の見える化）", () 
       );
       expect([...r.open]).toEqual([p3?.id]);
     });
+  });
+});
+
+describe("窓口の警告の、英語の文（#140）", () => {
+  it("日本語の summary は表の文と同じ。msg は、同じ項目を英語で出す", () => {
+    const r = rig({ retiredThreshold: 1 });
+    r.alert(summary({ invalid: 40, retiredExpired: 2 }));
+    const p = r.added()[0]?.body.payload as { summary: string; msg: never };
+    expect(isInboxMessage(p.msg)).toBe(true);
+    expect(inboxMessageText("ja", p.msg)).toBe(p.summary);
+    expect(inboxMessageText("en", p.msg)).toBe(
+      "API alert (2026-10-23T11:59:00 to 2026-10-23T12:00:00 UTC (60 s)): auth failures: 40 (invalid 40), auth failures with retired tokens: 2 (retiredExpired 2). Possible cause: token brute-forcing or runaway calls, calls that keep using a retired binding's token (an mcp bug or token reuse) (the daemon log's apiSummary has the breakdown)",
+    );
   });
 });
