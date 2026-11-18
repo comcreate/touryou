@@ -253,24 +253,81 @@ describe("記録と表示モデルの msg（#140）", () => {
     expect(item?.stall).toBe(true);
   });
 
-  it("parts のある知らせ（配下の要約）も、表示モデルを通って同じ文になる。英語に差し込み残りがない", () => {
-    const d = digestMessage({
-      nodeId: "root",
-      descendants: 2,
-      byState: { running: 2 },
-      unresolved: { info: 1 },
-      openDecisions: 0,
-      openExtensions: 1,
-      top: ["i1"],
-    });
-    const r = foldEvents([...base(), added({ summary: d.summary, msg: d.msg })]);
-    if (!r.ok) throw new Error(r.error.cause);
-    const msg = uiViewOf(r.value).inbox[0]?.msg;
-    expect(msg).toEqual(d.msg);
-    if (msg === undefined) throw new Error("msg がない");
-    expect(inboxMessageText("ja", msg)).toBe(d.summary);
-    expect(inboxMessageText("en", msg)).not.toContain("{");
-  });
+  const withParts: readonly (readonly [string, { summary: string; msg: never }])[] = [
+    [
+      "配下の要約",
+      digestMessage({
+        nodeId: "root",
+        descendants: 2,
+        byState: { running: 2 },
+        unresolved: { info: 1 },
+        openDecisions: 0,
+        openExtensions: 1,
+        top: ["i1"],
+      }) as never,
+    ],
+    [
+      "窓口の警告",
+      inboxMessage(
+        "apiAlert",
+        {},
+        {
+          window: { sep: "none", items: [messagePart("apiWindow", { sec: 60 })] },
+          kinds: {
+            sep: "dot",
+            items: [
+              messagePart(
+                "apiKindDetail",
+                { labelKey: "apiAuthFailed", total: 40 },
+                {
+                  detail: {
+                    sep: "dot",
+                    items: [messagePart("nameCount", { name: "invalid", n: 40 })],
+                  },
+                },
+              ),
+              messagePart("apiKind", { labelKey: "apiRateLimited", total: 31 }),
+            ],
+          },
+          hint: { sep: "comma", items: [messagePart("apiHintBrute")] },
+        },
+      ) as never,
+    ],
+    [
+      "再開しなかった子",
+      inboxMessage(
+        "resumeSkipped",
+        { decision: "d1" },
+        {
+          children: {
+            sep: "comma",
+            items: [
+              messagePart("resumeSkippedChild", { node: "c1", reasonKey: "notResumedDiscarded" }),
+              messagePart("resumeSkippedChild", {
+                node: "c2",
+                reasonKey: "notResumedStoppedByOther",
+              }),
+            ],
+          },
+        },
+      ) as never,
+    ],
+  ];
+
+  it.each(withParts)(
+    "parts のある知らせ（%s）も、表示モデルを通って同じ文になる。英語に差し込み残りがない",
+    (_, d) => {
+      const r = foldEvents([...base(), added({ summary: d.summary, msg: d.msg })]);
+      if (!r.ok) throw new Error(r.error.cause);
+      const msg = uiViewOf(r.value).inbox[0]?.msg;
+      expect(msg).toEqual(d.msg);
+      if (msg === undefined) throw new Error("msg がない");
+      expect(inboxMessageText("ja", msg)).toBe(d.summary);
+      const en = inboxMessageText("en", msg);
+      expect(en).toBeDefined();
+      expect(en).not.toContain("{");
+    },
+  );
 
   it("msg のない知らせ（古い記録・子や統合が書いたもの）は、msg を持たない", () => {
     const r = foldEvents([...base(), added({ summary: "子が書いた進み具合" })]);
