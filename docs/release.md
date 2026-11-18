@@ -26,7 +26,14 @@ claude plugin marketplace add comcreate/touryou
    - 結果（rc の版・A' と B の可・不可・直した PR）は、準備の PR に書く。フォークの後始末は、すべて可になってから行う。
 1. 版をそろえる（上の「版の決まり」）。準備の PR（`release: <版> の準備`）を出し、マージする。
 2. `bash scripts/check.sh` と `claude plugin validate plugin` が通ることを確かめる。
-   - **2-a 0 の確かめと同じ中身か**: 0 で最後に確かめた rc を作ったあとに main に入ったのが、版上げの準備の PR だけであることを確かめる（`git log --oneline` で見る）。ほかの PR が入っていたら、0 を新しい rc の番号でやり直す。
+   - **2-a 0 の確かめと同じ中身か**: 0 で最後に確かめた rc を作ったあとに main に入ったのが、版上げの準備の PR だけであることを確かめるほかの PR が入っていたら、0 を新しい rc の番号でやり直す。見る範囲の記録は、フォークの検証用の枝そのものに任せる（`verify-release` は、追いついた main の上に検証用の版のコミットを 1 つ載せた形なので、rc のもとは `verify-release~1`）。フォークの手元の clone で、次のとおり見る。出た値は手元で見るだけで、PR・Issue・docs には書き写さない。
+
+     ```sh
+     git fetch https://github.com/comcreate/touryou main
+     git log --oneline verify-release~1..FETCH_HEAD
+     ```
+
+     出るのが、準備の PR のマージのコミット 1 つだけなら可。
 3. main にマージしたあと、タグを付けて push する（タグは `v` + plugin.json の `version`。違うと失敗する）。決まりを越えてよい管理者のアカウントで、clone のディレクトリで実行する（`gh api repos/comcreate/touryou --jq .permissions.push` が `true` であること。`true` でも、決まりを越えられないと tag は作れない。下の段落）。zsh の対話に貼れるように、コメント行（`#`）は入れていない。
 
    ```sh
@@ -324,7 +331,7 @@ v=0.1.5-rc.0
 )
 ```
 
-**やり直す（2 回目から）**: 上の箱は `git switch -c verify-release` で始まるので、2 回目は止まる。新しい rc の番号で、次のようにする（`acct`・`v` は上の箱と同じ変数。`v` を新しい番号にする）。0 で見つかった不具合を main で直したあとも、これで作り直す。先に、上の「フォークの main を本番の main に追いつかせる push」をしてから行う（検証用の枝は、毎回、追いついた `origin/main` から作り直す）。`workflow_dispatch:` が要るときは、作り直した枝に足し直し、タグを付ける前にコミットしておく（タグはそのコミットに付ける）。
+**やり直す（2 回目から）**: 上の箱は `git switch -c verify-release` で始まるので、2 回目は止まる。新しい rc の番号で、次のようにする（`acct`・`v` は上の箱と同じ変数。`v` を新しい番号にする）。0 で見つかった不具合を main で直したあとも、これで作り直す。先に、上の「フォークの main を本番の main に追いつかせる push」をしてから行う（検証用の枝は、毎回、追いついた `origin/main` から作り直す）。`workflow_dispatch:` が要るときは、箱を貼る**前に**、手元の作業ツリーの `.github/workflows/release.yml` の `on:` に `workflow_dispatch:` を足しておく（コミットしない）。箱の `git switch -C` は作業ツリーの変更を持ち越し、`git commit -am` が版の変更と一緒にコミットするので、タグはそのコミットに付く（足した 1 行は、本番の release.yml には入れない）。
 
 ```sh
 acct=<自分のアカウント>
