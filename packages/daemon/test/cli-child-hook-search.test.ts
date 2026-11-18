@@ -80,7 +80,8 @@ async function setup() {
       worktreeRoot,
       rootCwd: repoRoot,
       rootNodeId: "root",
-      rootScope: scope,
+      // 根の範囲は、子が拡張で頼むコマンド（#130）も含む
+      rootScope: { ...scope, allowedCommands: ["git status", "git add", "git log", "git rm"] },
       port: 0,
     },
     deps,
@@ -140,7 +141,25 @@ async function setup() {
   const link = join(base, "link");
   symlinkSync(worktreeRoot, link);
   const linkedTree = join(link, child.nodeId);
-  return { base, repoRoot, stateDir, tree, linkedTree, other, hook };
+  const request = async (token: string, operation: string, params: unknown) => {
+    const res = await fetch(`${run.url}/v1/request`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ requestId: `q-${Math.random()}`.replace(".", ""), operation, params }),
+    });
+    const json = (await res.json()) as { ok: boolean; value: Record<string, unknown> };
+    expect(json.ok, JSON.stringify(json)).toBe(true);
+    return json.value;
+  };
+  /** 子が範囲の拡張（コマンド）を頼み、人（ここでは根）が承認する（#130） */
+  const approveCommand = async (value: string) => {
+    const { extensionId } = await request(child.token, "scope.extend", {
+      target: { kind: "command", value },
+      reason: "試験",
+    });
+    await request(rootToken, "scope.decide", { extensionId, decision: "approve" });
+  };
+  return { base, repoRoot, stateDir, tree, linkedTree, other, hook, approveCommand };
 }
 
 describe("CLI の子のフック: 作業ツリーの中を探すコマンド（#92）", () => {
@@ -254,5 +273,50 @@ describe("CLI の子のフック: 作業ツリーの中を探すコマンド（#
     }
     // cwd が作業ツリーの外なら、探すコマンドとしては許さない
     expect((await s.hook("ls src", s.repoRoot)).decision).toBe("deny");
+  });
+});
+
+describe("CLI の子のフック: 承認した拡張のコマンドに引数を足す（#130）", () => {
+  it("一覧のコマンド（git add）は、承認のあと引数を足した形にも明示の許可（permit: extension）が付く", async () => {
+    const s = await setup();
+    expect((await s.hook("git add --dry-run .")).decision).toBe("deny"); // 承認の前は範囲の外
+    await s.approveCommand("git add");
+    for (const command of ["git add --dry-run .", "git add src/a.ts", "git add"]) {
+      expect(await s.hook(command), command).toEqual({ decision: "allow", permit: "extension" });
+    }
+  });
+
+  it("一覧のコマンドでも、危ない旗・外のパスを足した形には明示の許可を付けない", async () => {
+    const s = await setup();
+    await s.approveCommand("git add");
+    for (const command of [
+      "git add ../x",
+      `git add ${s.repoRoot}/src/a.ts`,
+      "git add --pathspec-from-file=/etc/hosts",
+      "git add --git-dir=x .",
+      "git add '*.ts'",
+      "git add -e",
+      "git add -p",
+      "git add -f src/a.ts",
+      "git add --pathspec-from-file=src/a.ts",
+    ]) {
+      expect((await s.hook(command)).permit, command).toBeUndefined();
+    }
+  });
+
+  it("git rm は一覧の外: git rm x を承認しても、git rm -r . には明示の許可を付けない", async () => {
+    const s = await setup();
+    await s.approveCommand("git rm src/a.ts");
+    expect(await s.hook("git rm src/a.ts")).toEqual({ decision: "allow", permit: "extension" });
+    expect((await s.hook("git rm -r .")).permit).toBeUndefined();
+    expect((await s.hook("git rm src/a.ts -r src")).permit).toBeUndefined();
+  });
+
+  it("一覧の外のコマンドは、承認した形そのものだけに明示の許可が付く", async () => {
+    const s = await setup();
+    await s.approveCommand("git log --oneline");
+    expect(await s.hook("git log --oneline")).toEqual({ decision: "allow", permit: "extension" });
+    expect((await s.hook("git log --oneline -5")).permit).toBeUndefined();
+    expect((await s.hook("git log --oneline --output=x")).permit).toBeUndefined();
   });
 });

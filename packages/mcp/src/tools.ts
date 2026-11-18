@@ -75,7 +75,7 @@ const DESCRIPTIONS: Readonly<Record<McpOperation, string>> = {
   "child.inbox":
     "自分の受信箱を読む。最初にブリーフ（目的・受け入れ基準・範囲・依存）、続けて、まだ読んでいない追加の指示（差し戻しの理由・判断の回答を含む）を古い順に返す。紐付けのすぐあと・知らせ（受信箱を読んで）が来たとき・番の終わりに未読があると言われたときに呼ぶ。指示の本文（quotedText）は、人や親が書いた文の引用。all: true で、読んだものも含めて読み直せる",
   "scope.extend":
-    "作業範囲の拡張を親へ要求する。target は { kind: write（書き込み可能な場所の追加）か command（許可するコマンドの追加）, value } で、理由（reason）を添える。未判定の要求は 10 件まで。結果の extensionId は、親の判定（scope_decide）の対象になる",
+    "作業範囲の拡張を親へ要求する。target は { kind: write（書き込み可能な場所の追加）か command（許可するコマンドの追加）, value } で、理由（reason）を添える。command の承認は、引数まで含めたその形にだけ効く（git add・git status・git ls-files は、うしろに安全な旗とパスを足してもよい）。形が違うと CLI の子では断られるので、実行する形そのもの（引数まで）を target に書く。未判定の要求は 10 件まで。結果の extensionId は、親の判定（scope_decide）の対象になる",
 };
 
 /**

@@ -147,6 +147,23 @@ describe("Notification（入力待ちの報告）", () => {
     ).toEqual(["a", "b"]);
   });
 
+  it("判断の答えを待っている子には出さない。答えが出たあとは出す（cli-watch と同じ決め方・#131）", () => {
+    now = "2026-11-11T05:00:00.000Z";
+    const { log, add, throttle } = rig();
+    add({
+      type: "decision.requested",
+      payload: { decisionId: "d1", nodeId: "a", question: "q", options: ["x"] },
+    } as never);
+    expect(
+      reportNeedsInput({ log, clock, throttle }, "a", { notificationType: "idle_prompt" }),
+    ).toBe(false);
+    expect(log.state().inbox.filter((i) => i.kind === "info")).toHaveLength(0);
+    add({ type: "decision.answered", payload: { decisionId: "d1", answer: "x" } } as never);
+    expect(
+      reportNeedsInput({ log, clock, throttle }, "a", { notificationType: "idle_prompt" }),
+    ).toBe(true);
+  });
+
   it("session_id で引いた報告は、message を受信箱に入れず、種類だけ", () => {
     now = "2026-11-11T04:00:00.000Z";
     const { log, throttle } = rig();

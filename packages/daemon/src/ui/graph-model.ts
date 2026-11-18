@@ -133,7 +133,7 @@ export function agoText(ms: number): string {
   return `${Math.floor(m / 1440)} 日前`;
 }
 
-/** ノードの、人に関わる項目の有無（表示モデルの受信箱・判断・拡張要求から）。 */
+/** ノードの、人に関わる項目の有無（表示モデルの受信箱・判断・拡張要求から）。札は、答え待ち・失敗・止まっているかもの順に決める（app.js の `statusesOf` と同じ）。 */
 function flagsOf(
   v: Record<string, unknown>,
 ): Map<string, { wait: boolean; stall: boolean; fail: boolean }> {
@@ -160,7 +160,8 @@ function flagsOf(
     const f = at(idOf(i?.nodeId));
     if (!f || i === null) continue;
     if (i.stall === true) f.stall = true;
-    else if (i.priority === "failed") f.fail = true;
+    // 断られた操作（violation）の知らせだけでは失敗にしない（子は続けて動ける。知らせとしては残す）
+    else if (i.priority === "failed" && i.kind !== "violation") f.fail = true;
   }
   return m;
 }
@@ -185,10 +186,10 @@ export function graphModelOf(view: unknown): GraphModel {
         ? n.state === "stopped"
           ? "stopped"
           : "done"
-        : f.fail
-          ? "fail"
-          : f.wait
-            ? "wait"
+        : f.wait
+          ? "wait"
+          : f.fail
+            ? "fail"
             : f.stall
               ? "stall"
               : "run";

@@ -202,6 +202,8 @@ describe("箱の状態（見本の STATE・TIER。画面の言葉とそろえる
         needsHuman: 1,
       },
       { id: "fail", parentId: "run", role: "implement", state: "running", band: "turn" },
+      { id: "askf", parentId: "run", role: "implement", state: "running", band: "turn" },
+      { id: "viol", parentId: "run", role: "implement", state: "running", band: "turn" },
       { id: "arch", parentId: "run", role: "implement", state: "archived", band: "finished" },
       { id: "stop", parentId: "run", role: "implement", state: "stopped", band: "finished" },
       {
@@ -213,10 +215,16 @@ describe("箱の状態（見本の STATE・TIER。画面の言葉とそろえる
         lastActivityAt: "bad",
       },
     ],
-    decisions: [{ id: "d1", nodeId: "ask" }],
+    decisions: [
+      { id: "d1", nodeId: "ask" },
+      { id: "d2", nodeId: "askf" },
+    ],
     inbox: [
       { id: "s1", nodeId: "stall", kind: "info", priority: "info", stall: true },
       { id: "f1", nodeId: "fail", kind: "failure", priority: "failed" },
+      // 答え待ちは失敗より先に出す。断られた操作の知らせだけでは失敗にしない（#131）
+      { id: "f2", nodeId: "askf", kind: "failure", priority: "failed" },
+      { id: "v1", nodeId: "viol", kind: "violation", priority: "failed" },
     ],
   });
   const by = new Map(m.nodes.map((n) => [n.id, n]));
@@ -225,6 +233,8 @@ describe("箱の状態（見本の STATE・TIER。画面の言葉とそろえる
     ["ask", "wait", "turn", "● あなたの答え待ち", false],
     ["stall", "stall", "turn", "‖ 止まっているかも", false],
     ["fail", "fail", "turn", "✕ 失敗", false],
+    ["askf", "wait", "turn", "● あなたの答え待ち", false],
+    ["viol", "run", "go", "動いている", true],
     ["arch", "done", "over", "済んだ", false],
     ["stop", "stopped", "over", "■ 止めた", false],
     ["pend", "run", "go", "起動を待っている", false],

@@ -862,7 +862,8 @@ export async function decideToolUse(
  * deny・ask の規則は、明示の許可のあとも効く（Claude Code の文書: hooks の `permissionDecision`、permissions の
  * 「Precedence among rules, hooks, and mods」）。そのため、次のすべてを満たすときだけ真にする（前方一致のぶんは、フックだけ通し、
  * Claude Code の判定に任せる）。
- * - 命令を区切りで分けた各部分が、承認済みの拡張だけにある項目（ブリーフにない項目）と、語の数まで同じ（完全一致）
+ * - 命令を区切りで分けた各部分が、承認済みの拡張だけにある項目（ブリーフにない項目）と、語の数まで同じ（完全一致）。
+ *   ただし一覧のコマンド（`ARGS_OK_COMMANDS`）の項目は、うしろに安全な引数を足した形も認める（#130）
  * - その項目が、起動のときの一覧と同じ規則（`commandEntryProblem`: `cd` 始まり・1 語だけ・任意のコードが動く形の禁止）を通る
  * 書き込みの道具（Write・Edit・MultiEdit・NotebookEdit）は、対象の場所がブリーフでは断られ、有効な範囲では通るときだけ真。
  * 禁じる場所の `Edit` の deny は、明示の許可のあとも Claude Code の側で効く。
@@ -905,9 +906,154 @@ export function grantedOnlyByExtension(
     })
     .map(entryWords)
     .filter((w) => commandEntryProblem(w) === undefined);
+  // 一覧のコマンド（`ARGS_OK_COMMANDS`）の承認だけは、うしろに安全な引数を足した形も真（#130）。
+  // リダイレクト・展開の字があれば、語の外で何が起きるか分からないので、完全一致だけにする
+  const plain = !/[<>`$]/.test(command);
   return segments.every((seg) =>
-    granted.some((w) => w.length === seg.length && w.every((x, i) => seg[i] === x)),
+    granted.some(
+      (w) =>
+        (w.length === seg.length && w.every((x, i) => seg[i] === x)) ||
+        (plain && extendsWithSafeArgs(w, seg)),
+    ),
   );
+}
+
+/**
+ * 承認した形のうしろに引数を足しても、明示の許可を付けてよいコマンドと、足してよい旗の表（#130）。先頭の語の並びで照らす。
+ * 旗は許す表（ここにないものは断る）。短い旗のまとめ書き（`-nv`）は 1 字ずつ照らす。`--` のあとは、すべて位置の引数。
+ * 選んだ根拠（どれも、旗で任意のコードを動かす道・ファイルを読み込ませる道を持たない。filter・fsmonitor・hook は git の設定から
+ * 動き、設定は子が書けない。git の大域の旗 `-c` などはサブコマンドより前にしか効かない）:
+ * - `git add`: インデックスに載せるだけで、作業ツリーのファイルは変えない。git は作業ツリーの外・リンクの先のパスを断る。
+ *   エディタ・対話を始める `-e`・`-p`・`-i`、ファイルからパスを読む `--pathspec-from-file`、無視したファイルも載せる `-f` は許さない。
+ * - `git status`・`git ls-files`: 読み取りだけ。`--exclude-from`・`-X`（ファイルを読む）は許さない。
+ * 入れないもの: `git rm`・`git mv`（作業ツリーのファイルを消す・動かすので、書き込みの範囲を越えられる）、
+ * `git log`・`git diff`・`git show`（`--output`・`--ext-diff`・`--textconv`）、`git commit`（フックが動く）、`git grep`（`-O`）、
+ * `cp`・`mv`・`mkdir`・`touch`（作業ツリーの中のリンクを通って外へ書ける）。
+ */
+const ARGS_OK_COMMANDS: readonly {
+  readonly head: readonly string[];
+  readonly flags: ReadonlySet<string>;
+}[] = [
+  {
+    head: ["git", "add"],
+    flags: new Set([
+      "-n",
+      "--dry-run",
+      "-v",
+      "--verbose",
+      "-A",
+      "--all",
+      "--no-all",
+      "-u",
+      "--update",
+      "-N",
+      "--intent-to-add",
+      "--refresh",
+      "--ignore-errors",
+      "--ignore-missing",
+      "--renormalize",
+      "--chmod=+x",
+      "--chmod=-x",
+      "--sparse",
+    ]),
+  },
+  {
+    head: ["git", "status"],
+    flags: new Set([
+      "-s",
+      "--short",
+      "-b",
+      "--branch",
+      "--long",
+      "-v",
+      "--verbose",
+      "-z",
+      "--porcelain",
+      "--porcelain=v1",
+      "--porcelain=v2",
+      "--show-stash",
+      "-uno",
+      "-unormal",
+      "-uall",
+      "--untracked-files=no",
+      "--untracked-files=normal",
+      "--untracked-files=all",
+      "--ignored",
+      "--ignored=traditional",
+      "--ignored=matching",
+      "--ignored=no",
+      "--renames",
+      "--no-renames",
+      "--ahead-behind",
+      "--no-ahead-behind",
+      "--column",
+      "--no-column",
+    ]),
+  },
+  {
+    head: ["git", "ls-files"],
+    flags: new Set([
+      "-c",
+      "--cached",
+      "-d",
+      "--deleted",
+      "-m",
+      "--modified",
+      "-o",
+      "--others",
+      "-s",
+      "--stage",
+      "-u",
+      "--unmerged",
+      "-k",
+      "--killed",
+      "-z",
+      "-t",
+      "-v",
+      "-f",
+      "--directory",
+      "--no-empty-directory",
+      "--eol",
+      "--full-name",
+      "--deduplicate",
+      "--exclude-standard",
+      "--error-unmatch",
+      "--sparse",
+    ]),
+  },
+];
+
+/** 旗 1 つ（`--x`・`-x`・まとめ書きの `-xyz`）が、許す表にあるか。 */
+function flagAllowed(flag: string, allowed: ReadonlySet<string>): boolean {
+  if (allowed.has(flag)) return true;
+  if (flag.startsWith("--") || flag.length <= 2) return false;
+  // 短い旗のまとめ書き: 1 字ずつ照らす（`-nv` → `-n`・`-v`）
+  return [...flag.slice(1)].every((c) => allowed.has(`-${c}`));
+}
+
+/** 位置の引数 1 つが安全か。字は控えめな集まりだけ（空白・引用符・glob・`~`・展開は断る）。絶対パス・`..` も断る。 */
+function safePositional(a: string): boolean {
+  return /^[A-Za-z0-9._/:@+,%=-]+$/.test(a) && !a.startsWith("/") && !a.split("/").includes("..");
+}
+
+/** `entry`（承認した形）が一覧のコマンドで始まり、`seg` が entry と同じ語で始まり、そのうしろが安全な引数だけか。 */
+function extendsWithSafeArgs(entry: readonly string[], seg: readonly string[]): boolean {
+  if (seg.length <= entry.length || !entry.every((x, i) => seg[i] === x)) return false;
+  const cmd = ARGS_OK_COMMANDS.find((c) => c.head.every((x, i) => entry[i] === x));
+  if (cmd === undefined) return false;
+  let afterDashes = false;
+  for (const a of seg.slice(cmd.head.length)) {
+    if (!afterDashes && a === "--") {
+      afterDashes = true;
+      continue;
+    }
+    if (!afterDashes && a.startsWith("-")) {
+      if (!flagAllowed(a, cmd.flags)) return false;
+      continue;
+    }
+    if (!safePositional(a)) return false;
+  }
+  return true;
 }
 
 /**

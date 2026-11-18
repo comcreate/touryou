@@ -769,11 +769,12 @@ export const UI_JS = `'use strict';
     view.extensions.forEach(function (x) { waits.add(x.nodeId); });
     view.inbox.forEach(function (i) {
       if (i.stall === true) stalls.add(i.nodeId);
-      else if (i.priority === 'failed') fails.add(i.nodeId);
+      // 断られた操作の知らせだけでは失敗にしない（graph-model の flagsOf と同じ）
+      else if (i.priority === 'failed' && i.kind !== 'violation') fails.add(i.nodeId);
     });
     var m = new Map();
     view.nodes.forEach(function (n) {
-      var st = n.band === 'finished' ? (n.state === 'stopped' ? 'stopped' : 'done') : fails.has(n.id) ? 'fail' : waits.has(n.id) ? 'wait' : stalls.has(n.id) ? 'stall' : 'run';
+      var st = n.band === 'finished' ? (n.state === 'stopped' ? 'stopped' : 'done') : waits.has(n.id) ? 'wait' : fails.has(n.id) ? 'fail' : stalls.has(n.id) ? 'stall' : 'run';
       // 言葉は、図と同じく、止まりきっていないを失敗の札にする前に決める（動いている扱いなら「■ 止まりきっていない」）
       var text = st === 'run' && Object.hasOwn(RUN_TEXT, n.state) ? RUN_TEXT[n.state] : STATUS_TEXT[st];
       if (n.state === 'stopIncomplete' && st === 'run') st = 'fail';
