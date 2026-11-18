@@ -331,6 +331,12 @@ acct=<自分のアカウント>
 v=0.1.5-rc.1
 (
   set -euo pipefail
+  url="$(git remote get-url origin)"
+  case "${url}" in
+    *"comcreate/"*) echo "origin が上流です。止めます: ${url}" >&2; exit 1 ;;
+    *"/${acct}/"*|*":${acct}/"*) ;;
+    *) echo "origin が fork（${acct}）ではありません。止めます: ${url}" >&2; exit 1 ;;
+  esac
   [ -z "$(git ls-remote --tags origin "v${v}")" ] || { echo "fork にすでに v${v} がある" >&2; exit 1; }
   [ -z "$(git ls-remote --tags https://github.com/comcreate/touryou "v${v}")" ] || { echo "上流に v${v} がある。別の版にする" >&2; exit 1; }
   git fetch origin main
