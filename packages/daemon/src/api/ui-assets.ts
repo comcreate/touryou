@@ -1896,19 +1896,23 @@ export const UI_JS = `'use strict';
   document.getElementById('zoom-out').addEventListener('click', function () { zoomGraph('out'); });
   document.getElementById('zoom-fit').addEventListener('click', function () { zoomGraph('fit'); });
   document.getElementById('show-list').addEventListener('click', function () { showGraphMode('list'); });
-  // 設定の窓（#139）。選んだものはブラウザに残す（残せないときも、その場では効く）
+  // 設定の窓（#139）。選んだものはブラウザに残す（残せないときも、その場では効く）。
+  // localStorage を使うのは、この 2 つの関数の中だけ（鍵は 1 つ。書くのは still・theme・lang だけ。トークン・チケット・ID は書かない）
   var SETTINGS_KEY = 'touryou.ui.settings';
-  function loadSettings() {
-    var v = null;
-    try { v = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || 'null'); } catch (e) { v = null; }
-    var o = v !== null && typeof v === 'object' ? v : {};
+  function settingsOf(o) {
+    var v = o !== null && typeof o === 'object' ? o : {};
     return {
-      still: o.still === true,
-      theme: o.theme === 'light' || o.theme === 'dark' ? o.theme : 'auto',
+      still: v.still === true,
+      theme: v.theme === 'light' || v.theme === 'dark' ? v.theme : 'auto',
+      lang: v.lang === 'en' ? 'en' : 'ja',
     };
   }
+  function loadSettings() {
+    try { return settingsOf(JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || 'null')); } catch (e) { return settingsOf(null); }
+  }
   function saveSettings(x) {
-    try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify(x)); } catch (e) { /* 残せなくても動く */ }
+    var v = settingsOf(x);
+    try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ still: v.still, theme: v.theme, lang: v.lang })); } catch (e) { /* 残せなくても動く */ }
   }
   function applySettings(x) {
     var root = document.documentElement;
