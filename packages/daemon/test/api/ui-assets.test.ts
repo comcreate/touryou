@@ -1,7 +1,20 @@
 import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
-import { UI_CSS, UI_HEADERS, UI_HTML, UI_HTML_HEADERS, UI_JS } from "../../src/api/ui-assets.js";
+import {
+  INBOX_MESSAGES_JSON,
+  LIST_SEPS_JSON,
+  UI_CSS,
+  UI_HEADERS,
+  UI_HTML,
+  UI_HTML_HEADERS,
+  UI_JS,
+  UI_TEXT_JSON,
+} from "../../src/api/ui-assets.js";
 import { EXTERNAL_CHECK_SUMMARY, externalCheckSummaries } from "../../src/external-check.js";
+
+/** 埋め込んだ文字の表の行（#140）。JSON のオブジェクトの値だけの行（行の終わりまで形を決める）。走査から除くのは、この行だけ。 */
+const TABLE_LINE = /^ {2}var (?:TEXT|MESSAGES|SEPS) = \{[^\n]*\};$/gm;
+const TABLE_LINE_ONE = /^ {2}var (?:TEXT|MESSAGES|SEPS) = /;
 
 /** 画面の資産の走査。XSS・トークンの漏れにつながる書き方を禁じる。 */
 describe("画面の資産（走査）", () => {
@@ -80,13 +93,13 @@ describe("画面の資産（走査）", () => {
           { navigator: { language } },
         ) as (o: unknown) => unknown;
       const settingsOf = of("ja-JP");
-      expect(settingsOf(null)).toEqual({ still: false, theme: "auto", lang: "ja" });
-      expect(of("en-US")(null)).toEqual({ still: false, theme: "auto", lang: "en" });
+      // 言語は、選んだときだけ残す（選んでいなければ undefined で、JSON に書かれない。#140）
+      expect(settingsOf(null)).toEqual({ still: false, theme: "auto", lang: undefined });
       expect(of("en-US")({ lang: "ja" })).toEqual({ still: false, theme: "auto", lang: "ja" });
       expect(settingsOf({ still: "yes", theme: "neon", lang: "fr", token: "t" })).toEqual({
         still: false,
         theme: "auto",
-        lang: "ja",
+        lang: undefined,
       });
       expect(settingsOf({ still: true, theme: "dark", lang: "en" })).toEqual({
         still: true,
@@ -101,6 +114,15 @@ describe("画面の資産（走査）", () => {
     });
   });
 
+  it("走査から除く行は、埋め込んだ表の 3 行だけで、どれも JSON.stringify の値そのもの（#140）", () => {
+    const lines = UI_JS.split("\n").filter((l) => TABLE_LINE_ONE.test(l));
+    expect(lines).toEqual([
+      `  var TEXT = ${UI_TEXT_JSON};`,
+      `  var MESSAGES = ${INBOX_MESSAGES_JSON};`,
+      `  var SEPS = ${LIST_SEPS_JSON};`,
+    ]);
+    expect(UI_JS.match(TABLE_LINE)).toHaveLength(3);
+  });
   it("許可リスト: `.` の後ろのプロパティ名は、安全な集合にあるものだけ（文字列・コメントを除く）", () => {
     const SAFE = new Set([
       // 要素・文字列・集合・配列・Promise の、安全な操作
@@ -358,7 +380,7 @@ describe("画面の資産（走査）", () => {
       "attachDir",
     ]);
     // 埋め込んだ文字の表（#140。JSON の値で、コードでない）は、走査から除く
-    const code = UI_JS.replace(/^ {2}var (TEXT|MESSAGES|SEPS) = .*$/gm, "")
+    const code = UI_JS.replace(TABLE_LINE, "")
       .replace(/'(?:[^'\\\n]|\\.)*'/g, "''")
       .replace(/\/\/[^\n]*/g, "");
     const used = new Set([...code.matchAll(/\.\s*([A-Za-z_$][\w$]*)/g)].map((m) => m[1] as string));

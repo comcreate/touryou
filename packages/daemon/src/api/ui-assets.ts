@@ -13,14 +13,14 @@
  *   交換する。セッションのトークン（または貼り付けた人間のトークン）は、メモリにだけ持つ（storage・cookie には置かない）。`#token=` は受け取らない。
  */
 
-import { INBOX_MESSAGES, LIST_SEPS } from "@touryou/core";
+import { INBOX_MESSAGE_LIMITS, INBOX_MESSAGES, LIST_SEPS } from "@touryou/core";
 import { externalCheckSummaries } from "../external-check.js";
 import { UI_TEXT } from "../ui/i18n.js";
 
 // 画面の文字の表と、知らせの文の表（#140）。app.js に、そのまま JS の値として埋め込む
-const UI_TEXT_JSON = JSON.stringify(UI_TEXT);
-const INBOX_MESSAGES_JSON = JSON.stringify(INBOX_MESSAGES);
-const LIST_SEPS_JSON = JSON.stringify(LIST_SEPS);
+export const UI_TEXT_JSON = JSON.stringify(UI_TEXT);
+export const INBOX_MESSAGES_JSON = JSON.stringify(INBOX_MESSAGES);
+export const LIST_SEPS_JSON = JSON.stringify(LIST_SEPS);
 
 export const UI_HTML = `<!doctype html>
 <html lang="ja">
@@ -255,8 +255,8 @@ export const UI_JS = `'use strict';
     return {
       still: v.still === true,
       theme: v.theme === 'light' || v.theme === 'dark' ? v.theme : 'auto',
-      // 覚えた言語がなければ、ブラウザの言語（ja で始まれば日本語、ほかは英語。i18n.ts の pickLang と同じ。試験で照らす）
-      lang: v.lang === 'en' || v.lang === 'ja' ? v.lang : browserLang(),
+      // 言語は、言語の欄で選んだときだけ残す（選んでいなければ undefined。JSON に書かれず、そのつどブラウザの言語に合わせる）
+      lang: v.lang === 'en' || v.lang === 'ja' ? v.lang : undefined,
     };
   }
   function loadSettings() {
@@ -293,14 +293,19 @@ export const UI_JS = `'use strict';
   var TEXT = ${UI_TEXT_JSON};
   var MESSAGES = ${INBOX_MESSAGES_JSON};
   var SEPS = ${LIST_SEPS_JSON};
+  var MESSAGE_DEPTH_MAX = ${INBOX_MESSAGE_LIMITS.depth};
   var PLACEHOLDER = /[{]([a-z][A-Za-z0-9]*)[}]/g;
-  var lang = settings.lang;
+  // 覚えた言語がなければ、ブラウザの言語（ja で始まれば日本語、ほかは英語。i18n.ts の pickLang と同じ。試験で照らす）
+  var lang = settings.lang || browserLang();
   function t(key, args) {
     if (!Object.hasOwn(TEXT, key)) return key;
     return TEXT[key][lang].replace(PLACEHOLDER, function (all, nm) { return args && Object.hasOwn(args, nm) ? String(args[nm]) : all; });
   }
   // core の inboxMessageText と同じ規則（試験で照らす）。表にない鍵・形の合わないものは null
-  function msgText(m) {
+  function msgText(m, depth) {
+    var d = depth || 1;
+    // 入れ子は、記録の検査と同じ深さまで（core の INBOX_MESSAGE_LIMITS.depth）
+    if (d > MESSAGE_DEPTH_MAX) return null;
     if (!m || typeof m !== 'object' || typeof m.key !== 'string' || !Object.hasOwn(MESSAGES, m.key)) return null;
     var args = m.args && typeof m.args === 'object' ? m.args : {};
     var filled = {};
@@ -311,7 +316,7 @@ export const UI_JS = `'use strict';
         if (!l || !Array.isArray(l.items) || typeof l.sep !== 'string' || !Object.hasOwn(SEPS, l.sep)) return null;
         var texts = [];
         for (var j = 0; j < l.items.length; j += 1) {
-          var s = msgText(l.items[j]);
+          var s = msgText(l.items[j], d + 1);
           if (s === null) return null;
           texts.push(s);
         }

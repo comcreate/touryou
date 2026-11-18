@@ -702,12 +702,20 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       true,
     );
     expect(entries.some((t) => t.includes("ui-b の結果を待っている"))).toBe(true);
-    // 設定で日本語を選ぶと、その場で切り替わる
+    // 言語を選ばずに明暗だけ変えても、言語は残さない（あとでブラウザの言語を変えれば、ついてくる）
+    const saved = () =>
+      p2.evaluate(() => JSON.parse(window.localStorage.getItem("touryou.ui.settings") ?? "null"));
+    await p2.click("#open-settings");
+    await p2.check('input[name="set-theme"][value="light"]');
+    await p2.click("#close-settings");
+    expect(await saved()).toEqual({ still: false, theme: "light" });
+    // 設定で日本語を選ぶと、その場で切り替わり、言語も残る
     await p2.click("#open-settings");
     await p2.check('input[name="set-lang"][value="ja"]');
     await p2.click("#close-settings");
     expect(await p2.evaluate(() => document.documentElement.lang)).toBe("ja");
     expect(await textOf("#now-title")).toMatch(cjk);
+    expect(await saved()).toEqual({ still: false, theme: "light", lang: "ja" });
     expect((await all("#graph .gst")).some((t) => cjk.test(t))).toBe(true);
     expect(
       (await all(".entry")).some((t) =>

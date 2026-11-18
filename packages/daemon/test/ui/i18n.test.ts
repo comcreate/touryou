@@ -1,5 +1,6 @@
 import { runInNewContext } from "node:vm";
 import {
+  INBOX_MESSAGE_LIMITS,
   INBOX_MESSAGES,
   type InboxMessage,
   inboxMessage,
@@ -75,6 +76,7 @@ describe("画面（app.js・HTML・図）の文字は、表から引く（#140�
       lineOf("var TEXT ="),
       lineOf("var MESSAGES ="),
       lineOf("var SEPS ="),
+      lineOf("var MESSAGE_DEPTH_MAX ="),
       lineOf("var PLACEHOLDER ="),
       "var lang = 'ja';",
       fnOf("t"),
@@ -125,6 +127,17 @@ describe("画面（app.js・HTML・図）の文字は、表から引く（#140�
       expect(app.itemText({ summary: "子が書いた文" })).toBe("子が書いた文");
     }
     app.setLang("ja");
+  });
+
+  it("app.js は、並べる部分を記録の検査と同じ深さ（INBOX_MESSAGE_LIMITS.depth）までしかたどらない", () => {
+    const item = { key: "value", args: { value: "a" } };
+    const deep = (d: number): unknown =>
+      d === 0
+        ? item
+        : { key: "digestTop", args: {}, parts: { items: { sep: "none", items: [deep(d - 1)] } } };
+    expect(app.msgText(deep(INBOX_MESSAGE_LIMITS.depth - 1))).not.toBe(null);
+    expect(app.msgText(deep(INBOX_MESSAGE_LIMITS.depth))).toBe(null);
+    expect(app.itemText({ summary: "s", msg: deep(50) })).toBe("s");
   });
 
   it("app.js のブラウザの言語の選び方は、pickLang と同じ", () => {
