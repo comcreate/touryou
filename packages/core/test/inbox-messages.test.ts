@@ -253,6 +253,25 @@ describe("記録と表示モデルの msg（#140）", () => {
     expect(item?.stall).toBe(true);
   });
 
+  it("parts のある知らせ（配下の要約）も、表示モデルを通って同じ文になる。英語に差し込み残りがない", () => {
+    const d = digestMessage({
+      nodeId: "root",
+      descendants: 2,
+      byState: { running: 2 },
+      unresolved: { info: 1 },
+      openDecisions: 0,
+      openExtensions: 1,
+      top: ["i1"],
+    });
+    const r = foldEvents([...base(), added({ summary: d.summary, msg: d.msg })]);
+    if (!r.ok) throw new Error(r.error.cause);
+    const msg = uiViewOf(r.value).inbox[0]?.msg;
+    expect(msg).toEqual(d.msg);
+    if (msg === undefined) throw new Error("msg がない");
+    expect(inboxMessageText("ja", msg)).toBe(d.summary);
+    expect(inboxMessageText("en", msg)).not.toContain("{");
+  });
+
   it("msg のない知らせ（古い記録・子や統合が書いたもの）は、msg を持たない", () => {
     const r = foldEvents([...base(), added({ summary: "子が書いた進み具合" })]);
     if (!r.ok) throw new Error(r.error.cause);

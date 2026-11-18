@@ -457,7 +457,19 @@ function isMessageAt(x: unknown, depth: number): boolean {
   });
 }
 
-/** 記録に載せてよい形か（鍵は形だけを見る。知らない鍵は、画面が summary を出す）。 */
+/** 知らせの写し（並べる部分 `parts` も、入れ子まで写す。表示モデルが記録の値を共有しないため）。 */
+export function copyInboxMessage(m: InboxMessage): InboxMessage {
+  if (m.parts === undefined) return { key: m.key, args: { ...m.args } };
+  const parts: Record<string, InboxMessageList> = {};
+  for (const [name, l] of Object.entries(m.parts))
+    parts[name] = { sep: l.sep, items: l.items.map(copyInboxMessage) };
+  return { key: m.key, args: { ...m.args }, parts };
+}
+
+/**
+ * 記録に載せてよい形か。鍵は形だけを見て、表にない鍵も断らない：版の違う daemon の記録（新しい daemon が足した鍵を、
+ * 古い daemon・画面が読む。その逆も）を、畳むときに断って読めなくしないため。表にない鍵の知らせは、画面が summary を出す。
+ */
 export function isInboxMessage(x: unknown): x is InboxMessage {
   return isMessageAt(x, 1);
 }
