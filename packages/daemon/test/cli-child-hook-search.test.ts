@@ -81,7 +81,7 @@ async function setup() {
       rootCwd: repoRoot,
       rootNodeId: "root",
       // 根の範囲は、子が拡張で頼むコマンド（#130）も含む
-      rootScope: { ...scope, allowedCommands: ["git status", "git add", "git log"] },
+      rootScope: { ...scope, allowedCommands: ["git status", "git add", "git log", "git rm"] },
       port: 0,
     },
     deps,
@@ -295,9 +295,21 @@ describe("CLI の子のフック: 承認した拡張のコマンドに引数を�
       "git add --pathspec-from-file=/etc/hosts",
       "git add --git-dir=x .",
       "git add '*.ts'",
+      "git add -e",
+      "git add -p",
+      "git add -f src/a.ts",
+      "git add --pathspec-from-file=src/a.ts",
     ]) {
       expect((await s.hook(command)).permit, command).toBeUndefined();
     }
+  });
+
+  it("git rm は一覧の外: git rm x を承認しても、git rm -r . には明示の許可を付けない", async () => {
+    const s = await setup();
+    await s.approveCommand("git rm src/a.ts");
+    expect(await s.hook("git rm src/a.ts")).toEqual({ decision: "allow", permit: "extension" });
+    expect((await s.hook("git rm -r .")).permit).toBeUndefined();
+    expect((await s.hook("git rm src/a.ts -r src")).permit).toBeUndefined();
   });
 
   it("一覧の外のコマンドは、承認した形そのものだけに明示の許可が付く", async () => {

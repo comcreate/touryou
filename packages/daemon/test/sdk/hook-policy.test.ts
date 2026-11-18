@@ -749,39 +749,51 @@ describe("grantedOnlyByExtension: 引数を足してよい一覧のコマンド�
     allowedCommands: [
       "git status",
       "git add",
-      "git rm",
-      "git mv",
       "git add src",
       "git ls-files",
+      "git rm docs/old.md",
+      "git mv src/a.ts",
       "git grep",
       "git log",
     ],
   };
   const permit = (command: string) => grantedOnlyByExtension(brief, eff, "Bash", { command }, "/w");
 
-  it("一覧のコマンドは、承認した形のうしろに引数を足しても真", () => {
+  it("一覧のコマンドは、承認した形のうしろに、許す表の旗と安全な位置の引数を足しても真", () => {
     for (const c of [
       "git add --dry-run .",
       "git add src/a.ts src/b.ts",
       "git add -A",
-      "git rm --cached src/a.ts",
-      "git mv src/a.ts src/b.ts",
+      "git add -nv .", // まとめ書きは 1 字ずつ照らす
+      "git add -- -p", // `--` のあとは位置の引数
+      "git add src -u",
+      "git ls-files -zc", // まとめ書き
+      "git ls-files -- src",
       "git ls-files -z src",
-      "git add --pathspec-from-file=list.txt",
+      "git ls-files --others --exclude-standard",
     ])
       expect(permit(c), c).toBe(true);
   });
-  it("一覧のコマンドでも、危ない旗・作業ツリーの外のパス・展開・リダイレクトを足した形は偽", () => {
+  it("一覧のコマンドでも、許す表にない旗・外のパス・展開・リダイレクトを足した形は偽", () => {
     for (const c of [
+      "git add -e",
+      "git add --edit",
+      "git add -p",
+      "git add --patch",
+      "git add -i",
+      "git add --interactive",
+      "git add -f .env",
+      "git add --force .env",
+      "git add -nf .", // まとめ書きの中の -f
+      "git add --pathspec-from-file=list.txt",
+      "git add --pathspec-from-file=-",
+      "git ls-files --exclude-from=x",
+      "git ls-files -X x",
       "git add /etc/passwd",
       "git add ../other",
       "git add src/../../x",
-      "git add --pathspec-from-file=/etc/x",
-      "git add --pathspec-from-file=../x",
+      "git add -- ../x",
       "git add -c x",
-      "git add --exec=sh",
-      "git add --git-dir=x",
-      "git add --work-tree=x .",
       "git add ~/x",
       "git add '*.ts'",
       "git add $HOME",
@@ -790,6 +802,12 @@ describe("grantedOnlyByExtension: 引数を足してよい一覧のコマンド�
       "git add . ; rm -rf src",
     ])
       expect(permit(c), c).toBe(false);
+  });
+  it("git rm・git mv は一覧に入れない（作業ツリーのファイルを消す・動かすので、承認した形そのものだけ）", () => {
+    expect(permit("git rm docs/old.md")).toBe(true);
+    expect(permit("git rm docs/old.md -r src")).toBe(false);
+    expect(permit("git mv src/a.ts")).toBe(true);
+    expect(permit("git mv src/a.ts tmp.ts")).toBe(false);
   });
   it("一覧の外のコマンドは、今のまま完全一致だけ", () => {
     expect(permit("git grep")).toBe(true); // 承認した形そのものは、今までどおり真

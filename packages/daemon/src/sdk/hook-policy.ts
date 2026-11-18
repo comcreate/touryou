@@ -919,46 +919,141 @@ export function grantedOnlyByExtension(
 }
 
 /**
- * 承認した形のうしろに引数を足しても、明示の許可を付けてよいコマンド（#130）。先頭の語の並びで照らす。
- * 選んだ根拠（どれも、旗で任意のコードを動かす道・設定のファイルを読み込ませる道を持たず、
- * git が作業ツリーの外のパスやリンクの先を断る）:
- * - `git add`・`git rm`・`git mv`: インデックスと作業ツリーの中だけを変える。フック（.git/hooks）は動かさない。
- * - `git status`・`git ls-files`: 読み取りだけ。
- * 入れないもの: `git log`・`git diff`・`git show`（`--output`・`--ext-diff`・`--textconv`）、`git commit`（フックが動く）、
- * `git grep`（`-O`）、`cp`・`mv`・`mkdir`・`touch`（作業ツリーの中のリンクを通って外へ書ける）。
+ * 承認した形のうしろに引数を足しても、明示の許可を付けてよいコマンドと、足してよい旗の表（#130）。先頭の語の並びで照らす。
+ * 旗は許す表（ここにないものは断る）。短い旗のまとめ書き（`-nv`）は 1 字ずつ照らす。`--` のあとは、すべて位置の引数。
+ * 選んだ根拠（どれも、旗で任意のコードを動かす道・ファイルを読み込ませる道を持たない。filter・fsmonitor・hook は git の設定から
+ * 動き、設定は子が書けない。git の大域の旗 `-c` などはサブコマンドより前にしか効かない）:
+ * - `git add`: インデックスに載せるだけで、作業ツリーのファイルは変えない。git は作業ツリーの外・リンクの先のパスを断る。
+ *   エディタ・対話を始める `-e`・`-p`・`-i`、ファイルからパスを読む `--pathspec-from-file`、無視したファイルも載せる `-f` は許さない。
+ * - `git status`・`git ls-files`: 読み取りだけ。`--exclude-from`・`-X`（ファイルを読む）は許さない。
+ * 入れないもの: `git rm`・`git mv`（作業ツリーのファイルを消す・動かすので、書き込みの範囲を越えられる）、
+ * `git log`・`git diff`・`git show`（`--output`・`--ext-diff`・`--textconv`）、`git commit`（フックが動く）、`git grep`（`-O`）、
+ * `cp`・`mv`・`mkdir`・`touch`（作業ツリーの中のリンクを通って外へ書ける）。
  */
-const ARGS_OK_COMMANDS: readonly (readonly string[])[] = [
-  ["git", "add"],
-  ["git", "rm"],
-  ["git", "mv"],
-  ["git", "status"],
-  ["git", "ls-files"],
+const ARGS_OK_COMMANDS: readonly {
+  readonly head: readonly string[];
+  readonly flags: ReadonlySet<string>;
+}[] = [
+  {
+    head: ["git", "add"],
+    flags: new Set([
+      "-n",
+      "--dry-run",
+      "-v",
+      "--verbose",
+      "-A",
+      "--all",
+      "--no-all",
+      "-u",
+      "--update",
+      "-N",
+      "--intent-to-add",
+      "--refresh",
+      "--ignore-errors",
+      "--ignore-missing",
+      "--renormalize",
+      "--chmod=+x",
+      "--chmod=-x",
+      "--sparse",
+    ]),
+  },
+  {
+    head: ["git", "status"],
+    flags: new Set([
+      "-s",
+      "--short",
+      "-b",
+      "--branch",
+      "--long",
+      "-v",
+      "--verbose",
+      "-z",
+      "--porcelain",
+      "--porcelain=v1",
+      "--porcelain=v2",
+      "--show-stash",
+      "-uno",
+      "-unormal",
+      "-uall",
+      "--untracked-files=no",
+      "--untracked-files=normal",
+      "--untracked-files=all",
+      "--ignored",
+      "--ignored=traditional",
+      "--ignored=matching",
+      "--ignored=no",
+      "--renames",
+      "--no-renames",
+      "--ahead-behind",
+      "--no-ahead-behind",
+      "--column",
+      "--no-column",
+    ]),
+  },
+  {
+    head: ["git", "ls-files"],
+    flags: new Set([
+      "-c",
+      "--cached",
+      "-d",
+      "--deleted",
+      "-m",
+      "--modified",
+      "-o",
+      "--others",
+      "-s",
+      "--stage",
+      "-u",
+      "--unmerged",
+      "-k",
+      "--killed",
+      "-z",
+      "-t",
+      "-v",
+      "-f",
+      "--directory",
+      "--no-empty-directory",
+      "--eol",
+      "--full-name",
+      "--deduplicate",
+      "--exclude-standard",
+      "--error-unmatch",
+      "--sparse",
+    ]),
+  },
 ];
 
-/** 一覧のコマンドでも断る旗（値を取る形 `--x=...` も含む）。ファイルから読む・外へ書く道を閉じる。 */
-const ARGS_DENIED_FLAGS = new Set(["-c", "-C", "--exec", "--git-dir", "--work-tree", "--output"]);
-
-/** 足した引数 1 つが安全か。字は控えめな集まりだけ。絶対パス・`..`・`~`・glob・空白・引用符は断る。 */
-function safeExtraArg(a: string): boolean {
-  if (!/^[A-Za-z0-9._/=:@+,%-]+$/.test(a)) return false;
-  const name = a.startsWith("-") ? (a.split("=")[0] ?? a) : undefined;
-  if (name !== undefined && ARGS_DENIED_FLAGS.has(name)) return false;
-  // 旗の値（`--x=v`）も、ただの引数も、パスとして見る
-  for (const v of a.split("=")) {
-    if (v.startsWith("/")) return false;
-    if (v.split("/").includes("..")) return false;
-  }
-  return true;
+/** 旗 1 つ（`--x`・`-x`・まとめ書きの `-xyz`）が、許す表にあるか。 */
+function flagAllowed(flag: string, allowed: ReadonlySet<string>): boolean {
+  if (allowed.has(flag)) return true;
+  if (flag.startsWith("--") || flag.length <= 2) return false;
+  // 短い旗のまとめ書き: 1 字ずつ照らす（`-nv` → `-n`・`-v`）
+  return [...flag.slice(1)].every((c) => allowed.has(`-${c}`));
 }
 
-/** `entry`（承認した形）が一覧のコマンドで始まり、`seg` がそのうしろに安全な引数だけを足した形か。 */
+/** 位置の引数 1 つが安全か。字は控えめな集まりだけ（空白・引用符・glob・`~`・展開は断る）。絶対パス・`..` も断る。 */
+function safePositional(a: string): boolean {
+  return /^[A-Za-z0-9._/:@+,%=-]+$/.test(a) && !a.startsWith("/") && !a.split("/").includes("..");
+}
+
+/** `entry`（承認した形）が一覧のコマンドで始まり、`seg` が entry と同じ語で始まり、そのうしろが安全な引数だけか。 */
 function extendsWithSafeArgs(entry: readonly string[], seg: readonly string[]): boolean {
   if (seg.length <= entry.length || !entry.every((x, i) => seg[i] === x)) return false;
-  const head = ARGS_OK_COMMANDS.find((h) => h.every((x, i) => entry[i] === x));
-  if (head === undefined) return false;
-  return (
-    seg.slice(entry.length).every(safeExtraArg) && entry.slice(head.length).every(safeExtraArg)
-  );
+  const cmd = ARGS_OK_COMMANDS.find((c) => c.head.every((x, i) => entry[i] === x));
+  if (cmd === undefined) return false;
+  let afterDashes = false;
+  for (const a of seg.slice(cmd.head.length)) {
+    if (!afterDashes && a === "--") {
+      afterDashes = true;
+      continue;
+    }
+    if (!afterDashes && a.startsWith("-")) {
+      if (!flagAllowed(a, cmd.flags)) return false;
+      continue;
+    }
+    if (!safePositional(a)) return false;
+  }
+  return true;
 }
 
 /**
