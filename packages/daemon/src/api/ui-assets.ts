@@ -712,7 +712,7 @@ export const UI_JS = `'use strict';
           card.appendChild(row);
           card.appendChild(el('p', 'desc', '開くと、子の紐付けが外れることがあります。子が「紐付けをやり直して」と言ったら、統合の会話で、この子の紐付けのコードの出し直し（node_bindCode）を頼んでください。'));
         } else if (node && node.cli === true) {
-          card.appendChild(el('p', 'desc', 'この子は CLI で動いています。端末で claude agents を開き、この題の子を開いて確かめてください。'));
+          card.appendChild(el('p', 'desc', 'この子は CLI で動いています。端末でリポジトリに移ってから claude agents を開き、この題の子を開いて確かめてください。'));
         } else {
           card.appendChild(el('p', 'desc', 'この子は Desktop で動いています。Desktop で、この題の子を開いて確かめてください。'));
         }

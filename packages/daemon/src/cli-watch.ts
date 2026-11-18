@@ -133,6 +133,8 @@ export function watchFindings(
       return (
         n === undefined ||
         n.state !== "running" ||
+        // 判断の答え・範囲の頼みの判定を待っている子（state は running のまま。#115）
+        awaitingHuman(state, i.nodeId) ||
         activityMs(state, i.nodeId, lastHookMs) > ms(i.at)
       );
     })
@@ -200,6 +202,8 @@ export function recordWatchFindings(
   for (const s of f.stalled) {
     if (openStall.has(s.nodeId)) continue;
     openStall.add(s.nodeId);
+    // 鍵は最後の動きの時刻ごと。片付けたあと、新しい動きがないまま running に戻ってまた止まると、同じ鍵になり出さない
+    // （めったにない形。子が動けば最後の動きが進み、鍵が変わる。#136）
     push(
       `stall/${s.nodeId}/${s.lastMs}`,
       s.nodeId,

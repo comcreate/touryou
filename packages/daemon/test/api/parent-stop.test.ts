@@ -416,6 +416,28 @@ describe("見張り", () => {
     expect(open()).toHaveLength(0);
   });
 
+  it("子が判断の答えを待っているあいだは、止まっているかもの知らせを解決済みにする（#136）", async () => {
+    const r = rig();
+    await r.launched();
+    const at = (min: number) => Date.parse(T0) + min * 60_000;
+    const open = () =>
+      r.log
+        .state()
+        .inbox.filter(
+          (i) => (i.summary ?? "").includes("止まっているかもしれない") && i.resolved === undefined,
+        );
+    recordWatchFindings(r.log, () => T0, watchFindings(r.log.state(), at(31), spec), spec);
+    expect(open()).toHaveLength(1);
+    r.add({
+      type: "decision.requested",
+      payload: { decisionId: "d1", nodeId: "a", question: "どちらにする？" },
+    } as never);
+    const f = watchFindings(r.log.state(), at(40), spec);
+    expect(f.resolvedStalls).toHaveLength(1);
+    recordWatchFindings(r.log, () => T0, f, spec);
+    expect(open()).toHaveLength(0);
+  });
+
   it("子が done になったら、止まっているかもの知らせを解決済みにし、新しく出さない（#136）", async () => {
     const r = rig();
     await r.launched();
