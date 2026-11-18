@@ -18,9 +18,15 @@ claude plugin marketplace add comcreate/touryou
 
 ## リリースの手順
 
+0. **タグの前の実機の確かめ**（版上げの PR の前。0.1.5 から毎回行う）: 配る前の実機の確かめを、タグと Release の前に済ませる。Release の配布物は付け直さない決まりなので、タグのあとに見つかった不具合は、その版には直しを入れられない（0.1.4 で起きた）。そのため、フォークの試しのリリース（rc）の配布物で、先に確かめる。
+   - **0-a rc を作る**: 次の版に入れる PR を、版上げの PR のほかはすべて main にマージしてから、下の「本番の前の検証（フォークで行う）」で、フォークに rc の Release を作る（版は `<次の版>-rc.<番号>`。例: `0.1.5-rc.0`）。フォークの main を本番の main に追いつかせ、そこから作る。asset の照合（`shasum -a 256 -c`）まで通す。
+   - **0-b /setup**: その rc の zip を手元の写しにし、`docs/setup-verification.md` の A' で `/touryou:setup` を通す（S10〜S13）。
+   - **0-c 全体**: A' の 8（後片付け）の前に、rc を入れたまま、同じ文書の B で全体を確かめる（入れる・setup・daemon の常駐・状態画面・子の起動と止め・片付け）。
+   - **0-d 不具合が出たら**: rc の Release は直さない。main で直す（ふつうの PR）→ フォークの main を追いつかせ、新しい rc の番号で作り直す（「本番の前の検証」の「やり直す（2 回目から）」）→ A'・B を通し直す。すべて可になってから 1 に進む。
+   - 結果（rc の版・A' と B の可・不可・直した PR）は、準備の PR に書く。フォークの後始末は、すべて可になってから行う。
 1. 版をそろえる（上の「版の決まり」）。準備の PR（`release: <版> の準備`）を出し、マージする。
 2. `bash scripts/check.sh` と `claude plugin validate plugin` が通ることを確かめる。
-   - **2-a 新しい /setup の実機の確かめ**（tag の前。導入の script・`setup.md`・hooks を変えたときは必ず行う）: `docs/setup-verification.md` の A。手元の `plugin/` の写しに、直前の Release の `.sha256` から作った `checksums.json` を置き、`claude --plugin-dir <写し>` で `/touryou:setup` を通す（S10〜S13）。取得先は本番のまま、script には手を入れない。直前の Release に #56 の壊れたリンクがあるとき（v0.1.0）は、フォークの rc で A' を行う（下の「本番の前の検証」で rc の Release を作り、その zip を写しにして、手元の写しだけ取得先をフォークに書き換える）。
+   - **2-a 0 の確かめと同じ中身か**: 0 で最後に確かめた rc を作ったあとに main に入ったのが、版上げの準備の PR だけであることを確かめる（`git log --oneline` で見る）。ほかの PR が入っていたら、0 を新しい rc の番号でやり直す。
 3. main にマージしたあと、タグを付けて push する（タグは `v` + plugin.json の `version`。違うと失敗する）。決まりを越えてよい管理者のアカウントで、clone のディレクトリで実行する（`gh api repos/comcreate/touryou --jq .permissions.push` が `true` であること。`true` でも、決まりを越えられないと tag は作れない。下の段落）。zsh の対話に貼れるように、コメント行（`#`）は入れていない。
 
    ```sh
@@ -80,7 +86,10 @@ claude plugin marketplace add comcreate/touryou
 
    順番を間違えたとき：tag を付けずに次の作業に進むと、project の設定での marketplace の取得が `Remote branch marketplace-v<版> not found` で失敗し、日に 1 回の `marketplace ref` も落ちる。差し戻しは要らない。上の script で tag を付ければ直る（5 の PR のあとに `marketplace.json` を変えるコミットがなければ、script は 5 の PR のマージのコミットを選ぶ。あいだに `marketplace.json` を変えるコミットが入ったときは、script が「版が <版> になったコミットが見つかりません」で止まるので、その版になったコミットを確かめて手で付ける）。違うコミットに付けてしまったときは、tag の push の `marketplace ref` が落ちて知らせる。tag は決まりで消せないので、管理者が決まりを越えて消すか、版を上げて直す。
 
-6. **tag の後の確かめ**（marketplace の PR のマージの前と後）: マージの前に、Release の zip の `checksums.json` を確かめる（`unzip -p touryou-<版>.zip checksums.json`）。続けて、本番の zip を手元の写しにして、常駐している前の版の Mac で `/touryou:setup` の版上げを通す（取得先の書き換えは要らない）。マージのあとに、前の版を入れた Mac で update → `/touryou:setup`（S12）→ Q8。手順は `docs/setup-verification.md` の C。不具合が出たら、版を上げて直す（Release は付け直さない）。
+6. **tag の後の確かめ**（marketplace の PR のマージの前と後）: 0 で確かめた分（初めての導入・daemon の常駐・状態画面・子の起動と止め・片付けなど）は、ここでは繰り返さない。タグのあとでしか確かめられないものだけを行う。手順は `docs/setup-verification.md` の C。
+   - マージの前: 本番の Release の zip の `checksums.json` を確かめる（`unzip -p touryou-<版>.zip checksums.json`）。続けて、本番の zip を手元の写しにして、常駐している前の版の Mac で `/touryou:setup` の版上げを通す（本番の取得先から取れることの確かめ。取得先の書き換えは要らない）。
+   - マージのあと: 前の版を入れた Mac で update → `/touryou:setup`（S12）→ Q8。
+   - 不具合が出たら、版を上げて直す（Release は付け直さない）。
 
 ## 配布物では効かない、開発用の抜け道
 
@@ -251,9 +260,12 @@ marketplace への PR だけが出なかった（Release は正しく作られ�
 
 ## 本番の前の検証（フォークで行う）
 
-この検証は release.yml のためのもの。本番の取得先に固定された /setup は、そのままでは通せない。/setup の確かめは 2-a で行う（`docs/setup-verification.md`。直前の Release が v0.1.0 のときは、ここで作った rc の Release で A' を行う）。
+この検証には、2 つの使い道がある。
 
-目的: release.yml を、本番のリポジトリに触れずに、タグの push から Release の作成・照合まで通して確かめる。フォークの名前・アカウント名は、`<自分のアカウント>` と書く（値を文書に残さない）。
+- release.yml を、本番のリポジトリに触れずに、タグの push から Release の作成・照合まで通して確かめる。
+- ここで作った rc の Release の配布物で、タグの前の実機の確かめ（「リリースの手順」の 0。`docs/setup-verification.md` の A'・B）を行う。本番の取得先に固定された /setup は、そのままでは rc を取れないので、A' では手元の写しだけ取得先をフォークに書き換える。
+
+リリースのたびに、0 のために rc を作る。フォークの名前・アカウント名は、`<自分のアカウント>` と書く（値を文書に残さない）。
 
 | 確かめる | 確かめない |
 |:--|:--|
@@ -285,11 +297,11 @@ marketplace への PR だけが出なかった（Release は正しく作られ�
   - 新しい rc のタグを付けて push し、`gh workflow run release.yml --repo <自分のアカウント>/touryou --ref "v${v}"` で起こす。タグを ref にするので、`GITHUB_REF_NAME` はタグの名前になり、`version` の照合が通る。これで Release の作成・照合・`marketplace-self` まで通った。
 - **同じタグの出し直しは、起きないことがある**。やり直しは、新しい rc の番号（`0.1.1-rc.1`、`0.1.1-rc.2`、…）で行う。
 
-検証用の版は、本番で使わない pre-release にする（例: `0.1.1-rc.0`。やり直すたびに番号を上げる）。上流に同名のタグがないことを、先に確かめる。
+検証用の版は、本番で使わない pre-release にする（`<次の版>-rc.<番号>`。例: `0.1.5-rc.0`。やり直すたびに番号を上げる）。上流に同名のタグがないことを、先に確かめる。
 
 ```sh
 acct=<自分のアカウント>
-v=0.1.1-rc.0
+v=0.1.5-rc.0
 (
   set -euo pipefail
   url="$(git remote get-url origin)"
@@ -312,21 +324,22 @@ v=0.1.1-rc.0
 )
 ```
 
-**やり直す（2 回目から）**: 上の箱は `git switch -c verify-release` で始まるので、2 回目は止まる。新しい rc の番号で、次のようにする（`acct`・`v` は上の箱と同じ変数。`v` を新しい番号にする）。`workflow_dispatch:` が要るときは、タグを付ける前に、検証用の枝の release.yml に足してコミットしておく（タグはそのコミットに付ける）。
+**やり直す（2 回目から）**: 上の箱は `git switch -c verify-release` で始まるので、2 回目は止まる。新しい rc の番号で、次のようにする（`acct`・`v` は上の箱と同じ変数。`v` を新しい番号にする）。0 で見つかった不具合を main で直したあとも、これで作り直す。先に、上の「フォークの main を本番の main に追いつかせる push」をしてから行う（検証用の枝は、毎回、追いついた `origin/main` から作り直す）。`workflow_dispatch:` が要るときは、作り直した枝に足し直し、タグを付ける前にコミットしておく（タグはそのコミットに付ける）。
 
 ```sh
 acct=<自分のアカウント>
-v=0.1.1-rc.1
+v=0.1.5-rc.1
 (
   set -euo pipefail
   [ -z "$(git ls-remote --tags origin "v${v}")" ] || { echo "fork にすでに v${v} がある" >&2; exit 1; }
   [ -z "$(git ls-remote --tags https://github.com/comcreate/touryou "v${v}")" ] || { echo "上流に v${v} がある。別の版にする" >&2; exit 1; }
-  git switch verify-release
+  git fetch origin main
+  git switch -C verify-release origin/main
   for f in plugin/.claude-plugin/plugin.json package.json packages/*/package.json; do
     jq --arg v "${v}" '.version = $v' "${f}" >| "${f}.new" && command mv -f "${f}.new" "${f}"
   done
   git commit -am "verify: 検証用の版 ${v}"
-  git push origin verify-release
+  git push --force-with-lease origin verify-release
   git tag "v${v}"
   git push origin "v${v}"
 )
@@ -334,7 +347,7 @@ v=0.1.1-rc.1
 
 push で起きないとき（`workflow_dispatch:` を足したとき）は、続けて `gh workflow run release.yml --repo "${acct}/touryou" --ref "v${v}"` で起こす。
 
-確かめたあと、Release の asset を利用者と同じ形で取り、照合する（`shasum -a 256 -c` が `OK`）。Mac での起動・quarantine の確かめは `docs/dist-manual-verification.md`。照合が通ったら、`docs/setup-verification.md` の A'（この rc の Release で /setup を確かめる）に進む。
+確かめたあと、Release の asset を利用者と同じ形で取り、照合する（`shasum -a 256 -c` が `OK`）。Mac での起動・quarantine の確かめは `docs/dist-manual-verification.md`。照合が通ったら、`docs/setup-verification.md` の A'（この rc の Release で /setup を確かめる）と B（全体の確かめ）に進む（「リリースの手順」の 0）。
 
 ```sh
 d="$(mktemp -d)" && cd "${d}"
@@ -343,7 +356,7 @@ shasum -a 256 -c ./*.sha256
 unzip -p touryou-*.zip checksums.json | jq .
 ```
 
-後始末: **A' が済んでから**、fork の Release・タグ・ブランチを消す（A' はこの Release から取るので、先に消すと通せない）（fork ごと消してもよい）。手元の clone では、`git switch main` のあとで `git tag -d "v${v}"`・`git branch -D verify-release`。
+後始末: **「リリースの手順」の 0 がすべて可になってから**（A'・B が済んでから）、fork の Release・タグ・ブランチを消す（A'・B はこの Release から取るので、先に消すと通せない。作り直した rc の Release も、まとめて消す）（fork ごと消してもよい）。手元の clone では、`git switch main` のあとで `git tag -d "v${v}"`・`git branch -D verify-release`。
 
 ### 採用しない案
 

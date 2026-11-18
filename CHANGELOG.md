@@ -24,6 +24,7 @@
 
 ### 内部の変更
 
+- **配る前の実機の確かめを、タグの前に、フォークの rc の配布物で行う手順にした**: 0.1.4 では、実機の確かめをタグと Release のあとに行い、見つかった不具合をその版に入れられなかった。`docs/release.md` の「リリースの手順」に 0（タグの前の実機の確かめ）を足し、フォークの rc の Release の zip で、`docs/setup-verification.md` の A'（/setup）と、新しい B（daemon の常駐・状態画面・子の起動と止め・片付け）を通してから、版上げの PR とタグに進む。不具合は main で直し、新しい rc の番号で確かめ直す。2-a の v0.1.0 のときだけの条件を外し、6（タグの後）は、本番の zip の `checksums.json` と、前の版からの版上げ（C）だけにした。rc の作り直しは、追いついた `main` から検証用の枝を作り直す形にした。
 - **開発の道具の node-forge を 1.4.3 に上げた**（#52）: `@anthropic-ai/mcpb` が使う node-forge を、`pnpm-workspace.yaml` の `overrides` で 1.4.2 から 1.4.3 にした（公開から 14 日たった版）。Dependabot の moderate・low の知らせ 4 件を直す。配布物（tar.gz・`.mcpb`・zip）には入らない。
 
 ## 0.1.4（2026-11-18）

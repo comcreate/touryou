@@ -2,8 +2,9 @@
 
 `/touryou:setup`（`plugin/scripts/install-runtime.sh`・`plugin/commands/setup.md`・`plugin/hooks/`）を、Mac（Apple Silicon）の実機で通して確かめる手順。確かめの項目は `docs/manual-verification-checklist.md` の S10〜S13・Q8。
 
-- **A. tag の前**: 手元の clone の `plugin/` の写しに、**直前の Release** の配布物の `checksums.json` を置き、`claude --plugin-dir <写し>` で `/touryou:setup` を通す（`docs/release.md` の「リリースの手順」の 2-a）。
-- **A'. tag の前（フォークの rc）**: 直前の Release が v0.1.0 のとき（#56）は、A は通らない。フォークの試しのリリース（rc）の zip を写しにし、手元の写しだけ取得先をフォークに書き換えて、同じ確かめを行う。
+- **A. tag の前（手元の写しで早く試す。任意）**: 手元の clone の `plugin/` の写しに、**直前の Release** の配布物の `checksums.json` を置き、`claude --plugin-dir <写し>` で `/touryou:setup` を通す。開発の途中で、導入の script・`setup.md`・hooks の変更を早く試すときに使う。リリースの前の確かめは、A' で行う。
+- **A'. tag の前（フォークの rc。毎回行う）**: フォークの試しのリリース（rc）の zip を写しにし、手元の写しだけ取得先をフォークに書き換えて、A と同じ確かめを行う（`docs/release.md` の「リリースの手順」の 0）。
+- **B. tag の前の全体の確かめ（A' に続けて）**: A' で rc を入れたまま、daemon の常駐・状態画面・子の起動と止め・片付けまで、実機で通す（`docs/release.md` の 0）。
 - **C. tag の後**: Release の zip の `checksums.json` を確かめ、本番の zip の写しで、常駐している前の版からの版上げを通してから marketplace の PR をマージし、前の版を入れた Mac で update する（`docs/release.md` の 6）。
 
 決まり:
@@ -218,7 +219,7 @@ rm -rf "${W}"
 
 ## A'. tag の前（フォークの rc で行う）
 
-直前の Release が v0.1.0 のとき（#56 のため A が手順 3 で止まる）は、こちらで行う。フォークで試しのリリース（rc。例: `0.1.1-rc.0`。rc の番号は出し直しで増える）を作り、その Release の zip をそのまま写しにして `/touryou:setup` を通す。
+リリースのたびに、タグの前に行う（`docs/release.md` の「リリースの手順」の 0）。`release.yml` が作った配布物そのものを確かめられるため（直前の Release が v0.1.0 のとき〔#56〕は A が手順 3 で止まる、という理由で始めたが、0.1.5 からはいつもこちらで行う）。フォークで試しのリリース（rc。例: `0.1.5-rc.0`。rc の番号は出し直しで増える）を作り、その Release の zip をそのまま写しにして `/touryou:setup` を通す。
 
 - **前提**: フォークの試しのリリース（`v<rc の版>`）が、`docs/release.md` の「本番の前の検証（フォークで行う）」の手順で通っていること（Release に asset が 6 ファイルある）。
 - **手元の写しだけ**、取得先をフォークに書き換える（`scripts/install-runtime.sh` の `REPO_URL` の 1 行と、`.claude-plugin/plugin.json` の `repository`）。script は取得先を本番に固定し、`plugin.json` の `repository` も照合するため。リポジトリの script・`plugin.json` は変えない（守りを緩めない。試しの抜け道を本番の道筋に作らない）。
@@ -299,9 +300,27 @@ A の 3〜8（S10・S11・S13・S12 の模造・後片付け）を、`V` を `${
 - **3（S10）**: 取得先は `https://github.com/${ACCT}/touryou/releases/download/v${R}/…`（script の出力）。本番（`comcreate`）を指していたら、2' の書き換えが効いていない。止めて A の 8（=8'）に進む。
 - **3（S11）**: `current` が `…/v${R}/touryou-darwin-arm64`。
 - **6（S12）**: 版の違いの知らせは、本体 v0.0.0-verify と plugin v`${R}`。
-- **8（後片付け）**: A の 8 と同じ。`rm -rf "${W}"` で、書き換えた写しも消える（リポジトリの `plugin/` は変えていない。`git status` がきれいなことを確かめる）。フォークの Release・tag・枝は、A' が済んでから消す（`docs/release.md` の「本番の前の検証」の後始末）。
+- **8（後片付け）**: **8 の前に、B を行う**（8 で rc の `~/.touryou` と常駐を外すため）。8 は A の 8 と同じ。`rm -rf "${W}"` で、書き換えた写しも消える（リポジトリの `plugin/` は変えていない。`git status` がきれいなことを確かめる）。フォークの Release・tag・枝は、A' と B が済んでから消す（`docs/release.md` の「本番の前の検証」の後始末）。
 
 結果は、A と同じに、リリースの準備の PR か Issue に書く（rc の版でフォークの Release を使ったこと、を添える）。
+
+## B. tag の前の全体の確かめ（rc を入れたまま）
+
+A' の 7 のあと、8（後片付け）の前に、同じ Mac で行う。A' の 6（S12）のあと、`current` が rc（`v${R}`）で、常駐が running になっていること。`claude --plugin-dir "${W}/plugin"` で開いた写しの plugin のまま進める。項目の細部（手順と期待）は `docs/manual-verification-checklist.md` にあり、ここでは、リリースのたびに通すものを決める。
+
+| 順 | 確かめる | チェックリストの項目 | 可の目安 |
+|:--|:--|:--|:--|
+| 1 | 入れる・/setup | S10〜S13（A' で済み） | A' のとおり |
+| 2 | daemon の常駐 | S3〜S6・L | `touryou launchd status` が running。ログアウト・ログインのあとも running（L は、常駐の形を変えたときだけ） |
+| 3 | 統合セッションの MCP と中継 | N・Q（Q8 を除く。Q8 は C） | 統合セッションで `/touryou:start` がつながる |
+| 4 | 状態画面 | U・V・G | `/touryou:ui` で開き、木・カード・関係図が出る |
+| 5 | 子の起動と止め | A1・A2（範囲や知らせを変えたときは A3・A4 も） | 子が起動して紐付き、画面に出る。止める・消すが効く |
+| 6 | 片付け | A2 の削除・回収（`touryou reclaim`）、最後に S7（常駐を外す） | 子の作業ツリーとブランチが片付き、画面から消える。S7 のとおりに外れる（そのあと A' の 8 で元に戻す） |
+| 7 | 変えたところ | その版で変えたものの項目（H・I・P・D など。CHANGELOG の `## 未公開` を見て選ぶ） | 各項目の期待のとおり |
+
+- 試しの子は、試しのリポジトリで動かす（チェックリストの「必要なもの」）。B で作った子・作業ツリーは、6 で片付けてから A' の 8 に進む。
+- 不具合が出たら、ここで止める。A' の 8 で元に戻し、main で直してから、新しい rc の番号で A' と B を通し直す（`docs/release.md` の 0-d）。
+- 結果（項目ごとの可・不可と、出た表示）は、A' の結果と一緒に、準備の PR に書く。
 
 ## C. tag の後
 
