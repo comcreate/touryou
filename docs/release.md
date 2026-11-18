@@ -104,7 +104,7 @@ claude plugin marketplace add comcreate/touryou
 
 ## 対象の OS・CPU
 
-配布物の対象は、**macOS の arm64（Apple Silicon）のみ**（決定）。`dist` の matrix は `macos-15` だけ。**macOS の Intel（x64）と Windows（x64）は、将来の課題**（Linux も対象外）。`scripts/dist-build.sh` は、x64 の分岐を残している（手元の確認のため）が、リリースには使わない。
+配布物の対象は、**macOS の arm64（Apple Silicon）のみ**（決定）。`dist` の matrix は `macos-latest`（Apple Silicon）だけ。`dist` と `ci-macos.yml` は、最初の段で `uname -m` が `arm64` でなければ止める（GitHub が `macos-latest` の中身を変えても、違う CPU で黙って組み立てないため）。**macOS の Intel（x64）と Windows（x64）は、将来の課題**（Linux も対象外）。`scripts/dist-build.sh` は、x64 の分岐を残している（手元の確認のため）が、リリースには使わない。
 
 **macOS の Intel（x64）を足すとき**: `dist` の matrix に runner を足し、`make-checksums.mjs` の `TARGETS`、`release.yml` のファイル数・取り直しの照合の対象を広げ、実機（Intel の Mac）で確かめる。
 
@@ -152,6 +152,7 @@ claude plugin marketplace add comcreate/touryou
 | Settings → Actions → General → Actions permissions | Actions を有効にする（「Allow all actions and reusable workflows」か、使っている action〔`actions/checkout`・`actions/setup-node`・`actions/upload-artifact`・`actions/download-artifact`・`pnpm/action-setup` など。ワークフローは SHA で固定〕を許す） | ワークフローが動くため |
 | Settings → Actions → General → Workflow permissions | 「Read repository contents and packages permissions」（既定）か「Read and write permissions」のどちらでもよい（ジョブは要る権限〔`contents: write`・`pull-requests: write`・`actions: write`（`cleanup` と、`marketplace-self` の `ci.yml` の dispatch）〕を `permissions:` で明示している。明示が組織の制限で効かないときは「Read and write permissions」にする）。**「Allow GitHub Actions to create and approve pull requests」を有効にする** | `marketplace-self` が `GITHUB_TOKEN` で PR を作るため（無効だと、ブランチの push までは成功し、`gh pr create` が失敗する）。ジョブは必要な権限（`contents: write` など）を自分で明示している。組織の設定で禁じられていると、リポジトリでは有効にできないので、先に組織の Settings → Actions → General で許す |
 | Settings → Actions → General → Fork pull request workflows | 「Require approval for first-time contributors」以上にする | 外の人の PR で、ワークフローが黙って動かないように |
+| 組織の Settings → Actions → Runner groups | 組織の自前の実行役（self-hosted runner）を、touryou に共有しない（runner group の Repository access から外す） | 公開のリポジトリでは、外の人の PR が書き換えたワークフローで、実行役を指名できるため。touryou の CI は、GitHub が貸す実行役だけを使う |
 | Settings → Branches（または Rules → Rulesets）で `main` | PR を必須にする（直接の push を禁じる）・force push と削除を禁じる・必須の check に `ci.yml` の check を入れる（下の注） | 壊れた main からタグを付けないため |
 | Settings → Rules → Rulesets（タグ。名前 `release-tags`） | `v*` と `marketplace-v*` のタグの作成・更新・削除を、管理者（リリースする人）だけにする（対象は `refs/tags/v*` と `refs/tags/marketplace-v*`） | `v*` の push が Release を作るため。だれでも `v*` を push できると、Release が作られる。`marketplace-v*` は project の `.claude/settings.json` が指す、変わらない参照のため（#90。付け直せると固定にならない） |
 | Settings → Code security | Private vulnerability reporting を有効にする。Dependabot alerts・Secret scanning・Push protection を有効にする | `SECURITY.md` の窓口のため |
@@ -228,8 +229,8 @@ project の `.claude/settings.json` の `ref`（`marketplace-v<版>`）が効く
 |:--|:--|:--|
 | `ci.yml` | ubuntu（node 22・24） | push（main）・PR・`workflow_dispatch`（`release.yml` の `marketplace-self` が起こす。手でも起こせる）。いつも動く（必須の check のため）。`docs/**`・`.sdd/**`・`CHANGELOG.md`・`README.md`・`LICENSE` だけの変更では、checkout と変更の判定（`scripts/ci-code-changed.sh`）のあとの段を飛ばし、すぐ成功で終える。`workflow_dispatch` と、差分を取れないときは、すべて走らせる |
 | （同じ `ci.yml` の check の中） | | `check (ubuntu-latest, node 22)` の job で（node 24 の job では飛ばす）、どの変更でも（docs だけでも）、コミットのメールを確かめる（`scripts/ci-commit-emails.sh`）。author・committer・本文の `Co-authored-by` のメールが、GitHub の noreply（`<番号>+<名前>@users.noreply.github.com`。github-actions のボットも含む）・GitHub の `noreply` のアドレス・Anthropic の `noreply` のアドレス（正確な一覧は `scripts/ci-commit-emails.sh`）のどれかでなければ失敗する。範囲は、PR では base と head の間、push では before と after の間（新しいブランチ・force push で before が取れないときは、ほかのブランチにない after のコミット）。失敗の文には、コミットの短い番号と欄だけを出し、アドレスは出さない |
-| `ci-macos.yml` | macos-15（node 24） | push（main）・PR で、`packages/**`・`scripts/**`・`plugin/**`・`package.json`・`pnpm-lock.yaml`・`pnpm-workspace.yaml`・`biome.json`・`tsconfig*.json`・自分の yml が変わったときだけ（`paths`）と、`workflow_dispatch`。必須の check ではないので、`paths` のまま（毎回は動かさない）。Mac の機械を 1 台だけ待つよう、1 つのジョブ（`check (macos-15, node 24)`）で、`scripts/check.sh` のあとに配布物の確かめ（tar.gz・.mcpb を作り、展開して daemon を起こす）を続けて行う。配布物のビルドの前に、`release.yml` の `dist` と同じ Node（22.20.0）に切り替える。配布物の確かめは PR と手で実行したときだけ（main への push では check だけ）。artifact を上げるのは手で実行したときだけ |
-| `release.yml` | macos-15（dist）・ubuntu | タグの push のとき |
+| `ci-macos.yml` | macos-latest（arm64。node 24） | push（main）・PR で、`packages/**`・`scripts/**`・`plugin/**`・`package.json`・`pnpm-lock.yaml`・`pnpm-workspace.yaml`・`biome.json`・`tsconfig*.json`・自分の yml が変わったときだけ（`paths`）と、`workflow_dispatch`。必須の check ではないので、`paths` のまま（毎回は動かさない）。Mac の機械を 1 台だけ待つよう、1 つのジョブ（`check (macos-latest, node 24)`）で、`scripts/check.sh` のあとに配布物の確かめ（tar.gz・.mcpb を作り、展開して daemon を起こす）を続けて行う。配布物のビルドの前に、`release.yml` の `dist` と同じ Node（22.20.0）に切り替える。配布物の確かめは PR と手で実行したときだけ（main への push では check だけ）。artifact を上げるのは手で実行したときだけ |
+| `release.yml` | macos-latest（dist。arm64）・ubuntu | タグの push のとき |
 | `dependabot-auto-merge.yml` | ubuntu | Dependabot の PR（`pull_request`）のとき。下の「Dependabot の actions の更新と自動マージ」 |
 | `macos-capacity-rerun.yml` | ubuntu | `ci-macos.yml`・`release.yml` が失敗で終わったとき（`workflow_run`）。下の「macOS の機械が割り当てられなかったとき」 |
 | `dependabot-main-ci.yml` | ubuntu | Dependabot の PR の `ci.yml` が成功で終わったとき（`workflow_run`）。マージを待って、main で `ci.yml` を起こす |
@@ -239,7 +240,7 @@ project の `.claude/settings.json` の `ref`（`marketplace-v<版>`）が効く
 - コミットのメールの確かめで落ちたら: GitHub の Settings → Emails で「Keep my email addresses private」を有効にし、`git config user.email "<番号>+<名前>@users.noreply.github.com"` を設定して、外れたコミットを直してから push し直す（squash のマージでは、PR のコミットの author が本文の `Co-authored-by` に入るため）。
 - どれも `concurrency` で、同じ ref（PR）の前の実行を止める。
 - 形は `scripts/ci-workflow.test.mjs`・`scripts/release-workflow.test.mjs` で確かめる。
-- runner は `macos-15`（arm64）に固定している（`macos-latest` は使わない）。`macos-15` の runner image の廃止が告知されたら（GitHub の changelog）、3 つのワークフローの runner を、まとめて次の版に移す。配布物の中身（公式の Node・npm の prebuild）は、runner の版に依存しない見込み。
+- macOS の runner は `macos-latest`（arm64）を使う（`macos-15` に固定していたが、Mac が割り当てられずに落ちることが続いたため、利用者のほかのリポジトリと同じ `macos-latest` にした。rc と本番を同じ設定で組み立てる）。`macos-latest` は、GitHub が新しい macOS を出すと自動で切り替わる。そのときに CI が壊れれば、`ci-macos.yml`（PR の CI）で先に分かる。配布物の中身（公式の Node・npm の prebuild）は、runner の版に依存しない見込み。CPU が arm64 でなくなったときは、最初の段の確かめで止まる。
 
 ## Dependabot の actions の更新と自動マージ
 
@@ -277,7 +278,7 @@ marketplace への PR だけが出なかった（Release は正しく作られ�
 | 確かめる | 確かめない |
 |:--|:--|
 | `version` の照合・semver の検査 | 本番の marketplace.json への反映 |
-| `dist`（macos-15）が、ビルド・smoke・artifact まで通る | 上流のリポジトリの設定（権限・保護） |
+| `dist`（macos-latest）が、ビルド・smoke・artifact まで通る | 上流のリポジトリの設定（権限・保護） |
 | `release` の、配布物の検査・`checksums.json` の生成・zip の許可リスト・Release の作成・asset 6 ファイルの取り直しと sha256 の照合 | |
 | `marketplace-self` が、fork の中に PR を出す（fork で「Allow GitHub Actions to create and approve pull requests」を有効にしたとき） | |
 | 2 回目の実行が「Release がすでにある」で失敗すること | |
@@ -302,6 +303,7 @@ marketplace への PR だけが出なかった（Release は正しく作られ�
 - **登録のあとでも、push で動きが起きないことがある**。v0.1.1 の前に試したときは、フォークへの push が出来事（events API の `PushEvent` など）として記録されず、タグの push で release.yml が起きなかった。同じタグを消して push し直しても、新しい rc のタグでも起きなかった。手で起こした実行（`workflow_dispatch`）は動いた。そのときは、次のようにする（**本番の release.yml には足さない**）。
   - 検証用の枝（`verify-release`）の `.github/workflows/release.yml` にだけ、`on:` に `workflow_dispatch:` を足してコミットする。
   - 新しい rc のタグを付けて push し、`gh workflow run release.yml --repo <自分のアカウント>/touryou --ref "v${v}"` で起こす。タグを ref にするので、`GITHUB_REF_NAME` はタグの名前になり、`version` の照合が通る。これで Release の作成・照合・`marketplace-self` まで通った。
+- **Mac が割り当てられずに落ちたとき**（annotations に「The job was not acquired by Runner」）は、流し直す（`macos-capacity-rerun.yml` は上流でしか動かない）。`gh run rerun` は、gh の鍵に新しいフォークの Actions の権限がないと「Must have admin rights」で断られることがあるので、ブラウザの実行の画面の「Re-run jobs → Re-run failed jobs」で行う。
 - **同じタグの出し直しは、起きないことがある**。やり直しは、新しい rc の番号（`0.1.1-rc.1`、`0.1.1-rc.2`、…）で行う。
 
 検証用の版は、本番で使わない pre-release にする（`<次の版>-rc.<番号>`。例: `0.1.5-rc.0`。やり直すたびに番号を上げる）。上流に同名のタグがないことを、先に確かめる。
@@ -331,7 +333,7 @@ v=0.1.5-rc.0
 )
 ```
 
-**やり直す（2 回目から）**: 上の箱は `git switch -c verify-release` で始まるので、2 回目は止まる。新しい rc の番号で、次のようにする（`acct`・`v` は上の箱と同じ変数。`v` を新しい番号にする）。0 で見つかった不具合を main で直したあとも、これで作り直す。先に、上の「フォークの main を本番の main に追いつかせる push」をしてから行う（検証用の枝は、毎回、追いついた `origin/main` から作り直す）。`workflow_dispatch:` が要るときは、箱を貼る**前に**、手元の作業ツリーの `.github/workflows/release.yml` の `on:` に `workflow_dispatch:` を足しておく（コミットしない）。箱の `git switch -C` は作業ツリーの変更を持ち越し、`git commit -am` が版の変更と一緒にコミットするので、タグはそのコミットに付く（足した 1 行は、本番の release.yml には入れない）。
+**やり直す（2 回目から）**: 上の箱は `git switch -c verify-release` で始まるので、2 回目は止まる。新しい rc の番号で、次のようにする（`acct`・`v` は上の箱と同じ変数。`v` を新しい番号にする）。0 で見つかった不具合を main で直したあとも、これで作り直す。先に、上の「フォークの main を本番の main に追いつかせる push」をしてから行う（検証用の枝は、毎回、追いついた `origin/main` から作り直す）。`workflow_dispatch:` が要るときは、箱を貼る**前に**、先に `git switch main` してから、手元の作業ツリーの `.github/workflows/release.yml` の `on:` に `workflow_dispatch:` を足しておく（コミットしない）。箱の `git switch -C` は作業ツリーの変更を持ち越し、`git commit -am` が版の変更と一緒にコミットするので、タグはそのコミットに付く（足した 1 行は、本番の release.yml には入れない）。`git switch main` を先にするのは、検証用の枝にいるまま足すと、`git switch -C verify-release origin/main` が「ローカルの変更が上書きされる」で止まるため（検証用の枝の release.yml には、前の rc の `workflow_dispatch:` がすでに入っている）。
 
 ```sh
 acct=<自分のアカウント>

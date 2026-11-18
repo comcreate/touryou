@@ -27,6 +27,7 @@
 
 - **daemon が書く受信箱の知らせを、鍵と値（`msg`）でも載せるようにした**（#140 の先の段）: 状態画面で、日本語と英語を切り替えるための土台（`packages/core/src/inbox-messages.ts`・`packages/daemon/src/ui/i18n.ts`）。配下の要約・窓口の警告・再開しなかった子の知らせは、項目を並べる `parts` で載せる。日本語の `summary` は、これまでと同じ文のまま。画面の切り替えは、あとの段で入れる。
 - **配る前の実機の確かめを、タグの前に、フォークの rc の配布物で行う手順にした**（#147）: 0.1.4 では、実機の確かめをタグと Release のあとに行い、見つかった不具合をその版に入れられなかった。`docs/release.md` の「リリースの手順」に 0（タグの前の実機の確かめ）を足し、フォークの rc の Release の zip で、`docs/setup-verification.md` の A'（/setup）と、新しい B（daemon の常駐・状態画面・子の起動と止め・片付け）を通してから、版上げの PR とタグに進む。不具合は main で直し、新しい rc の番号で確かめ直す。2-a の v0.1.0 のときだけの条件を外し、6（タグの後）は、本番の zip の `checksums.json` と、前の版からの版上げ（C）だけにした。rc の作り直しは、追いついた `main` から検証用の枝を作り直す形にした。
+- **CI の macOS の実行役を `macos-15` から `macos-latest` にした**: `macos-15` で、Mac が割り当てられずに落ちること（「was not acquired by Runner」）が続いたため。`release.yml` の `dist` と `ci-macos.yml` は、最初の段で `uname -m` が `arm64` でなければ止める。ジョブの名前は `dist (macos-latest)`・`check (macos-latest, node 24)` になる（必須の check の ubuntu の 2 つは変わらない）。`docs/release.md` に、フォークでの流し直し方・`workflow_dispatch:` を足す前の `git switch main`・組織の自前の実行役を touryou に共有しないことを足した。
 - **開発の道具の node-forge を 1.4.3 に上げた**（#52）: `@anthropic-ai/mcpb` が使う node-forge を、`pnpm-workspace.yaml` の `overrides` で 1.4.2 から 1.4.3 にした（公開から 14 日たった版）。Dependabot の moderate・low の知らせ 4 件を直す。配布物（tar.gz・`.mcpb`・zip）には入らない。
 
 ## 0.1.4（2026-11-18）

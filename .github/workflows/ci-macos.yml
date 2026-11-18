@@ -2,7 +2,7 @@ name: CI (macOS)
 
 # macOS（arm64）の check と、配布物（Node 同梱の tar.gz・.mcpb）の確かめ。Mac の機械を 1 台だけ待つよう、1 つのジョブで続けて行う。
 # macOS の runner は ubuntu の約 10 倍の費用なので、コード・依存・この yml が変わったときだけ動かす
-# （docs/release.md の「CI の実行時間と費用」）。release.yml の dist と同じ macos-15。
+# （docs/release.md の「CI の実行時間と費用」）。release.yml の dist と同じ macos-latest（arm64）。
 # 配布物の確かめは PR と手で実行したときだけ（main への push では check だけ）。artifact を上げるのは手で実行したときだけ（1 日）。
 # 機械が割り当てられずに落ちたときは、macos-capacity-rerun.yml が 1 回だけ走らせ直す。
 on:
@@ -41,11 +41,16 @@ concurrency:
 
 jobs:
   check:
-    name: check (macos-15, node 24)
-    runs-on: macos-15
+    name: check (macos-latest, node 24)
+    runs-on: macos-latest
     # macOS arm64 の runner は、割り当てまで長く待つことがある（"capacity constraints"）。待ち時間を含めて 60 分（check と配布物の確かめ）
     timeout-minutes: 60
     steps:
+      - name: 機械が Apple Silicon（arm64）であることを確かめる（macos-latest の中身が変わっても、違う CPU で黙って組み立てない）
+        run: |
+          arch="$(uname -m)"
+          echo "arch: ${arch}"
+          [ "${arch}" = arm64 ] || { echo "arm64 ではありません（${arch}）。配布物は darwin-arm64 だけなので止めます" >&2; exit 1; }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -90,7 +95,7 @@ jobs:
           xattr -l "$n" || true
           file "$n"
           {
-            echo "### macos-15"
+            echo "### macos-latest"
             echo "- arch: $(uname -m)"
             echo "- tar.gz: $(du -h "$(ls "${RUNNER_TEMP}"/dist/touryou-*.tar.gz)" | cut -f1)"
             echo "- 注意: runner 上の展開先には quarantine が付かない。Gatekeeper の影響は、CI では確かめられない（docs/dist-manual-verification.md）"
@@ -99,6 +104,6 @@ jobs:
         # 手で実行したときだけ（PR では上げない。artifact の容量の上限〔Artifact storage quota has been hit〕に当たったため。docs/release.md）
         if: github.event_name == 'workflow_dispatch'
         with:
-          name: touryou-dist-macos-15
+          name: touryou-dist-macos-latest
           path: ${{ runner.temp }}/dist/*
           retention-days: 1

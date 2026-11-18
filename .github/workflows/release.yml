@@ -56,8 +56,13 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        os: [macos-15]
+        os: [macos-latest]
     steps:
+      - name: 機械が Apple Silicon（arm64）であることを確かめる（macos-latest の中身が変わっても、違う CPU で黙って組み立てない）
+        run: |
+          arch="$(uname -m)"
+          echo "arch: ${arch}"
+          [ "${arch}" = arm64 ] || { echo "arm64 ではありません（${arch}）。配布物は darwin-arm64 だけなので止めます" >&2; exit 1; }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false

@@ -22,7 +22,7 @@
 main への push では、配布物は作られない（`CI (macOS)` の配布物の確かめは、手動実行と、関連ファイルを変える PR だけで動き、artifact を上げるのは手動実行のときだけ）。**検証の直前に、手動で実行する**。
 
 1. リポジトリの Actions → 左の一覧の `CI (macOS)` → `Run workflow`（ブランチは `main`）。
-2. 実行が終わる（`check (macos-15, node 24)` が緑）のを待ち、その実行のページの下の Artifacts から、`touryou-dist-macos-15`（arm64）をダウンロードする。
+2. 実行が終わる（`check (macos-latest, node 24)` が緑）のを待ち、その実行のページの下の Artifacts から、`touryou-dist-macos-latest`（arm64）をダウンロードする。
 3. artifact は **1 日で消える**。消えたら、1. からやり直す。ダウンロードには、GitHub にログインしている必要がある。
 
 > **x64（Intel）は対象外**（決定。Apple が Intel Mac を OS のサポート対象外としている。将来の課題）。この手順書は、arm64 の Mac で、arm64 の配布物（名前に `darwin-arm64`）を使う。

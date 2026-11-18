@@ -60,7 +60,7 @@ const CODE = [
 
 test("ci.yml は ubuntu だけ（macOS は ci-macos.yml）", () => {
   assert.doesNotMatch(ci, /os: macos|runs-on: macos/);
-  assert.match(mac, /runs-on: macos-15\b/);
+  assert.match(mac, /runs-on: macos-latest\b/);
 });
 
 test("ci-macos.yml: push・pull_request とも paths があり、同じ一覧。コードの変更で動き、docs だけでは動かない", () => {
@@ -251,7 +251,7 @@ test("macOS の PR・push の workflow は ci-macos.yml の 1 ジョブだけ。
   );
   assert.deepEqual(macOs, [".github/workflows/ci-macos.yml"]);
   assert.equal([...mac.matchAll(/runs-on: macos/g)].length, 1);
-  assert.match(mac, /\n {4}name: check \(macos-15, node 24\)\n/);
+  assert.match(mac, /\n {4}name: check \(macos-latest, node 24\)\n/);
   const order = [
     "bash scripts/check.sh",
     "bash scripts/dist-build.sh",
@@ -360,4 +360,18 @@ test("macos-capacity-rerun.yml: 落ちたジョブのすべてに「was not acqu
     false,
   );
   assert.equal(runRerun([], {}).rerun, false);
+});
+
+test("ci-macos.yml・release.yml の dist は macos-latest で、最初の段で arm64 でなければ止める", () => {
+  const rel = read("release.yml");
+  assert.match(rel, /os: \[macos-latest\]/);
+  for (const [name, text, job] of [
+    ["ci-macos.yml", mac, "  check:\n"],
+    ["release.yml", rel, "  dist:\n"],
+  ]) {
+    const body = text.slice(text.indexOf(job));
+    const first = body.slice(body.indexOf("    steps:\n")).split("\n      - ")[1];
+    assert.match(first, /Apple Silicon（arm64）/, `${name}: 最初の段が arm64 の確かめでない`);
+    assert.match(first, /\[ "\$\{arch\}" = arm64 \] \|\| \{.*exit 1; \}/, name);
+  }
 });
