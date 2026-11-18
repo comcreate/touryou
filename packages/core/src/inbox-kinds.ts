@@ -1,4 +1,5 @@
 /** 受信箱の項目の種類と優先度（spec 4.2）。inbox.ts との循環 import を避けるため分離。 */
+import { inboxMessage } from "./inbox-messages.js";
 /** 受信箱の項目の種類（spec 4.2）。 */
 export const INBOX_KINDS = [
   "decision",
@@ -58,7 +59,7 @@ export const INBOX_SUMMARY_MAX = 200;
  * （`isStallSummary`。種類は `info` のまま）。文を変えるときは、両方をここで変える。
  */
 export const stallSummary = (nodeId: string, minutes: number): string =>
-  `子 ${nodeId} は止まっているかもしれない（${minutes} 分、報告も道具の使用の記録もない）。親は claude agents --json で状態を確かめて parent_report の agentState で報告するか、人に attach を頼む`;
+  inboxMessage("stall", { node: nodeId, minutes }).summary;
 const STALL_SUMMARY = /^子 [A-Za-z0-9._:-]+ は止まっているかもしれない（/;
 export const isStallSummary = (summary: unknown): boolean =>
   typeof summary === "string" && STALL_SUMMARY.test(summary);

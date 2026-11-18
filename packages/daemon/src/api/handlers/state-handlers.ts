@@ -30,6 +30,7 @@ import {
   deriveId,
   fail,
   type LogPort,
+  notice,
   summarize,
 } from "./context.js";
 import { createExclusive } from "./inflight.js";
@@ -212,9 +213,7 @@ export function createStateHandlers(deps: StateHandlerDeps) {
               id: deriveId("inbox", "system", `${nodeId}-${req.requestId}`, "reject-nosub"),
               kind: "info",
               nodeId,
-              summary: summarize(
-                `子 ${nodeId} は差し戻したが、いま購読がないので、指示がすぐには届かない。子のセッションが動いているか確かめる`,
-              ),
+              ...notice("rejectNoSubscription", { node: nodeId }),
             },
           },
         ],
@@ -363,7 +362,7 @@ export function createStateHandlers(deps: StateHandlerDeps) {
             id: deriveId("inbox", caller, req.requestId, "inbox"),
             kind: "done",
             nodeId: caller,
-            summary: summarize(`完了報告（根拠 ${evidence.length} 件）`),
+            ...notice("doneReport", { count: evidence.length }),
             ref: reportId,
           },
         },

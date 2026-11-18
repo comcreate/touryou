@@ -29,6 +29,7 @@ export * from "./events.js";
 export * from "./ids.js";
 export * from "./inbox.js";
 export * from "./inbox-kinds.js";
+export * from "./inbox-messages.js";
 export * from "./limits.js";
 export * from "./process-name.js";
 export * from "./purge.js";

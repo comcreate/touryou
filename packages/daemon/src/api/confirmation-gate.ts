@@ -25,7 +25,7 @@ import {
   type Result,
 } from "@touryou/core";
 import { BIND_CODE_ALPHABET, createThrottle, normalizeBindCode, type Throttle } from "./bind.js";
-import { appendAtomically, deriveId, type LogPort, summarize } from "./handlers/context.js";
+import { appendAtomically, deriveId, type LogPort, notice } from "./handlers/context.js";
 import { pickResult } from "./results.js";
 import type { HandlerRequest, Handlers } from "./server.js";
 
@@ -153,9 +153,7 @@ export function createConfirmationGate(deps: ConfirmationGateDeps): Confirmation
             id: deriveId("inbox", "system", req.requestId, `confirm-${op}`),
             kind: "info",
             nodeId: root.id,
-            summary: summarize(
-              `取り消せない操作（${op}）の確認待ちがある。画面のいちばん上の欄で、daemon を起動した端末に出たコードを打つ（5 分で消える。daemon を再起動しても消える）`,
-            ),
+            ...notice("confirmRequired", { op }),
           },
         },
       ],

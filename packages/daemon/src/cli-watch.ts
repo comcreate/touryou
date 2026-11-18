@@ -15,8 +15,8 @@
  */
 
 import type { EventBody, OrchState } from "@touryou/core";
-import { isStallSummary, stallSummary } from "@touryou/core";
-import { appendAtomically, deriveId, type LogPort, summarize } from "./api/handlers/context.js";
+import { isStallSummary } from "@touryou/core";
+import { appendAtomically, deriveId, type LogPort, notice } from "./api/handlers/context.js";
 
 export interface WatchSpec {
   readonly stallMs: number;
@@ -126,7 +126,12 @@ export function recordWatchFindings(
   const bodies: EventBody[] = [];
   const known = new Set(log.state().inbox.map((i) => i.id));
   const cap = spec.perNodePerDay ?? 20;
-  const push = (key: string, nodeId: string, text: string, kind: "info" | "failure" = "info") => {
+  const push = (
+    key: string,
+    nodeId: string,
+    text: ReturnType<typeof notice>,
+    kind: "info" | "failure" = "info",
+  ) => {
     const id = deriveId("inbox", "system", key, "cli-watch");
     if (known.has(id)) return;
     let c = counts.get(nodeId);
@@ -145,9 +150,7 @@ export function recordWatchFindings(
           id: capId,
           kind: "info",
           nodeId,
-          summary: summarize(
-            `子 ${nodeId} の見張りの知らせが多すぎる（24 時間に ${cap} 件）ので、しばらく出すのを止めた。子の状態を確かめる`,
-          ),
+          ...notice("watchCapped", { node: nodeId, cap }),
         },
       });
       return;
@@ -156,7 +159,7 @@ export function recordWatchFindings(
     known.add(id);
     bodies.push({
       type: "inbox.added",
-      payload: { id, kind, nodeId, summary: summarize(text) },
+      payload: { id, kind, nodeId, ...text },
     });
   };
   // 同じ子の「止まっているかも」は、未解決のものを 1 件だけにする（#115。最後の動きが進んでも、古い知らせと並べない）
@@ -172,14 +175,18 @@ export function recordWatchFindings(
     push(
       `stall/${s.nodeId}/${s.lastMs}`,
       s.nodeId,
-      stallSummary(s.nodeId, Math.round(spec.stallMs / 60_000)),
+      notice("stall", { node: s.nodeId, minutes: Math.round(spec.stallMs / 60_000) }),
     );
   }
   for (const u of f.unread) {
     push(
       `unread/${u.seq}`,
       u.nodeId,
-      `子 ${u.nodeId} が、指示（番号 ${u.seq}）を ${Math.round(spec.unreadMs / 60_000)} 分たっても受け取っていない。子が動いているか確かめる`,
+      notice("unreadInstruction", {
+        node: u.nodeId,
+        seq: u.seq,
+        minutes: Math.round(spec.unreadMs / 60_000),
+      }),
     );
   }
   for (const u of f.unbound ?? []) {
@@ -191,7 +198,7 @@ export function recordWatchFindings(
     push(
       `unbound/${u.nodeId}`,
       u.nodeId,
-      `子 ${u.nodeId} が紐付けていない（起動の報告から ${Math.round((spec.unboundMs ?? 0) / 60_000)} 分）。touryou の plugin が、子の設定の置き場に入っていない見込み。--plugin-dir で開いた親の子には plugin が付かない。plugin を設定の置き場に入れて（/touryou:setup）、子を起動し直す`,
+      notice("unbound", { node: u.nodeId, minutes: Math.round((spec.unboundMs ?? 0) / 60_000) }),
       "failure",
     );
   }

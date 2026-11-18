@@ -31,7 +31,7 @@ import {
   type Scope,
 } from "@touryou/core";
 import type { BindCodes } from "../api/bind.js";
-import { appendAtomically, deriveId, type LogPort, summarize } from "../api/handlers/context.js";
+import { appendAtomically, deriveId, type LogPort, notice } from "../api/handlers/context.js";
 import type { ProcessProbe } from "./lsof-probe.js";
 import type {
   Capabilities,
@@ -65,10 +65,9 @@ export const cliUnsupported = (what: string): Failure =>
   );
 
 /** 起動の依頼の受信箱の要約（親が読んで、次の操作をする）。 */
-export const launchSummary = (nodeId: string): string =>
-  summarize(
-    `子 ${nodeId} の起動の依頼。parent_request（nodeId: ${nodeId}）で実行する文を受け取り、Bash でそのまま実行して、parent_report で結果を報告する`,
-  );
+export const launchSummary = (nodeId: string): string => launchNotice(nodeId).summary;
+/** 起動の依頼の知らせ（#140。日本語の要約と、画面のための鍵と値）。 */
+export const launchNotice = (nodeId: string) => notice("launchRequest", { node: nodeId });
 
 export interface ParentRequestCliAdapterDeps {
   readonly log: LogPort;
@@ -95,7 +94,7 @@ export interface ParentRequestCliAdapterDeps {
 
 /** 停止の依頼の受信箱の要約・代行の文面（手順を先に、ID を後ろに置く）。 */
 export const stopDelegation = (nodeId: string): string =>
-  `親に claude stop を依頼した: parent_request で文を受け取り、Bash で実行して parent_report で報告する（daemon が作業ツリーのプロセスを確かめてから stopped にする）。対象ノード: ${nodeId}`;
+  notice("stopDelegated", { node: nodeId }).summary;
 
 const defaultAfter = (ms: number, fn: () => void): { cancel(): void } => {
   const t = setTimeout(fn, Math.max(0, ms));
@@ -188,7 +187,7 @@ export class ParentRequestCliAdapter implements RuntimeAdapter {
             id: deriveId("inbox", "system", requestRef, "parent-request"),
             kind: "info",
             nodeId,
-            summary: launchSummary(nodeId),
+            ...launchNotice(nodeId),
           },
         },
       ],

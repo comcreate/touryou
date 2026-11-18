@@ -338,6 +338,11 @@ describe("見張り", () => {
     expect(
       r.log.state().inbox.some((i) => (i.summary ?? "").includes("止まっているかもしれない")),
     ).toBe(true);
+    // 画面のための鍵と値も載る（#140。画面が言語を選んで文にする）
+    expect(r.log.state().inbox.find((i) => i.msg?.key === "stall")?.msg).toEqual({
+      key: "stall",
+      args: { node: "a", minutes: 30 },
+    });
     // 道具の使用（フック）があれば止まっていない
     expect(watchFindings(r.log.state(), at(50), spec, () => at(45)).stalled).toEqual([]);
     // 判断待ちは出さない

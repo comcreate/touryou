@@ -15,6 +15,7 @@
  */
 import type { Actor } from "./events.js";
 import { type InboxKind, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
+import type { InboxMessage } from "./inbox-messages.js";
 
 export interface InboxItem {
   /** daemon が採番する単調増加の番号。差分取得の cursor に使う。 */
@@ -33,6 +34,8 @@ export interface InboxItem {
   readonly ref?: string;
   /** 優先度（`digest` だけ。配下の未解決の項目の最高の優先度）。ほかの種類は、種類で決まる（`priorityOf`）。 */
   readonly priority?: Priority;
+  /** daemon が書いた知らせの鍵と値（#140。画面が言語を選んで文にする）。ないときは `summary` を出す。 */
+  readonly msg?: InboxMessage;
   /** 解決済み（`inbox.resolved`）。解決した者・時刻・イベントの `seq`。項目そのものは消えない（記録）。 */
   readonly resolved?: { readonly seq: number; readonly at: string; readonly by: Actor };
 }

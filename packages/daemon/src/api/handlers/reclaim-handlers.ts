@@ -39,7 +39,7 @@ import {
 import type { LossFacts } from "../../git-ports.js";
 import type { ProcessProbe } from "../../sdk/lsof-probe.js";
 import type { HandlerRequest } from "../server.js";
-import { appendAtomically, deriveId, fail, type LogPort, summarize } from "./context.js";
+import { appendAtomically, deriveId, fail, type LogPort, notice } from "./context.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;
 
@@ -537,9 +537,11 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
               id: deriveId("inbox", caller, req.requestId, "integrated"),
               kind: "info",
               nodeId,
-              summary: summarize(
-                `子 ${nodeId} のブランチを、親のブランチ ${r.value.target} へ fast-forward で統合した（先端 ${r.value.tip.slice(0, 12)}）`,
-              ),
+              ...notice("integrated", {
+                node: nodeId,
+                target: r.value.target,
+                tip: r.value.tip.slice(0, 12),
+              }),
             },
           },
         ]);

@@ -33,6 +33,7 @@ import {
   stateOf,
   transition,
 } from "@touryou/core";
+import { stopDelegation } from "../../sdk/cli-adapter.js";
 import type { RuntimeAdapter, StopValue } from "../../sdk/runtime.js";
 import type { HandlerRequest } from "../server.js";
 import {
@@ -41,6 +42,7 @@ import {
   deriveId,
   fail,
   type LogPort,
+  notice,
   summarize,
 } from "./context.js";
 import { createExclusive } from "./inflight.js";
@@ -168,32 +170,41 @@ export function createRuntimeHandlers(deps: RuntimeHandlerDeps) {
    */
   const settle = (nodeId: string, stopSeq: number, result: Result<StopValue, Failure>): void => {
     const bodies: EventBody[] = [];
-    const inbox = (kind: "info" | "stopIncomplete", text: string): EventBody => ({
+    const inbox = (
+      kind: "info" | "stopIncomplete",
+      text: string | ReturnType<typeof notice>,
+    ): EventBody => ({
       type: "inbox.added",
       payload: {
         id: deriveId("inbox", "system", `stop-${stopSeq}`, "settled"),
         kind,
         nodeId,
-        summary: summarize(text),
+        ...(typeof text === "string" ? { summary: summarize(text) } : text),
       },
     });
     if (result.ok && result.value.state === "stopped") {
-      bodies.push(inbox("info", `停止を確認した（${result.value.outcome}）`));
+      bodies.push(inbox("info", notice("stopConfirmed", { outcome: result.value.outcome })));
     } else if (
       result.ok &&
       result.value.state === "stopIncomplete" &&
       result.value.delegation !== undefined
     ) {
-      bodies.push(inbox("stopIncomplete", result.value.delegation));
+      // 親への停止の依頼（CLI のアダプタの決まった文）は、鍵と値で載せる。ほかの文は、そのまま
+      bodies.push(
+        inbox(
+          "stopIncomplete",
+          result.value.delegation === stopDelegation(nodeId)
+            ? notice("stopDelegated", { node: nodeId })
+            : result.value.delegation,
+        ),
+      );
     } else if (result.ok) {
       bodies.push(
         inbox(
           "stopIncomplete",
-          `停止未完了: 残っているプロセス ${
-            result.value.processes !== undefined
-              ? formatProcesses(result.value.processes)
-              : `pid ${result.value.blockers.join(", ") || "不明"}`
-          }`,
+          result.value.processes !== undefined
+            ? notice("stopIncomplete", { processes: formatProcesses(result.value.processes) })
+            : notice("stopIncompletePids", { pids: result.value.blockers.join(", ") || "不明" }),
         ),
       );
     } else {
@@ -203,7 +214,7 @@ export function createRuntimeHandlers(deps: RuntimeHandlerDeps) {
           payload: { nodeId, event: { type: "stopTimeout" } },
         });
       }
-      bodies.push(inbox("stopIncomplete", `停止に失敗: ${result.error.cause}`));
+      bodies.push(inbox("stopIncomplete", notice("stopFailed", { cause: result.error.cause })));
     }
     appendAtomically(log, clock, `stop-settled-${stopSeq}`, { system: true }, bodies);
   };
@@ -438,7 +449,6 @@ export function createRuntimeHandlers(deps: RuntimeHandlerDeps) {
           "ノードの状態を確認する",
         );
       }
-      const who = human ? "人間" : `統合ノード ${callerOf(req)}`;
       const bodies: EventBody[] = [
         { type: "node.stopDeclared", payload: { nodeId, ...(note === undefined ? {} : { note }) } },
         { type: "node.stateChanged", payload: { nodeId, event: { type: "confirmStopped" } } },
@@ -453,9 +463,13 @@ export function createRuntimeHandlers(deps: RuntimeHandlerDeps) {
             id: deriveId("inbox", human ? "human" : callerOf(req), req.requestId, "declared"),
             kind: "info",
             nodeId,
-            summary: summarize(
-              `停止の宣言を記録した（宣言者: ${who}${note === undefined ? "" : `。根拠: ${note}`}）`,
-            ),
+            ...(human
+              ? note === undefined
+                ? notice("stopDeclaredHuman", {})
+                : notice("stopDeclaredHumanNote", { note })
+              : note === undefined
+                ? notice("stopDeclaredNode", { by: callerOf(req) })
+                : notice("stopDeclaredNodeNote", { by: callerOf(req), note })),
           },
         },
       ];

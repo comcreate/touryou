@@ -30,6 +30,7 @@ import {
 import { isSafeId, pauseNodeIdsProblem } from "./ids.js";
 import { type InboxItem, isValidInboxTime } from "./inbox.js";
 import { INBOX_KINDS, type InboxKind, PRIORITIES, type Priority } from "./inbox-kinds.js";
+import { type InboxMessage, isInboxMessage } from "./inbox-messages.js";
 import type { NodeRole, NodeState } from "./index.js";
 import { isBoundedText, LIMITS } from "./limits.js";
 import type { Scope, ScopeViolationReason } from "./scope.js";
@@ -93,6 +94,8 @@ export type EventBody =
         readonly ref?: string;
         /** 優先度（種類 `digest` だけ。配下の未解決の項目の最高の優先度）。 */
         readonly priority?: Priority;
+        /** daemon が書いた知らせの鍵と値（画面が言語を選んで文にする。#140）。`summary` は日本語のまま残す。 */
+        readonly msg?: InboxMessage;
       };
     }
   | {
@@ -1523,7 +1526,7 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
     }
 
     case "inbox.added": {
-      const { id, kind, nodeId, summary, ref, priority } = p;
+      const { id, kind, nodeId, summary, ref, priority, msg } = p;
       if (!isId(id) || !isId(nodeId) || !INBOX_KINDS.includes(kind as InboxKind)) {
         return invalid(seq, "inbox.added の payload");
       }
@@ -1545,6 +1548,7 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
         return invalid(seq, `inbox.added の summary（${LIMITS.summary} 文字以下、制御文字なし）`);
       }
       if (ref !== undefined && !isId(ref)) return invalid(seq, "inbox.added の ref");
+      if (msg !== undefined && !isInboxMessage(msg)) return invalid(seq, "inbox.added の msg");
       if (!isValidInboxTime(raw.at)) return invalid(seq, "inbox.added の at（ISO 8601 UTC）");
       const node = nodeAt(d, nodeId);
       if (node === undefined) return unknownNode(seq, nodeId);
@@ -1593,6 +1597,7 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
           ...(summary === undefined ? {} : { summary: summary as string }),
           ...(ref === undefined ? {} : { ref: ref as string }),
           ...(priority === undefined ? {} : { priority: priority as Priority }),
+          ...(msg === undefined ? {} : { msg: msg as InboxMessage }),
         }),
       );
       return commit();

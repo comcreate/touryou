@@ -14,6 +14,10 @@ import {
   type EventBody,
   type Failure,
   failure,
+  type InboxMessage,
+  type InboxMessageArgs,
+  type InboxMessageKey,
+  inboxMessage,
   LIMITS,
   type OrchEvent,
   type OrchState,
@@ -47,6 +51,18 @@ export function deriveId(prefix: string, caller: string, requestId: string, tag:
 /** 受信箱の要約: 空白を詰めて 1 行にし、上限に収める。 */
 export const summarize = (text: string): string =>
   sanitizeText(text.replace(/\s+/g, " ").trim(), LIMITS.summary);
+
+/**
+ * daemon が書く知らせ（#140）：日本語の要約（これまでと同じ文。`summarize` を通す）と、画面のための鍵と値（`msg`）。
+ * `inbox.added` の payload に、`...notice("鍵", { 値 })` と広げて使う。
+ */
+export const notice = (
+  key: InboxMessageKey,
+  args: InboxMessageArgs,
+): { summary: string; msg: InboxMessage } => {
+  const m = inboxMessage(key, args);
+  return { summary: summarize(m.summary), msg: m.msg };
+};
 
 /** 呼び出し元を表す鍵（ノード ID・人間・システム）。内部の requestId を呼び出し元ごとに分けるのに使う。 */
 const callerKey = (actor: Actor): string =>

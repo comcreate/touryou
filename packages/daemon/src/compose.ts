@@ -36,6 +36,7 @@ import {
   effectiveScope,
   type Failure,
   failure,
+  inboxMessage,
   isPathUnder,
   type Result,
   type ScopeViolationReason,
@@ -45,7 +46,7 @@ import { assertSecureDirectory, processUid, readSecureSecret } from "./api/fs-sa
 import { recoverAnswerDeliveries } from "./api/handlers/answer-delivery.js";
 import { createBindHandlers, shellWord } from "./api/handlers/bind-handlers.js";
 import { createBindWorktreeCheck } from "./api/handlers/cli-bind-check.js";
-import { appendAtomically, deriveId, summarize } from "./api/handlers/context.js";
+import { appendAtomically, deriveId, notice } from "./api/handlers/context.js";
 import {
   createHookHandlers,
   createNeedsInputThrottle,
@@ -117,7 +118,7 @@ import {
   writeSavedPort,
 } from "./port-file.js";
 import { reconcileOnStartup } from "./reconcile.js";
-import { latestLaunch, ParentRequestCliAdapter, stopDelegation } from "./sdk/cli-adapter.js";
+import { latestLaunch, ParentRequestCliAdapter } from "./sdk/cli-adapter.js";
 import { DesktopRuntimeAdapter, touryouChildCommands } from "./sdk/desktop-adapter.js";
 import {
   decideToolUse,
@@ -261,10 +262,9 @@ export interface Daemon {
 
 /** 範囲違反の受信箱の要約。違反はフックが拒んだときだけ記録するので、拒んだことをはっきり言う（Issue #6）。 */
 export const violationSummary = (reason: string, subject: string): string =>
-  `範囲違反（フックが拒んだ・${reason}）: ${subject}`;
+  inboxMessage("violation", { reason, subject }).summary;
 /** 受信箱に出す違反の上限を超えたときの要約。 */
-export const VIOLATION_OVERFLOW_SUMMARY =
-  "ほかにも範囲違反がある（どれもフックが拒んだ。受信箱には、これ以上出さない。記録を確認する）";
+export const VIOLATION_OVERFLOW_SUMMARY = inboxMessage("violationOverflow", {}).summary;
 
 const fail = (code: string, cause: string, ...next: [string, ...string[]]) => ({
   ok: false as const,
@@ -656,11 +656,14 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     issuedAt: string,
   ): void => {
     const key = `token-expired/${nodeId}/${issuedAt}`;
-    const why = reason === "absolute" ? "発行から時間がたった" : "使わなかった時間が長い";
-    const next =
+    const key2 =
       kind === "bind"
-        ? "node.bindCode で紐付けのコードを出し直し、子が結び直す"
-        : "子を再開するか、作り直す";
+        ? reason === "absolute"
+          ? "tokenExpiredAbsoluteBind"
+          : "tokenExpiredIdleBind"
+        : reason === "absolute"
+          ? "tokenExpiredAbsolute"
+          : "tokenExpiredIdle";
     const r = appendAtomically(log, clock, key, { system: true }, [
       {
         type: "inbox.added",
@@ -668,7 +671,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           id: deriveId("inbox", "system", key, "token-expired"),
           kind: "info",
           nodeId,
-          summary: summarize(`子 ${nodeId} のトークンの期限が切れた（${why}）。${next}`),
+          ...notice(key2, { node: nodeId }),
         },
       },
     ]);
@@ -915,9 +918,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           id: deriveId("inbox", "system", key, "rebind"),
           kind: "failure",
           nodeId,
-          summary: summarize(
-            `子 ${nodeId} の紐付けをやり直して（コードが無効。daemon の再起動・期限切れなど）。node_bindCode でコードを出し直し、子に child_bind を引数なしでもう一度呼ばせる`,
-          ),
+          ...notice("rebind", { node: nodeId }),
         },
       },
     ]);
@@ -964,9 +965,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
               id: deriveId("inbox", "system", requestRef, "restart-stop"),
               kind: "stopIncomplete",
               nodeId: n.id,
-              summary: summarize(
-                `daemon の再起動で、停止の猶予の調べが途中で終わった。${stopDelegation(n.id)}`,
-              ),
+              ...notice("restartStopCheck", { node: n.id }),
             },
           },
         );
@@ -1188,7 +1187,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           id: deriveId("inbox", "system", requestId, "violation"),
           kind: "violation",
           nodeId,
-          summary: summarize(violationSummary(reason, subject)),
+          ...notice("violation", { reason, subject }),
         },
       });
     } else if (count === 0 && !v.overflow) {
@@ -1199,7 +1198,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           id: deriveId("inbox", "system", requestId, "violation"),
           kind: "violation",
           nodeId,
-          summary: summarize(VIOLATION_OVERFLOW_SUMMARY),
+          ...notice("violationOverflow", {}),
         },
       });
     }
@@ -1254,9 +1253,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           id: deriveId("inbox", "system", key, "hook-not-seen"),
           kind: "info",
           nodeId,
-          summary: summarize(
-            `子 ${nodeId} が始まってから ${minutes} 分たっても、見張り（フック）が 1 度も通っていない。Desktop で daemon の作業ツリーを「ローカル」で始めたかを確かめる（チップや「ワークツリー」で始めた子には、見張りが効かず、報告もできない）`,
-          ),
+          ...notice("hookNotSeen", { node: nodeId, minutes }),
         },
       },
     ]);
@@ -1299,9 +1296,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           id: deriveId("inbox", "system", key, "config-dir-learned"),
           kind: "info",
           nodeId,
-          summary: summarize(
-            `子 ${nodeId} の Claude Code の設定の場所が、守る集合の外だった（CLAUDE_CONFIG_DIR が daemon と違う）。守る集合に足した。起動時から守るには、daemon の設定 claudeConfigDirs に書く`,
-          ),
+          ...notice("configDirLearned", { node: nodeId }),
         },
       },
     ]);
@@ -1325,11 +1320,10 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           id: deriveId("inbox", "system", key, "hook-tampered"),
           kind: "info",
           nodeId,
-          summary: summarize(
-            problem.kind === "home"
-              ? `子 ${nodeId} の見張りが外されうる状態になった（${problem.text}。人が設定を変えた場合も同じ扱い）。子のトークンを失効させた。子を止めるか、node.bindCode を出し直すかを決める`
-              : `子 ${nodeId} の見張り（フック）が外された（${problem.text}）。設定を書き戻し、子のトークンを失効させた。子を止めるか、node.bindCode を出し直すかを決める`,
-          ),
+          ...notice(problem.kind === "home" ? "hookSettingsHome" : "hookSettingsTampered", {
+            node: nodeId,
+            detail: problem.text,
+          }),
         },
       },
     ]);
@@ -1553,9 +1547,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           id: deriveId("inbox", "system", key, "git-dir-unknown"),
           kind: "failure",
           nodeId,
-          summary: summarize(
-            `子 ${nodeId} の作業ツリーの git のディレクトリを確かめられないため、書き込みを拒否している。人が作業ツリー（git worktree）を確かめる`,
-          ),
+          ...notice("gitDirUnknown", { node: nodeId }),
         },
       },
     ]);

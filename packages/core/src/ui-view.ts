@@ -17,6 +17,7 @@
 import type { Actor, OrchState } from "./events.js";
 import { ID_PATTERN } from "./ids.js";
 import { isStallSummary, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
+import type { InboxMessage } from "./inbox-messages.js";
 import type { NodeRole, NodeState } from "./index.js";
 
 export const UI_TEXT_MAX = 200;
@@ -87,6 +88,8 @@ export interface UiInboxItem {
   readonly ref?: string;
   /** 「止まっているかもしれない子」の知らせ（`isStallSummary`）。 */
   readonly stall?: true;
+  /** daemon が書いた知らせの鍵と値（#140）。画面は、言語を選んで文にし、ないときは `summary` を出す。 */
+  readonly msg?: InboxMessage;
 }
 
 export interface UiOption {
@@ -326,6 +329,8 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       ...(summary === "" ? {} : { summary }),
       ...(ref === "" ? {} : { ref }),
       ...(i.kind === "info" && isStallSummary(i.summary) ? { stall: true as const } : {}),
+      // 記録の検査を通った形（鍵の形・値の数と長さ・制御文字なし）。値は、画面が textContent で入れる
+      ...(i.msg === undefined ? {} : { msg: { key: i.msg.key, args: { ...i.msg.args } } }),
     };
   });
 

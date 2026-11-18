@@ -164,6 +164,23 @@ daemon の窓口が、状態を見るための HTML 画面を配る。**状態�
   4. 手元で Playwright の試験を流し、CSP の違反がないことを確かめる。
   5. 大きさ（`node scripts/ui-graph-bundle.mjs` が出す最小化・gzip）を PR に書く。
 
+## 言語（日本語・英語。#140）
+
+状態画面と、画面に出る知らせの言語を、日本語と英語で切り替えられるようにする（v0.1.5）。2 段で入れる。いまは先の段（知らせを鍵と値で載せる所と、文字の表の土台）まで。
+
+- **切り替えるもの**: 状態画面の文字（関係図の束の言葉も含む）と、daemon が書く種類の知らせの文。
+- **切り替えないもの**: 子や統合が書いた文、CLI の出力、skill。
+- **知らせの載せ方**: daemon が書く知らせは、`inbox.added` の `msg`（鍵と値。`packages/core/src/inbox-messages.ts` の `INBOX_MESSAGES`）でも載せる。日本語の `summary` は、これまでと同じ文のまま残す（統合・子・MCP・CLI は `summary` を読む。「止まっているかも」の見分けも `summary` の形のまま）。値に入るのは、ノード ID・数・短い符号と、daemon のほかの文（失敗の文など）だけ。表示モデルは `msg` をそのまま載せ、画面が言語を選んで文にする。
+- **文字の表**: `packages/daemon/src/ui/i18n.ts`（画面の文字）と、core の `INBOX_MESSAGES`（知らせの文）。どちらも、鍵 → `{ ja, en }` の文字だけで、`{名前}` の差し込みだけを持つ。graph.js は表を import して束に入れ、app.js は ui-assets.ts の組み立てで表を埋め込む（あとの段）。差し込んだ文は `textContent` で入れる（`el`・`textContent`・CSP の決まりは変えない）。
+- **言語の選び方**: 最初はブラウザの言語に合わせる（`ja` で始まれば日本語、ほかは英語）。設定の窓（#139）の「言語」で変えられる。
+- **試験**: 表のどの鍵も日本語と英語を持ち、空でなく、差し込みの名前が両方で同じであること。英語の文に日本語の文字がないこと。daemon は鍵を型で縛るので、表にない鍵は型の確かめで落ちる。
+
+利用者の決め：
+
+- **daemon の窓口が返す失敗の文**（操作が断られたときに、画面の帯に「失敗: code: cause」と出るもの）は、今回は日本語のまま。あとの Issue にする。知らせの値に入った失敗の文も、日本語のまま出る。
+- **`msg` のない古い知らせ**（この版より前の記録）は、英語の画面でも、日本語の `summary` のまま出す。子や統合が書いた文も同じ。
+- **選んだ言語は、ブラウザごとに覚える**（#139 の設定と同じ）。
+
 ## XSS・CSP
 
 - 画面は、`textContent` と `createElement`（タグは `div`・`span`・`p`・`button`・`textarea`・`details`・`summary`・`code` の許可リストだけ。#89 で `details`・`summary`・`code` を足した。どれも属性を付けない。実行時にも拒む）だけで描く。`innerHTML`・`outerHTML`・`insertAdjacentHTML`・`document.write`・`eval`・`new Function`・`setAttribute`・`on*` への代入・`location` への代入・`srcdoc`・storage・cookie・`postMessage`・`window.open`・動的 import は使わない（`ui-assets.test.ts` が走査で守らせる）。ブラケット記法の文字列キー、HTML を解釈する API（`setHTMLUnsafe`・`parseHTMLUnsafe`・`setHTML`・`createContextualFragment`・`DOMParser`）、`.href`・`.src`・`.action`・`.formAction` への代入、危ないタグ（`script`・`iframe`・`a`・`img`・`link`・`object`・`embed`・`form` など）の生成も禁じる。さらに、**許可リスト**として、`.` の後ろのプロパティ名を抜き出し、安全な集合にあるものだけを許す（新しい API を使うと、試験が落ちるので、意識して足す）。HTML にインラインの script・style・イベント属性を置かない。

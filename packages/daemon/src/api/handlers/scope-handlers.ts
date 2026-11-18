@@ -36,7 +36,7 @@ import {
   deriveId,
   fail,
   type LogPort,
-  summarize,
+  notice,
 } from "./context.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;
@@ -180,7 +180,7 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
             id: deriveId("inbox", caller, req.requestId, "inbox"),
             kind: "violation",
             nodeId: caller,
-            summary: summarize(`範囲の拡張要求（${target.kind}）: ${target.value}`),
+            ...notice("extensionRequested", { kind: target.kind, value: target.value }),
             ref: extensionId,
           },
         },
@@ -287,9 +287,7 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
             id: deriveId("inbox", "system", extensionId, "update-failed"),
             kind: "failure",
             nodeId: ext.nodeId,
-            summary: summarize(
-              `範囲の拡張 ${extensionId} を承認したが、アダプタの範囲を更新できなかった`,
-            ),
+            ...notice("extensionUpdateFailed", { extension: extensionId }),
           },
         },
       ],
