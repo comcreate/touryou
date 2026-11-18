@@ -310,7 +310,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(pairs.find((p) => p.id === "ui-d")?.card).not.toBe("● あなたの答え待ち");
     // 答え待ちは失敗より先。断られた操作の知らせだけでは失敗にしない（#131）
     expect(pairs.find((p) => p.id === "ui-b")?.card).toBe("● あなたの答え待ち");
-    expect(pairs.find((p) => p.id === "ui-a")?.card).not.toBe("✕ 失敗");
+    expect(pairs.find((p) => p.id === "ui-a")?.card).toBe("動いている");
   });
 
   it("カードの meta は 1 行、親の題は 12 字、やり取りの相手の題は 10 字で切る。短い文は 1 行、長い文はたたむ", async () => {
