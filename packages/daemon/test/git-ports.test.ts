@@ -273,7 +273,13 @@ describe("createGitPorts（実際の git で、作業ツリーの作成・事実
     // 親（main）に統合する: 親の作業ツリーで、子のブランチを取り込む
     git(s.repoRoot, "merge", "-q", "--no-edit", branch.trim());
     expect((await s.ports.factsFor("c1"))?.merged).toBe(true);
-    expect(await s.ports.factsFor("none")).toBeUndefined();
+    // 作業ツリーもブランチもない: 消すものがないこと（gone）を返す（使ってよいかは、ハンドラが状態で決める。Issue #137）
+    expect(await s.ports.factsFor("none")).toEqual({
+      merged: false,
+      clean: true,
+      gone: true,
+      worktreePath: expect.stringMatching(/\/worktrees\/none-[0-9a-f]+$/),
+    });
   });
 
   it("回収: きれいで統合済みなら、作業ツリーとブランチを消す（--force・-D は使わない）。再実行しても成功する", async () => {

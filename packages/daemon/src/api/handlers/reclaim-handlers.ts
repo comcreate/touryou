@@ -49,6 +49,11 @@ export type WorktreeFacts = Omit<ReclaimNodeFacts, "discarded"> & {
   readonly headCommit?: string;
   /** 先端の取得に失敗した（ブランチがないのとは別。不明）。 */
   readonly headUnknown?: true;
+  /**
+   * 作業ツリーもブランチも、もうない（消すものがない）。判定に使うのは、人が破棄を決めた停止ノード（と、そこから回収可能にした
+   * ノード）だけ。それ以外のノードでは、事実がないもの（`factsMissing`）として扱う（Issue #137）。
+   */
+  readonly gone?: true;
 };
 
 /**
@@ -232,7 +237,13 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
     discarded: ReadonlySet<string>,
     shared?: { processes: readonly ProcessInfo[] | null },
   ): Promise<{ result: Result<ReclaimAssessment, Failure>; facts?: WorktreeFacts }> {
-    const found = await safely(nodeId, () => ports.factsFor(nodeId), undefined);
+    const raw = await safely(nodeId, () => ports.factsFor(nodeId), undefined);
+    // 消すものがない（gone）事実は、人が破棄を決めた停止ノードと、まだ判断のない停止ノード（判断が要ると示すため）にだけ使う。
+    const self = nodes.find((n) => n.id === nodeId);
+    const goneUsable =
+      self !== undefined &&
+      (self.state === "stopped" || (self.state === "reclaimable" && discarded.has(nodeId)));
+    const found = raw?.gone === true && !goneUsable ? undefined : raw;
     let processes: readonly ProcessInfo[] | null = null;
     if (found !== undefined) {
       processes =
