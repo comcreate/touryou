@@ -240,7 +240,7 @@ project の `.claude/settings.json` の `ref`（`marketplace-v<版>`）が効く
 - コミットのメールの確かめで落ちたら: GitHub の Settings → Emails で「Keep my email addresses private」を有効にし、`git config user.email "<番号>+<名前>@users.noreply.github.com"` を設定して、外れたコミットを直してから push し直す（squash のマージでは、PR のコミットの author が本文の `Co-authored-by` に入るため）。
 - どれも `concurrency` で、同じ ref（PR）の前の実行を止める。
 - 形は `scripts/ci-workflow.test.mjs`・`scripts/release-workflow.test.mjs` で確かめる。
-- macOS の runner は `macos-latest`（arm64）を使う（`macos-15` に固定していたが、Mac が割り当てられずに落ちることが続いたため、利用者のほかのリポジトリと同じ `macos-latest` にした。rc と本番を同じ設定で組み立てる）。`macos-latest` は、GitHub が新しい macOS を出すと自動で切り替わる。そのときに CI が壊れれば、`ci-macos.yml`（PR の CI）で先に分かる。配布物の中身（公式の Node・npm の prebuild）は、runner の版に依存しない見込み。CPU が arm64 でなくなったときは、最初の段の確かめで止まる。
+- macOS の runner は `macos-latest`（arm64）を使う（`macos-15` に固定していたが、Mac が割り当てられずに落ちることが続いたため、利用者のほかのリポジトリと同じ `macos-latest` にした。rc と本番を同じ設定で組み立てる）。`macos-latest` は、GitHub が新しい macOS を出すと自動で切り替わる。そのときに CI が壊れれば、`ci-macos.yml`（PR の CI）で先に分かる。ただし `ci-macos.yml` は `paths` で絞っているので、docs だけの PR が続く間に切り替わったときは、リリースの手順の 0（フォークの rc の `dist`）で、タグの前に分かる。配布物の中身（公式の Node・npm の prebuild）は、runner の版に依存しない見込み。CPU が arm64 でなくなったときは、最初の段の確かめで止まる。
 
 ## Dependabot の actions の更新と自動マージ
 
@@ -333,7 +333,7 @@ v=0.1.5-rc.0
 )
 ```
 
-**やり直す（2 回目から）**: 上の箱は `git switch -c verify-release` で始まるので、2 回目は止まる。新しい rc の番号で、次のようにする（`acct`・`v` は上の箱と同じ変数。`v` を新しい番号にする）。0 で見つかった不具合を main で直したあとも、これで作り直す。先に、上の「フォークの main を本番の main に追いつかせる push」をしてから行う（検証用の枝は、毎回、追いついた `origin/main` から作り直す）。`workflow_dispatch:` が要るときは、箱を貼る**前に**、先に `git switch main` してから、手元の作業ツリーの `.github/workflows/release.yml` の `on:` に `workflow_dispatch:` を足しておく（コミットしない）。箱の `git switch -C` は作業ツリーの変更を持ち越し、`git commit -am` が版の変更と一緒にコミットするので、タグはそのコミットに付く（足した 1 行は、本番の release.yml には入れない）。`git switch main` を先にするのは、検証用の枝にいるまま足すと、`git switch -C verify-release origin/main` が「ローカルの変更が上書きされる」で止まるため（検証用の枝の release.yml には、前の rc の `workflow_dispatch:` がすでに入っている）。
+**やり直す（2 回目から）**: 上の箱は `git switch -c verify-release` で始まるので、2 回目は止まる。新しい rc の番号で、次のようにする（`acct`・`v` は上の箱と同じ変数。`v` を新しい番号にする）。0 で見つかった不具合を main で直したあとも、これで作り直す。先に、上の「フォークの main を本番の main に追いつかせる push」をしてから行う（検証用の枝は、毎回、追いついた `origin/main` から作り直す）。`workflow_dispatch:` が要るときは、箱を貼る**前に**、先に `git fetch origin main && git switch --detach origin/main` してから、手元の作業ツリーの `.github/workflows/release.yml` の `on:` に `workflow_dispatch:` を足しておく（コミットしない）。箱の `git switch -C` は作業ツリーの変更を持ち越し、`git commit -am` が版の変更と一緒にコミットするので、タグはそのコミットに付く（足した 1 行は、本番の release.yml には入れない）。検証用の枝から先に離れるのは、検証用の枝にいるまま足すと、`git switch -C verify-release origin/main` が「ローカルの変更が上書きされる」で止まるため（検証用の枝の release.yml には、前の rc の `workflow_dispatch:` がすでに入っている）。手元の `main` ではなく、追いついた `origin/main` に移るのは、手元の `main` が古いと、同じく止まることがあるため。
 
 ```sh
 acct=<自分のアカウント>
