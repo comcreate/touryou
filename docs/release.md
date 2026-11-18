@@ -23,10 +23,10 @@ claude plugin marketplace add comcreate/touryou
    - **0-b /setup**: その rc の zip を手元の写しにし、`docs/setup-verification.md` の A' で `/touryou:setup` を通す（S10〜S13）。
    - **0-c 全体**: A' の 8（後片付け）の前に、rc を入れたまま、同じ文書の B で全体を確かめる（入れる・setup・daemon の常駐・状態画面・子の起動と止め・片付け）。
    - **0-d 不具合が出たら**: rc の Release は直さない。main で直す（ふつうの PR）→ フォークの main を追いつかせ、新しい rc の番号で作り直す（「本番の前の検証」の「やり直す（2 回目から）」）→ A'・B を通し直す。すべて可になってから 1 に進む。
-   - 結果（rc の版・A' と B の可・不可・直した PR）は、準備の PR に書く。フォークの後始末は、すべて可になってから行う。
+   - 結果（rc の版・A' と B の可・不可・直した PR）は、準備の PR に書く。フォークの後始末（Release・タグ・検証用の枝）は、2-a が済んでから行う（2-a で手元の `verify-release` を使うため）。
 1. 版をそろえる（上の「版の決まり」）。準備の PR（`release: <版> の準備`）を出し、マージする。
 2. `bash scripts/check.sh` と `claude plugin validate plugin` が通ることを確かめる。
-   - **2-a 0 の確かめと同じ中身か**: 0 で最後に確かめた rc を作ったあとに main に入ったのが、版上げの準備の PR だけであることを確かめるほかの PR が入っていたら、0 を新しい rc の番号でやり直す。見る範囲の記録は、フォークの検証用の枝そのものに任せる（`verify-release` は、追いついた main の上に検証用の版のコミットを 1 つ載せた形なので、rc のもとは `verify-release~1`）。フォークの手元の clone で、次のとおり見る。出た値は手元で見るだけで、PR・Issue・docs には書き写さない。
+   - **2-a 0 の確かめと同じ中身か**: 0 で最後に確かめた rc を作ったあとに main に入ったのが、版上げの準備の PR だけであることを確かめる。ほかの PR が入っていたら、0 を新しい rc の番号でやり直す。見る範囲の記録は、フォークの検証用の枝そのものに任せる（`verify-release` は、追いついた main の上に検証用の版のコミットを 1 つ載せた形なので、rc のもとは `verify-release~1`）。フォークの手元の clone で、次のとおり見る。出た値は手元で見るだけで、PR・Issue・docs には書き写さない。
 
      ```sh
      git fetch https://github.com/comcreate/touryou main
@@ -369,7 +369,7 @@ shasum -a 256 -c ./*.sha256
 unzip -p touryou-*.zip checksums.json | jq .
 ```
 
-後始末: **「リリースの手順」の 0 がすべて可になってから**（A'・B が済んでから）、fork の Release・タグ・ブランチを消す（A'・B はこの Release から取るので、先に消すと通せない。作り直した rc の Release も、まとめて消す）（fork ごと消してもよい）。手元の clone では、`git switch main` のあとで `git tag -d "v${v}"`・`git branch -D verify-release`。
+後始末: **「リリースの手順」の 2-a が済んでから**（0 の A'・B がすべて可になり、2-a で中身が同じと確かめたあと。タグの前の最後の確かめ）、fork の Release・タグ・ブランチを消す（A'・B はこの Release から取り、2-a は手元の `verify-release` を使うので、先に消すと通せない。作り直した rc の Release・タグも、まとめて消す）（fork ごと消してもよい）。手元の clone では、`git switch main` のあとで `git tag -d "v${v}"`・`git branch -D verify-release`。
 
 ### 採用しない案
 

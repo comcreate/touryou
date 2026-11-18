@@ -300,7 +300,7 @@ A の 3〜8（S10・S11・S13・S12 の模造・後片付け）を、`V` を `${
 - **3（S10）**: 取得先は `https://github.com/${ACCT}/touryou/releases/download/v${R}/…`（script の出力）。本番（`comcreate`）を指していたら、2' の書き換えが効いていない。止めて A の 8（=8'）に進む。
 - **3（S11）**: `current` が `…/v${R}/touryou-darwin-arm64`。
 - **6（S12）**: 版の違いの知らせは、本体 v0.0.0-verify と plugin v`${R}`。
-- **8（後片付け）**: **8 の前に、B を行う**（8 で rc の `~/.touryou` と常駐を外すため）。8 は A の 8 と同じ。`rm -rf "${W}"` で、書き換えた写しも消える（リポジトリの `plugin/` は変えていない。`git status` がきれいなことを確かめる）。フォークの Release・tag・枝は、A' と B が済んでから消す（`docs/release.md` の「本番の前の検証」の後始末）。
+- **8（後片付け）**: **8 の前に、B を行う**（8 で rc の `~/.touryou` と常駐を外すため）。8 は A の 8 と同じ。`rm -rf "${W}"` で、書き換えた写しも消える（リポジトリの `plugin/` は変えていない。`git status` がきれいなことを確かめる）。フォークの Release・tag・枝は、A' と B が済み、`docs/release.md` の 2-a が済んでから消す（`docs/release.md` の「本番の前の検証」の後始末）。
 
 結果は、A と同じに、リリースの準備の PR か Issue に書く（rc の版でフォークの Release を使ったこと、を添える）。
 
