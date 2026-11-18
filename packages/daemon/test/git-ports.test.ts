@@ -422,6 +422,13 @@ describe("createGitPorts（実際の git で、作業ツリーの作成・事実
       expect(facts?.headCommit).toMatch(/^[0-9a-f]{40}$/);
     });
 
+    it("作業ツリーもブランチもないとき、先端の取得に失敗したら（git が一時的に失敗）、消すものがない（gone）とみなさない（#137）", async () => {
+      const failing = setup({ revParse: "spawn" });
+      expect(await failing.ports.factsFor("none")).toBeUndefined();
+      const missing = setup({ revParse: "missing" });
+      expect((await missing.ports.factsFor("none"))?.gone).toBe(true);
+    });
+
     it("先端を取れなかったときは、ブランチがない（code 1）のと、取得に失敗した（git を起動できないなど）のを、区別する（headUnknown）", async () => {
       const missing = setup({ revParse: "missing" });
       const pm = await provision(missing, "c1");

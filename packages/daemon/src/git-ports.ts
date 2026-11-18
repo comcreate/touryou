@@ -840,13 +840,11 @@ export function createGitPorts(
           // 作業ツリーもブランチも、もうない（Issue #137）: 作業ツリーの一覧を取れて、登録がなく、場所もないときだけ、
           // 消すものがないことを `gone` で返す。使ってよいのは、人が破棄を決めた停止ノードだけ（ハンドラが確かめる）。
           if (registered === false && !dirExists(path)) {
-            return {
-              worktreePath: path,
-              merged: false,
-              clean: true,
-              gone: true as const,
-              ...(await headFields(nodeId)),
-            };
+            // `branchExists` は git の失敗も「ない」にするので、ブランチがないことは、先端の取得で確かめ直す
+            // （`rev-parse --verify -q` が code 1 のときだけ「ない」。失敗〔headUnknown〕・先端あり なら、gone にしない）。
+            const head = await headFields(nodeId);
+            if (head.headUnknown === true || head.headCommit !== undefined) return undefined;
+            return { worktreePath: path, merged: false, clean: true, gone: true as const };
           }
           return undefined;
         }
