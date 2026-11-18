@@ -469,7 +469,8 @@ const terminalSafe = (s: string, max = 100): string => {
 const byId = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const digestOfText = (text: string): string => {
   let h1 = 0x811c9dc5;
-  let h2 = 0x01000193 ^ 0xa5a5a5a5;
+  // `^` は符号つき 32 ビットを返すので、`>>> 0` で符号なしにする（空の入力で、値に「-」が混じっていた。Issue #137）。
+  let h2 = (0x01000193 ^ 0xa5a5a5a5) >>> 0;
   for (let i = 0; i < text.length; i++) {
     const c = text.charCodeAt(i);
     h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0;
@@ -504,11 +505,10 @@ function describeReclaim(nodeId: string, p: ReclaimPreview): string {
   const tipLines = Object.entries(p.tips ?? {}).map(
     ([id, tip]) => `  ${terminalSafe(id, 128)}: ${tip.slice(0, 12)}`,
   );
-  const head = `回収（破棄）の対象: ${terminalSafe(nodeId, 128)}\n${
-    tipLines.length === 0
-      ? ""
-      : `ブランチの先端（照合の値: ${tipsDigest(p.tips)}。破棄の指示は、この値と今の先端が違えば、拒否する）:\n${tipLines.join("\n")}\n`
-  }`;
+  // 先端がない（ブランチが、もうない）ときも、照合の値を出す（ふだんと同じ 12 桁。Issue #137）。
+  const head = `回収（破棄）の対象: ${terminalSafe(nodeId, 128)}\nブランチの先端（照合の値: ${tipsDigest(p.tips)}。破棄の指示は、この値と今の先端が違えば、拒否する）:\n${
+    tipLines.length === 0 ? "  なし（ブランチがない）" : tipLines.join("\n")
+  }\n`;
   if (p.loss === undefined) {
     return `${head}失われるものの情報が得られない（daemon が対応していない）。作業ツリーとブランチを、強制して消す。\n`;
   }
@@ -1331,6 +1331,16 @@ export async function runCommand(
       } as Failure);
     }
     const shown = describeReclaim(nodeId, preview.value);
+    // daemon が作業ツリーの情報を確かめられないノードは、破棄を決めても回収できない。指示を記録せずに、理由と次の操作を出す（Issue #137）。
+    if (preview.value.unmet.includes("factsMissing")) {
+      return {
+        exitCode: 1,
+        stdout: shown,
+        stderr:
+          "回収できない: daemon が、このノードの作業ツリーの情報を確かめられない（作業ツリーが daemon の置き場の外にある・別の場所に登録されている・git を調べられない、など）。破棄は指示していない。\n" +
+          "次の操作: git worktree list で、このノードのブランチ（touryou/…）の作業ツリーがどこにあるか確かめる。git が使えるか確かめてから、もう一度 touryou reclaim で確かめ直す\n",
+      };
+    }
     const digest = tipsDigest(tips);
     const expect = values.get("--expect");
     if (!flags.has("--yes")) {

@@ -1201,6 +1201,8 @@ export const UI_JS = `'use strict';
   // 送れない理由（フェイルクローズ）。送れるなら ''。失われるものが分からないまま、取り消せない指示は出さない。
   function reclaimBlocked(v) {
     if (v.loss === undefined) return '失われるものの情報が得られませんでした（古い daemon です）。' + CLI_HINT;
+    // daemon が作業ツリーの情報を確かめられないノードは、破棄を決めても回収できない（指示済みの表示と、回収の結果が食い違う。#137）。
+    if (v.unmet.indexOf('factsMissing') !== -1) return 'daemon が、作業ツリーの情報を確かめられません（置き場の外にある・別の場所に登録されている・git を調べられない、など）。破棄を指示しても回収できないので、指示できません。' + CLI_HINT;
     var unknown = v.loss.filter(function (l) { return l && (l.unknown === true || l.workingTreeUnknown === true); });
     if (unknown.length) {
       var ids = unknown.map(function (l) { return cleanText(String(l.nodeId), 128); }).join('、');

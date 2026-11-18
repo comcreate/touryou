@@ -198,9 +198,38 @@ describe("破棄の判断を経た停止ノードの回収（実際の git）", 
     expect(stateOf(s.log.state(), "c1")).toBe("archived");
   });
 
-  it("作業ツリーもブランチもないノードは、これまでどおり回収できない（消すものがない）", async () => {
+  it("作業ツリーもブランチもない停止ノード（Issue #137）: 判断がなければ discardRequired だけ。人が破棄を決めれば、記録だけを archived にする", async () => {
     const s = await setup();
+    const removeBoth = () => {
+      git(s.repoRoot, "worktree", "remove", "--force", s.wt);
+      git(
+        s.repoRoot,
+        "branch",
+        "-D",
+        ...git(s.repoRoot, "branch", "--list", "touryou/*").replace("*", "").trim().split("\n"),
+      );
+    };
+    removeBoth();
+    // 判断の前: 事実はある（消すものがない）ので、factsMissing にしない。要るのは人の判断だけ
+    const before = await s.humanPreview("c1");
+    expect(before.value.unmet).toEqual(["discardRequired"]);
+    expect(before.value.loss).toEqual([]);
+    expect(before.value.tips).toBeUndefined();
     expect((await s.call("node.reclaimInstruct", "human", "c1")).ok).toBe(true);
+    // 判断の後: 統合ノードの事前確認と、画面の「破棄を指示済み」が食い違わない
+    const after = await s.humanPreview("c1");
+    expect(after.value.reclaimable).toBe(true);
+    expect(after.value.unmet).toEqual([]);
+    const done = await s.call("node.reclaim", "integrator", "c1");
+    expect(done.ok).toBe(true);
+    expect(stateOf(s.log.state(), "c1")).toBe("archived");
+    expect(s.log.state().nodes.find((x) => x.id === "c1")?.lastCommit).toBeUndefined();
+    expect(git(s.repoRoot, "for-each-ref", "refs/touryou/discarded/")).toBe(""); // 保管するものもない
+  });
+
+  it("ブランチがあるうちに破棄を決め、そのあと作業ツリーもブランチも消えたなら、先端の照合で止める（tipMismatch）。確かめ直して決め直せば回収できる", async () => {
+    const s = await setup();
+    expect((await s.call("node.reclaimInstruct", "human", "c1")).ok).toBe(true); // 先端ありで記録
     git(s.repoRoot, "worktree", "remove", "--force", s.wt);
     git(
       s.repoRoot,
@@ -210,6 +239,42 @@ describe("破棄の判断を経た停止ノードの回収（実際の git）", 
     );
     const r = await s.call("node.reclaim", "integrator", "c1");
     expect(r.ok).toBe(false);
+    expect(r.error?.code).toBe("tipMismatch");
+    expect(stateOf(s.log.state(), "c1")).toBe("stopped");
+    expect((await s.call("node.reclaimInstruct", "human", "c1")).ok).toBe(true); // 先端なしで決め直す
+    expect((await s.call("node.reclaim", "integrator", "c1")).ok).toBe(true);
+    expect(stateOf(s.log.state(), "c1")).toBe("archived");
+  });
+
+  it("作業ツリーもブランチもない検証済みのノードは、これまでどおり回収できない（factsMissing。破棄の判断の経路でない）", async () => {
+    const s = await setup("verified");
+    git(s.repoRoot, "worktree", "remove", "--force", s.wt);
+    git(
+      s.repoRoot,
+      "branch",
+      "-D",
+      ...git(s.repoRoot, "branch", "--list", "touryou/*").replace("*", "").trim().split("\n"),
+    );
+    const p = await s.humanPreview("c1");
+    expect(p.value.unmet).toContain("factsMissing");
+    expect((await s.call("node.reclaim", "integrator", "c1")).ok).toBe(false);
+    expect(stateOf(s.log.state(), "c1")).toBe("verified");
+  });
+
+  it("作業ツリーの場所に、登録されていないディレクトリが残っていれば、消すものがないとみなさない（factsMissing）", async () => {
+    const s = await setup();
+    git(s.repoRoot, "worktree", "remove", "--force", s.wt);
+    git(
+      s.repoRoot,
+      "branch",
+      "-D",
+      ...git(s.repoRoot, "branch", "--list", "touryou/*").replace("*", "").trim().split("\n"),
+    );
+    mkdirSync(s.wt);
+    writeFileSync(join(s.wt, "left.txt"), "x\n");
+    const p = await s.humanPreview("c1");
+    expect(p.value.unmet).toContain("factsMissing");
+    expect(existsSync(join(s.wt, "left.txt"))).toBe(true);
   });
 
   it("統合済みの通常の回収（-d）でも、先端を node.lastCommit に記録して、作業ツリーとブランチを消す", async () => {
