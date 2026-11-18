@@ -89,6 +89,15 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       }),
       // 止まっているかもの子（長い ID。狭い窓で、はみ出さないことも見る）と、済んだ子
       ...created(LONG, "investigate", "root", "関係図の見た目を見本と比べる"),
+      // CLI の子（親が起動を報告した。#136: attach のコマンドは CLI の子にだけ出す）
+      ev({
+        type: "node.parentRequested",
+        payload: { nodeId: LONG, requestRef: "pr-long", kind: "launch", worktree: "/w/long" },
+      }),
+      ev({
+        type: "node.parentReported",
+        payload: { nodeId: LONG, requestRef: "pr-long", outcome: "done" },
+      }),
       ev({
         type: "inbox.added",
         payload: { id: "st1", kind: "info", nodeId: LONG, summary: stallSummary(LONG, 12) },
