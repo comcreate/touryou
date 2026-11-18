@@ -274,6 +274,14 @@ export const INBOX_MESSAGES = {
     ja: "子 {node} を再開できなかった（{code}）: {cause}。対処: {next}",
     en: "Could not resume child {node} ({code}): {cause}. Next step: {next}",
   },
+  autoPurgeNotice: {
+    ja: "木 {node} を {date} 以降に自動で削除する。止めるには touryou purge-hold {node}（人間のコマンド。期限は --until）",
+    en: "Tree {node} will be deleted automatically on or after {date}. To stop this, run touryou purge-hold {node} (a human command; set a deadline with --until)",
+  },
+  autoPurgeNoticeOpen: {
+    ja: "木 {node} を {date} 以降に自動で削除する（未回答の判断 {decisions}・未解決の項目 {items}）。止めるには touryou purge-hold {node}（人間のコマンド。期限は --until）",
+    en: "Tree {node} will be deleted automatically on or after {date} ({decisions} unanswered decisions, {items} open items). To stop this, run touryou purge-hold {node} (a human command; set a deadline with --until)",
+  },
   gitDirUnknown: {
     ja: "子 {node} の作業ツリーの git のディレクトリを確かめられないため、書き込みを拒否している。人が作業ツリー（git worktree）を確かめる",
     en: "Writes are refused because the git folder of child {node}'s worktree cannot be checked. A person should check the worktree (git worktree)",

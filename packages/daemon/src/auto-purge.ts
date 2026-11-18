@@ -26,6 +26,8 @@ import {
   activePurgeHold,
   type EventBody,
   type Failure,
+  type InboxMessage,
+  inboxMessage,
   type OrchState,
   planPurge,
   type Result,
@@ -102,17 +104,19 @@ function noticeSummary(
   nodeId: string,
   nodeIds: readonly string[],
   deps: Pick<AutoPurgeDeps, "nowMs" | "noticeDays">,
-): string {
+): { summary: string; msg: InboxMessage } {
   const inTree = new Set(nodeIds);
   const decisions = state.decisions.filter(
     (d) => d.status === "open" && inTree.has(d.nodeId),
   ).length;
   const items = state.inbox.filter((i) => i.resolved === undefined && inTree.has(i.nodeId)).length;
   const date = new Date(deps.nowMs() + deps.noticeDays * DAY_MS).toISOString().slice(0, 10);
-  const open =
-    decisions + items === 0 ? "" : `（未回答の判断 ${decisions}・未解決の項目 ${items}）`;
-  const text = `木 ${nodeId} を ${date} 以降に自動で削除する${open}。止めるには touryou purge-hold ${nodeId}（人間のコマンド。期限は --until）`;
-  return text.length <= 200 ? text : `${text.slice(0, 197)}...`;
+  const m =
+    decisions + items === 0
+      ? inboxMessage("autoPurgeNotice", { node: nodeId, date })
+      : inboxMessage("autoPurgeNoticeOpen", { node: nodeId, date, decisions, items });
+  const text = m.summary;
+  return { summary: text.length <= 200 ? text : `${text.slice(0, 197)}...`, msg: m.msg };
 }
 const FAILURE_NOTE_INTERVAL_MS = DAY_MS;
 const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
@@ -185,7 +189,7 @@ export function createAutoPurger(deps: AutoPurgeDeps): AutoPurger {
         id: noticeId(nodeId, e.archivedAt, index),
         kind: "info",
         nodeId: parentId,
-        summary: noticeSummary(state, nodeId, e.nodeIds, deps),
+        ...noticeSummary(state, nodeId, e.nodeIds, deps),
       },
     });
     if (r.ok) deps.note("autoPurge.noticePosted", { nodeId, index });
