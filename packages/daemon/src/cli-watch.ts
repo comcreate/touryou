@@ -54,6 +54,11 @@ export const boundInState = (state: OrchState, nodeId: string): boolean =>
 
 const ms = (iso: string | undefined): number => (iso === undefined ? 0 : Date.parse(iso) || 0);
 
+/** 判断の答え・範囲の頼みの判定を待っている子か（止まっているのではない。cli-watch と Notification のフックで同じ決め方・#115・#131）。 */
+export const awaitingHuman = (state: OrchState, nodeId: string): boolean =>
+  state.decisions.some((d) => d.nodeId === nodeId && d.status === "open") ||
+  state.extensions.some((x) => x.nodeId === nodeId && x.status === "open");
+
 export function watchFindings(
   state: OrchState,
   nowMs: number,
@@ -80,9 +85,7 @@ export function watchFindings(
     )
       unbound.push({ nodeId: n.id });
     // 判断の答え・範囲の頼みの判定を待っているだけの子は、止まっているのではないので知らせない（#115）
-    const awaiting =
-      state.decisions.some((d) => d.nodeId === n.id && d.status === "open") ||
-      state.extensions.some((x) => x.nodeId === n.id && x.status === "open");
+    const awaiting = awaitingHuman(state, n.id);
     if (n.state === "running" && !awaiting) {
       const times = [
         ms(launch.report?.at),
