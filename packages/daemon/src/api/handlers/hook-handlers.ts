@@ -17,6 +17,7 @@ import {
   type Result,
   stateOf,
 } from "@touryou/core";
+import { awaitingHuman } from "../../cli-watch.js";
 import { type HookTokens, type SessionBinder, sessionActor } from "../hook.js";
 import type { HandlerRequest } from "../server.js";
 import {
@@ -245,6 +246,8 @@ export function reportNeedsInput(
   trust?: "sessionIdOnly",
 ): boolean {
   if (!NEEDS_INPUT_TYPES.has(n.notificationType)) return false;
+  // 判断・範囲の頼みの答えを待っているだけの子には出さない（cli-watch と同じ決め方・#131）
+  if (awaitingHuman(deps.log.state(), nodeId)) return false;
   const at = deps.clock();
   const nowMs = Date.parse(at);
   if (Number.isNaN(nowMs)) return false;
