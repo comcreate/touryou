@@ -693,7 +693,8 @@ describe("grantedOnlyByExtension（#91: 承認済みの拡張にだけ、明示�
     expect(permit("git grep x")).toBe(false); // 2 語の "git grep" は承認済みでも、語の数が違う
   });
   it("前方一致のぶん（うしろに旗を足した形）は偽（フックだけ通し、Claude Code の判定に任せる）", () => {
-    expect(permit("git ls-files docs .sdd -z")).toBe(false);
+    // git ls-files は引数を足してよい一覧のコマンド（#130）なので、ここでは一覧の外のコマンドだけを見る
+    expect(permit("git ls-files docs .sdd -z")).toBe(true);
     expect(permit("git grep -O sh x")).toBe(false);
     expect(permit("git grep --open-files-in-pager=sh x")).toBe(false);
   });
@@ -734,6 +735,67 @@ describe("grantedOnlyByExtension（#91: 承認済みの拡張にだけ、明示�
     expect(permit("pnpm test && git ls-files docs .sdd")).toBe(false);
     expect(permit(grep, "Read")).toBe(false);
     expect(grantedOnlyByExtension(brief, effective, "Bash", {}, "/w")).toBe(false);
+  });
+});
+
+describe("grantedOnlyByExtension: 引数を足してよい一覧のコマンド（#130）", () => {
+  const brief: Scope = {
+    writableLocations: ["src"],
+    forbiddenLocations: [".git"],
+    allowedCommands: ["git status"],
+  };
+  const eff: Scope = {
+    ...brief,
+    allowedCommands: [
+      "git status",
+      "git add",
+      "git rm",
+      "git mv",
+      "git add src",
+      "git ls-files",
+      "git grep",
+      "git log",
+    ],
+  };
+  const permit = (command: string) => grantedOnlyByExtension(brief, eff, "Bash", { command }, "/w");
+
+  it("一覧のコマンドは、承認した形のうしろに引数を足しても真", () => {
+    for (const c of [
+      "git add --dry-run .",
+      "git add src/a.ts src/b.ts",
+      "git add -A",
+      "git rm --cached src/a.ts",
+      "git mv src/a.ts src/b.ts",
+      "git ls-files -z src",
+      "git add --pathspec-from-file=list.txt",
+    ])
+      expect(permit(c), c).toBe(true);
+  });
+  it("一覧のコマンドでも、危ない旗・作業ツリーの外のパス・展開・リダイレクトを足した形は偽", () => {
+    for (const c of [
+      "git add /etc/passwd",
+      "git add ../other",
+      "git add src/../../x",
+      "git add --pathspec-from-file=/etc/x",
+      "git add --pathspec-from-file=../x",
+      "git add -c x",
+      "git add --exec=sh",
+      "git add --git-dir=x",
+      "git add --work-tree=x .",
+      "git add ~/x",
+      "git add '*.ts'",
+      "git add $HOME",
+      "git add . > out",
+      "git add 'a b'",
+      "git add . ; rm -rf src",
+    ])
+      expect(permit(c), c).toBe(false);
+  });
+  it("一覧の外のコマンドは、今のまま完全一致だけ", () => {
+    expect(permit("git grep")).toBe(true); // 承認した形そのものは、今までどおり真
+    expect(permit("git grep x")).toBe(false);
+    expect(permit("git log --output=x")).toBe(false);
+    expect(permit("git log -1")).toBe(false);
   });
 });
 

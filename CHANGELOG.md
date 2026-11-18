@@ -2,6 +2,10 @@
 
 ## 未公開
 
+### 直したこと
+
+- **CLI の子で、承認したコマンドに引数を足すと断られた**（#130）: 範囲の拡張で `git add` を承認しても、`git add --dry-run .` のように引数を足すと、明示の許可が付かず、Claude Code の dontAsk で断られていた。`git add`・`git rm`・`git mv`・`git status`・`git ls-files` は、承認した形のうしろに安全な引数を足しても明示の許可を付けるようにした（外のパス・`..`・glob・展開・リダイレクト・`-c`・`--exec` などを含む形は除く）。ほかのコマンドは今までどおり、引数まで同じ形だけ。`scope_extend` の説明・承認の知らせ・子の skill・docs に、そのことを書いた。
+
 ### 内部の変更
 
 - **開発の道具の node-forge を 1.4.3 に上げた**（#52）: `@anthropic-ai/mcpb` が使う node-forge を、`pnpm-workspace.yaml` の `overrides` で 1.4.2 から 1.4.3 にした（公開から 14 日たった版）。Dependabot の moderate・low の知らせ 4 件を直す。配布物（tar.gz・`.mcpb`・zip）には入らない。
