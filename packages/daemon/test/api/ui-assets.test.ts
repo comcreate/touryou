@@ -277,6 +277,8 @@ describe("画面の資産（走査）", () => {
       "classList",
       "toggle",
       "documentElement",
+      "cli",
+      "attachDir",
     ]);
     const code = UI_JS.replace(/'(?:[^'\\\n]|\\.)*'/g, "''").replace(/\/\/[^\n]*/g, "");
     const used = new Set([...code.matchAll(/\.\s*([A-Za-z_$][\w$]*)/g)].map((m) => m[1] as string));
@@ -1069,8 +1071,11 @@ describe("画面の使い勝手（#13）", () => {
     expect(i, prefix).toBeGreaterThan(-1);
     return UI_JS.slice(i, UI_JS.indexOf("\n", i));
   };
+  const uiContext: Record<string, unknown> = {};
   const api = runInNewContext(
     [
+      lineOf("var attachDir ="),
+      lineOf("function shellQuote("),
       lineOf("var PRIORITY_NAMES ="),
       lineOf("var EXTERNAL_CHECK_PREFIXES ="),
       lineOf("var UNREACHABLE_TEXT ="),
@@ -1088,7 +1093,7 @@ describe("画面の使い勝手（#13）", () => {
       lineOf("function nodeLabel("),
       "({ inboxBand: inboxBand, fetchFailureText: fetchFailureText, UNREACHABLE_TEXT: UNREACHABLE_TEXT, timeText: timeText, agoText: agoText, stageText: stageText, attachCommand: attachCommand, nodeLabel: nodeLabel })",
     ].join("\n"),
-    {},
+    uiContext,
   ) as {
     inboxBand(i: Record<string, unknown>, delegated: Set<string>): { cls: string; label: string };
     fetchFailureText(status: number): string;
@@ -1177,12 +1182,26 @@ describe("画面の使い勝手（#13）", () => {
     expect(api.stageText({ stage: "x" })).toBe("");
   });
 
-  it("(#89) 止まっているかもの子を開くコマンドは claude attach <ノード ID>。Desktop の子・ID の形でないものには出さない。セッションの ID は使わない", () => {
-    expect(api.attachCommand({ id: "n-a1" })).toBe("claude attach n-a1");
-    expect(api.attachCommand({ id: "n-a1", stopDelegated: true })).toBe("");
-    expect(api.attachCommand({ id: "a b; rm -rf" })).toBe("");
+  it("(#89・#136) 止まっているかもの子を開くコマンドは、CLI の子にだけ出す。repoRoot に移ってから claude attach <ノード ID>。ID の形でないものには出さない。セッションの ID は使わない", () => {
+    uiContext.attachDir = "";
+    expect(api.attachCommand({ id: "n-a1", cli: true })).toBe("claude attach n-a1");
+    // CLI の子にも stopDelegated は付く（#136）。cli で見分ける
+    expect(api.attachCommand({ id: "n-a1", cli: true, stopDelegated: true })).toBe(
+      "claude attach n-a1",
+    );
+    expect(api.attachCommand({ id: "n-a1", stopDelegated: true })).toBe(""); // Desktop の子
+    expect(api.attachCommand({ id: "n-a1" })).toBe("");
+    expect(api.attachCommand({ id: "a b; rm -rf", cli: true })).toBe("");
     expect(api.attachCommand(undefined)).toBe("");
+    uiContext.attachDir = "/r/my repo's";
+    expect(api.attachCommand({ id: "n-a1", cli: true })).toBe(
+      "cd '/r/my repo'\\''s' && claude attach n-a1",
+    );
+    uiContext.attachDir = "";
     expect(UI_JS).not.toContain("sessionId");
+    expect(UI_JS).toContain(
+      "attachDir = typeof view.attachDir === 'string' ? view.attachDir : '';",
+    );
   });
 
   it("(#89) 「止まっているかも」は、daemon の知らせ（stall）があるときだけ出す（時刻から推し量らない）", () => {

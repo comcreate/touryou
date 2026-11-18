@@ -373,23 +373,66 @@ describe("見張り", () => {
     expect(watchFindings(decided, at(111), spec).stalled.map((x) => x.nodeId)).toEqual(["a"]);
   });
 
-  it("同じ子の未解決の止まっているかもは 1 件だけ。最後の動きが進んでも、新しい知らせを並べない。解決したら、また出せる（#115）", async () => {
+  it("同じ子の未解決の止まっているかもは 1 件だけ（#115）。知らせのあとに子が動いたら、古い知らせは解決済みにする（#136）", async () => {
     const r = rig();
     await r.launched();
     const at = (min: number) => Date.parse(T0) + min * 60_000;
+    const stalls = () =>
+      r.log.state().inbox.filter((i) => (i.summary ?? "").includes("止まっているかもしれない"));
+    const open = () => stalls().filter((i) => i.resolved === undefined);
     expect(
       recordWatchFindings(r.log, () => T0, watchFindings(r.log.state(), at(31), spec), spec),
     ).toBe(1);
-    // フックで最後の動きが進み、そのあとまた止まった（stall の鍵は lastMs ごとに違う）
+    // まだ止まったまま: 同じ知らせのまま（並べない）
+    expect(
+      recordWatchFindings(r.log, () => T0, watchFindings(r.log.state(), at(50), spec), spec),
+    ).toBe(0);
+    expect(open()).toHaveLength(1);
+    // フックで最後の動きが進み（知らせのあと）、そのあとまた止まった: 古い知らせは解決し、新しい知らせを 1 件だけ出す
     const later = watchFindings(r.log.state(), at(100), spec, () => at(60));
     expect(later.stalled.map((x) => x.nodeId)).toEqual(["a"]);
-    expect(recordWatchFindings(r.log, () => T0, later, spec)).toBe(0);
-    const stalls = () =>
-      r.log.state().inbox.filter((i) => (i.summary ?? "").includes("止まっているかもしれない"));
-    expect(stalls()).toHaveLength(1);
-    // 解決したら、次の止まりは知らせる
-    r.add({ type: "inbox.resolved", payload: { itemId: (stalls()[0] as { id: string }).id } });
+    expect(later.resolvedStalls).toHaveLength(1);
     expect(recordWatchFindings(r.log, () => T0, later, spec)).toBe(1);
+    expect(stalls()).toHaveLength(2);
+    expect(open()).toHaveLength(1);
+  });
+
+  it("子が動いたあと・終わったあとは、止まっているかもの知らせを解決済みにする（#136）", async () => {
+    const r = rig();
+    await r.launched();
+    const at = (min: number) => Date.parse(T0) + min * 60_000;
+    const open = () =>
+      r.log
+        .state()
+        .inbox.filter(
+          (i) => (i.summary ?? "").includes("止まっているかもしれない") && i.resolved === undefined,
+        );
+    recordWatchFindings(r.log, () => T0, watchFindings(r.log.state(), at(31), spec), spec);
+    expect(open()).toHaveLength(1);
+    // フックで子が動いた（まだ止まりの時間を超えていない）: 知らせは解決し、新しい知らせは出さない
+    const moved = watchFindings(r.log.state(), at(40), spec, () => at(35));
+    expect(moved.stalled).toEqual([]);
+    expect(recordWatchFindings(r.log, () => T0, moved, spec)).toBe(0);
+    expect(open()).toHaveLength(0);
+  });
+
+  it("子が done になったら、止まっているかもの知らせを解決済みにし、新しく出さない（#136）", async () => {
+    const r = rig();
+    await r.launched();
+    const at = (min: number) => Date.parse(T0) + min * 60_000;
+    const open = () =>
+      r.log
+        .state()
+        .inbox.filter(
+          (i) => (i.summary ?? "").includes("止まっているかもしれない") && i.resolved === undefined,
+        );
+    recordWatchFindings(r.log, () => T0, watchFindings(r.log.state(), at(31), spec), spec);
+    expect(open()).toHaveLength(1);
+    r.ev("a", { type: "reportDone" });
+    const f = watchFindings(r.log.state(), at(200), spec);
+    expect(f.stalled).toEqual([]);
+    recordWatchFindings(r.log, () => T0, f, spec);
+    expect(open()).toHaveLength(0);
   });
 
   it("子が受け取らないまま所定の時間を超えた指示を、指示ごとに 1 回だけ受信箱に出す（FR_009）", async () => {

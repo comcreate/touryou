@@ -295,10 +295,14 @@ export const UI_JS = `'use strict';
     return '';
   }
   // 止まっているかもしれない子を開くコマンド。CLI の子は --name <ノード ID> で起動しているので、claude attach で開ける。
-  // Desktop の子（stopDelegated）と、ID の形でないものは ''（コマンドを出さない）
+  // CLI の子だけ（表示モデルの cli）。ID の形でないものは ''（コマンドを出さない）。
+  // claude attach・claude agents は、打った場所で絞られるので、repoRoot（表示モデルの attachDir）に移ってから打つ形にする（#136）
+  var attachDir = '';
+  function shellQuote(s) { return "'" + s.replace(/'/g, "'\\\\''") + "'"; }
   function attachCommand(n) {
-    if (!n || n.stopDelegated === true || typeof n.id !== 'string' || !ID_RE.test(n.id)) return '';
-    return 'claude attach ' + n.id;
+    if (!n || n.cli !== true || typeof n.id !== 'string' || !ID_RE.test(n.id)) return '';
+    var attach = 'claude attach ' + n.id;
+    return attachDir ? 'cd ' + shellQuote(attachDir) + ' && ' + attach : attach;
   }
   // ノードの呼び名（題がなければ ID）。
   function nodeLabel(n, max) { return n && typeof n.title === 'string' && n.title !== '' ? cleanText(n.title, max) : n ? n.id : ''; }
@@ -705,6 +709,9 @@ export const UI_JS = `'use strict';
           row.appendChild(el('code', '', cmd));
           row.appendChild(copyButton(cmd));
           card.appendChild(row);
+          card.appendChild(el('p', 'desc', '開くと、子の紐付けが外れることがあります。子が「紐付けをやり直して」と言ったら、統合の会話で、この子の紐付けのコードの出し直し（node_bindCode）を頼んでください。'));
+        } else if (node && node.cli === true) {
+          card.appendChild(el('p', 'desc', 'この子は CLI で動いています。端末で claude agents を開き、この題の子を開いて確かめてください。'));
         } else {
           card.appendChild(el('p', 'desc', 'この子は Desktop で動いています。Desktop で、この題の子を開いて確かめてください。'));
         }
@@ -1622,6 +1629,7 @@ export const UI_JS = `'use strict';
   }
 
   function render(view) {
+    attachDir = typeof view.attachDir === 'string' ? view.attachDir : '';
     renderApprovals(view.confirmations);
     var flows = Array.isArray(view.flows) ? view.flows : [];
     var v = { nodes: view.nodes, inbox: view.inbox, decisions: view.decisions, extensions: view.extensions, flows: flows };

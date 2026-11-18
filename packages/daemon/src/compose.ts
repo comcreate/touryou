@@ -1972,6 +1972,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     // 画面の停止の宣言。ハンドラ（node.confirmStopped）と同じく、能力表の stopDelegated だけで決める（管理しているか
     // は見ない。再起動の後も出す）。childRuntime が desktop のとき、Desktop のアダプタの能力表から真になる。
     stopDelegated: stopDelegatedOf(adapter),
+    // 画面の claude attach を打つ場所（#136）
+    attachDir: config.repoRoot,
     ...(confirmGate === undefined
       ? {}
       : {

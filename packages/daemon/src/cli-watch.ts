@@ -42,6 +42,34 @@ export interface WatchFindings {
   readonly unread: readonly { readonly nodeId: string; readonly seq: number }[];
   /** 起動の報告から所定の時間を超えても紐付けていない子。 */
   readonly unbound?: readonly { readonly nodeId: string }[];
+  /**
+   * 解決済みにする「止まっているかも」の知らせの ID（#136）。子が動いていない（終わった・止めた・回収した・判断待ち）か、
+   * 知らせのあとに子の動きがあったもの。
+   */
+  readonly resolvedStalls?: readonly string[];
+}
+
+/**
+ * 子の最後の動きの時刻（ミリ秒）。起動の報告・報告・範囲違反・道具の拒否・指示の受け取り・親の依頼の報告・判断の答え・
+ * 範囲の頼みの判定・フックの呼び出しのうち、いちばん新しいもの。daemon の起動の時刻は含めない（呼び出し側で足す）。
+ */
+function activityMs(
+  state: OrchState,
+  nodeId: string,
+  lastHookMs: (nodeId: string) => number | undefined,
+): number {
+  return Math.max(
+    0,
+    ...state.reports.filter((x) => x.nodeId === nodeId).map((x) => ms(x.at)),
+    ...state.violations.filter((x) => x.nodeId === nodeId).map((x) => ms(x.at)),
+    ...state.toolDenials.filter((x) => x.nodeId === nodeId).map((x) => ms(x.at)),
+    ...state.instructions.filter((x) => x.nodeId === nodeId).map((x) => ms(x.deliveredAt)),
+    ...state.parentRequests.filter((x) => x.nodeId === nodeId).map((x) => ms(x.report?.at)),
+    // 人（親）が判断に答えた・範囲の頼みを判定した時刻（答えた直後に、止まっているかもを出さない。#115）
+    ...state.decisions.filter((x) => x.nodeId === nodeId).map((x) => ms(x.answeredAt)),
+    ...state.extensions.filter((x) => x.nodeId === nodeId).map((x) => ms(x.decidedAt)),
+    lastHookMs(nodeId) ?? 0,
+  );
 }
 
 /**
@@ -87,20 +115,7 @@ export function watchFindings(
     // 判断の答え・範囲の頼みの判定を待っているだけの子は、止まっているのではないので知らせない（#115）
     const awaiting = awaitingHuman(state, n.id);
     if (n.state === "running" && !awaiting) {
-      const times = [
-        ms(launch.report?.at),
-        ...state.reports.filter((x) => x.nodeId === n.id).map((x) => ms(x.at)),
-        ...state.violations.filter((x) => x.nodeId === n.id).map((x) => ms(x.at)),
-        ...state.toolDenials.filter((x) => x.nodeId === n.id).map((x) => ms(x.at)),
-        ...state.instructions.filter((x) => x.nodeId === n.id).map((x) => ms(x.deliveredAt)),
-        ...state.parentRequests.filter((x) => x.nodeId === n.id).map((x) => ms(x.report?.at)),
-        // 人（親）が判断に答えた・範囲の頼みを判定した時刻（答えた直後に、止まっているかもを出さない。#115）
-        ...state.decisions.filter((x) => x.nodeId === n.id).map((x) => ms(x.answeredAt)),
-        ...state.extensions.filter((x) => x.nodeId === n.id).map((x) => ms(x.decidedAt)),
-        lastHookMs(n.id) ?? 0,
-        spec.sinceMs ?? 0,
-      ];
-      const lastMs = Math.max(...times);
+      const lastMs = Math.max(activityMs(state, n.id, lastHookMs), spec.sinceMs ?? 0);
       if (nowMs - lastMs > spec.stallMs) stalled.push({ nodeId: n.id, lastMs });
     }
     if (n.state === "running" || n.state === "waiting") {
@@ -110,7 +125,19 @@ export function watchFindings(
       }
     }
   }
-  return { stalled, unread, unbound };
+  // 「止まっているかも」の知らせの片付け（#136）: 子が動いていない（running でない）か、知らせのあとに子の動きがあれば解決済みにする
+  const resolvedStalls = state.inbox
+    .filter((i) => i.resolved === undefined && i.kind === "info" && isStallSummary(i.summary))
+    .filter((i) => {
+      const n = state.nodes.find((x) => x.id === i.nodeId);
+      return (
+        n === undefined ||
+        n.state !== "running" ||
+        activityMs(state, i.nodeId, lastHookMs) > ms(i.at)
+      );
+    })
+    .map((i) => i.id);
+  return { stalled, unread, unbound, resolvedStalls };
 }
 
 /** 見つけたものを受信箱に出す（決まった ID なので、同じものは二度出ない）。出した件数を返す。 */
@@ -160,10 +187,14 @@ export function recordWatchFindings(
     });
   };
   // 同じ子の「止まっているかも」は、未解決のものを 1 件だけにする（#115。最後の動きが進んでも、古い知らせと並べない）
+  const resolving = new Set(f.resolvedStalls ?? []);
+  for (const itemId of resolving) bodies.push({ type: "inbox.resolved", payload: { itemId } });
   const openStall = new Set(
     log
       .state()
-      .inbox.filter((i) => i.resolved === undefined && isStallSummary(i.summary))
+      .inbox.filter(
+        (i) => i.resolved === undefined && isStallSummary(i.summary) && !resolving.has(i.id),
+      )
       .map((i) => i.nodeId),
   );
   for (const s of f.stalled) {
@@ -199,6 +230,11 @@ export function recordWatchFindings(
   // 1 件ずつ記録する（ほかのものの失敗で、全部を落とさない）
   let n = 0;
   for (const b of bodies) {
+    if (b.type === "inbox.resolved") {
+      // 片付け（#136）は、出した件数に数えない
+      appendAtomically(log, clock, `cli-watch-resolve-${b.payload.itemId}`, { system: true }, [b]);
+      continue;
+    }
     const id = (b as { payload: { id: string } }).payload.id;
     if (appendAtomically(log, clock, `cli-watch-${id}`, { system: true }, [b]).ok) n++;
   }
