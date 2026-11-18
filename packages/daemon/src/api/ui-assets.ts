@@ -236,6 +236,33 @@ const EXTERNAL_CHECK_PREFIXES = JSON.stringify(externalCheckSummaries().map((x) 
 
 export const UI_JS = `'use strict';
 (function () {
+  // 設定の窓（#139）。描く前に当てる（読み込みの一瞬だけ違う明暗で描かないように）。選んだものはブラウザに残す（残せないときも、その場では効く）。
+  // localStorage を使うのは、この 2 つの関数の中だけ（鍵は 1 つ。書くのは still・theme・lang だけ。トークン・チケット・ID は書かない）
+  var SETTINGS_KEY = 'touryou.ui.settings';
+  function settingsOf(o) {
+    var v = o !== null && typeof o === 'object' ? o : {};
+    return {
+      still: v.still === true,
+      theme: v.theme === 'light' || v.theme === 'dark' ? v.theme : 'auto',
+      lang: v.lang === 'en' ? 'en' : 'ja',
+    };
+  }
+  function loadSettings() {
+    try { return settingsOf(JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || 'null')); } catch (e) { return settingsOf(null); }
+  }
+  function saveSettings(x) {
+    var v = settingsOf(x);
+    try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ still: v.still, theme: v.theme, lang: v.lang })); } catch (e) { /* 残せなくても動く */ }
+  }
+  function applySettings(x) {
+    var root = document.documentElement;
+    root.classList.toggle('still', x.still);
+    root.classList.toggle('theme-light', x.theme === 'light');
+    root.classList.toggle('theme-dark', x.theme === 'dark');
+  }
+  var settings = loadSettings();
+  applySettings(settings);
+
   // 最初に、フラグメントのチケット（touryou ui が付ける、60 秒・1 回だけのもの）を取り出して、アドレスから消す（履歴に残さない）。
   // 長く使える人間のトークンは、URL では受け取らない（#token= は効かない）。
   var token = '';
@@ -1896,32 +1923,6 @@ export const UI_JS = `'use strict';
   document.getElementById('zoom-out').addEventListener('click', function () { zoomGraph('out'); });
   document.getElementById('zoom-fit').addEventListener('click', function () { zoomGraph('fit'); });
   document.getElementById('show-list').addEventListener('click', function () { showGraphMode('list'); });
-  // 設定の窓（#139）。選んだものはブラウザに残す（残せないときも、その場では効く）。
-  // localStorage を使うのは、この 2 つの関数の中だけ（鍵は 1 つ。書くのは still・theme・lang だけ。トークン・チケット・ID は書かない）
-  var SETTINGS_KEY = 'touryou.ui.settings';
-  function settingsOf(o) {
-    var v = o !== null && typeof o === 'object' ? o : {};
-    return {
-      still: v.still === true,
-      theme: v.theme === 'light' || v.theme === 'dark' ? v.theme : 'auto',
-      lang: v.lang === 'en' ? 'en' : 'ja',
-    };
-  }
-  function loadSettings() {
-    try { return settingsOf(JSON.parse(window.localStorage.getItem(SETTINGS_KEY) || 'null')); } catch (e) { return settingsOf(null); }
-  }
-  function saveSettings(x) {
-    var v = settingsOf(x);
-    try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ still: v.still, theme: v.theme, lang: v.lang })); } catch (e) { /* 残せなくても動く */ }
-  }
-  function applySettings(x) {
-    var root = document.documentElement;
-    root.classList.toggle('still', x.still);
-    root.classList.toggle('theme-light', x.theme === 'light');
-    root.classList.toggle('theme-dark', x.theme === 'dark');
-  }
-  var settings = loadSettings();
-  applySettings(settings);
   var settingsBox = document.getElementById('settings');
   var openSettings = document.getElementById('open-settings');
   var stillBox = document.getElementById('set-still');
@@ -1939,10 +1940,10 @@ export const UI_JS = `'use strict';
   // 窓の中は Tab で回る（最後から最初へ、最初から最後へ）
   settingsBox.addEventListener('keydown', function (e) {
     if (e.key !== 'Tab') return;
-    var f = Array.prototype.filter.call(
-      settingsBox.querySelectorAll('input:not([disabled]),button:not([disabled])'),
-      function (x) { return x.type !== 'radio' || x.checked; },
-    );
+    var f = [];
+    settingsBox.querySelectorAll('input:not([disabled]),button:not([disabled])').forEach(function (x) {
+      if (x.type !== 'radio' || x.checked) f.push(x);
+    });
     if (f.length === 0) return;
     var first = f[0];
     var last = f[f.length - 1];

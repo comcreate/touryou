@@ -111,8 +111,6 @@ describe("画面の資産（走査）", () => {
       "checked",
       "showModal",
       "close",
-      "prototype",
-      "call",
       "type",
       "shiftKey",
       "textContent",
