@@ -1197,6 +1197,14 @@ describe("画面の使い勝手（#13）", () => {
     expect(api.attachCommand({ id: "n-a1", cli: true })).toBe(
       "cd '/r/my repo'\\''s' && claude attach n-a1",
     );
+    // 引用符・空白・展開の字を含んでも、1 つの語として渡る（試験の外で bash に通して確かめた）
+    uiContext.attachDir = "/r/x'; touch y; echo '$(z)";
+    expect(api.attachCommand({ id: "n-a1", cli: true })).toBe(
+      "cd '/r/x'\\''; touch y; echo '\\''$(z)' && claude attach n-a1",
+    );
+    // 改行などの制御文字を含む場所には、移る部分を付けない
+    uiContext.attachDir = "/r/a\nb";
+    expect(api.attachCommand({ id: "n-a1", cli: true })).toBe("claude attach n-a1");
     uiContext.attachDir = "";
     expect(UI_JS).not.toContain("sessionId");
     expect(UI_JS).toContain(

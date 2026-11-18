@@ -302,7 +302,8 @@ export const UI_JS = `'use strict';
   function attachCommand(n) {
     if (!n || n.cli !== true || typeof n.id !== 'string' || !ID_RE.test(n.id)) return '';
     var attach = 'claude attach ' + n.id;
-    return attachDir ? 'cd ' + shellQuote(attachDir) + ' && ' + attach : attach;
+    // 制御文字（改行など）を含む場所は、貼ったときに行が分かれるので、移る部分を付けない
+    return attachDir && !/[\\u0000-\\u001f\\u007f]/.test(attachDir) ? 'cd ' + shellQuote(attachDir) + ' && ' + attach : attach;
   }
   // ノードの呼び名（題がなければ ID）。
   function nodeLabel(n, max) { return n && typeof n.title === 'string' && n.title !== '' ? cleanText(n.title, max) : n ? n.id : ''; }
