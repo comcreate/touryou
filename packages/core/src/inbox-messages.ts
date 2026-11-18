@@ -179,6 +179,101 @@ export const INBOX_MESSAGES = {
     ja: "子 {node} のセッションを削除した（claude rm）",
     en: "Removed child {node}'s session (claude rm)",
   },
+  removeRefused: {
+    ja: "子 {node} のセッションの削除（claude rm）を拒まれた。消していない: {reason}。成果を捨てるかは人間が決める（破棄を決めたあとに、もう一度削除を依頼する）",
+    en: "Removing child {node}'s session (claude rm) was refused. Nothing was removed: {reason}. A person decides whether to discard the work (after deciding to discard, request the removal again)",
+  },
+  removeRefusedNoReason: {
+    ja: "子 {node} のセッションの削除（claude rm）を拒まれた。消していない: 理由の記載なし。成果を捨てるかは人間が決める（破棄を決めたあとに、もう一度削除を依頼する）",
+    en: "Removing child {node}'s session (claude rm) was refused. Nothing was removed (no reason given). A person decides whether to discard the work (after deciding to discard, request the removal again)",
+  },
+  parentFailed: {
+    ja: "子 {node} の依頼（{kind}）を、親が実行できなかった: {reason}",
+    en: "The parent could not carry out the request ({kind}) for child {node}: {reason}",
+  },
+  parentFailedNoReason: {
+    ja: "子 {node} の依頼（{kind}）を、親が実行できなかった: 理由の記載なし",
+    en: "The parent could not carry out the request ({kind}) for child {node} (no reason given)",
+  },
+  sessionStopped: {
+    ja: "受理した子 {node} の裏のセッションを止めた（作業ツリーのプロセスはない）",
+    en: "Stopped the background session of accepted child {node} (no processes in the worktree)",
+  },
+  stopUnverifiable: {
+    ja: "子 {node} は親が止めたと報告したが、作業ツリーのプロセスを確かめられない。確かめてから node_confirmStopped で宣言する",
+    en: "The parent reported child {node} as stopped, but the worktree's processes cannot be checked. Check them, then declare with node_confirmStopped",
+  },
+  stopProcessesLeft: {
+    ja: "子 {node} は親が止めたと報告したが、作業ツリーを使うプロセスが残っている（pid {pids}）。止めてから node_stop で再試行する",
+    en: "The parent reported child {node} as stopped, but processes still use the worktree (pid {pids}). Stop them, then retry with node_stop",
+  },
+  stopReportedState: {
+    ja: "子 {node} は親が止めたと報告した（状態 {state} のため、記録は変えない）",
+    en: "The parent reported child {node} as stopped (its state is {state}, so the record is not changed)",
+  },
+  stopReportedUnknownState: {
+    ja: "子 {node} は親が止めたと報告した（状態 不明 のため、記録は変えない）",
+    en: "The parent reported child {node} as stopped (its state is unknown, so the record is not changed)",
+  },
+  sessionGone: {
+    ja: "子 {node} のセッションは、もう一覧になかった（止めた時点で消えていた）。削除の依頼は済んだ扱いにした",
+    en: "Child {node}'s session was no longer listed (it was gone once stopped). The removal request is treated as done",
+  },
+  agentStalled: {
+    ja: "子 {node} は止まっているかもしれない（親の確かめ: {state}）。人に、子のセッションへの attach を頼む",
+    en: "Child {node} may be stuck (the parent checked: {state}). Ask a person to attach to the child's session",
+  },
+  needsInputOverflow: {
+    ja: "子 {node} の入力待ちの知らせが多すぎる（1 日 {max} 件）ので、今日はこれ以上出さない。人が子のセッションを確かめる",
+    en: "Too many input-waiting notices for child {node} ({max} a day), so no more will be shown today. A person should check the child's session",
+  },
+  needsInputMaybe: {
+    ja: "子 {node} が止まっているかもしれない（{label}。session_id で引いた報告）。人が子のセッションを開いて（attach）確かめる",
+    en: "Child {node} may be stuck ({label}; reported by session_id). A person should open (attach to) the child's session and check",
+  },
+  needsInput: {
+    ja: "子 {node} が止まっている（{label}）。人が子のセッションを開いて（attach）応える",
+    en: "Child {node} is stuck ({label}). A person should open (attach to) the child's session and respond",
+  },
+  needsInputDetail: {
+    ja: "子 {node} が止まっている（{label}: {detail}）。人が子のセッションを開いて（attach）応える",
+    en: "Child {node} is stuck ({label}: {detail}). A person should open (attach to) the child's session and respond",
+  },
+  labelPermissionPrompt: { ja: "許可の確認", en: "permission prompt" },
+  labelIdlePrompt: {
+    ja: "入力待ち（応答のあと操作がない）",
+    en: "waiting for input (no action after the reply)",
+  },
+  labelElicitationDialog: { ja: "MCP の入力の画面", en: "MCP input dialog" },
+  labelElicitationUrlDialog: {
+    ja: "MCP のブラウザでの確認",
+    en: "MCP confirmation in the browser",
+  },
+  labelAgentNeedsInput: { ja: "入力待ち", en: "waiting for input" },
+  unstartableNoBrief: {
+    ja: "依存が揃ったが、起動できない: ブリーフ（目的・受け入れ基準・範囲）が記録されていない",
+    en: "Dependencies are ready, but the node cannot start: no brief (objective, acceptance criteria, scope) is recorded",
+  },
+  unstartableNoAdapter: {
+    ja: "依存が揃ったが、起動できない: 親 {parent} のランタイム（アダプタ）が見つからない",
+    en: "Dependencies are ready, but the node cannot start: the runtime (adapter) of parent {parent} was not found",
+  },
+  unstartableNoWorktree: {
+    ja: "依存が揃ったが、起動できない: 作業ツリーを用意できない",
+    en: "Dependencies are ready, but the node cannot start: the worktree cannot be prepared",
+  },
+  startFailed: {
+    ja: "依存が揃ったので起動しようとしたが、失敗した（{code}）: {cause}。対処: {next}",
+    en: "Dependencies were ready, so the node tried to start, but it failed ({code}): {cause}. Next step: {next}",
+  },
+  dependencyDiscarded: {
+    ja: "依存先 {dep} が破棄されたため、このノードは起動できない。node.stop で取り消すか、別の依存先で作り直す",
+    en: "Dependency {dep} was discarded, so this node cannot start. Cancel it with node.stop or create it again with a different dependency",
+  },
+  resumeFailed: {
+    ja: "子 {node} を再開できなかった（{code}）: {cause}。対処: {next}",
+    en: "Could not resume child {node} ({code}): {cause}. Next step: {next}",
+  },
   gitDirUnknown: {
     ja: "子 {node} の作業ツリーの git のディレクトリを確かめられないため、書き込みを拒否している。人が作業ツリー（git worktree）を確かめる",
     en: "Writes are refused because the git folder of child {node}'s worktree cannot be checked. A person should check the worktree (git worktree)",
@@ -234,17 +329,27 @@ export function isInboxMessage(x: unknown): x is InboxMessage {
   );
 }
 
-/** `{名前}` を値で置き換える（無い名前は、そのまま残す）。 */
-export function fillMessage(template: string, args: InboxMessageArgs): string {
-  return template.replace(/\{([a-z][A-Za-z0-9]*)\}/g, (all, name: string) =>
-    Object.hasOwn(args, name) ? String(args[name]) : all,
-  );
+/**
+ * `{名前}` を値で置き換える（無い名前は、そのまま残す）。
+ * `lang` を渡すと、値の名前が `名前Key`（例 `labelKey`）で、その値が表の鍵なら、`{名前}` を、その鍵の文（同じ言語）にする
+ * （入力待ちの種類のように、daemon の言葉の表から選ぶ部分を、言語に合わせるため。1 段だけ。差し込みはしない）。
+ */
+export function fillMessage(template: string, args: InboxMessageArgs, lang?: Lang): string {
+  return template.replace(/\{([a-z][A-Za-z0-9]*)\}/g, (all, name: string) => {
+    if (Object.hasOwn(args, name)) return String(args[name]);
+    const ref = `${name}Key`;
+    if (lang !== undefined && Object.hasOwn(args, ref)) {
+      const k = args[ref];
+      if (isInboxMessageKey(k)) return INBOX_MESSAGES[k][lang];
+    }
+    return all;
+  });
 }
 
 /** 言語ごとの文。鍵が表になければ undefined。 */
 export function inboxMessageText(lang: Lang, m: InboxMessage): string | undefined {
   if (!isInboxMessageKey(m.key)) return undefined;
-  return fillMessage(INBOX_MESSAGES[m.key][lang], m.args);
+  return fillMessage(INBOX_MESSAGES[m.key][lang], m.args, lang);
 }
 
 /** 文の中の `{名前}` の一覧（並べ替えて、重なりを除く）。 */
@@ -271,5 +376,5 @@ export function inboxMessage<K extends InboxMessageKey>(
             .join("")
             .slice(0, INBOX_MESSAGE_LIMITS.value);
   }
-  return { summary: fillMessage(INBOX_MESSAGES[key].ja, safe), msg: { key, args: safe } };
+  return { summary: fillMessage(INBOX_MESSAGES[key].ja, safe, "ja"), msg: { key, args: safe } };
 }

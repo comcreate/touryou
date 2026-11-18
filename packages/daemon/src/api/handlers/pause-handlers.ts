@@ -39,6 +39,7 @@ import {
   deriveId,
   fail,
   type LogPort,
+  notice,
   summarize,
   waitRequestKey,
 } from "./context.js";
@@ -181,9 +182,13 @@ export function createPauseHandlers(deps: PauseHandlerDeps) {
    */
   function reportStartFailure(target: string, parentId: string | null, f: Failure): void {
     if (parentId === null) return;
-    const summary = summarize(
-      `子 ${target} を再開できなかった（${f.code}）: ${f.cause}。対処: ${f.nextActions[0]}`,
-    );
+    const text = notice("resumeFailed", {
+      node: target,
+      code: f.code,
+      cause: f.cause,
+      next: f.nextActions[0],
+    });
+    const summary = text.summary;
     const state = log.state();
     if (
       state.inbox.some(
@@ -199,7 +204,7 @@ export function createPauseHandlers(deps: PauseHandlerDeps) {
           id: deriveId("inbox", "system", key, "failure"),
           kind: "failure",
           nodeId: target,
-          summary,
+          ...text,
         },
       },
     ]);

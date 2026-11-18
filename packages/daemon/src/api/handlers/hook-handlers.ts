@@ -11,6 +11,7 @@
 
 import {
   type Failure,
+  type InboxMessageKey,
   isStrictDescendant,
   type OperationMap,
   type OrchState,
@@ -27,6 +28,7 @@ import {
   deriveId,
   fail,
   type LogPort,
+  notice,
   summarize,
 } from "./context.js";
 
@@ -172,12 +174,13 @@ export const NEEDS_INPUT_TYPES: ReadonlySet<string> = new Set([
   "agent_needs_input",
 ]);
 
-const NEEDS_INPUT_LABEL: Readonly<Record<string, string>> = {
-  permission_prompt: "許可の確認",
-  idle_prompt: "入力待ち（応答のあと操作がない）",
-  elicitation_dialog: "MCP の入力の画面",
-  elicitation_url_dialog: "MCP のブラウザでの確認",
-  agent_needs_input: "入力待ち",
+/** 入力待ちの種類の言葉（#140。鍵は core の知らせの表。画面が言語に合わせる）。 */
+const NEEDS_INPUT_LABEL: Readonly<Record<string, InboxMessageKey>> = {
+  permission_prompt: "labelPermissionPrompt",
+  idle_prompt: "labelIdlePrompt",
+  elicitation_dialog: "labelElicitationDialog",
+  elicitation_url_dialog: "labelElicitationUrlDialog",
+  agent_needs_input: "labelAgentNeedsInput",
 };
 
 export interface NotificationInput {
@@ -255,16 +258,22 @@ export function reportNeedsInput(
   const verdict = deps.throttle.take(`${nodeId}\0${trust ?? "token"}`, nowMs, at.slice(0, 10));
   if (verdict === "skip") return false;
   const key = `needs-input/${nodeId}/${at}`;
-  const label = NEEDS_INPUT_LABEL[n.notificationType] ?? n.notificationType;
+  // 知らない種類は、種類の名前をそのまま出す
+  const labelKey = Object.hasOwn(NEEDS_INPUT_LABEL, n.notificationType)
+    ? NEEDS_INPUT_LABEL[n.notificationType]
+    : undefined;
+  const label = labelKey === undefined ? { label: n.notificationType } : { labelKey };
   // session_id で引いた報告（秘密でない session_id だけで名乗れる）は、本文（message）を受信箱に入れない。種類だけ（注入の通り道を塞ぐ）
-  const detail = n.message === undefined || trust !== undefined ? "" : `: ${n.message}`;
+  const detail = n.message === undefined || trust !== undefined ? undefined : n.message;
   const actor = trust === undefined ? ({ system: true } as const) : sessionActor(trust);
-  const summary =
+  const text =
     verdict === "overflow"
-      ? `子 ${nodeId} の入力待ちの知らせが多すぎる（1 日 ${NEEDS_INPUT_DAILY_MAX} 件）ので、今日はこれ以上出さない。人が子のセッションを確かめる`
+      ? notice("needsInputOverflow", { node: nodeId, max: NEEDS_INPUT_DAILY_MAX })
       : trust !== undefined
-        ? `子 ${nodeId} が止まっているかもしれない（${label}。session_id で引いた報告）。人が子のセッションを開いて（attach）確かめる`
-        : `子 ${nodeId} が止まっている（${label}${detail}）。人が子のセッションを開いて（attach）応える`;
+        ? notice("needsInputMaybe", { node: nodeId, ...label })
+        : detail === undefined
+          ? notice("needsInput", { node: nodeId, ...label })
+          : notice("needsInputDetail", { node: nodeId, ...label, detail });
   const r = appendAtomically(deps.log, deps.clock, key, actor, [
     {
       type: "inbox.added",
@@ -277,7 +286,7 @@ export function reportNeedsInput(
         ),
         kind: "info",
         nodeId,
-        summary: summarize(summary),
+        ...text,
       },
     },
   ]);

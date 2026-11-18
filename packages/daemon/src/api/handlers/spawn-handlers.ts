@@ -48,6 +48,7 @@ import {
   deriveId,
   fail,
   type LogPort,
+  notice,
   summarize,
 } from "./context.js";
 import { createExclusive } from "./inflight.js";
@@ -559,7 +560,7 @@ export function createSpawner(deps: SpawnHandlerDeps) {
   };
 
   /** 親の受信箱に、失敗を 1 度だけ出す（`key` で決定的。再び呼んでも重複しない）。 */
-  function reportOnce(nodeId: string, key: string, text: string): void {
+  function reportOnce(nodeId: string, key: string, text: ReturnType<typeof notice>): void {
     if (alreadyApplied(log.state(), SYSTEM, key)) return;
     const r = appendAtomically(log, deps.clock, key, SYSTEM, [
       {
@@ -568,7 +569,7 @@ export function createSpawner(deps: SpawnHandlerDeps) {
           id: deriveId("inbox", "system", key, "failure"),
           kind: "failure",
           nodeId,
-          summary: summarize(text),
+          ...text,
         },
       },
     ]);
@@ -592,9 +593,9 @@ export function createSpawner(deps: SpawnHandlerDeps) {
   };
 
   /** 起動できない事情を、pending のまま、最初の 1 度だけ受信箱に出す（以降の tick では、同じ事情を繰り返さない）。 */
-  const unstartable = (nodeId: string, why: string): void => {
-    note(nodeId, why);
-    reportOnce(nodeId, `sched-${nodeId}/unstartable`, `依存が揃ったが、起動できない: ${why}`);
+  const unstartable = (nodeId: string, text: ReturnType<typeof notice>): void => {
+    note(nodeId, text.summary);
+    reportOnce(nodeId, `sched-${nodeId}/unstartable`, text);
   };
 
   function startPending(nodeId: string): Promise<Result<undefined, Failure>> {
@@ -610,17 +611,17 @@ export function createSpawner(deps: SpawnHandlerDeps) {
           node.acceptanceCriteria === undefined ||
           node.scope === undefined
         ) {
-          unstartable(nodeId, "ブリーフ（目的・受け入れ基準・範囲）が記録されていない");
+          unstartable(nodeId, notice("unstartableNoBrief", {}));
           return { ok: true, value: undefined };
         }
         const adapter = deps.adapterFor(parentId);
         if (adapter === undefined) {
-          unstartable(nodeId, `親 ${parentId} のランタイム（アダプタ）が見つからない`);
+          unstartable(nodeId, notice("unstartableNoAdapter", { parent: parentId }));
           return { ok: true, value: undefined };
         }
         const provisioned = await ports.provisionWorktree({ parentId, nodeId });
         if (!provisioned.ok || !worktreePathOk(provisioned.value.worktreePath)) {
-          unstartable(nodeId, "作業ツリーを用意できない");
+          unstartable(nodeId, notice("unstartableNoWorktree", {}));
           return { ok: true, value: undefined };
         }
         const brief: BriefParams = {
@@ -644,7 +645,11 @@ export function createSpawner(deps: SpawnHandlerDeps) {
           reportOnce(
             nodeId,
             `sched-${nodeId}/failed`,
-            `依存が揃ったので起動しようとしたが、失敗した（${started.error.code}）: ${started.error.cause}。対処: ${started.error.nextActions[0]}`,
+            notice("startFailed", {
+              code: started.error.code,
+              cause: started.error.cause,
+              next: started.error.nextActions[0],
+            }),
           );
         }
       } catch (e) {
@@ -664,7 +669,7 @@ export function createSpawner(deps: SpawnHandlerDeps) {
       reportOnce(
         n.id,
         `sched-${n.id}/blocked-${dead}`,
-        `依存先 ${dead} が破棄されたため、このノードは起動できない。node.stop で取り消すか、別の依存先で作り直す`,
+        notice("dependencyDiscarded", { dep: dead }),
       );
     }
   }

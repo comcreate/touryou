@@ -392,12 +392,16 @@ export function createParentRequestHandlers(deps: ParentRequestHandlerDeps) {
             ? add(
                 "parent-failed",
                 "failure",
-                `子 ${nodeId} のセッションの削除（claude rm）を拒まれた。消していない: ${reason ?? "理由の記載なし"}。成果を捨てるかは人間が決める（破棄を決めたあとに、もう一度削除を依頼する）`,
+                reason === undefined
+                  ? notice("removeRefusedNoReason", { node: nodeId })
+                  : notice("removeRefused", { node: nodeId, reason }),
               )
             : add(
                 "parent-failed",
                 "failure",
-                `子 ${nodeId} の依頼（${r.kind}）を、親が実行できなかった: ${reason ?? "理由の記載なし"}`,
+                reason === undefined
+                  ? notice("parentFailedNoReason", { node: nodeId, kind: r.kind })
+                  : notice("parentFailed", { node: nodeId, kind: r.kind, reason }),
               ),
         );
       } else if (r.kind === "stop") {
@@ -450,30 +454,24 @@ export function createParentRequestHandlers(deps: ParentRequestHandlerDeps) {
         if (!confirmed) {
           bodies.push(
             nodeState === "verified" && left !== null && left.length === 0
-              ? add(
-                  "session-stopped",
-                  "info",
-                  `受理した子 ${nodeId} の裏のセッションを止めた（作業ツリーのプロセスはない）`,
-                )
+              ? add("session-stopped", "info", notice("sessionStopped", { node: nodeId }))
               : add(
                   "stop-unconfirmed",
                   "stopIncomplete",
                   left === null
-                    ? `子 ${nodeId} は親が止めたと報告したが、作業ツリーのプロセスを確かめられない。確かめてから node_confirmStopped で宣言する`
+                    ? notice("stopUnverifiable", { node: nodeId })
                     : left.length > 0
-                      ? `子 ${nodeId} は親が止めたと報告したが、作業ツリーを使うプロセスが残っている（pid ${left.join(", ")}）。止めてから node_stop で再試行する`
-                      : `子 ${nodeId} は親が止めたと報告した（状態 ${nodeState ?? "不明"} のため、記録は変えない）`,
+                      ? notice("stopProcessesLeft", { node: nodeId, pids: left.join(", ") })
+                      : nodeState === undefined
+                        ? notice("stopReportedUnknownState", { node: nodeId })
+                        : notice("stopReportedState", { node: nodeId, state: nodeState }),
                 ),
           );
         }
       } else if (r.kind === "remove") {
         bodies.push(
           gone
-            ? add(
-                "removed",
-                "info",
-                `子 ${nodeId} のセッションは、もう一覧になかった（止めた時点で消えていた）。削除の依頼は済んだ扱いにした`,
-              )
+            ? add("removed", "info", notice("sessionGone", { node: nodeId }))
             : add("removed", "info", notice("sessionRemoved", { node: nodeId })),
         );
       }
@@ -482,7 +480,7 @@ export function createParentRequestHandlers(deps: ParentRequestHandlerDeps) {
           add(
             `agent-${agentState}`,
             "info",
-            `子 ${nodeId} は止まっているかもしれない（親の確かめ: ${agentState}）。人に、子のセッションへの attach を頼む`,
+            notice("agentStalled", { node: nodeId, state: agentState }),
           ),
         );
       }
