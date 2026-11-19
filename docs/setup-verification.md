@@ -198,7 +198,15 @@ claude --plugin-dir "${W}/plugin"
 if [ -d "${HOME}/.touryou.before-verify" ]; then "${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes; rm -rf "${HOME}/.touryou" && command mv -f "${HOME}/.touryou.before-verify" "${HOME}/.touryou" && readlink "${HOME}/.touryou/current"; else echo "退避がない（もう戻っているかもしれない）。止めます"; fi
 ```
 
-「止めます」と出たら、次の `launchd init` 以降に進む前に、`readlink "${HOME}/.touryou/current"` が 1 で記録したものと同じかを確かめる（同じなら、もう戻っている）。
+「止めます」と出たら、1 で記録したものを見て、次のどちらかにする。
+
+- 1 で `~/.touryou` があった（退避した）とき: もう戻っている。`readlink "${HOME}/.touryou/current"` が 1 で記録したものと同じかを確かめ、次の `launchd init` 以降に進む。
+- 1 で `~/.touryou` がなかった（1 の最初の `ls` が「No such file or directory」で、退避するものがなかった）とき: 試しの `~/.touryou` と常駐が残っている。次の 2 行を **1 回だけ** 打って外す（戻すものはない。1 で常駐でなかったので、次の `launchd init` 以降は飛ばす）。
+
+```sh
+"${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes
+rm -rf "${HOME}/.touryou"
+```
 
 1 で常駐だったときは、1 で確かめた引数と同じ引数で init し直して、戻す（`--org` を付けていたら、`init`・`apply`・`status` の全部に同じものを付ける。`--path-prefix` は `init` にだけ付ける〔`PATH` は `init` が plist に書く。`apply`・`status` は受けず、付けると失敗する〕。付けないと元の常駐にならない）。
 
