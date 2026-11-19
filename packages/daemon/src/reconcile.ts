@@ -36,12 +36,12 @@ import {
   summarize,
   waitRequestKey,
 } from "./api/handlers/context.js";
+import { staleResolveBodies } from "./api/handlers/stale-inbox.js";
 import {
   EXTERNAL_CHECK_SUMMARY,
   openExternalChecks,
   resolveExternalCheckBodies,
 } from "./external-check.js";
-import { staleResolveBodies } from "./api/handlers/stale-inbox.js";
 import type { ProcessProbe } from "./sdk/lsof-probe.js";
 
 export { EXTERNAL_CHECK_SUMMARY };

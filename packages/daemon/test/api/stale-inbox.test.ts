@@ -16,7 +16,12 @@ import { reconcileOnStartup } from "../../src/reconcile.js";
 const T0 = "2026-11-14T00:00:00.000Z";
 let n = 0;
 
-const rig = (nodes: Record<string, NodeEvent["type"][]>) => {
+const DONE: NodeEvent = { type: "reportDone" };
+const ACCEPT: NodeEvent = { type: "accept" };
+const RECLAIMABLE: NodeEvent = { type: "markReclaimable", discarded: false };
+const ARCHIVE: NodeEvent = { type: "archive" };
+
+const rig = (nodes: Record<string, NodeEvent[]>) => {
   const opened = EventLog.open(createMemoryStore().open(), { clock: () => T0 });
   if (!opened.ok) throw new Error(opened.error.code);
   const log = opened.value;
@@ -38,8 +43,8 @@ const rig = (nodes: Record<string, NodeEvent["type"][]>) => {
       payload: { nodeId: id, role: "implement", parentId: "root", dependsOn: [] },
     });
     add({ type: "node.stateChanged", payload: { nodeId: id, event: { type: "start" } } });
-    for (const type of events) {
-      add({ type: "node.stateChanged", payload: { nodeId: id, event: { type } as NodeEvent } });
+    for (const event of events) {
+      add({ type: "node.stateChanged", payload: { nodeId: id, event } });
     }
   }
   const item = (nodeId: string, kind: InboxKind) =>
@@ -67,7 +72,7 @@ const review = (log: EventLog, nodeId: string) =>
 
 describe("受理で、古い停止未完了・失敗の項目を解決にする（A2）", () => {
   it("受理した子の未解決の stopIncomplete・failure が解決になる。system の記録で、info は残す", async () => {
-    const r = rig({ a: ["reportDone"], b: [] });
+    const r = rig({ a: [DONE], b: [] });
     r.item("a", "stopIncomplete");
     r.item("a", "failure");
     r.item("a", "info");
@@ -95,9 +100,9 @@ describe("起動時の整合で、古い項目を 1 回だけ追記で解決に�
 
   it("verified・reclaimable・archived の古い項目だけ解決にし、running の項目は残す。2 回目は何も足さない", async () => {
     const r = rig({
-      v: ["reportDone", "accept"],
-      c: ["reportDone", "accept", "markReclaimable"],
-      z: ["reportDone", "accept", "markReclaimable", "archive"],
+      v: [DONE, ACCEPT],
+      c: [DONE, ACCEPT, RECLAIMABLE],
+      z: [DONE, ACCEPT, RECLAIMABLE, ARCHIVE],
       s: [],
     });
     for (const id of ["v", "c", "z", "s"]) r.item(id, "failure");
@@ -118,7 +123,7 @@ describe("起動時の整合で、古い項目を 1 回だけ追記で解決に�
 
 describe("受理後のノードの停止の報告で、stopIncomplete を作らない（B）", () => {
   it("プロセスが残っていても、受理後（verified）は info にする", async () => {
-    const r = rig({ a: ["reportDone"] });
+    const r = rig({ a: [DONE] });
     r.add({
       type: "node.parentRequested",
       payload: { nodeId: "a", requestRef: "preq-launch", kind: "launch", worktree: "/w/a" },
