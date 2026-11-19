@@ -39,7 +39,7 @@
 
 ### 上げ方
 
-v0.1.4 を入れている Mac で、次のとおり（細部は `docs/setup-verification.md` の C と、`/touryou:setup` の手順〔`plugin/commands/setup.md`〕）。v0.1.3 以前から上げる人は、この手順の代わりに、0.1.4 の節の「上げ方」を読む（入る版は v0.1.5 になる）。その 6 は、v0.1.2 から上げる人だけに要る。
+v0.1.4 を入れている Mac で、次のとおり（細部は `docs/setup-verification.md` の C と、`/touryou:setup` の手順〔`plugin/commands/setup.md`〕）。v0.1.3 以前（v0.1.2 以前と、手で入れた v0.1.3）から上げる人は、この手順の代わりに、0.1.4 の節の「上げ方」を読む（入る版は v0.1.5 になる）。その 6 は、v0.1.2 から上げる人だけに要る。
 
 1. plugin を上げる。
 
