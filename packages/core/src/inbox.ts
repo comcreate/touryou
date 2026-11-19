@@ -13,7 +13,7 @@
  *   現状の件数では十分なため未対応（design 9.2）。
  * - 依存が循環する（相互に先行する）ノードどうしには制約を課さない。
  */
-import type { Actor } from "./events.js";
+import type { Actor, OrchState } from "./events.js";
 import { type InboxKind, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
 import type { InboxMessage } from "./inbox-messages.js";
 
@@ -43,6 +43,22 @@ export interface InboxItem {
 /** 解決済みでない項目だけ。`inbox.fetch` は、これで解決済みを除く。 */
 export const unresolvedInbox = (items: readonly InboxItem[]): InboxItem[] =>
   items.filter((i) => i.resolved === undefined);
+
+/** 受理・回収・archive のあとは、もう対処のいらない、停止の未完了と失敗の記録を残さない（`staleInboxItems`）。 */
+export const SETTLED_STATES: ReadonlySet<string> = new Set(["verified", "reclaimable", "archived"]);
+const STALE_KINDS: ReadonlySet<InboxKind> = new Set(["stopIncomplete", "failure"]);
+
+/**
+ * 受理（verified）・回収可能（reclaimable）・archive 済みのノードに、古い記録として残っている、未解決の stopIncomplete・failure。
+ * running・waiting・stopping・stopIncomplete などの、まだ対処が要るかもしれないノードの項目は含めない。
+ * 並びは `seq` の昇順（決定的）。daemon が、これを `inbox.resolved`（system）で解決にする。
+ */
+export function staleInboxItems(state: Pick<OrchState, "nodes" | "inbox">): InboxItem[] {
+  const settled = new Set(state.nodes.filter((n) => SETTLED_STATES.has(n.state)).map((n) => n.id));
+  return state.inbox
+    .filter((i) => i.resolved === undefined && STALE_KINDS.has(i.kind) && settled.has(i.nodeId))
+    .sort((a, b) => a.seq - b.seq);
+}
 
 /** ノードの依存（ノード → 依存先）。項目を持たない中間ノードを含められる。 */
 export type NodeDeps = ReadonlyMap<string, readonly string[]>;

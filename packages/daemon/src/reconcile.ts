@@ -14,6 +14,8 @@
  *   記録に残す（停止の要求の requestId を判断から決める）。回答（`decision.answer`）の側が、これを見て再開する（人間が止めた子は除く）。
  * - プロセスの調査は、置き場全体に 1 回だけ行って共有する（`worktreeRoot` を渡すとき）。
  * - 「プロセスがない」は、停止の証明ではない（調べられた範囲に、見つからなかっただけ）。作業ツリーの外へ出たプロセスは、見つけられない。
+ * - 受理（verified）・回収可能・archive 済みのノードに残る、未解決の stopIncomplete・failure は、`inbox.resolved`（system）の追記で
+ *   解決にする（`staleInboxItems`。古い記録の移行）。
  * - 同じ状態での再実行は、何も変えない（冪等）。記録は、システムの記録として、この起動の時点の `seq` から導く requestId で追記する。
  */
 
@@ -39,6 +41,7 @@ import {
   openExternalChecks,
   resolveExternalCheckBodies,
 } from "./external-check.js";
+import { staleResolveBodies } from "./api/handlers/stale-inbox.js";
 import type { ProcessProbe } from "./sdk/lsof-probe.js";
 
 export { EXTERNAL_CHECK_SUMMARY };
@@ -122,6 +125,19 @@ export async function reconcileOnStartup(deps: ReconcileDeps): Promise<Reconcile
         root?.id ?? "（根なし）",
         `確かめる依頼を記録できない${root === undefined ? "（根のノードが記録にない）" : ""}: ${r.error.cause}`,
       );
+  }
+  // 受理・回収・archive のあとも残っている、古い停止未完了・失敗の項目を、追記で解決にする（移行。イベントは書き換えない）。
+  // 解決済みになれば対象がなくなるので、2 回目以降は何も足さない（冪等）。
+  const staleBodies = staleResolveBodies(start);
+  if (staleBodies.length > 0) {
+    const r = appendAtomically(
+      log,
+      deps.clock,
+      `reconcile-stale-${run}`,
+      { system: true },
+      staleBodies,
+    );
+    if (!r.ok) deps.onFailure?.("", `古い項目を解決にできない: ${r.error.code}: ${r.error.cause}`);
   }
   // 置き場全体を 1 回だけ調べて共有する（調べられなければ null。全ノードを安全側にする）。
   let shared: readonly ProcessInfo[] | null | undefined;

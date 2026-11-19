@@ -40,6 +40,7 @@ import type { LossFacts } from "../../git-ports.js";
 import type { ProcessProbe } from "../../sdk/lsof-probe.js";
 import type { HandlerRequest } from "../server.js";
 import { appendAtomically, deriveId, fail, type LogPort, notice } from "./context.js";
+import { resolveStaleInbox } from "./stale-inbox.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;
 
@@ -377,6 +378,12 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
     );
   };
 
+  /** 回収可能・archive にしたノードに残る、古い停止未完了・失敗の項目を解決にする（失敗しても回収は進める。起動時の整合が拾う）。 */
+  const settle = (nodeId: string, key: string): void => {
+    const r = resolveStaleInbox(log, deps.clock, key, nodeId);
+    if (!r.ok) deps.onFailure?.(nodeId, `古い項目を解決にできない: ${r.cause}`);
+  };
+
   const unsupported =
     (what: string, ...next: [string, ...string[]]) =>
     () =>
@@ -674,6 +681,7 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
             },
           ]);
           if (!marked.ok) return { ok: false, error: marked.error };
+          settle(n.id, `${requestId}/${n.id}/mark-stale`);
         }
         // 作業ツリーを消す前に、最終コミットを記録する（墓標の `lastCommit` の情報源。FR_031）。記録できなくても、回収は進める。
         const head = again.facts.headCommit;
@@ -739,6 +747,7 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
           { type: "node.stateChanged", payload: { nodeId: n.id, event: { type: "archive" } } },
         ]);
         if (!archived.ok) return { ok: false, error: archived.error };
+        settle(n.id, `${requestId}/${n.id}/archive-stale`);
       }
       reclaimed.push(n.id);
     }

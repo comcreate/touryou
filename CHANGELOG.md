@@ -4,6 +4,7 @@
 
 ### 直したこと
 
+- **受理・回収・archive した子の、古い「停止未完了」「失敗」の知らせが受信箱に残り続けた**: 受理（`node.review` の accept）・回収可能にしたとき・archive にしたときに、その子の未解決の stopIncomplete・failure を、system の `inbox.resolved` で解決済みにする（core の `staleInboxItems` が対象を選ぶ）。daemon の起動時の整合も、すでに残っている古い知らせを、追記だけで 1 回だけ解決済みにする（記録は書き換えず、2 回目は何も足さない）。running・waiting・stopping・停止未完了の子の知らせは、解決済みにしない。あわせて、受理後の子の停止の報告で、プロセスが残っていても stopIncomplete を新しく作らず、info にとどめる。
 - **plugin が本体より古いとき、版の違いの知らせが「本体を上げて」と言い、`/touryou:setup` が古い版に入れ替えてしまった**（#154）: セッションの始まりの知らせが、本体と plugin のどちらが新しいかで文を変える。plugin が古いときは「先に plugin を新しくする」と案内する。`/touryou:setup` は、plugin が古いと、何も変えずに止まり、plugin を新しくする案内を出す（常駐していても同じ）。`--scope user` の付け忘れで plugin が古いままになる場合も、この案内で直せる。
 - **手順書の plugin の update に `--scope user` を足した**（#153）: clone の中で `claude plugin update touryou@touryou` だけを実行すると、その clone の中だけが新しくなり、自分のアカウント全体の plugin は古いままになる。手順書（`docs/setup-verification.md` の C・`README.md`・`docs/plugin.md`）・`/touryou:setup`・script の止める文・この CHANGELOG の update の例のすべてに `--scope user` を書いた。
 

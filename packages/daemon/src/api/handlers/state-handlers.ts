@@ -36,6 +36,7 @@ import {
 import { createExclusive } from "./inflight.js";
 import { type InstructionDelivery, wasNotified } from "./instruction-delivery.js";
 import { sessionStopBodies, sessionStopDeferredBodies } from "./parent-request-handlers.js";
+import { resolveStaleInbox } from "./stale-inbox.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;
 
@@ -187,6 +188,11 @@ export function createStateHandlers(deps: StateHandlerDeps) {
       bodies,
     );
     if (!r.ok) return r;
+    // 受理した子に残る、古い停止未完了・失敗の項目は、もう対処がいらないので解決にする（失敗しても受理は成り立つ。起動時の整合が拾う）。
+    if (req.params.verdict === "accept") {
+      const stale = resolveStaleInbox(log, clock, `${req.requestId}/resolve-stale`, nodeId);
+      if (!stale.ok) deps.onFailure?.(nodeId, `古い項目を解決にできない: ${stale.cause}`);
+    }
     // 差し戻しの理由を、再開した子へ届ける（未配送のときだけ。再送で、送り直せる）。
     if (req.params.verdict === "reject" && deps.deliver !== undefined) {
       const seq = r.value.events[1]?.seq;
