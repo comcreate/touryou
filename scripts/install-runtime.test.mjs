@@ -423,7 +423,10 @@ test("SessionStart: 版が違えば /touryou:setup を知らせる JSON を出�
   const r = runNotice(h, P);
   assert.equal(r.status, 0);
   const j = JSON.parse(r.stdout);
-  assert.match(j.systemMessage, /v0\.9\.0.*v1\.0\.0.*\/touryou:setup/);
+  assert.match(
+    j.systemMessage,
+    /本体（v0\.9\.0）と plugin（v1\.0\.0）の版が違います。\/touryou:setup を実行して、本体を上げてください/,
+  );
   assert.equal(j.hookSpecificOutput.hookEventName, "SessionStart");
   assert.ok(!r.stdout.includes(h));
   assert.ok(!existsSync(join(h, "fetch.log")));
@@ -450,6 +453,188 @@ test("SessionStart: 版が違えば /touryou:setup を知らせる JSON を出�
   const nopj = runNotice(h, P);
   assert.equal(nopj.status, 0);
   assert.equal(nopj.stdout, "");
+});
+
+// --- 版の比べ（vercmp）と、plugin が本体より古いとき（#154） ---
+
+/** script の中の vercmp の 3 つの関数の本文。 */
+const vercmpSource = (file, endMarker) => {
+  const s = readFileSync(file, "utf8");
+  const from = s.indexOf("vercmp_split() {");
+  const to = s.indexOf(endMarker, from);
+  assert.ok(from >= 0 && to > from, `${file}: vercmp が見つからない`);
+  return s.slice(from, to).trim();
+};
+const NOTICE_FNS = vercmpSource(NOTICE, '\np="$(dirname');
+const INSTALL_FNS = vercmpSource(SCRIPT, "\nmain() {");
+
+// 0: 同じ、1: 左が古い、3: 左が新しい、2: 比べられない
+const VERCMP_TABLE = [
+  ["0.1.5", "0.1.5", 0],
+  ["0.1.5-rc.0", "0.1.5", 1],
+  ["0.1.5", "0.1.5-rc.0", 3],
+  ["0.1.5-rc.0", "0.1.5-rc.0", 0],
+  ["0.1.5-rc.2", "0.1.5-rc.10", 1],
+  ["0.1.5-rc.10", "0.1.5-rc.2", 3],
+  ["0.1.9", "0.1.10", 1],
+  ["0.1.10", "0.1.9", 3],
+  ["0.9.0", "1.0.0", 1],
+  ["1.0.0", "0.9.0", 3],
+  ["1.0.0-rc.0", "0.9.0", 3],
+  ["0.1.6-rc.0", "0.1.5", 3],
+  ["0.1.5+build1", "0.1.5", 0],
+  ["0.1.5-rc.1+x", "0.1.5-rc.1", 0],
+  ["0.1.5-beta", "0.1.5", 2],
+  ["0.1.5", "0.1.5-alpha.1", 2],
+  ["0.1.5-rc", "0.1.5", 2],
+  ["0.1.5-rc.x", "0.1.5", 2],
+  ["0.1.5-rc.1.2", "0.1.5", 2],
+  ["0.1.5-rc.1-x", "0.1.5", 2],
+  ["0.1.5-", "0.1.5", 2],
+  ["0.1", "0.1.5", 2],
+  ["0.1.5.1", "0.1.5", 2],
+  ["abc", "0.1.5", 2],
+  ["", "0.1.5", 2],
+];
+
+test("vercmp: notice と install の関数は同じ本文", () => {
+  assert.equal(NOTICE_FNS, INSTALL_FNS);
+});
+
+for (const [name, fns] of [
+  ["runtime-version-notice.sh", NOTICE_FNS],
+  ["install-runtime.sh", INSTALL_FNS],
+]) {
+  for (const shell of ["sh", "bash"]) {
+    test(`vercmp（${name}・${shell}）: semver どおり。rc.N は数で比べ、rc.N 以外は比べられない`, () => {
+      for (const [a, b, want] of VERCMP_TABLE) {
+        const script = `set -eu\n${fns}\nvercmp "$1" "$2" || exit $?`;
+        const r = spawnSync(shell, ["-c", script, "_", a, b], { encoding: "utf8" });
+        assert.equal(r.status, want, `${JSON.stringify([a, b])}: ${r.stderr}`);
+      }
+    });
+  }
+}
+
+/** 本体 bodyVer を入れた HOME（取得の記録は消す）。 */
+const homeWithBody = (bodyVer) => {
+  const tb = makeTarball(bodyVer);
+  const h = newHome();
+  assert.equal(install(makePlugin(bodyVer, tb), h, tb).status, 0);
+  rmSync(join(h, "fetch.log"));
+  return h;
+};
+const installPlugin = (h, pluginVer, args = []) => {
+  const tb = makeTarball(pluginVer);
+  return install(makePlugin(pluginVer, tb), h, tb, args);
+};
+const assertPluginOlder = (h, r, bodyVer) => {
+  assert.equal(r.status, 4, out(r));
+  assert.match(r.stdout, /RESULT: plugin-older/);
+  assert.match(
+    r.stdout,
+    /止めました: plugin（v[^）]+）が、いまの本体（v[^）]+）より古い。古い版に入れ替えません。/,
+  );
+  assert.match(r.stdout, /いまの状態: 何も変えていません/);
+  assert.match(
+    r.stdout,
+    /次にすること: claude plugin marketplace update touryou のあと、claude plugin update touryou@touryou --scope user を実行し、Claude Code を開き直してから、もう一度 \/touryou:setup。/,
+  );
+  assert.ok(!existsSync(join(h, "fetch.log")), "取得しない");
+  assert.equal(cur(h), join(h, ".touryou", `v${bodyVer}`, "touryou-darwin-arm64"));
+  assert.deepEqual(lines(join(h, "calls.log")), []);
+};
+
+test("plugin 0.9.0・本体 1.0.0: 終了コード 4・RESULT: plugin-older で止まり、取得せず、current は変わらない", () => {
+  const h = homeWithBody("1.0.0");
+  const r = installPlugin(h, "0.9.0");
+  assertPluginOlder(h, r, "1.0.0");
+  assert.ok(!existsSync(join(h, ".touryou", "v0.9.0")), "古い版を置かない");
+  assert.ok(!out(r).includes(h), "HOME の中身を出さない");
+});
+
+test("plugin が古い: 常駐（launchd）ありでも、終了コードは 3 にならず 4。--restart-daemon を付けても同じ", () => {
+  const h = homeWithBody("1.0.0");
+  mkdirSync(join(h, "Library", "LaunchAgents"), { recursive: true });
+  writeFileSync(join(h, "Library", "LaunchAgents", "touryou.daemon.plist"), "<plist/>");
+  assertPluginOlder(h, installPlugin(h, "0.9.0"), "1.0.0");
+  assertPluginOlder(h, installPlugin(h, "0.9.0", ["--restart-daemon"]), "1.0.0");
+});
+
+test("plugin が古い（rc・桁の違い）: 本体 0.1.5 に plugin 0.1.5-rc.0、本体 0.1.10 に plugin 0.1.9、本体 0.1.5-rc.10 に plugin 0.1.5-rc.2 は止まる", () => {
+  for (const [body, plugin] of [
+    ["0.1.5", "0.1.5-rc.0"],
+    ["0.1.10", "0.1.9"],
+    ["0.1.5-rc.10", "0.1.5-rc.2"],
+  ]) {
+    const h = homeWithBody(body);
+    assertPluginOlder(h, installPlugin(h, plugin), body);
+  }
+});
+
+test("plugin が新しい（rc・桁の違い）: 本体 0.1.5-rc.0 に plugin 0.1.5、本体 0.1.9 に plugin 0.1.10、本体 0.1.5-rc.2 に plugin 0.1.5-rc.10 は通る", () => {
+  for (const [body, plugin] of [
+    ["0.1.5-rc.0", "0.1.5"],
+    ["0.1.9", "0.1.10"],
+    ["0.1.5-rc.2", "0.1.5-rc.10"],
+  ]) {
+    const h = homeWithBody(body);
+    const r = installPlugin(h, plugin);
+    assert.equal(r.status, 0, `${body} → ${plugin}: ${out(r)}`);
+    assert.match(r.stdout, /RESULT: upgraded/);
+    assert.equal(cur(h), join(h, ".touryou", `v${plugin}`, "touryou-darwin-arm64"));
+  }
+});
+
+test("比べられない版（rc.N 以外の形）: 止めずに、今までの動き（入れ替える）", () => {
+  for (const [body, plugin] of [
+    ["1.0.0-beta", "0.9.0"],
+    ["0.9.0", "1.0.0-beta"],
+  ]) {
+    const h = homeWithBody(body);
+    const r = installPlugin(h, plugin);
+    assert.equal(r.status, 0, `${body} → ${plugin}: ${out(r)}`);
+    assert.match(r.stdout, /RESULT: upgraded/);
+    assert.equal(cur(h), join(h, ".touryou", `v${plugin}`, "touryou-darwin-arm64"));
+  }
+});
+
+test("SessionStart: 本体が新しい（plugin が古い）なら、先に plugin を新しくする、と --scope user つきで知らせる。同じは何も出さない。比べられないときは、向きを言わない", () => {
+  const tb = makeTarball("1.0.0");
+  const h = newHome();
+  assert.equal(install(makePlugin("1.0.0", tb), h, tb).status, 0);
+
+  const older = runNotice(h, makePlugin("0.9.0", tb));
+  assert.equal(older.status, 0);
+  const j = JSON.parse(older.stdout);
+  assert.equal(
+    j.systemMessage,
+    "touryou の plugin（v0.9.0）が本体（v1.0.0）より古いです。/touryou:setup は本体を古い版に入れ替えないので、先に plugin を新しくしてください。claude plugin marketplace update touryou のあと claude plugin update touryou@touryou --scope user を実行し、Claude Code を開き直してください。",
+  );
+  assert.equal(j.hookSpecificOutput.additionalContext, j.systemMessage);
+  assert.equal(j.hookSpecificOutput.hookEventName, "SessionStart");
+  assert.doesNotMatch(j.systemMessage, /本体を上げてください/);
+
+  assert.equal(runNotice(h, makePlugin("1.0.0", tb)).stdout, "");
+
+  const unknown = runNotice(h, makePlugin("1.0.0-beta", tb));
+  assert.equal(unknown.status, 0);
+  const u = JSON.parse(unknown.stdout);
+  assert.match(
+    u.systemMessage,
+    /本体（v1\.0\.0）と plugin（v1\.0\.0-beta）の版が違います。\/touryou:setup を実行してください。/,
+  );
+  assert.doesNotMatch(u.systemMessage, /古い|本体を上げて/);
+
+  // rc: 本体 1.0.0 に plugin 1.0.0-rc.0 は plugin が古い。本体 1.0.0-rc.0 に plugin 1.0.0 は本体が古い
+  const rcOlder = JSON.parse(runNotice(h, makePlugin("1.0.0-rc.0", tb)).stdout);
+  assert.match(rcOlder.systemMessage, /plugin（v1\.0\.0-rc\.0）が本体（v1\.0\.0）より古い/);
+  const rcHome = newHome();
+  mkdirSync(join(rcHome, ".touryou"));
+  const rcDist = join(rcHome, ".touryou", "v1.0.0-rc.0", "touryou-darwin-arm64");
+  symlinkSync(rcDist, join(rcHome, ".touryou", "current"));
+  const rcNewer = JSON.parse(runNotice(rcHome, makePlugin("1.0.0", tb)).stdout);
+  assert.match(rcNewer.systemMessage, /本体を上げてください/);
 });
 
 // --- 常駐の版上げで、stop のあとに失敗したとき（NFR_015: 前の版で動く状態に戻す） ---

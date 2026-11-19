@@ -5,6 +5,8 @@
 #   1. 対象の確認（Darwin arm64・git〔Command Line Tools〕）
 #   2. この plugin の中の checksums.json・plugin.json から、版・名前・sha256 を読む（引数・環境変数では変えられない）
 #   3. 同じ版がすでに入って動くなら、何もせずに終わる
+#   3'. plugin の版が、いまの本体より古いなら、何も変えずに止まる（古い版に入れ替えない。終了コード 4・RESULT: plugin-older。
+#      常駐の有無・同意に関わらない。版の大小が比べられない形〔rc.N 以外〕は、止めずに先へ進む）
 #   4. 取得（curl。https だけ・リダイレクトの先も https だけ）→ sha256 を checksums.json と照合（通るまで、展開も実行もしない）
 #   5. 取得したファイルの quarantine を確かめる（外さない）
 #   6. tar -t で中身を確かめる（先頭が touryou-darwin-arm64/ だけ・絶対パス・.. の要素を断る）
@@ -13,6 +15,8 @@
 #   9. 常駐（launchd の plist がある）で、版が変わるときだけ: 同意（--restart-daemon）があれば、止める → 付け替え → 新しい版で init → 起動し直す
 #      同意がなければ、付け替えずに終わる（終了コード 3）
 #  10. current を付け替える（できるだけ原子的に）
+#
+# 終了コード: 0 成功、1 失敗、2 知らない引数、3 常駐の同意が要る（need-restart-consent）、4 plugin が本体より古い（plugin-older）。
 #
 # 引数は --restart-daemon だけ（常駐の daemon を止めて起動し直すことへの、利用者の同意の印）。ほかは断る。
 # トークン・個人のパス（HOME の中身）は出さない。HOME の下のパスは「${HOME}/…」の形で出す。
@@ -206,6 +210,65 @@ current_version() {
   printf '%s' "${t}" | sed -n "s#^.*/v\([0-9][0-9A-Za-z.+-]*\)/${DIST_DIR}/*\$#\1#p"
 }
 
+# plugin/scripts/runtime-version-notice.sh にも、同じ vercmp がある（同じ表で試験している）
+vercmp_split() {
+  # $1: N.N.N の形の版の本体。vc_s1・vc_s2・vc_s3 に 3 つの数を入れる。形が違えば 2
+  case "$1" in "" | *[!0-9.]* | .* | *. | *..*) return 2 ;; esac
+  vc_o="${IFS}"
+  IFS=.
+  set -- $1
+  IFS="${vc_o}"
+  [ "$#" = 3 ] || return 2
+  [ "${#1}" -le 9 ] && [ "${#2}" -le 9 ] && [ "${#3}" -le 9 ] || return 2
+  vc_s1="$1"
+  vc_s2="$2"
+  vc_s3="$3"
+}
+vercmp_pre() {
+  # $1: 空、または -rc.N。vc_n に N を入れる（空なら pre なし）。それ以外の形は 2
+  case "$1" in
+    "") vc_n="" ;;
+    -rc.*)
+      vc_n="${1#-rc.}"
+      case "${vc_n}" in "" | *[!0-9]*) return 2 ;; esac
+      [ "${#vc_n}" -le 9 ] || return 2
+      ;;
+    *) return 2 ;;
+  esac
+}
+vercmp() {
+  # 版 $1 と $2 を semver どおりに比べる（+ 以降は無視。pre は rc.N だけ）。0: 同じ、1: $1 が古い、3: $1 が新しい、2: 比べられない
+  vc_a="${1%%+*}"
+  vc_b="${2%%+*}"
+  vc_ca="${vc_a%%-*}"
+  vc_cb="${vc_b%%-*}"
+  vc_pa=""
+  vc_pb=""
+  [ "${vc_a}" = "${vc_ca}" ] || vc_pa="-${vc_a#*-}"
+  [ "${vc_b}" = "${vc_cb}" ] || vc_pb="-${vc_b#*-}"
+  vercmp_split "${vc_ca}" || return 2
+  vc_a1="${vc_s1}"
+  vc_a2="${vc_s2}"
+  vc_a3="${vc_s3}"
+  vercmp_split "${vc_cb}" || return 2
+  vercmp_pre "${vc_pa}" || return 2
+  vc_na="${vc_n}"
+  vercmp_pre "${vc_pb}" || return 2
+  vc_nb="${vc_n}"
+  [ "${vc_a1}" -lt "${vc_s1}" ] && return 1
+  [ "${vc_a1}" -gt "${vc_s1}" ] && return 3
+  [ "${vc_a2}" -lt "${vc_s2}" ] && return 1
+  [ "${vc_a2}" -gt "${vc_s2}" ] && return 3
+  [ "${vc_a3}" -lt "${vc_s3}" ] && return 1
+  [ "${vc_a3}" -gt "${vc_s3}" ] && return 3
+  [ -n "${vc_pa}" ] || [ -n "${vc_pb}" ] || return 0
+  [ -n "${vc_pa}" ] || return 3
+  [ -n "${vc_pb}" ] || return 1
+  [ "${vc_na}" -lt "${vc_nb}" ] && return 1
+  [ "${vc_na}" -gt "${vc_nb}" ] && return 3
+  return 0
+}
+
 main() {
   local consent=0 a
   for a in "$@"; do
@@ -257,6 +320,19 @@ main() {
     finish 0 already
   fi
 
+  # plugin が、いまの本体より古いなら、古い版に入れ替えずに止める（取得も展開もしない。常駐の有無・同意より前）。
+  # 版の大小が比べられない形（rc.N 以外）は、止めずに、今までの動きにする
+  local vrc=0
+  if [ -n "${old}" ]; then
+    vercmp "${ver}" "${old}" || vrc=$?
+    if [ "${vrc}" = 1 ]; then
+      say "止めました: plugin（v${ver}）が、いまの本体（v${old}）より古い。古い版に入れ替えません。"
+      say "いまの状態: 何も変えていません"
+      say "次にすること: claude plugin marketplace update touryou のあと、claude plugin update touryou@touryou --scope user を実行し、Claude Code を開き直してから、もう一度 /touryou:setup。"
+      finish 4 plugin-older
+    fi
+  fi
+
   # 常駐の有無（plist があるか）。版を変える前に決める
   local managed=0 agents="${HOME}/Library/LaunchAgents"
   if [ -n "${old}" ] && [ -f "${agents}/${LABEL_PLIST}" ]; then managed=1; fi
@@ -280,7 +356,7 @@ main() {
     rm -f "${part}"
     if ! fetch "${REPO_URL}/releases/download/v${ver}/${name}" "${part}"; then
       rm -f "${part}"
-      die "配布物を取得できなかった（404 なら、この版の配布物が公開されていない）" "ネットワークを確かめて、もう一度 /touryou:setup。404 なら plugin を新しい版にしてから（claude plugin marketplace update touryou と claude plugin update touryou@touryou）"
+      die "配布物を取得できなかった（404 なら、この版の配布物が公開されていない）" "ネットワークを確かめて、もう一度 /touryou:setup。404 なら plugin を新しい版にしてから（claude plugin marketplace update touryou と claude plugin update touryou@touryou --scope user）"
     fi
     if [ "$(sha256_of "${part}")" != "${sha}" ]; then
       rm -f "${part}"

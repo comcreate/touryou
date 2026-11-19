@@ -33,16 +33,18 @@ Claude Code の auto モード（権限の自動判定）で実行している�
 
 1. **本体の導入（script。1 コマンド）**: `env -u BASH_ENV -u ENV bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-runtime.sh"`。`${CLAUDE_PLUGIN_ROOT}` は、この文書の中で、plugin のディレクトリの絶対パスに置き換わっている（Bash の環境変数には入らないので、置き換わった文字列のまま実行する）。置き換わっていない（`${CLAUDE_PLUGIN_ROOT}` の文字のまま）ときは、止まる。**このコマンドは、タイムアウトを長め（最大 10 分）にして実行する**（初めて・版が変わったときは、約 41MB の取得〔展開後は約 130MB〕を含む）。
    `env -u BASH_ENV -u ENV` は、非対話の bash が script の前に読むファイル（環境変数 `BASH_ENV`・`ENV` が指すもの）を読ませないため（script の頭では、環境から取り込まれた関数を消し、`PATH` を OS の既定にする）。承認の画面では、`env -u BASH_ENV -u ENV bash` と、plugin の中の `scripts/install-runtime.sh` だけで、引数がない（`--restart-daemon` は、下の「版が変わり、常駐しているとき」だけ）ことを確かめてもらう。
-   script がすること（順に。どこで失敗しても、`current` は古いまま。理由と次にすることを出して、0 以外で終わる）: 対象の確認（`Darwin arm64`・`git`〔Xcode の Command Line Tools〕）→ plugin の中の `checksums.json`・`plugin.json` から版・名前・sha256 を読み、版の一致・`repository` の固定値・形を確かめる → 同じ版が入って動くなら、何もせずに終わる → `curl`（https だけ）で `$HOME/.touryou/work` に取得 → sha256 を `checksums.json` と照合（**通るまで、展開も実行もしない**。合わなければ、取得したものを消す）→ quarantine の確かめ → `tar -t` の検査（先頭が `touryou-darwin-arm64/` だけ・絶対パス・`..` を断る）→ 一時ディレクトリに展開し、外を指すシンボリックリンク・quarantine を断る → `$HOME/.touryou/v<版>` に移す → 新しい版の `touryou-daemon --help` が動くことを確かめる → `current` を付け替える（新しいリンクを作ってから入れ替える）。
+   script がすること（順に。どこで失敗しても、`current` は古いまま。理由と次にすることを出して、0 以外で終わる）: 対象の確認（`Darwin arm64`・`git`〔Xcode の Command Line Tools〕）→ plugin の中の `checksums.json`・`plugin.json` から版・名前・sha256 を読み、版の一致・`repository` の固定値・形を確かめる → 同じ版が入って動くなら、何もせずに終わる → plugin の版が、いまの本体より古ければ、何も変えずに止まる（古い版に入れ替えない。常駐の有無で変えない。版の大小が比べられない形は、止めずに先へ進む）→ `curl`（https だけ）で `$HOME/.touryou/work` に取得 → sha256 を `checksums.json` と照合（**通るまで、展開も実行もしない**。合わなければ、取得したものを消す）→ quarantine の確かめ → `tar -t` の検査（先頭が `touryou-darwin-arm64/` だけ・絶対パス・`..` を断る）→ 一時ディレクトリに展開し、外を指すシンボリックリンク・quarantine を断る → `$HOME/.touryou/v<版>` に移す → 新しい版の `touryou-daemon --help` が動くことを確かめる → `current` を付け替える（新しいリンクを作ってから入れ替える）。
    出力の最後の行（`RESULT: …`）で分ける。その前の `CONFIG:`・`LAUNCHD:` の行は、設定・常駐の有無（成功のときだけ出る）:
    - `RESULT: installed`（初めて）: 手順 2 へ。
    - `RESULT: already`（同じ版がすでに入っている）・`RESULT: upgraded`（版を上げた。常駐なし）・`RESULT: upgraded-restarted`（版を上げ、常駐の daemon を起動し直した）: `CONFIG: present` なら、手順 2 を飛ばす。`LAUNCHD: present` なら、手順 3 も飛ばして、下の「版を上げたあと」へ。`upgraded` で daemon を手で動かしているなら、止めてから起動し直すよう伝える。
    - `RESULT: need-restart-consent`（終了コード 3。版が変わり、常駐している）: 何も変わっていない。下の「版が変わり、常駐しているとき」の問いを出す。
+   - `RESULT: plugin-older`（終了コード 4。plugin が、いまの本体より古い）: 何も変わっていない。本体を古い版に入れ替えず、手順 2 以降にも進まず、止まる。下の定型文（plugin が古い）を伝える。常駐しているときも同じで、同意は聞かない。
    - `RESULT: failed`（終了コード 1・2）: 止まる。出力の「止めました」「次にすること」を、そのまま伝える。
    定型文（script を実行する前）: 「導入の script を実行します。初めてのときと、版が変わったときは、配布物を取得します（目安として約 41MB です。回線によっては、数分かかります）。同じ版がすでに入っているときは、取得しません。」実際に取得したか（取得した・取得済みのものを使い直した・何もしなかった）は、script の出力の行が知らせるので、終わったあとに、この定型文を繰り返さない（取得の大きさ・時間を、もう一度言わない）。
    定型文（Command Line Tools がない）: 「この Mac には、git（Xcode の Command Line Tools）が入っていません。Terminal で `xcode-select --install` を実行して、インストールが終わってから、もう一度 /setup を実行してください（ダウンロードに、ネットワークと時間が要ります。Xcode だけを入れているときは、Xcode を一度開いて、ライセンスに同意してください）。」
    定型文（`checksums.json` がない・版が違う）: 「この plugin の版には、配布物の情報が入っていません。この plugin を配布した COMCREATE（連絡先: contact@comcreate-info.com）に、確かめてください。」
-   定型文（取得の失敗）: 「配布物を取得できませんでした。ネットワークの接続を確かめて、もう一度 /setup を実行してください。`404` と出たときは、plugin の版の配布物が公開されていません。plugin を新しい版にしてから（`claude plugin marketplace update touryou` と `claude plugin update touryou@touryou`）、もう一度実行してください。分からなければ、この plugin を配布した COMCREATE（連絡先: contact@comcreate-info.com）に相談してください。」
+   定型文（取得の失敗）: 「配布物を取得できませんでした。ネットワークの接続を確かめて、もう一度 /setup を実行してください。`404` と出たときは、plugin の版の配布物が公開されていません。plugin を新しい版にしてから（`claude plugin marketplace update touryou` と `claude plugin update touryou@touryou --scope user`）、もう一度実行してください。分からなければ、この plugin を配布した COMCREATE（連絡先: contact@comcreate-info.com）に相談してください。」
+   定型文（plugin が古い）: 「plugin（v<plugin の版>）が、いまの本体（v<本体の版>）より古いので、本体を古い版に入れ替えずに止めました（何も変えていません）。先に plugin を新しくしてください。`claude plugin marketplace update touryou` のあと、`claude plugin update touryou@touryou --scope user` を実行し、Claude Code を開き直してから、もう一度 /setup を実行してください。clone の中で `--scope user` なしに update すると、その project の分だけが上がり、user の分は古いままです。」
    定型文（照合の失敗）: 「配布物の検証に失敗しました（改ざん・取得の失敗の可能性）。インストールを止めました。この plugin を配布した COMCREATE（連絡先: contact@comcreate-info.com）に知らせてください。」
    定型文（quarantine）: 「配布物に、macOS の安全確認の印が付いています（ブラウザなどで取得すると付きます）。この setup を、もう一度実行して、取り直してください。それでも付くときは、この plugin を配布した COMCREATE（連絡先: contact@comcreate-info.com）に相談してください。」
    定型文: 「配布物の中身が、想定と違います。インストールを止めました。この plugin を配布した COMCREATE（連絡先: contact@comcreate-info.com）に知らせてください。」
@@ -135,7 +137,7 @@ CLI の子は、親のセッション（統合）が Bash で `claude` のコマ
 
 ## 版が変わり、常駐しているとき
 
-plugin を新しい版にしたあと（セッションの始まりに「本体と plugin の版が違います」と出たときなど）は、この `/setup` を、もう一度実行する。常駐（launchd の plist がある）なら、手順 1 の script は、何も変えずに `RESULT: need-restart-consent`（終了コード 3）で終わる。そのときは、次の定型文で尋ねる。
+plugin を新しい版にしたあと（`claude plugin marketplace update touryou` のあと `claude plugin update touryou@touryou --scope user`。セッションの始まりに「本体と plugin の版が違います」と出たときなど）は、この `/setup` を、もう一度実行する。plugin のほうが本体より古いとき（`RESULT: plugin-older`）は、常駐していても、この問いを出さずに、手順 1 の定型文（plugin が古い）を伝えて止まる。常駐（launchd の plist がある）なら、手順 1 の script は、何も変えずに `RESULT: need-restart-consent`（終了コード 3）で終わる。そのときは、次の定型文で尋ねる。
 
 定型文: 「常駐している daemon を、いったん止めて、新しい版に入れ替えます。入れ替えたあと、常駐の設定のまま（ログイン時に自動で動くまま）起動し直します。動いている子のセッションは止まります。よいですか（はい／いいえ）」
 

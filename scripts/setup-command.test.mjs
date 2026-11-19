@@ -82,6 +82,7 @@ test("手順 1: plugin の中の script を、引数なしの 1 コマンドで�
     "upgraded",
     "upgraded-restarted",
     "need-restart-consent",
+    "plugin-older",
     "failed",
   ]) {
     assert.ok(s.includes(`\`RESULT: ${r}\``), r);
@@ -94,6 +95,7 @@ test("手順 1: plugin の中の script を、引数なしの 1 コマンドで�
     "failed",
     "installed",
     "need-restart-consent",
+    "plugin-older",
     "upgraded",
     "upgraded-restarted",
   ]);
@@ -295,6 +297,15 @@ test("版が変わり、常駐しているとき: はっきり「はい」のと
   const after = /## 版を上げたあと\n([\s\S]*?)\n## /.exec(body)?.[1] ?? "";
   assert.match(after, /古い版のまま動き続ける/);
   assert.match(after, /`\/mcp` で `plugin:touryou:node` を選んで Reconnect する/);
+});
+
+test("plugin が本体より古いとき（#154）: 手順 1 は plugin-older（終了コード 4）で止まる。plugin の update の例は、すべて --scope user つき（#153）", () => {
+  assert.match(step(1), /`RESULT: plugin-older`（終了コード 4。/);
+  assert.match(step(1), /定型文（plugin が古い）:/);
+  assert.match(body, /`RESULT: plugin-older`）は、常駐していても、この問いを出さずに/);
+  const updates = [...body.matchAll(/claude plugin update touryou@touryou[^`\n]*/g)];
+  assert.ok(updates.length >= 3, "update の例が 3 か所以上ある");
+  for (const m of updates) assert.match(m[0], /--scope user/, m[0]);
 });
 
 test("症状表: 観察した症状のとおり（約 1 分後に終了）。原因が未確認のものは、未確認と書く。相談先は『この plugin を配布した COMCREATE』", () => {

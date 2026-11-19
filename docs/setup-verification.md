@@ -407,13 +407,16 @@ ls "${HOME}/Library/LaunchAgents/" | grep touryou
 
 ```sh
 claude plugin marketplace update touryou
-claude plugin update touryou@touryou
+claude plugin update touryou@touryou --scope user
 ```
+
+`--scope user` を付ける。clone の中で付けずに update すると、その project の分だけが上がり、user の分が古いままになる（本体より plugin が古い状態になる）。
 
 確かめる:
 
 - **Q8**: update の直後、`/reload-plugins` をせずに統合セッションを開き（または続け）、`/touryou:start`。node の MCP が動く。動かなければ、表示を記録する。
 - **S12**: 新しいセッションで、版の違いの知らせが出る（出なければ記録する）。`/touryou:setup` で、同意のあと `--restart-daemon` で起動し直し、`/touryou:service status` が新しい版で running。
 - **S13**: もう一度 `/touryou:setup` で `RESULT: already`。
+- **S12（plugin が古いとき）**: plugin が本体より古い状態（`--scope user` なしの update で起こる）では、セッションの始まりに「plugin（v…）が本体（v…）より古いです」と、`--scope user` つきの update を案内する知らせが出る。`/touryou:setup` は、`RESULT: plugin-older`（終了コード 4）で、何も変えずに止まり（常駐していても、同意は聞かない）、`current` は新しい本体のまま。`claude plugin update touryou@touryou --scope user` のあと Claude Code を開き直すと、`RESULT: already` になる。
 
 不具合が出たら、版を上げて直す（Release は付け直さない。`docs/release.md` の「版の決まり」と「やり直す」）。
