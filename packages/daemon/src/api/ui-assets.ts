@@ -233,8 +233,9 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 @keyframes galive{0%,100%{opacity:1}50%{opacity:.45}}
 @keyframes gflow{to{stroke-dashoffset:-14}}@keyframes gtravel{from{offset-distance:0%}to{offset-distance:100%}}
 .still *,.still *::before{animation:none!important;transition:none!important}
-@media (prefers-reduced-motion: reduce){*,*::before{animation:none!important;transition:none!important}}
-@media (max-width:640px){.now .count{font-size:44px}.now h2{font-size:18px}.top .tools{margin-left:0}}
+.still .pip{display:none}
+@media (prefers-reduced-motion: reduce){*,*::before{animation:none!important;transition:none!important}.pip{display:none}}
+@media (max-width:640px){.now .count{font-size:44px}.now h2{font-size:18px}.top .tools{margin-left:0}button.sm,button.copy,button.gear{min-height:44px}.zoom button{min-width:44px;min-height:44px}.seg button{min-width:44px}}
 `;
 
 // 根に出る、Desktop の子を人が確かめる依頼（daemon の再起動のあとの整合。external-check.ts）の文面の先頭。画面は、これを「停止の代行依頼」と同じ扱いにする
@@ -1768,8 +1769,18 @@ export const UI_JS = `'use strict';
     titleById = new Map();
     view.nodes.forEach(function (n) { if (typeof n.title === 'string') titleById.set(n.id, n.title); });
     nextSeen = new Set();
+    var prevWait = lastCount;
     renderTodo(v, byId);
     cardStatus = statusesOf(v);
+    // 状態変化の読み上げ: 答え待ちが増えた・失敗が増えた・（接続が切れた。下の connectionLost）の 3 つだけ。最初の描画では読まない
+    var failCount = 0;
+    cardStatus.forEach(function (s) { if (s.status === 'fail') failCount += 1; });
+    var said = [];
+    if (prevWait !== -1 && lastCount > prevWait) said.push(t('live.wait', { n: lastCount }));
+    if (lastFail !== -1 && failCount > lastFail) said.push(t('live.fail', { n: failCount }));
+    lastFail = failCount;
+    lostSaid = false;
+    if (said.length > 0) announce(said.join('。'));
     // カードは描き直しのたびに作り直すので、focus がカードにあったら、作り直したあとの同じ子のカードへ戻す
     // （移った先を、キーボード・読み上げの人が見失わないように）。入力欄など、ほかに focus があるときは触らない
     var act = document.activeElement;
@@ -1792,6 +1803,15 @@ export const UI_JS = `'use strict';
   }
 
   var etag = '';
+  // 読み上げ用: 前の描画の「失敗」の数（-1 は、まだ描いていない）と、接続が切れたと読み上げたか（描けたら戻す）
+  var lastFail = -1;
+  var lostSaid = false;
+  // つながっていた画面が取れなくなったとき、1 回だけ読み上げる（取り直しのたびには読まない）
+  function connectionLost() {
+    if (!lastView || lostSaid) return;
+    lostSaid = true;
+    announce(t('live.lost'));
+  }
 
   function showConnected() {
     if (!lastView) return;
@@ -1829,14 +1849,14 @@ export const UI_JS = `'use strict';
         if (res.status === 304) { return { unchanged: true }; }
         if (res.status === 401) { rejectToken(t('err.badToken')); return null; }
         if (res.status === 403) { rejectToken(t('err.needHuman')); return null; }
-        if (!res.ok) { setStatus(fetchFailureText(res.status)); return null; }
+        if (!res.ok) { setStatus(fetchFailureText(res.status)); connectionLost(); return null; }
         etag = res.headers.get('etag') || '';
         return res.json();
       })
       .then(function (body) {
         if (body && body.ok) render(body.value);
       })
-      .catch(function () { setStatus(unreachableText()); });
+      .catch(function () { setStatus(unreachableText()); connectionLost(); });
   }
 
   // 同時に 1 回だけ取る。取っている間に通知が来たら、終わってからもう 1 回取る。

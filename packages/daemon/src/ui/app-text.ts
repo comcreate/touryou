@@ -142,6 +142,15 @@ export const APP_TEXT = {
     ja: "daemon に接続できません（daemon が止まっている・再起動してポートが変わった・ネットワークの失敗）。daemon が動いているか、このページの URL のポートが今の daemon と同じかを確かめてください。再試行します",
     en: "Cannot connect to the daemon (it stopped, it restarted on a different port, or the network failed). Check that the daemon is running and that this page's URL uses the current daemon's port. Retrying",
   },
+  "live.wait": {
+    ja: "あなたの答え待ちが増えました（いま {n} 件）",
+    en: "More items are waiting for your answer ({n} now)",
+  },
+  "live.fail": {
+    ja: "失敗した作業が増えました（いま {n} 件）",
+    en: "More tasks have failed ({n} now)",
+  },
+  "live.lost": { ja: "daemon との接続が切れました", en: "The connection to the daemon was lost" },
   "copy.done": { ja: "写しました", en: "Copied" },
   "copy.failed": {
     ja: "写せません。文字を選んでコピーしてください",

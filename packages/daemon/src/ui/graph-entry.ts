@@ -456,6 +456,7 @@ function drawNode(
   element.replaceChildren();
   const box = el("div", `gnode t-${n.tier} s-${n.status}`);
   box.dataset.id = n.id;
+  box.role = "button";
   box.ariaLabel = graphString(lang, "graph.boxLabel", { title: n.title, status: n.statusText });
   const row = el("div", "gr");
   const icon = svgEl("svg", { class: "gic", width: 12, height: 12, viewBox: "0 0 12 12" });
