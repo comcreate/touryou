@@ -1476,7 +1476,10 @@ describe("状態変化の読み上げ・スマホの幅（UI レビューの対�
 
   it("render の読み上げ: 最初の描画では読まず、増えたときだけ読み、同じなら読まない。rejectToken のあとは最初に戻る", () => {
     const announced: string[] = [];
-    const ctx = { __announce: (m: string) => announced.push(m) };
+    const ctx = {
+      __announce: (m: string) => announced.push(m),
+      __cur: { wait: 0, statuses: [] as { status: string }[] },
+    };
     const api = runInNewContext(
       [
         "var lastCount = -1; var lastFail = -1; var lostSaid = true; var lastView = null; var lastRaw = null;",
@@ -1488,8 +1491,9 @@ describe("状態変化の読み上げ・スマホの幅（UI レビューの対�
         "function t(k) { return k; }",
         "function announce(m) { __announce(m); }",
         "function renderApprovals() {}",
-        "function renderTodo(v) { lastCount = v.wait; }",
-        "function statusesOf(v) { return v.statuses; }",
+        // render は view の一部だけを v に写すので、試験の値は ctx.__cur から読む
+        "function renderTodo() { lastCount = __cur.wait; }",
+        "function statusesOf() { return __cur.statuses; }",
         "function renderCards() {}",
         "function renderList() { return 0; }",
         "function renderGraph() {}",
@@ -1504,18 +1508,19 @@ describe("状態変化の読み上げ・スマホの幅（UI レビューの対�
       ].join("\n"),
       ctx,
     ) as { render(view: unknown): void; rejectToken(m: string): void };
-    const view = (wait: number, fail: number) => ({
-      nodes: [],
-      inbox: [],
-      decisions: [],
-      extensions: [],
-      flows: [],
-      confirmations: [],
-      truncated: [],
-      lastSeq: 1,
-      wait,
-      statuses: Array.from({ length: fail }, () => ({ status: "fail" })),
-    });
+    const view = (wait: number, fail: number) => {
+      ctx.__cur = { wait, statuses: Array.from({ length: fail }, () => ({ status: "fail" })) };
+      return {
+        nodes: [],
+        inbox: [],
+        decisions: [],
+        extensions: [],
+        flows: [],
+        confirmations: [],
+        truncated: [],
+        lastSeq: 1,
+      };
+    };
     api.render(view(3, 1));
     expect(announced).toEqual([]); // 前が -1（最初の描画）
     api.render(view(5, 2));
