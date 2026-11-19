@@ -144,13 +144,16 @@ export const APP_TEXT = {
   },
   "live.wait": {
     ja: "あなたの答え待ちが増えました（いま {n} 件）",
-    en: "More items are waiting for your answer ({n} now)",
+    en: "More exchanges are waiting for your answer ({n} now)",
   },
   "live.fail": {
     ja: "失敗した作業が増えました（いま {n} 件）",
-    en: "More tasks have failed ({n} now)",
+    en: "More pieces of work have failed ({n} now)",
   },
-  "live.lost": { ja: "daemon との接続が切れました", en: "The connection to the daemon was lost" },
+  "live.lost": {
+    ja: "daemon との接続が切れました。自動でやり直します",
+    en: "The connection to the daemon was lost. Retrying",
+  },
   "copy.done": { ja: "写しました", en: "Copied" },
   "copy.failed": {
     ja: "写せません。文字を選んでコピーしてください",

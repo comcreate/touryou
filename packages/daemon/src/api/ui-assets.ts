@@ -235,7 +235,7 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .still *,.still *::before{animation:none!important;transition:none!important}
 .still .pip{display:none}
 @media (prefers-reduced-motion: reduce){*,*::before{animation:none!important;transition:none!important}.pip{display:none}}
-@media (max-width:640px){.now .count{font-size:44px}.now h2{font-size:18px}.top .tools{margin-left:0}button.sm,button.copy,button.gear{min-height:44px}.zoom button{min-width:44px;min-height:44px}.seg button{min-width:44px}}
+@media (max-width:640px){.now .count{font-size:44px}.now h2{font-size:18px}.top .tools{margin-left:0}button.sm,button.copy,button.gear{min-height:44px}.zoom{top:4px}.zoom button{min-width:44px;min-height:44px}.seg button{min-width:44px}}
 `;
 
 // 根に出る、Desktop の子を人が確かめる依頼（daemon の再起動のあとの整合。external-check.ts）の文面の先頭。画面は、これを「停止の代行依頼」と同じ扱いにする
@@ -1779,7 +1779,6 @@ export const UI_JS = `'use strict';
     if (prevWait !== -1 && lastCount > prevWait) said.push(t('live.wait', { n: lastCount }));
     if (lastFail !== -1 && failCount > lastFail) said.push(t('live.fail', { n: failCount }));
     lastFail = failCount;
-    lostSaid = false;
     if (said.length > 0) announce(said.join('。'));
     // カードは描き直しのたびに作り直すので、focus がカードにあったら、作り直したあとの同じ子のカードへ戻す
     // （移った先を、キーボード・読み上げの人が見失わないように）。入力欄など、ほかに focus があるときは触らない
@@ -1803,7 +1802,7 @@ export const UI_JS = `'use strict';
   }
 
   var etag = '';
-  // 読み上げ用: 前の描画の「失敗」の数（-1 は、まだ描いていない）と、接続が切れたと読み上げたか（描けたら戻す）
+  // 読み上げ用: 前の描画の「失敗」の数（-1 は、まだ描いていない）と、接続が切れたと読み上げたか（取得に成功したら戻す。304 も成功）
   var lastFail = -1;
   var lostSaid = false;
   // つながっていた画面が取れなくなったとき、1 回だけ読み上げる（取り直しのたびには読まない）
@@ -1846,11 +1845,12 @@ export const UI_JS = `'use strict';
       : { authorization: 'Bearer ' + token };
     return fetch('/v1/ui/state', { headers: headers })
       .then(function (res) {
-        if (res.status === 304) { return { unchanged: true }; }
+        if (res.status === 304) { lostSaid = false; return { unchanged: true }; }
         if (res.status === 401) { rejectToken(t('err.badToken')); return null; }
         if (res.status === 403) { rejectToken(t('err.needHuman')); return null; }
         if (!res.ok) { setStatus(fetchFailureText(res.status)); connectionLost(); return null; }
         etag = res.headers.get('etag') || '';
+        lostSaid = false;
         return res.json();
       })
       .then(function (body) {
