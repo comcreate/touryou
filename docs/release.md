@@ -157,6 +157,7 @@ claude plugin marketplace add comcreate/touryou
 | Settings → Code security | Private vulnerability reporting を有効にする。Dependabot alerts・Secret scanning・Push protection を有効にする | `SECURITY.md` の窓口のため |
 | Settings → General | Issues を有効にする。Wiki・Projects は任意 | |
 | Settings → General → Pull Requests | **「Allow auto-merge」を有効にする** | `dependabot-auto-merge.yml` が Dependabot の PR に auto-merge を付けるため（無効だと `gh pr merge --auto` が失敗し、PR は人のマージを待つ） |
+| 組織の Settings → Actions → Runner groups → Repository access | 組織の自前の実行役（self-hosted runner）を、touryou（公開）に共有しない（Repository access から touryou を外す） | 公開のリポジトリでは、外の人の PR が書き換えたワークフローで、実行役を指名できるため。touryou の CI は、GitHub が貸す実行役だけを使う |
 
 - 必須の check の注: 必須にするのは `ci.yml` の `check (ubuntu-latest, node 22)`・`check (ubuntu-latest, node 24)`（名前を変えると必須の check が「待ち」のままになるので、変えるときは ruleset も合わせる）。`ci.yml` は `paths`・`paths-ignore` を使わず、どの PR でも動く（docs などだけの変更では、ジョブの中で重い段を飛ばして成功で終える）。`ci-macos.yml` はコードが変わったときだけ動く（`paths`）ので、必須にしない（動かなかった check を必須にすると「待ち」のままになる）。
 - secrets・variables は、どれも要らない（`GITHUB_TOKEN` だけを使う）。
@@ -303,6 +304,7 @@ marketplace への PR だけが出なかった（Release は正しく作られ�
   - 検証用の枝（`verify-release`）の `.github/workflows/release.yml` にだけ、`on:` に `workflow_dispatch:` を足してコミットする。
   - 新しい rc のタグを付けて push し、`gh workflow run release.yml --repo <自分のアカウント>/touryou --ref "v${v}"` で起こす。タグを ref にするので、`GITHUB_REF_NAME` はタグの名前になり、`version` の照合が通る。これで Release の作成・照合・`marketplace-self` まで通った。
 - **同じタグの出し直しは、起きないことがある**。やり直しは、新しい rc の番号（`0.1.1-rc.1`、`0.1.1-rc.2`、…）で行う。
+- **Mac が割り当てられずに落ちることがある**。実行の annotations に「The job was not acquired by Runner of type hosted even after multiple attempts」と出たら、コードの不具合ではないので、その実行を流し直す。`gh run rerun` は、gh の鍵に新しいフォークの Actions の権限がないと「Must have admin rights to Repository」で断られることがあるので、ブラウザでその実行を開き「Re-run jobs → Re-run failed jobs」で行う。macOS arm64 の割り当ては混むことがあり、何度か流し直すと通ることがある。
 
 検証用の版は、本番で使わない pre-release にする（`<次の版>-rc.<番号>`。例: `0.1.5-rc.0`。やり直すたびに番号を上げる）。上流に同名のタグがないことを、先に確かめる。
 
@@ -331,7 +333,7 @@ v=0.1.5-rc.0
 )
 ```
 
-**やり直す（2 回目から）**: 上の箱は `git switch -c verify-release` で始まるので、2 回目は止まる。新しい rc の番号で、次のようにする（`acct`・`v` は上の箱と同じ変数。`v` を新しい番号にする）。0 で見つかった不具合を main で直したあとも、これで作り直す。先に、上の「フォークの main を本番の main に追いつかせる push」をしてから行う（検証用の枝は、毎回、追いついた `origin/main` から作り直す）。`workflow_dispatch:` が要るときは、箱を貼る**前に**、手元の作業ツリーの `.github/workflows/release.yml` の `on:` に `workflow_dispatch:` を足しておく（コミットしない）。箱の `git switch -C` は作業ツリーの変更を持ち越し、`git commit -am` が版の変更と一緒にコミットするので、タグはそのコミットに付く（足した 1 行は、本番の release.yml には入れない）。
+**やり直す（2 回目から）**: 上の箱は `git switch -c verify-release` で始まるので、2 回目は止まる。新しい rc の番号で、次のようにする（`acct`・`v` は上の箱と同じ変数。`v` を新しい番号にする）。0 で見つかった不具合を main で直したあとも、これで作り直す。先に、上の「フォークの main を本番の main に追いつかせる push」をしてから行う（検証用の枝は、毎回、追いついた `origin/main` から作り直す）。`workflow_dispatch:` が要るときは、箱を貼る**前に**、まず `git fetch origin main && git switch --detach origin/main` で追いついた main に移ってから、手元の作業ツリーの `.github/workflows/release.yml` の `on:` に `workflow_dispatch:` を足しておく（コミットしない）。箱の `git switch -C` は作業ツリーの変更を持ち越し、`git commit -am` が版の変更と一緒にコミットするので、タグはそのコミットに付く（足した 1 行は、本番の release.yml には入れない）。先に main に移るのは、検証用の枝にいるまま足すと、前の rc の `workflow_dispatch:` がすでに入っていて、箱の `git switch -C verify-release origin/main` が「ローカルの変更が上書きされる」で止まるため（手元の main が古いときも止まる）。
 
 ```sh
 acct=<自分のアカウント>

@@ -190,16 +190,15 @@ claude --plugin-dir "${W}/plugin"
 
 ### 8. 後片付け
 
-**2〜7 のどこで失敗・中断しても、ここを上から通せば元に戻る**（試しのものは消し、1 で退避したものを戻すだけ）。最初の `uninstall` は、試しの常駐がない・`~/.touryou` がないなどで失敗してもよい。失敗しても、次の行に進む。
+**2〜7 のどこで失敗・中断しても、ここを上から通せば元に戻る**（試しのものは消し、1 で退避したものを戻すだけ）。
 
-試しの `~/.touryou` と常駐を外し、1 で退避したものを戻す。
+試しの `~/.touryou` と常駐を外し、1 で退避したものを戻す。下の 1 行は、1 で退避した `~/.touryou.before-verify` があるときだけ、外す・消す・戻すを行う。ないときは「退避がない（もう戻っているかもしれない）。止めます」と出して、何もしない（**2 回打っても、戻したものを消さない**。前に、外す・消す・戻すを別々の行で 2 回打ち、1 回目で戻した `~/.touryou` を 2 回目の `rm` が消したことがある）。中の `uninstall` は、試しの常駐がない・`~/.touryou` がないなどで失敗してもよい（失敗しても、消す・戻すに進む）。
 
 ```sh
-"${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes
-rm -rf "${HOME}/.touryou"
-command mv -f "${HOME}/.touryou.before-verify" "${HOME}/.touryou"
-readlink "${HOME}/.touryou/current"
+if [ -d "${HOME}/.touryou.before-verify" ]; then "${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes; rm -rf "${HOME}/.touryou" && command mv -f "${HOME}/.touryou.before-verify" "${HOME}/.touryou" && readlink "${HOME}/.touryou/current"; else echo "退避がない（もう戻っているかもしれない）。止めます"; fi
 ```
+
+「止めます」と出たら、次の `launchd init` 以降に進む前に、`readlink "${HOME}/.touryou/current"` が 1 で記録したものと同じかを確かめる（同じなら、もう戻っている）。
 
 1 で常駐だったときは、1 で確かめた引数と同じ引数で init し直して、戻す（`--org` を付けていたら、`init`・`apply`・`status` の全部に同じものを付ける。`--path-prefix` は `init` にだけ付ける〔`PATH` は `init` が plist に書く。`apply`・`status` は受けず、付けると失敗する〕。付けないと元の常駐にならない）。
 
@@ -215,7 +214,13 @@ readlink "${HOME}/.touryou/current"
 rm -rf "${W}"
 ```
 
-確かめる: `current` が 1 で記録したものと同じ。常駐だったときは `"${HOME}/Library/LaunchAgents/"` の plist と `"${HOME}/touryou-verify-launchd/"` の写しを `diff` で比べ、同じなら写しを消す（`rm -rf "${HOME}/touryou-verify-launchd"`）。常駐だったときは status が running。結果（S10〜S13 の可・不可と、出た表示）を、リリースの準備の PR か Issue に書く。
+確かめる: `current` が 1 で記録したものと同じ。常駐だったときは status が running。常駐だったときは、`"${HOME}/Library/LaunchAgents/"` の plist と `"${HOME}/touryou-verify-launchd/"` の写しを比べ、`diff` が同じと出たときだけ写しを消す（下の 1 行。違いが出たら写しは消えずに残るので、違いを見て直す。`--org` 付きのときは、2 つのファイル名をその名前にする）。
+
+```sh
+diff "${HOME}/Library/LaunchAgents/touryou.daemon.plist" "${HOME}/touryou-verify-launchd/touryou.daemon.plist" && rm -rf "${HOME}/touryou-verify-launchd"
+```
+
+結果（S10〜S13 の可・不可と、出た表示）を、リリースの準備の PR か Issue に書く。
 
 ## A'. tag の前（フォークの rc で行う）
 
@@ -300,7 +305,7 @@ A の 3〜8（S10・S11・S13・S12 の模造・後片付け）を、`V` を `${
 - **3（S10）**: 取得先は `https://github.com/${ACCT}/touryou/releases/download/v${R}/…`（script の出力）。本番（`comcreate`）を指していたら、2' の書き換えが効いていない。止めて A の 8（=8'）に進む。
 - **3（S11）**: `current` が `…/v${R}/touryou-darwin-arm64`。
 - **6（S12）**: 版の違いの知らせは、本体 v0.0.0-verify と plugin v`${R}`。
-- **8（後片付け）**: **8 の前に、B を行う**（8 で rc の `~/.touryou` と常駐を外すため）。8 は A の 8 と同じ。`rm -rf "${W}"` で、書き換えた写しも消える（リポジトリの `plugin/` は変えていない。`git status` がきれいなことを確かめる）。フォークの Release・tag・枝は、A' と B が済み、`docs/release.md` の 2-a が済んでから消す（`docs/release.md` の「本番の前の検証」の後始末）。
+- **8（後片付け）**: **8 の前に、B を行う**（8 で rc の `~/.touryou` と常駐を外すため）。8 は A の 8 と同じ（退避があるときだけ戻す 1 行なので、2 回打っても戻したものは消えない。「止めます」と出たら、もう戻っている）。`rm -rf "${W}"` で、書き換えた写しも消える（リポジトリの `plugin/` は変えていない。`git status` がきれいなことを確かめる）。フォークの Release・tag・枝は、A' と B が済み、`docs/release.md` の 2-a が済んでから消す（`docs/release.md` の「本番の前の検証」の後始末）。
 
 結果は、A と同じに、リリースの準備の PR か Issue に書く（rc の版でフォークの Release を使ったこと、を添える）。
 
@@ -315,9 +320,9 @@ A' の 7 のあと、8（後片付け）の前に、同じ Mac で行う。A' �
 | 3 | 統合セッションの MCP と中継 | N・Q（Q8 を除く。Q8 は C） | 統合セッションで `/touryou:start` がつながる |
 | 4 | 状態画面 | U・V・G | `/touryou:ui` で開き、木・カード・関係図が出る |
 | 5 | 子の起動と止め | A1・A2（範囲や知らせを変えたときは A3・A4 も） | 子が起動して紐付き、画面に出る。止める・消すが効く |
-| 6 | 止まっているかも | V の 4（CLI の子を 30 分動かさずに置く） | 知らせの前は出ない。daemon の知らせのあとに「止まっているかも」が出る → 画面の `claude attach` のコマンドを写して子を開き、答える → 子が done になると、知らせと札が消える |
+| 6 | 止まっているかも | V の 4（CLI の子を 30 分動かさずに置く） | 知らせの前は出ない。daemon の知らせのあとに「止まっているかも」が出る → 画面の `claude attach` のコマンドを写して子を開き、答える → 子が done になると、知らせと札が消える。子のプロセスが止まっていると、画面の `claude attach <ノード ID>` では開けない。そのときは `claude agents` でセッションの番号を見て、`claude attach <セッションの番号>` で開く（#150 が直るまで） |
 | 7 | 変えたところ | その版で変えたものの項目（H・I・P・D など。CHANGELOG の `## 未公開` を見て選ぶ） | 各項目の期待のとおり |
-| 8 | 片付け | A2 の削除・回収（`touryou reclaim`）、最後に S7（常駐を外す） | 子の作業ツリーとブランチが片付き、画面から消える。S7 のとおりに外れる（そのあと A' の 8 で元に戻す） |
+| 8 | 片付け | A2 の削除・回収（`touryou reclaim`）、最後に S7（常駐を外す） | 子の作業ツリーとブランチが片付き、画面から消える。S7 のとおりに外れる（そのあと A' の 8 で元に戻す。8 の 1 行は、退避があるときだけ戻すので、2 回打っても戻したものは消えない） |
 
 - 試しの子は、試しのリポジトリで動かす（チェックリストの「必要なもの」）。B で作った子・作業ツリーは、8 で片付けてから A' の 8 に進む。
 - 不具合が出たら、ここで止める。A' の 8 で元に戻し、main で直してから、新しい rc の番号で A' と B を通し直す（`docs/release.md` の 0-d）。
