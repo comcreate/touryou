@@ -1,0 +1,146 @@
+<title>統括ボード</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: 1カラムの読み物。上にサマリー、次に「あなたがすること」「決めてほしいこと」、下に現状。 */
+:root{--bg:#f4f6f8;--fg:#1c2530;--muted:#5a6775;--card:#ffffff;--line:#d5dce3;--accent:#1f5fae;--warn:#a85a00;--ok:#1d7a4a;
+--font-body:"Noto Sans JP","Hiragino Sans","Yu Gothic",system-ui,sans-serif;--font-mono:ui-monospace,Menlo,Consolas,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12171d;--fg:#e4e9ee;--muted:#9aa7b4;--card:#1a2129;--line:#2d3844;--accent:#6fa8ee;--warn:#e0a15a;--ok:#5cc08b;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#12171d;--fg:#e4e9ee;--muted:#9aa7b4;--card:#1a2129;--line:#2d3844;--accent:#6fa8ee;--warn:#e0a15a;--ok:#5cc08b;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);line-height:1.8;font-size:15px;
+padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+main{max-width:46rem;margin:0 auto;display:flex;flex-direction:column;gap:28px}
+h1{font-size:1.6rem;margin:0;text-wrap:balance}
+h2{font-size:1.2rem;margin:0 0 10px;text-wrap:balance}
+p{margin:0 0 8px}
+.sub{color:var(--muted);font-size:.9rem}
+.sum{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:0 6px 6px 0;padding:12px 14px}
+.todo{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.todo li{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px 14px;min-width:0}
+.empty{background:var(--card);border:1px dashed var(--line);border-radius:6px;padding:12px 14px;color:var(--muted)}
+.tag{display:inline-block;font-size:.75rem;padding:0 8px;border-radius:99px;border:1px solid currentColor;margin-right:6px;letter-spacing:.04em}
+.judge{color:var(--accent)}.work{color:var(--warn)}.opt{color:var(--muted)}
+.todo small{display:block;color:var(--muted);margin-top:2px}
+code{font-family:var(--font-mono);font-size:.85em;background:var(--bg);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+.tw{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--card)}
+table{border-collapse:collapse;width:100%;min-width:34rem}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:.8rem;color:var(--muted);letter-spacing:.05em}
+tr:last-child td{border-bottom:0}
+.note{border-left:4px solid var(--warn);background:var(--card);padding:10px 14px;border-radius:0 6px 6px 0}
+.note ul,.tana ul{margin:6px 0 0;padding-left:1.2em}
+.tana{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:12px 14px}
+.st{font-weight:700;white-space:nowrap}
+.st.done{color:var(--ok)}.st.now{color:var(--warn)}.st.next{color:var(--muted)}
+pre{position:relative;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px 76px 10px 12px;overflow-x:auto;font-family:var(--font-mono);font-size:.82rem;line-height:1.55;margin:6px 0;white-space:pre}
+.copy{position:absolute;top:6px;right:6px;font:600 .75rem/1 system-ui,sans-serif;padding:6px 9px;border-radius:5px;border:1px solid var(--line);background:var(--card);color:var(--accent);cursor:pointer}
+.copy:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.copied{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:.9rem;z-index:20}
+.now{border:2px solid var(--accent);border-radius:8px;padding:12px 14px;background:var(--card);display:flex;flex-direction:column;gap:6px}
+.now ol{margin:0;padding-left:1.3em}.now li{margin:8px 0}
+.nowhead{margin:0}
+.see{border-left:3px solid var(--ok);padding:4px 10px;font-size:.92rem}
+footer{color:var(--muted);font-size:.85rem}
+</style>
+<main>
+<header>
+<h1>統括ボード</h1>
+<p class="sub">最終更新 YYYY-MM-DD。このページは非公開です。</p>
+</header>
+
+<section class="sum">
+<p><b>いまの状況</b></p>
+<p>（統括から届いた進み具合を、ここに短く書く。）</p>
+</section>
+
+<section>
+<h2>あなたがすること</h2>
+<p>いまは、ありません。</p>
+<!-- 例: <ul class="todo"><li><b>…する</b>：（ターミナルで打つ）<pre>コマンド</pre></li></ul> -->
+<p class="sub" style="margin-top:8px"><b>そのあと、順に</b>(いまは、書くだけ):（なし）</p>
+</section>
+
+<section>
+<h2>決めてほしいこと</h2>
+<p>いまは、ありません。</p>
+</section>
+
+<section>
+<h2>進行中の作業</h2>
+<div class="tw"><table>
+<thead><tr><th>作業</th><th>いまの状態</th></tr></thead>
+<tbody>
+<tr><td>（なし）</td><td></td></tr>
+</tbody></table></div>
+</section>
+
+<section>
+<h2>完了(あなたの作業)</h2>
+<ul class="todo">
+</ul>
+</section>
+
+<section>
+<h2>マージ済み(main に入った)</h2>
+<div class="tw"><table>
+<thead><tr><th>PR</th><th>内容</th></tr></thead>
+<tbody>
+</tbody></table></div>
+</section>
+
+<footer>版 1 ・ YYYY-MM-DD 更新</footer>
+</main>
+<div class="copied" id="copied" hidden>コピーしました</div>
+<script>
+(() => {
+  const toast = document.getElementById("copied");
+  let timer;
+  const done = () => {
+    toast.hidden = false;
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      toast.hidden = true;
+    }, 1400);
+  };
+  const fallback = (text) => {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch {
+      ok = false;
+    }
+    document.body.removeChild(ta);
+    if (ok) {
+      done();
+    } else {
+      toast.textContent = "コピーできませんでした。選んでコピーしてください";
+      done();
+      setTimeout(() => {
+        toast.textContent = "コピーしました";
+      }, 1500);
+    }
+  };
+  for (const pre of document.querySelectorAll("pre")) {
+    const text = pre.textContent;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "copy";
+    b.textContent = "コピー";
+    b.setAttribute("aria-label", "このブロックをコピー");
+    b.addEventListener("click", () => {
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).then(done, () => fallback(text));
+      } else {
+        fallback(text);
+      }
+    });
+    pre.appendChild(b);
+  }
+})();
+</script>

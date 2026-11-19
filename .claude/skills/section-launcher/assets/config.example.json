@@ -1,0 +1,9 @@
+{
+  "repo": "comcreate/touryou",
+  "ghUser": "",
+  "boardUrl": "",
+  "namePrefix": "orch-",
+  "permissionMode": "auto",
+  "triageCron": "41 * * * *",
+  "boardCron": "15 * * * *"
+}

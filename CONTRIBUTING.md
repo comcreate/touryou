@@ -20,6 +20,8 @@ bash scripts/check.sh
 
 このリポジトリは、AI-SDD（仕様駆動の開発）に従います。要求・仕様・設計・タスクは `.sdd/` にあります（`.sdd/AI-SDD-PRINCIPLES.md`）。機能を足すときは、`.sdd/task/` のタスクの表に行を足してから実装します。
 
+手元の Mac で、統括（root）のセッションと常駐の手伝いのセッション（見回り・ボード・UI レビュー・UX レビュー）で進めるときの skill は `.claude/skills/` にあります。使い方と設定（環境変数・設定のファイル）は [`docs/dev-orchestration.md`](docs/dev-orchestration.md)。
+
 ## PR
 
 - 1 つの PR は 1 つの目的にします。説明には、変えたこと・確かめたこと（手元の検査の結果）・実機で確かめることを書きます。

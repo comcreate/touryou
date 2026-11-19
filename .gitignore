@@ -18,3 +18,6 @@ plugin/checksums.json
 # 画面の確かめ（scripts/ui-browser-check.mjs）の出力。TOURYOU_OUT を指定しないとルートに書かれる
 /ui-*.png
 /ux-*.png
+
+# 開発の統括の skill の script（.claude/skills）が作る Python の一時ファイル
+__pycache__/
