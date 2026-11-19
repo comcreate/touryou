@@ -1352,11 +1352,14 @@ describe("画面の使い勝手（#13）", () => {
 
   it("(#89) 動きは CSS の keyframes とクラスだけ。prefers-reduced-motion と「動きを止める」で止まる", () => {
     expect(UI_CSS).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)\{\*,\*::before\{animation:none!important;transition:none!important\}\}/,
+      /@media \(prefers-reduced-motion: reduce\)\{\*,\*::before\{animation:none!important;transition:none!important\}/,
     );
     expect(UI_CSS).toContain(
       ".still *,.still *::before{animation:none!important;transition:none!important}",
     );
+    // 図の上を動く玉は、動きを減らす設定と「動きを止める」のとき隠す（線と箱は残る）
+    expect(UI_CSS).toMatch(/@media \(prefers-reduced-motion: reduce\)\{[^@]*\.pip\{display:none\}\}/);
+    expect(UI_CSS).toContain(".still .pip{display:none}");
     expect(UI_JS).toContain("root.classList.toggle('still', x.still)"); // 設定の窓の「動きを止める」（#139）
     expect(UI_JS).not.toMatch(/\.animate\(|requestAnimationFrame/);
   });
