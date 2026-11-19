@@ -4,8 +4,8 @@
 
 ### 直したこと
 
-- **plugin が本体より古いとき、版の違いの知らせが「本体を上げて」と言い、`/touryou:setup` が古い版に入れ替えてしまった**（#154）: 知らせの向きを、版の大小で分けた。本体が古いときは今までの文、本体が新しい（plugin が古い）ときは「先に plugin を新しくする」と、`--scope user` つきの update を案内する。`/touryou:setup` は、plugin が本体より古いと、何も変えずに終了コード 4（`RESULT: plugin-older`）で止まる（取得も展開もしない。常駐の有無・同意に関わらない）。版は semver どおりに比べる（`0.1.5-rc.0` は `0.1.5` より古く、`rc.2` は `rc.10` より古い）。大小が比べられない形（`rc.N` 以外）は、止めずに今までの動きにする。
-- **手順書の plugin の update に `--scope user` を足した**（#153）: clone の中で `claude plugin update touryou@touryou` だけを実行すると、その project の分だけが上がり、user の分が古いままになる。手順書（`docs/setup-verification.md` の C・`README.md`・`docs/plugin.md`）・`/touryou:setup`・script の止める文・この CHANGELOG の update の例のすべてに `--scope user` を書いた。
+- **plugin が本体より古いとき、版の違いの知らせが「本体を上げて」と言い、`/touryou:setup` が古い版に入れ替えてしまった**（#154）: セッションの始まりの知らせが、本体と plugin のどちらが新しいかで文を変える。plugin が古いときは「先に plugin を新しくする」と案内する。`/touryou:setup` は、plugin が古いと、何も変えずに止まり、plugin を新しくする案内を出す（常駐していても同じ）。`--scope user` の付け忘れで plugin が古いままになる場合も、この案内で直せる。
+- **手順書の plugin の update に `--scope user` を足した**（#153）: clone の中で `claude plugin update touryou@touryou` だけを実行すると、その clone の中だけが新しくなり、自分のアカウント全体の plugin は古いままになる。手順書（`docs/setup-verification.md` の C・`README.md`・`docs/plugin.md`）・`/touryou:setup`・script の止める文・この CHANGELOG の update の例のすべてに `--scope user` を書いた。
 
 ## 0.1.5（2026-11-19）
 

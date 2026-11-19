@@ -7,6 +7,7 @@
 # - 標準出力には、Claude Code の SessionStart の JSON（systemMessage・additionalContext）だけを出す。個人のパスは出さない。
 # - POSIX sh と sed だけを使う（macOS の sh〔bash の POSIX モード〕と dash で同じに動く）。
 # vercmp は、plugin/scripts/install-runtime.sh にも同じものがある（同じ表で試験している）。
+# 共通の file に分けないのは、このフックが POSIX sh で走り、bash 用の install-runtime.sh を source できないため。
 vercmp_split() {
   # $1: N.N.N の形の版の本体。vc_s1・vc_s2・vc_s3 に 3 つの数を入れる。形が違えば 2
   case "$1" in "" | *[!0-9.]* | .* | *. | *..*) return 2 ;; esac
@@ -78,7 +79,7 @@ case "${r}" in
   3) m="touryou の plugin（v${b}）が本体（v${a}）より古いです。/touryou:setup は本体を古い版に入れ替えないので、先に plugin を新しくしてください。claude plugin marketplace update touryou のあと claude plugin update touryou@touryou --scope user を実行し、Claude Code を開き直してください。" ;;
   *)
     [ "${a}" != "${b}" ] || exit 0
-    m="touryou の本体（v${a}）と plugin（v${b}）の版が違います。/touryou:setup を実行してください。"
+    m="touryou の本体（v${a}）と plugin（v${b}）の版が違います（本体と plugin のどちらが新しいかは分かりません）。/touryou:setup を実行してください。"
     ;;
 esac
 printf '{"systemMessage":"%s","hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "${m}" "${m}"

@@ -495,6 +495,9 @@ const VERCMP_TABLE = [
   ["0.1.5.1", "0.1.5", 2],
   ["abc", "0.1.5", 2],
   ["", "0.1.5", 2],
+  ["1234567890.0.0", "0.1.5", 2],
+  ["0.1.5-rc.1234567890", "0.1.5", 2],
+  ["0.01.5", "0.1.5", 0],
 ];
 
 test("vercmp: notice と install の関数は同じ本文", () => {
@@ -561,6 +564,21 @@ test("plugin が古い: 常駐（launchd）ありでも、終了コードは 3 �
   assertPluginOlder(h, installPlugin(h, "0.9.0", ["--restart-daemon"]), "1.0.0");
 });
 
+test("plugin が古く、本体も動かない（--help が通らない）: 終了コード 4 で止まり、本体が動かないことも伝える。動く本体では、その文を出さない", () => {
+  const h = homeWithBody("1.0.0");
+  const normal = installPlugin(h, "0.9.0");
+  assertPluginOlder(h, normal, "1.0.0");
+  assert.doesNotMatch(normal.stdout, /いまの本体が動かない場合も/);
+
+  writeFileSync(
+    join(h, ".touryou", "v1.0.0", "touryou-darwin-arm64", "bin", "touryou-daemon"),
+    "#!/bin/sh\nexit 1\n",
+  );
+  const r = installPlugin(h, "0.9.0");
+  assertPluginOlder(h, r, "1.0.0");
+  assert.match(r.stdout, /いまの本体が動かない場合も、先に plugin を新しくしてください。/);
+});
+
 test("plugin が古い（rc・桁の違い）: 本体 0.1.5 に plugin 0.1.5-rc.0、本体 0.1.10 に plugin 0.1.9、本体 0.1.5-rc.10 に plugin 0.1.5-rc.2 は止まる", () => {
   for (const [body, plugin] of [
     ["0.1.5", "0.1.5-rc.0"],
@@ -622,9 +640,9 @@ test("SessionStart: 本体が新しい（plugin が古い）なら、先に plug
   const u = JSON.parse(unknown.stdout);
   assert.match(
     u.systemMessage,
-    /本体（v1\.0\.0）と plugin（v1\.0\.0-beta）の版が違います。\/touryou:setup を実行してください。/,
+    /本体（v1\.0\.0）と plugin（v1\.0\.0-beta）の版が違います（本体と plugin のどちらが新しいかは分かりません）。\/touryou:setup を実行してください。/,
   );
-  assert.doesNotMatch(u.systemMessage, /古い|本体を上げて/);
+  assert.doesNotMatch(u.systemMessage, /より古い|本体を上げて/);
 
   // rc: 本体 1.0.0 に plugin 1.0.0-rc.0 は plugin が古い。本体 1.0.0-rc.0 に plugin 1.0.0 は本体が古い
   const rcOlder = JSON.parse(runNotice(h, makePlugin("1.0.0-rc.0", tb)).stdout);

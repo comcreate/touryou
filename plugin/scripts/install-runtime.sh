@@ -211,6 +211,7 @@ current_version() {
 }
 
 # plugin/scripts/runtime-version-notice.sh にも、同じ vercmp がある（同じ表で試験している）
+# 共通の file に分けないのは、SessionStart のフックが POSIX sh で走り、bash 用のこの file を source できないため
 vercmp_split() {
   # $1: N.N.N の形の版の本体。vc_s1・vc_s2・vc_s3 に 3 つの数を入れる。形が違えば 2
   case "$1" in "" | *[!0-9.]* | .* | *. | *..*) return 2 ;; esac
@@ -327,6 +328,9 @@ main() {
     vercmp "${ver}" "${old}" || vrc=$?
     if [ "${vrc}" = 1 ]; then
       say "止めました: plugin（v${ver}）が、いまの本体（v${old}）より古い。古い版に入れ替えません。"
+      if ! { [ -x "${BASE}/current/bin/touryou-daemon" ] && "${BASE}/current/bin/touryou-daemon" --help >/dev/null 2>&1; }; then
+        say "いまの本体が動かない場合も、先に plugin を新しくしてください。"
+      fi
       say "いまの状態: 何も変えていません"
       say "次にすること: claude plugin marketplace update touryou のあと、claude plugin update touryou@touryou --scope user を実行し、Claude Code を開き直してから、もう一度 /touryou:setup。"
       finish 4 plugin-older

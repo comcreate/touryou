@@ -44,7 +44,7 @@ touryou のリポジトリで開発する人へ: このリポジトリの中で 
 **版の食い違いの知らせ（SessionStart）**: `hooks.json` の SessionStart は、`plugin/scripts/runtime-version-notice.sh` を呼び、本体（`current` の指す版）と plugin の版が違えば「`/touryou:setup` で本体を上げる」と知らせるだけ（取得・daemon の起動し直しはしない）。本体がない・読めないときは何も出さず、どの場合もセッションを止めない。
 
 - 取得に失敗したとき: ネットワークの接続を確かめる。`404` は、その版の Release がない（plugin と Release の版の食い違い）。plugin を新しい版にしてからやり直す。
-- 新しい版: `claude plugin marketplace update touryou` と `claude plugin update touryou@touryou --scope user` のあとに、`/touryou:setup` をもう一度実行して、配布物も同じ版にする（`--scope user` を付ける。clone の中で付けずに update すると、その project の分だけが上がる）。plugin が本体より古いときは、`/touryou:setup` は本体を入れ替えず、`RESULT: plugin-older`（終了コード 4）で止まって、plugin の更新を案内する。
+- 新しい版: `claude plugin marketplace update touryou` と `claude plugin update touryou@touryou --scope user` のあとに、`/touryou:setup` をもう一度実行して、配布物も同じ版にする（`--scope user` を付ける。付け忘れて clone の中で update すると、その clone の中だけが新しくなる）。plugin が本体より古いときは、`/touryou:setup` は本体を入れ替えず、`RESULT: plugin-older`（終了コード 4）で止まって、plugin の更新を案内する。
 
 ## 使う順序
 

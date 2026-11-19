@@ -410,7 +410,7 @@ claude plugin marketplace update touryou
 claude plugin update touryou@touryou --scope user
 ```
 
-`--scope user` を付ける。clone の中で付けずに update すると、その project の分だけが上がり、user の分が古いままになる（本体より plugin が古い状態になる）。
+`--scope user` を付ける。付け忘れて clone の中で update すると、その clone の中だけが新しくなり、自分のアカウント全体の plugin は古いままになる（本体より plugin が古い状態になる）。本体を古い版へ戻すことには対応していない。
 
 確かめる:
 
