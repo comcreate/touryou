@@ -1826,7 +1826,7 @@ export const UI_JS = `'use strict';
       message = t('conn.sessionExpired');
     }
     dropGraph(); graphView = null;
-    token = ''; etag = ''; lastView = null; lastRaw = null; generation += 1; sseUp = false; keptList = null; purgeSignature = null; pending = null;
+    token = ''; etag = ''; lastView = null; lastRaw = null; lastFail = -1; lostSaid = false; lastCount = -1; generation += 1; sseUp = false; keptList = null; purgeSignature = null; pending = null;
     if (controller) controller.abort();
     document.getElementById('approvals').hidden = true; codeDrafts.clear(); approvalErrors.clear();
     showAuth(true); setStatus(message);

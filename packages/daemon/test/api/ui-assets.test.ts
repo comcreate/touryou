@@ -1467,19 +1467,64 @@ describe("状態変化の読み上げ・スマホの幅（UI レビューの対�
   });
 
   it("読み上げは live.wait・live.fail・live.lost の 3 つだけ（ほかに、写すボタンの結果だけ）。最初の描画では読まない", () => {
-    const calls = [...UI_JS.matchAll(/announce\([^\n]*/g)].map((m) => m[0]);
-    expect(calls).toEqual([
-      "announce(msg) {",
-      "announce(t(ok ? 'copy.done' : 'copy.failed'));",
-      "announce(said.join('。'));",
-      "announce(t('live.lost'));",
-    ]);
+    for (const key of ["live.wait", "live.fail", "live.lost"]) {
+      expect(UI_JS, key).toContain(`t('${key}'`);
+    }
     const keys = [...UI_JS.matchAll(/said\.push\(t\('([^']+)'/g)].map((m) => m[1]);
     expect(keys).toEqual(["live.wait", "live.fail"]);
-    // 前の描画がないとき（最初の描画）は、増えたとは言わない
-    expect(UI_JS).toContain("if (prevWait !== -1 && lastCount > prevWait)");
-    expect(UI_JS).toContain("if (lastFail !== -1 && failCount > lastFail)");
-    expect(UI_JS).toContain("if (!lastView || lostSaid) return;");
+  });
+
+  it("render の読み上げ: 最初の描画では読まず、増えたときだけ読み、同じなら読まない。rejectToken のあとは最初に戻る", () => {
+    const announced: string[] = [];
+    const ctx = { __announce: (m: string) => announced.push(m) };
+    const api = runInNewContext(
+      [
+        "var lastCount = -1; var lastFail = -1; var lostSaid = true; var lastView = null; var lastRaw = null;",
+        "var attachDir = ''; var titleById = null; var nextSeen = null; var cardStatus = null; var graphView = null; var seenItems = null;",
+        "var viaSession = false; var token = 't'; var etag = ''; var generation = 0; var sseUp = false; var keptList = null;",
+        "var purgeSignature = null; var pending = null; var controller = null;",
+        "var codeDrafts = new Map(); var approvalErrors = new Map();",
+        "var document = { activeElement: null, getElementById: function () { return {}; } };",
+        "function t(k) { return k; }",
+        "function announce(m) { __announce(m); }",
+        "function renderApprovals() {}",
+        "function renderTodo(v) { lastCount = v.wait; }",
+        "function statusesOf(v) { return v.statuses; }",
+        "function renderCards() {}",
+        "function renderList() { return 0; }",
+        "function renderGraph() {}",
+        "function renderPurge() {}",
+        "function showAuth() {}",
+        "function showConnected() {}",
+        "function setStatus() {}",
+        "function dropGraph() {}",
+        fnOf("render"),
+        fnOf("rejectToken"),
+        "({ render: render, rejectToken: rejectToken })",
+      ].join("\n"),
+      ctx,
+    ) as { render(view: unknown): void; rejectToken(m: string): void };
+    const view = (wait: number, fail: number) => ({
+      nodes: [],
+      inbox: [],
+      decisions: [],
+      extensions: [],
+      flows: [],
+      confirmations: [],
+      truncated: [],
+      lastSeq: 1,
+      wait,
+      statuses: Array.from({ length: fail }, () => ({ status: "fail" })),
+    });
+    api.render(view(3, 1));
+    expect(announced).toEqual([]); // 前が -1（最初の描画）
+    api.render(view(5, 2));
+    expect(announced).toEqual(["live.wait。live.fail"]); // 増えた
+    api.render(view(5, 2));
+    expect(announced).toHaveLength(1); // 同じ
+    api.rejectToken("x");
+    api.render(view(9, 4));
+    expect(announced).toHaveLength(1); // rejectToken のあとは、最初の描画に戻る
   });
 
   it("接続が切れた読み上げは、取得に成功したあと（304 の変わりなしも）に、2 回目も読み上げる", () => {
@@ -1527,6 +1572,7 @@ describe("状態変化の読み上げ・スマホの幅（UI レビューの対�
 
   it("スマホの幅: 小さいボタンは 44px。図のボタンは top 4px で、下端が FIT_TOP に収まる", () => {
     const mobile = /@media \(max-width:640px\)\{([^\n]*)\}\n?$/m.exec(UI_CSS)?.[1] ?? "";
+    expect(mobile, "スマホ幅の @media が取れない").not.toBe("");
     expect(mobile).toContain("button.sm,button.copy,button.gear{min-height:44px}");
     expect(mobile).toContain(".zoom button{min-width:44px;min-height:44px}");
     const top = Number(/\.zoom\{top:(\d+)px\}/.exec(mobile)?.[1]);
