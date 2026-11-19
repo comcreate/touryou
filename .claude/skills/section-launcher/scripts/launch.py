@@ -132,7 +132,7 @@ def cmd_stop(cfg, role):
 
 
 def cmd_work(cfg, slug, prompt_file):
-    if not re.match(SLUG, slug):
+    if not re.fullmatch(SLUG, slug):
         raise SystemExit("題は、英小文字・数字・- だけで書いてください（例: review-154-1）")
     name = cfg["names"]["workPrefix"] + slug
     if sessions_named(name):
@@ -155,7 +155,7 @@ def main(argv):
         if argv[0] == "start":
             extra, rest = [], argv[2:]
             while rest:
-                if rest[0] in ("--model", "--effort") and len(rest) >= 2 and re.match(r"^[A-Za-z0-9._\[\]-]{1,64}$", rest[1]):
+                if rest[0] in ("--model", "--effort") and len(rest) >= 2 and re.fullmatch(r"[A-Za-z0-9._\[\]-]{1,64}", rest[1]):
                     extra += rest[:2]
                     rest = rest[2:]
                 else:

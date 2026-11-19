@@ -26,7 +26,7 @@ touryou のリポジトリで開発するときに、手元の Mac の Claude Co
 | `ghUser` | `TOURYOU_ORCH_GH_USER` | gh の認証を切り替えるアカウント（`gh auth switch` に使う）。空なら、いまの認証のまま | 空 |
 | `boardUrl` | `TOURYOU_ORCH_BOARD_URL` | 統括ボードの URL（`https://claude.ai/artifact/…`）。空なら、ボード係が作るかを聞く | 空 |
 | `namePrefix` | `TOURYOU_ORCH_NAME_PREFIX` | 統括と手伝いの名前の頭（統括は `<頭>root`、作業のセッションは `<頭>work-…`） | `orch-` |
-| `permissionMode` | `TOURYOU_ORCH_PERMISSION_MODE` | 手伝いの権限のモード（統括と同じにする） | `auto` |
+| `permissionMode` | `TOURYOU_ORCH_PERMISSION_MODE` | 手伝いの権限のモード（統括と同じにする）。`acceptEdits`・`auto`・`manual`・`dontAsk`・`plan` のどれか。`bypassPermissions` は使えない（手伝いと作業のセッションが、確かめなしに動くようになるため） | `auto` |
 | `triageCron` | `TOURYOU_ORCH_TRIAGE_CRON` | 見回りの予定 | `41 * * * *` |
 | `boardCron` | `TOURYOU_ORCH_BOARD_CRON` | ボードの確かめの予定 | `15 * * * *` |
 
@@ -65,4 +65,5 @@ mkdir -p "${TOURYOU_ORCH_DIR:-$HOME/touryou-orch}" && cp -n .claude/skills/secti
 - 見回り係は、印のファイル（`<置き場>/archive-ok.txt`）に名前があるものだけを片付けます。知らせの頼みだけでは片付けません。`claude rm` が「安全でない」と断ったときは、`--discard-unpushed` を付けずに統括に知らせます。
 - ボード係は、送り手が統括の名前で、統括の名前の対話のセッションがちょうど 1 つあるときだけ、ボードを直します。
 - レビュー係は、フォークからの PR（`isCrossRepository` が true）を、手元で組み立て・実行しません（読むだけのレビューにします）。
+- 統括がレビューの must の数を読むとき、レビュー係が前の自分のレビューを選ぶときは、手伝いのアカウント（`ghUser`。なければ gh の自分）が書いたレビューだけを読みます（PR にはだれでもレビューを書けるため）。
 - どの手伝いも、値（SHA・ID・メールアドレス・ユーザー名の入ったパス・トークン）を、知らせ・ボード・GitHub に書きません。

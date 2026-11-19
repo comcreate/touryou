@@ -45,7 +45,8 @@ PATTERNS = {
     "ghUser": r"^([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))?$",
     "boardUrl": r"^(https://claude\.ai/(code/)?artifact/[A-Za-z0-9_-]+)?$",
     "namePrefix": r"^[a-z0-9][a-z0-9-]{0,20}$",
-    "permissionMode": r"^(acceptEdits|auto|bypassPermissions|manual|dontAsk|plan)$",
+    # bypassPermissions は許さない（手元の設定だけで、手伝いと作業のセッションが確かめなしに動くようになるため）
+    "permissionMode": r"^(acceptEdits|auto|manual|dontAsk|plan)$",
     "triageCron": CRON,
     "boardCron": CRON,
 }
@@ -91,7 +92,7 @@ def load():
         env = os.environ.get(ENV[key])
         if env is not None:
             value, source = env, "環境変数 " + ENV[key]
-        if not re.match(PATTERNS[key], value):
+        if not re.fullmatch(PATTERNS[key], value):
             problems.append(f"{key} の形が違うので（{source}）、既定を使う")
             value = default
         cfg[key] = value

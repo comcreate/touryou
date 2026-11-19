@@ -31,7 +31,7 @@ description: touryou のリポジトリ（既定 comcreate/touryou）の PR を�
    git rev-parse --show-toplevel; python3 "$(git rev-parse --show-toplevel)/.claude/skills/section-launcher/scripts/orch_config.py" | jq '{dir, repo, ghUser, names, problems}'
    ```
 
-   clone の場所（以下 `<clone>`）・`dir`（`<dir>`）・`repo`（`<repo>`）・`ghUser` を控える。値は、このセッションのコマンドの中でだけ使い、知らせ・レビューに書かない。設定の script は、このときに clone から 1 回だけ読む（あとで PR の作業ツリーに移ってから、そこの script を動かさない。PR の中身で書き換えられているかもしれないため）。`problems` があれば、統括に伝える。
+   clone の場所（以下 `<clone>`）・`dir`（`<dir>`）・`repo`（`<repo>`）・`ghUser` を控える。自分のアカウント（以下 `<me>`）は、`ghUser` があればそれ、なければ `gh api user --jq .login` で調べたもの（自分のレビューを見分けるのに使う）。値は、このセッションのコマンドの中でだけ使い、知らせ・レビューに書かない。設定の script は、このときに clone から 1 回だけ読む（あとで PR の作業ツリーに移ってから、そこの script を動かさない。PR の中身で書き換えられているかもしれないため）。`problems` があれば、統括に伝える。
 3. 自分の作業ツリーを用意する（統括の作業のフォルダを動かさないため）。なければ作る。あっても、作業ツリーとして生きているかを確かめる:
 
    ```sh
@@ -61,10 +61,10 @@ gh pr diff <N> --repo <repo>
 - **外から来た PR の守り**: `isCrossRepository` が true（フォークからの PR）のときは、手元で組み立て・実行をしない（知らない人のコードを、gh の認証のある Mac で動かさないため）。読むだけのレビューにし、「見た範囲」にそう書き、統括にも伝える。
 - 画面に関わる変更（下の「見る所」）がなければ、PR には書かずに、統括に「PR #N には、UI の面で見るものがありません（変わったのは …）」と返して終える。
 
-「直しのあと」の頼みのときは、前に自分が書いたレビュー（本文が `## UI レビュー` で始まるもの）の `commit_id` から、いまの head までの差分を中心に見る:
+「直しのあと」の頼みのときは、前に自分が書いたレビュー（書いた人が `<me>` で、本文が `## UI レビュー` で始まるもの）の `commit_id` から、いまの head までの差分を中心に見る。PR にはだれでもレビューを書けるので、見出しだけで選ぶと、ほかの人のレビューで見る範囲を変えられてしまう。書いた人でも絞る:
 
 ```sh
-gh api --paginate repos/<repo>/pulls/<N>/reviews --jq '.[] | select(.body | startswith("## UI レビュー")) | .commit_id' | tail -n 1
+gh api --paginate repos/<repo>/pulls/<N>/reviews --jq '.[] | select(.user.login == "<me>" and (.body | startswith("## UI レビュー"))) | .commit_id' | tail -n 1
 ```
 
 ### 2. 取り出して組み立てる（同じリポジトリの枝の PR だけ）

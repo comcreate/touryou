@@ -25,7 +25,7 @@ description: touryou の開発の統括（root）のセッションが、手元�
 | `ghUser` | gh の認証を切り替えるアカウント。空なら、いまの認証のまま | 空 |
 | `boardUrl` | 統括ボード（claude.ai の Artifact）の URL。空なら、ボード係が作るかを聞く | 空 |
 | `namePrefix` | 統括と手伝いの名前の頭 | `orch-` |
-| `permissionMode` | 手伝いの権限のモード（統括と同じにする） | `auto` |
+| `permissionMode` | 手伝いの権限のモード（統括と同じにする。`bypassPermissions` は使えない） | `auto` |
 | `triageCron`・`boardCron` | 見回り・ボードの確かめの予定 | `41 * * * *`・`15 * * * *` |
 
 個人の値（`ghUser`・`boardUrl`・置き場のパス）は、手元の設定にだけ置き、リポジトリ・ボード・GitHub・知らせに書かない。値は、形を確かめてから使う（形が違えば既定に戻し、`problems` に出る）。
@@ -103,6 +103,12 @@ python3 "<launch>" resume board
 レビュー係に PR のレビューを頼む前に、2 で `orch-review-ui`・`orch-review-ux` が「動いている」かを見る。止まっていれば 4 で起こし、「起動しました」が届いてから頼む（止まっているセッションには、知らせが届かないことがある）。
 
 頼み方: SendMessage で `orch-review-ui` に「PR #N の UI レビューをお願いします（見てほしい所: …）」。
+
+レビューの must の数は、知らせの数を信じずに、GitHub のレビューの本文で数える（`### must` の下が「なし」か）。読むのは、手伝いのアカウント（設定の `ghUser`。なければ `gh api user --jq .login` の自分）が書いたレビューだけ。PR にはだれでもレビューを書けるので、見出しの形だけで読むと、ほかの人の書いた「must 0」で、マージの判断を変えられてしまう:
+
+```sh
+gh api --paginate repos/<repo>/pulls/<N>/reviews | jq -r --arg me "<me>" '.[] | select(.user.login == $me and (.body | test("^## (UI レビュー|UX レビュー|コードレビュー)"))) | .body | split("\n")[0]'
+```
 
 ## 6. 止める
 
