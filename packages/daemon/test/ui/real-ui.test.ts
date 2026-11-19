@@ -240,9 +240,11 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       await page.setViewportSize({ width, height: 900 });
       const heights = await page.evaluate(() =>
         [...document.querySelectorAll("#list .tname button")].map((b) => {
-          const r = b.getBoundingClientRect();
+          // スマホ幅では、押す所を 44px にそろえるため、ボタンの箱は 1 行より高い。折れたかは、中の文字の高さで見る
+          const range = document.createRange();
+          range.selectNodeContents(b);
           const line = Number.parseFloat(getComputedStyle(b).lineHeight) || 20;
-          return r.height / line;
+          return range.getBoundingClientRect().height / line;
         }),
       );
       expect(heights.length).toBeGreaterThan(0);
