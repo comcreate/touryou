@@ -475,8 +475,23 @@ export function flowsOf(state: OrchState): UiFlow[] {
     if (reviewed !== undefined && r.seq < reviewed) reviewedDone.set(r.nodeId, r.seq);
   }
 
+  // 統合が受け取った時刻（`inbox.acknowledged`。#102）を、項目の参照先（報告・判断・範囲の頼みの ID）ごとに。
+  // 同じ参照先の項目が複数あれば、いちばん早い受け取り。受け取りの記録がない統合では、引けない（届いたかは分からない）。
+  const acknowledgedAt = new Map<string, string>();
+  for (const i of state.inbox) {
+    if (i.ref === undefined || i.acknowledged === undefined) continue;
+    const cur = acknowledgedAt.get(i.ref);
+    if (cur === undefined || i.acknowledged.at < cur) acknowledgedAt.set(i.ref, i.acknowledged.at);
+  }
+  /** 子 → 親のやり取りの「届いた」。受け取りの記録があれば時刻、なければ「届いたかは分からない」の印。 */
+  const upDelivery = (
+    ref: string | undefined,
+  ): { deliveredAt: string } | { deliveryUnknown: true } => {
+    const at = ref === undefined ? undefined : acknowledgedAt.get(ref);
+    return at === undefined ? { deliveryUnknown: true } : { deliveredAt: t(at) };
+  };
   const out: { flow: UiFlow; seq: number }[] = [];
-  const push = (flow: UiFlow, seq: number): void => {
+  const push =(flow: UiFlow, seq: number): void => {
     if (flow.from === "" || flow.to === "" || flow.sentAt === "") return;
     out.push({ flow, seq });
   };
@@ -518,6 +533,7 @@ export function flowsOf(state: OrchState): UiFlow[] {
     // その直前の完了の報告にだけ付ける。それより前の完了の報告は、済んだが時刻は分からない）。
     const lastDoneBeforeReview = done ? reviewedDone.get(r.nodeId) : undefined;
     const doneAt = !done ? r.at : lastDoneBeforeReview === r.seq ? node?.reviewedAt : undefined;
+    const delivery = upDelivery(r.reportId);
     push(
       {
         id: `f-${r.seq}`,
@@ -525,10 +541,10 @@ export function flowsOf(state: OrchState): UiFlow[] {
         dir: "up",
         from,
         to: parentOf.get(r.nodeId) ?? UI_HUMAN,
-        stage: waiting ? "sent" : "done",
+        stage: waiting ? ("deliveredAt" in delivery ? "delivered" : "sent") : "done",
         sentAt: t(r.at),
+        ...delivery,
         ...(waiting || doneAt === undefined ? {} : { doneAt: t(doneAt) }),
-        deliveryUnknown: true,
         ...body(r.text),
       },
       r.seq,
@@ -540,6 +556,7 @@ export function flowsOf(state: OrchState): UiFlow[] {
     if (d.requestedAt === undefined) continue;
     const doneAt =
       d.status === "answered" ? d.answeredAt : d.status === "closed" ? d.closedAt : undefined;
+    const delivery = upDelivery(d.decisionId);
     push(
       {
         id: `f-${seq}`,
@@ -547,10 +564,10 @@ export function flowsOf(state: OrchState): UiFlow[] {
         dir: "up",
         from,
         to: parentOf.get(d.nodeId) ?? UI_HUMAN,
-        stage: d.status === "open" ? "sent" : "done",
+        stage: d.status === "open" ? ("deliveredAt" in delivery ? "delivered" : "sent") : "done",
         sentAt: t(d.requestedAt),
+        ...delivery,
         ...(doneAt === undefined ? {} : { doneAt: t(doneAt) }),
-        deliveryUnknown: true,
         ...body(d.question),
       },
       seq,
@@ -576,6 +593,7 @@ export function flowsOf(state: OrchState): UiFlow[] {
   }
   for (const x of state.extensions) {
     if (x.requestedAt === undefined) continue;
+    const delivery = upDelivery(x.extensionId);
     push(
       {
         id: `f-${x.requestedSeq}`,
@@ -583,10 +601,10 @@ export function flowsOf(state: OrchState): UiFlow[] {
         dir: "up",
         from: idOf(x.nodeId),
         to: parentOf.get(x.nodeId) ?? UI_HUMAN,
-        stage: x.status === "open" ? "sent" : "done",
+        stage: x.status === "open" ? ("deliveredAt" in delivery ? "delivered" : "sent") : "done",
         sentAt: t(x.requestedAt),
+        ...delivery,
         ...(x.decidedAt === undefined ? {} : { doneAt: t(x.decidedAt) }),
-        deliveryUnknown: true,
         ...body(x.reason),
       },
       x.requestedSeq,

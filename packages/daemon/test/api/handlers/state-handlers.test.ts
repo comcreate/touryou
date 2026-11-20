@@ -741,6 +741,63 @@ describe("inbox.fetch（呼び出し側の部分木の受信箱。差分取得�
     ]);
     expect(r.state().inbox).toHaveLength(2);
   });
+
+  it("ackItemIds（#102）: 統合ノードが載せた項目の ID だけを、受け取ったものとして記録する。項目は返さず、解決済みにもならない", async () => {
+    const r = rig();
+    await r.call("report.progress", r.req("report.progress", { text: "a1" }, A));
+    await r.call("report.progress", r.req("report.progress", { text: "a2" }, A));
+    const fetched = await r.call("inbox.fetch", r.req("inbox.fetch", {}, M1));
+    const [first, second] = fetched.value.items as { id: string }[];
+    // 受け取りを返さないうちは、記録がない（これまでどおり）
+    for (const i of r.state().inbox) expect(i).not.toHaveProperty("acknowledged");
+    const ack = await r.call(
+      "inbox.fetch",
+      r.req("inbox.fetch", { ackItemIds: [(first as { id: string }).id] }, M1),
+    );
+    expect(ack).toEqual({ ok: true, value: { items: [] } });
+    const byId = (id: string) => r.state().inbox.find((i) => i.id === id);
+    expect(byId((first as { id: string }).id)?.acknowledged).toMatchObject({
+      by: { nodeId: "m1" },
+    });
+    // 載せなかった項目は、受け取ったことにならない
+    expect(byId((second as { id: string }).id)).not.toHaveProperty("acknowledged");
+    expect(byId((first as { id: string }).id)).not.toHaveProperty("resolved");
+    // 付け直しても、記録は 1 回（最初の記録を残す）
+    const before = r.state().lastSeq;
+    await r.call(
+      "inbox.fetch",
+      r.req("inbox.fetch", { ackItemIds: [(first as { id: string }).id] }, M1),
+    );
+    expect(r.state().lastSeq).toBe(before);
+    // 受け取ったあとも、項目は受信箱に残る（解決するまで）
+    const again = await r.call("inbox.fetch", r.req("inbox.fetch", {}, M1));
+    expect(again.value.items).toHaveLength(2);
+  });
+
+  it("ackItemIds: 見えない（部分木の外の）項目・存在しない ID は記録しない。人間の呼び出しは拒む", async () => {
+    const r = rig();
+    await r.call(
+      "report.progress",
+      r.req("report.progress", { text: "b1" }, { role: "child", nodeId: "b" }),
+    );
+    const bItem = r.state().inbox[0] as { id: string };
+    const ack = await r.call(
+      "inbox.fetch",
+      r.req("inbox.fetch", { ackItemIds: [bItem.id, "no-such-item"] }, M1),
+    );
+    expect(ack.ok).toBe(true);
+    expect(r.state().inbox[0]).not.toHaveProperty("acknowledged");
+    const human = await r.call(
+      "inbox.fetch",
+      r.req("inbox.fetch", { ackItemIds: [bItem.id] }, "human"),
+    );
+    expect(human.ok).toBe(false);
+    expect(human.error?.code).toBe("forbidden");
+    expect(r.state().inbox[0]).not.toHaveProperty("acknowledged");
+    // 部分木の持ち主（root）なら、その項目を受け取れる
+    await r.call("inbox.fetch", r.req("inbox.fetch", { ackItemIds: [bItem.id] }, ROOT));
+    expect(r.state().inbox[0]?.acknowledged).toMatchObject({ by: { nodeId: "root" } });
+  });
 });
 
 describe("共通の性質", () => {

@@ -153,6 +153,7 @@ describe("purgeEventSeqs（木のノードを主語とするイベントの seq�
     mine.push(
       add({ type: "inbox.added", payload: { id: "ia", kind: "progress", nodeId: "a", ref: "ra" } }),
     );
+    mine.push(add({ type: "inbox.acknowledged", payload: { itemId: "ia" } }));
     mine.push(add({ type: "inbox.resolved", payload: { itemId: "ia" } }));
     mine.push(
       add({
@@ -189,6 +190,7 @@ describe("purgeEventSeqs（木のノードを主語とするイベントの seq�
     theirs.push(
       add({ type: "inbox.added", payload: { id: "ib", kind: "progress", nodeId: "b", ref: "rb" } }),
     );
+    theirs.push(add({ type: "inbox.acknowledged", payload: { itemId: "ib" } }));
     theirs.push(add({ type: "inbox.resolved", payload: { itemId: "ib" } }));
     const nodeSeqs = events
       .filter(

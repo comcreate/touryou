@@ -195,6 +195,14 @@ export type EventBody =
       readonly payload: { readonly itemId: string };
     }
   | {
+      /**
+       * 統合が受信箱の項目を受け取った記録（#102。`inbox.fetch` の `ackThrough`）。受け取った者は封筒の `actor`。記録のみ
+       * （項目は消えない・解決済みにもならない）。子 → 親のやり取りの「届いた」を、状態画面に出すために使う。
+       */
+      readonly type: "inbox.acknowledged";
+      readonly payload: { readonly itemId: string };
+    }
+  | {
       /** 追加指示の配送の記録（アダプタが子へ届けた）。`instructedSeq` は、対応する `node.instructed` のイベントの `seq`。記録のみ。 */
       readonly type: "node.instructionDelivered";
       readonly payload: { readonly instructedSeq: number };
@@ -1876,6 +1884,29 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
         d.inbox[i] = freezeRecord({
           ...cur,
           resolved: Object.freeze({ seq, at: raw.at as string, by: actor }),
+        });
+      }
+      return commit();
+    }
+
+    case "inbox.acknowledged": {
+      const { itemId } = p;
+      if (!isId(itemId)) return invalid(seq, "inbox.acknowledged の itemId");
+      const i = d.inbox.findIndex((x) => x.id === itemId);
+      const cur = d.inbox[i];
+      if (cur === undefined) {
+        return reject(
+          seq,
+          "unknownInboxItem",
+          `受信箱の項目 ${itemId} は存在しない`,
+          "受信箱の項目の ID を確認する",
+        );
+      }
+      // 二度目の受け取りの記録は、最初の記録を残す（状態は変えない）。
+      if (cur.acknowledged === undefined) {
+        d.inbox[i] = freezeRecord({
+          ...cur,
+          acknowledged: Object.freeze({ seq, at: raw.at as string, by: actor }),
         });
       }
       return commit();
