@@ -4,7 +4,7 @@
 
 ### 利用者に見える変更
 
-- **すでにある作業ツリーと、そこで動くセッションを、子として採用できるようにした**（#163）: 統合ノードの新しい道具 `node_adopt`（操作 `node.adopt`）が、手で作った作業ツリーを調べて、木の子として登録する（CLI の木だけ）。採用の条件は、登録済みの作業ツリー・主や親の作業ツリーでない・ブランチが付いている（指定した `branch` と同じ・親と別・上流が親のブランチ）・すでに別の子の作業ツリーでない。満たさないときは、何も変えずに、原因（`cause`）と次の操作（`nextActions`）を返す。範囲は、`node_spawn` と同じく親の範囲に収まること（`scopeNotSubset`）。成功すると、`nodeId` と、セッションの人に伝える `instruction`（`/mcp` の Reconnect → `child_bind` を引数なしで → 受信箱は自分で読む）が返る。同じ `requestId` の再送は、同じ結果（`duplicate: true`）を返す。手順は、新しい skill `/touryou:adopt` と `touryou:child`・`touryou:integrator` に書いた。
+- **すでにある作業ツリーと、そこで動くセッションを、あとから子として採用できるようにした**（#163）: CLI の木だけで、統合の Claude が手順を進める。以下は条件・記録・互換の細目（内部の名前を含む）。統合ノードの新しい道具 `node_adopt`（操作 `node.adopt`）が、手で作った作業ツリーを調べて、木の子として登録する（CLI の木だけ）。採用の条件は、登録済みの作業ツリー・主や親の作業ツリーでない・ブランチが付いている（指定した `branch` と同じ・親と別・上流が親のブランチ）・すでに別の子の作業ツリーでない。満たさないときは、何も変えずに、原因（`cause`）と次の操作（`nextActions`）を返す。範囲は、`node_spawn` と同じく親の範囲に収まること（`scopeNotSubset`）。成功すると、`nodeId` と、セッションの人に伝える `instruction`（`/mcp` の Reconnect → `child_bind` を引数なしで → 受信箱は自分で読む）が返る。同じ `requestId` の再送は、同じ結果（`duplicate: true`）を返す。手順は、新しい skill `/touryou:adopt` と `touryou:child`・`touryou:integrator` に書いた。
   - 記録: 採用は、新しいイベント `node.adopted`（作業ツリー・ブランチ・セッション参照）と、`node.created`（範囲を含む）、`node.stateChanged` を 1 回で追記する。誰が（イベントの actor）・どの作業ツリーを・どの範囲で採用したかが残る。
   - 回収（`node_reclaim`）は、採用した作業ツリーとブランチを**消さない**。子の印と紐付けのコードを外すだけ。未コミットの変更がある作業ツリーも採用できる（結果の `dirty` が真になる）。
   - **互換性**: `node.adopted` を含むログは、この版より古い daemon では読み直せない。採用を使ったあとは、daemon を古い版へ戻さない（状態の版 `STATE_VERSION` は変えていない）。人間（CLI の `touryou`）には、`node.adopt` を足していない。統合ノードの MCP からだけ使える。

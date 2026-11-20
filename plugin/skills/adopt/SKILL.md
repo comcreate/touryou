@@ -25,11 +25,12 @@ description: touryou の統合ノードとして、すでにある git の作業
 
 1. 採用する作業ツリーの絶対パス（`git worktree list` で確かめる）と、ブランチ名を決める。
 2. 子の目的・受け入れ基準・範囲を決める。**範囲は、親（根なら `config.json` の `rootScope`）の範囲に収まること**（`node_spawn` と同じ。収まらないと `scopeNotSubset`）。`forbiddenLocations` には、親の禁止をすべて含める。場所は、採用する作業ツリーの中の相対パス。
-3. `mcp__node__node_adopt` を呼ぶ（`parentId`・`role`・`worktree`・`branch`・`objective`・`acceptanceCriteria`・`scope`）。
+3. **呼ぶ前に、人に伝える**: 採用を使うと、記録に `node.adopted` が入り、この daemon は古い版へ戻せなくなる（古い版は、その記録を読めない）。同意を得てから呼ぶ。
+   `mcp__node__node_adopt` を呼ぶ（`parentId`・`role`・`worktree`・`branch`・`objective`・`acceptanceCriteria`・`scope`）。
    - 失敗したら、`cause` と `nextActions` に従って直し、同じ内容でもう一度呼ぶ（作業ツリーとブランチは変わっていない）。
    - 成功すると、`nodeId` と `instruction` が返る。同じ `requestId` の再送は、同じ結果（`duplicate: true`）を返す。
 4. 返った `instruction` を、そのセッションの人に伝える。セッションの中で、次の順に進めてもらう:
-   1. `/mcp` を開き、touryou の接続を **Reconnect** する（動いていたセッションの MCP は、採用の前に始まっているので、子の印を見ていない）。
+   1. `/mcp` を開き、touryou の接続を **Reconnect** する（動いていたセッションの MCP は、採用の前に始まっているので、つなぎ直すまでは子として動けない）。
    2. 子のツール `child_bind` を、**引数なし**で 1 回だけ呼ぶ。
    3. 紐付けのあと、`inbox_fetch` でブリーフを読み、`/touryou:child` の手順で報告する。
 5. 紐付けに失敗する（コードの期限切れなど）ときは、`mcp__node__node_bindCode` で、コードを作業ツリーに書き直し、もう一度 `child_bind` を呼んでもらう。

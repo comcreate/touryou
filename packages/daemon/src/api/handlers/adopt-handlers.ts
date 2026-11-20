@@ -75,7 +75,7 @@ const nodeOf = (state: OrchState, id: string): NodeRecord | undefined =>
 const instructionOf = (nodeId: string, dirty: boolean): string =>
   [
     `ノード ${nodeId} として採用した。このノードの作業ツリーで動いているセッションで、次の順に進める:`,
-    "1. セッションの中で /mcp を開き、touryou の接続をつなぎ直す（Reconnect）。採用の前から動いていたセッションの MCP は、子の印を見ていないため",
+    "1. セッションの中で /mcp を開き、touryou の接続をつなぎ直す（Reconnect）。これで、このセッションが子として動けるようになる（採用の前から動いていたセッションは、つなぎ直すまで、子として扱われない）",
     "2. 子のツール child_bind を、引数なしで呼ぶ（紐付けのコードは作業ツリーに置いてある。期限が切れていたら、親が node_bindCode で出し直す）",
     "3. 紐付けのあとは、/touryou:child の手順で報告する。起動時の知らせの自動の流れがないので、ときどき inbox_fetch で受信箱を読む",
     ...(dirty

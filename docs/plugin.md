@@ -63,8 +63,8 @@ daemon は、CLI の子を起動しない。親のセッションが起動する
 手で作った作業ツリー（`git worktree add`）と、そこで動いているセッションを、あとから木の子にできる（#163。CLI の木だけ。統合ノードの MCP の `node_adopt`。人間の CLI には足していない）。手順書は `plugin/skills/adopt/SKILL.md`（`/touryou:adopt`）。
 
 1. 統合ノードが `node_adopt` を呼ぶ（`parentId`・`role`・`worktree`〔絶対パス〕・`branch`・`objective`・`acceptanceCriteria`・`scope`）。daemon は、作業ツリーを調べ（登録済み・主や親の作業ツリーでない・ブランチが付いている〔指定の `branch` と同じ・親と別・上流が親のブランチ〕・すでに別の子の作業ツリーでない）、範囲が親の範囲に収まることを確かめる。満たさなければ、何も変えずに、原因（`cause`）と次の操作（`nextActions`）を返す。
-2. 成功すると、`nodeId` と `instruction` が返る。作業ツリーに、子の印と紐付けのコードが書かれる。
-3. 動いていたセッションで、`/mcp` から touryou を Reconnect し（子の印は、MCP の起動のときにしか見ないため）、`child_bind` を引数なしで 1 回呼ぶ。
+2. 成功すると、`nodeId` と `instruction` が返る。作業ツリーに、子であることの印（git のディレクトリのファイル）と紐付けのコードが書かれる。
+3. 動いていたセッションで、`/mcp` から touryou を Reconnect し（これでこのセッションが子として動ける。印は MCP の起動のときにしか見ないため）、`child_bind` を引数なしで 1 回呼ぶ。
 4. 採用した子には、起動の知らせの自動の流れがないので、子が `inbox_fetch` を自分で読む。受理・統合は、普通の子と同じ。
 
 記録は、`node.created`（範囲）・`node.stateChanged`・`node.adopted`（作業ツリー・ブランチ）を 1 回で追記する。回収は、採用した作業ツリーとブランチを消さない（子の印と紐付けのコードを外すだけ）。`node.adopted` を含むログは、古い daemon では読み直せない。
