@@ -191,6 +191,23 @@ export interface OperationMap {
     result: { items: readonly InboxItem[] };
   };
   /**
+   * 受信箱の項目を片付ける（人間だけ。#99）。片付けた項目は解決済みになり、「要対応」の数に入らない（記録に残る。`inbox.reopen` で戻せる）。
+   * 片付けてよい種類は `HUMAN_RESOLVABLE_KINDS`（progress・done・info）だけ。判断・違反・停止未完了などが 1 件でも含まれると、
+   * 何も片付けずに `notResolvable` で失敗する。存在しない ID は `notFound`（何も片付けない）。すでに解決済みの項目は、`alreadyResolved` に入れる（冪等）。
+   */
+  "inbox.resolve": {
+    params: { itemIds: readonly string[] };
+    result: { resolved: readonly string[]; alreadyResolved: readonly string[] };
+  };
+  /**
+   * 人間が片付けた項目を、未解決に戻す（人間だけ。#99）。戻せるのは、人間が片付けた項目だけ（システム・ノードが解決にしたものは `notReopenable`）。
+   * すでに未解決の項目は、`alreadyOpen` に入れる（冪等）。
+   */
+  "inbox.reopen": {
+    params: { itemIds: readonly string[] };
+    result: { reopened: readonly string[]; alreadyOpen: readonly string[] };
+  };
+  /**
    * 子の受信箱（子のロールだけ。自分のノードの分だけ）。最初にブリーフ（目的・受け入れ基準・範囲・依存）を、続けて、まだ受け取って
    * いない追加の指示（差し戻しの理由・判断の回答を含む）を古い順に返す。`all: true` なら、受け取ったものも含める。返した指示は受け取った
    * ものとして記録する。指示の本文は人や親が書いた文で、子への引用として扱う。
@@ -605,6 +622,8 @@ export const ROLE_OPERATIONS = {
   ],
   human: [
     "inbox.fetch",
+    "inbox.resolve",
+    "inbox.reopen",
     "tree.list",
     "decision.get",
     "decision.answer",

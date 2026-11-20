@@ -47,6 +47,25 @@ export interface InboxItem {
 export const unresolvedInbox = (items: readonly InboxItem[]): InboxItem[] =>
   items.filter((i) => i.resolved === undefined);
 
+/**
+ * 人が「片付ける」（`inbox.resolve`）ことのできる種類（#99）。進み具合・完了・知らせだけ。
+ * 判断（decision）・拡張要求の違反（violation）・停止未完了（stopIncomplete）は、答える・判定する・宣言するまで片付けさせない。
+ * 失敗（failure）・答え（answer）・要約（digest）は、システムの記録で解決になる（片付ける操作の対象にしない）。
+ */
+export const HUMAN_RESOLVABLE_KINDS: ReadonlySet<InboxKind> = new Set<InboxKind>([
+  "progress",
+  "done",
+  "info",
+]);
+
+/** 人が片付けてよい種類の項目か。 */
+export const isHumanResolvable = (item: Pick<InboxItem, "kind">): boolean =>
+  HUMAN_RESOLVABLE_KINDS.has(item.kind);
+
+/** 人が片付けた（解決した者が人間の）項目か。`inbox.reopen` で戻せるのは、これだけ（システム・ノードが解決にしたものは戻さない）。 */
+export const isResolvedByHuman = (item: Pick<InboxItem, "resolved">): boolean =>
+  item.resolved !== undefined && "human" in item.resolved.by;
+
 /** 受理・回収・archive のあとは、もう対処のいらない、停止の未完了と失敗の記録を残さない（`staleInboxItems`）。 */
 export const SETTLED_STATES: ReadonlySet<NodeState> = new Set<NodeState>([
   "verified",

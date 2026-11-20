@@ -16,6 +16,7 @@
 
 import type { Actor, OrchState } from "./events.js";
 import { ID_PATTERN } from "./ids.js";
+import { isResolvedByHuman } from "./inbox.js";
 import { isStallSummary, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
 import { copyInboxMessage, type InboxMessage } from "./inbox-messages.js";
 import type { NodeRole, NodeState } from "./index.js";
@@ -38,6 +39,8 @@ export const UI_LIMITS = {
   extensions: 100,
   options: 10,
   flows: 200,
+  /** 人が片付けた項目（「片付けた項目」にたたんで出すもの）。新しい順で、この件数まで。 */
+  resolved: 50,
 } as const;
 
 export interface UiNode {
@@ -94,6 +97,21 @@ export interface UiInboxItem {
   /** 「止まっているかもしれない子」の知らせ（`isStallSummary`）。 */
   readonly stall?: true;
   /** daemon が書いた知らせの鍵と値（#140）。画面は、言語を選んで文にし、ないときは `summary` を出す。 */
+  readonly msg?: InboxMessage;
+}
+
+/**
+ * 人が片付けた項目（#99）。画面は「片付けた項目」にたたんで出し、「戻す」（`inbox.reopen`）を付ける。
+ * 戻せるのは人が片付けた項目だけなので、システム・ノードが解決にしたものは載せない。
+ */
+export interface UiResolvedItem {
+  readonly id: string;
+  readonly kind: string;
+  readonly nodeId: string;
+  readonly at: string;
+  /** 片付けた時刻。 */
+  readonly resolvedAt: string;
+  readonly summary?: string;
   readonly msg?: InboxMessage;
 }
 
@@ -192,11 +210,13 @@ export interface UiView {
   readonly lastSeq: number;
   readonly nodes: readonly UiNode[];
   readonly inbox: readonly UiInboxItem[];
+  /** 人が片付けた項目（新しい順。`UI_LIMITS.resolved` 件まで）。 */
+  readonly resolved: readonly UiResolvedItem[];
   readonly decisions: readonly UiDecision[];
   readonly extensions: readonly UiExtension[];
   /** やり取り（新しい順。`UI_LIMITS.flows` 件まで）。 */
   readonly flows: readonly UiFlow[];
-  /** 上限で切った種類（nodes・inbox・decisions・extensions・flows）。 */
+  /** 上限で切った種類（nodes・inbox・resolved・decisions・extensions・flows）。 */
   readonly truncated: readonly string[];
 }
 
@@ -346,6 +366,25 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
     };
   });
 
+  const resolved = cap(
+    "resolved",
+    state.inbox
+      .filter((i) => i.resolved !== undefined && isResolvedByHuman(i))
+      .sort((a, b) => (b.resolved?.seq ?? 0) - (a.resolved?.seq ?? 0)),
+    UI_LIMITS.resolved,
+  ).map((i): UiResolvedItem => {
+    const summary = uiText(i.summary);
+    return {
+      id: idOf(i.id),
+      kind: i.kind,
+      nodeId: idOf(i.nodeId),
+      at: uiText(i.at),
+      resolvedAt: uiText(i.resolved?.at),
+      ...(summary === "" ? {} : { summary }),
+      ...(i.msg === undefined ? {} : { msg: copyInboxMessage(i.msg) }),
+    };
+  });
+
   // open のほか、閉じた判断（止まった子・破棄を決めた子の未回答）も載せ、理由を示す。
   const decisions = cap(
     "decisions",
@@ -382,7 +421,16 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
 
   const flows = cap("flows", flowsOf(state), UI_LIMITS.flows);
 
-  return { lastSeq: state.lastSeq, nodes, inbox, decisions, extensions, flows, truncated };
+  return {
+    lastSeq: state.lastSeq,
+    nodes,
+    inbox,
+    resolved,
+    decisions,
+    extensions,
+    flows,
+    truncated,
+  };
 }
 
 /** 題: 改行・タブ・続く空白を空白 1 つにまとめ、前後の空白を除いて 1 行にしてから、`UI_TITLE_MAX` で切る。 */
