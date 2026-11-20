@@ -1086,6 +1086,7 @@ export const UI_JS = `'use strict';
   function resolveButton(label, list, key) {
     var b = el('button', 'sm', label);
     b.dataset.key = key;
+    if (list.length === 1) b.ariaLabel = label + ': ' + cleanText(itemText(list[0]) || list[0].id, 60);
     b.addEventListener('click', function () {
       var lines = [[t('line.content'), t('resolve.content')], [t('line.record'), t('resolve.record')]];
       list.slice(0, 10).forEach(function (i) { lines.push([t('line.target'), cleanText(itemText(i) || i.id, 60)]); });
@@ -1107,6 +1108,7 @@ export const UI_JS = `'use strict';
     if (text) row.appendChild(el('div', 'confirm-line', cleanText(text, 120)));
     if (ID_RE.test(r.id)) {
       var undo = el('button', 'sm', t('reopen.button'));
+      undo.ariaLabel = t('reopen.button') + ': ' + cleanText(text || r.id, 60);
       undo.addEventListener('click', function () {
         openConfirm(t('reopen.title'), [[t('line.content'), t('reopen.content')], [t('line.target'), cleanText(text || r.id, 60)]], 'inbox.reopen', { itemIds: [r.id] }, function (value) {
           return t('reopen.done', { n: value && Array.isArray(value.reopened) ? value.reopened.length : 0 });

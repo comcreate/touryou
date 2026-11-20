@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
+import { HUMAN_RESOLVABLE_KINDS } from "@touryou/core";
 import { describe, expect, it } from "vitest";
 import {
   INBOX_MESSAGES_JSON,
@@ -1592,5 +1593,26 @@ describe("状態変化の読み上げ・スマホの幅（UI レビューの対�
     const fitTop = Number(/const FIT_TOP = (\d+);/.exec(src)?.[1]);
     expect(top).toBe(4);
     expect(top + 44).toBeLessThanOrEqual(fitTop);
+  });
+});
+
+describe("受信箱の項目の片付け・戻し（#99）", () => {
+  it("画面の片付けられる種類は、core の HUMAN_RESOLVABLE_KINDS と同じ（進み具合・完了・お知らせだけ）", () => {
+    const m = /var CLEARABLE_KINDS = \{([^}]*)\};/.exec(UI_JS);
+    const kinds = [...(m?.[1] ?? "").matchAll(/(\w+): true/g)].map((x) => x[1]).sort();
+    expect(kinds).toEqual([...HUMAN_RESOLVABLE_KINDS].sort());
+  });
+
+  it("停止未完了（stall）の項目と、ID の形が不正な項目には、ボタンを付けない", () => {
+    expect(UI_JS).toMatch(
+      /function isClearable\(i\) \{ return Object\.hasOwn\(CLEARABLE_KINDS, i\.kind\) && i\.stall !== true && ID_RE\.test\(i\.id\); \}/,
+    );
+  });
+
+  it("「片付けた項目」の欄は view.resolved から作り、ボタンの読み上げの名前に項目の文を添える", () => {
+    expect(UI_JS).toContain("resolved-");
+    expect(UI_JS).toMatch(/\.resolved\b/);
+    expect(UI_JS).toMatch(/b\.ariaLabel = label \+ ': '/);
+    expect(UI_JS).toMatch(/undo\.ariaLabel = t\('reopen\.button'\) \+ ': '/);
   });
 });
