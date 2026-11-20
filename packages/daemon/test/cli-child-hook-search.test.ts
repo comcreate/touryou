@@ -372,7 +372,6 @@ describe("CLI の子のフック: 承認した場所へ Bash で書き込む形�
       "git rm -r -f --cached src/a.ts src/b.ts",
       "git mv src/a.ts src/c.ts",
       "git mv -f src/a.ts src/okdir",
-      "mkdir -p src/x && touch src/x/y",
     ]) {
       expect(await s.hook(command), command).toEqual(PERMIT);
     }
@@ -390,7 +389,6 @@ describe("CLI の子のフック: 承認した場所へ Bash で書き込む形�
       "cp src/a.ts /tmp/touryou-135-x",
       "touch docs/x", // 承認した場所の外（docs はまだ頼んでいない）
       "touch README.md",
-      "mkdir -p src/a && touch docs/b", // 区切りの片方だけ外
       "touch src/ext/x", // 外を指すリンクの中
       "cp src/a.ts src/ext",
       "mkdir -p src/ext/new",
@@ -403,6 +401,27 @@ describe("CLI の子のフック: 承認した場所へ Bash で書き込む形�
       "touch .git/x",
       "cp src/a.ts .git/hooks/pre-commit",
     ]) {
+      expect((await s.hook(command)).decision, command).toBe("deny");
+    }
+  });
+
+  it("パスを書く区切りが 2 つ以上ある形には、明示の許可を付けない（前の区切りが、あとのパスの指す先を変えうる）", async () => {
+    const s = await setup();
+    await approveAll(s);
+    for (const command of [
+      "mkdir -p src/x && touch src/x/y",
+      "mkdir -p src/a && touch docs/b",
+      "git mv src/a.ts src/c.ts && touch src/c.ts",
+    ]) {
+      expect(await s.hook(command), command).toEqual({ decision: "allow" });
+    }
+  });
+
+  it("承認した形そのもの（引数つき）でも、パスが範囲の外・リンクの先なら拒否する", async () => {
+    const s = await setup();
+    for (const c of ["touch src/ext/x", "cp a.ts ../../outside", "touch .git/x"])
+      await s.approveCommand(c);
+    for (const command of ["touch src/ext/x", "cp a.ts ../../outside", "touch .git/x"]) {
       expect((await s.hook(command)).decision, command).toBe("deny");
     }
   });

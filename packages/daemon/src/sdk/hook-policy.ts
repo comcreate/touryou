@@ -935,7 +935,21 @@ function classifyExtensionBash(
   const plain = !/[<>`$]/.test(command);
   const uses: PathUse[] = [];
   for (const seg of segments) {
-    if (granted.some((w) => w.length === seg.length && w.every((x, i) => seg[i] === x))) continue;
+    const exact = granted.find((w) => w.length === seg.length && w.every((x, i) => seg[i] === x));
+    if (exact !== undefined) {
+      // 承認した形そのものでも、パスを足すコマンド（`touch`・`cp` など）は、そのパスを実パスで照らす
+      const hasPathRule = ARGS_OK_COMMANDS.some(
+        (c) =>
+          c.paths !== undefined &&
+          c.head.every((x, i) => exact[i] === x) &&
+          exact.length > c.head.length,
+      );
+      if (!hasPathRule) continue;
+      const u = extendsWithSafeArgs(exact, seg, true);
+      if (u === undefined) return undefined;
+      if (u.writes.length > 0) uses.push(u);
+      continue;
+    }
     if (!plain) return undefined;
     let extended: PathUse | undefined;
     for (const w of granted) {
@@ -945,6 +959,8 @@ function classifyExtensionBash(
     if (extended === undefined) return undefined;
     if (extended.writes.length > 0) uses.push(extended);
   }
+  // 区切りの前の区切り（`git mv`・`cp` など）が、あとの区切りのパスの指す先（リンク）を変えうるので、パスを書く区切りは 1 つだけにする
+  if (uses.length > 1) return undefined;
   return uses;
 }
 
@@ -1011,6 +1027,9 @@ async function checkPathUse(
     }
     const d = evaluateScope(ctx.scope, ctx.worktree, { kind: "write", path: target });
     if (!d.allowed) return { reason: d.reason, subject: d.subject };
+    // 作業ツリーの .git など、守る場所の中には、どのコマンドも書けない
+    if (ctx.guardTrees.some((x) => isPathUnder(target, x)))
+      return { reason: "forbiddenLocation", subject: `${word}（守る場所の中）` };
     // 木ごと消す・動かすコマンドは、禁じる場所を含む場所を指せない（`git rm -r docs` が `docs/secret` を消さない）
     if (use.guardTree) {
       const g = [...ctx.scope.forbiddenLocations, ...ctx.guardTrees];
@@ -1262,8 +1281,10 @@ function pathWordOk(rule: PathRule, a: string): boolean {
 function extendsWithSafeArgs(
   entry: readonly string[],
   seg: readonly string[],
+  exact = false,
 ): PathUse | undefined {
-  if (seg.length <= entry.length || !entry.every((x, i) => seg[i] === x)) return undefined;
+  if (seg.length < entry.length || (!exact && seg.length === entry.length)) return undefined;
+  if (!entry.every((x, i) => seg[i] === x)) return undefined;
   const cmd = ARGS_OK_COMMANDS.find((c) => c.head.every((x, i) => entry[i] === x));
   if (cmd === undefined) return undefined;
   const rule = cmd.paths;

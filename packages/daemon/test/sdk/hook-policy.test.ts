@@ -806,9 +806,10 @@ describe("grantedOnlyByExtension: 引数を足してよい一覧のコマンド�
       expect(permit(c), c).toBe(false);
   });
   it("git rm・git mv は一覧に入れない（作業ツリーのファイルを消す・動かすので、承認した形そのものだけ）", () => {
-    expect(permit("git rm docs/old.md")).toBe(true);
+    // 承認した形そのものでも、パスを足す形は実パスの照らしが要る（非同期の grantedBashByExtension）ので、ここでは真にしない
+    expect(permit("git rm docs/old.md")).toBe(false);
     expect(permit("git rm docs/old.md -r src")).toBe(false);
-    expect(permit("git mv src/a.ts")).toBe(true);
+    expect(permit("git mv src/a.ts")).toBe(false);
     expect(permit("git mv src/a.ts tmp.ts")).toBe(false);
   });
   it("一覧の外のコマンドは、今のまま完全一致だけ", () => {
