@@ -333,7 +333,7 @@ export function noneMessage(noneReason: unknown, state: unknown): string {
   if (noneReason === "cwdMismatch") {
     return "cwd が子の作業ツリーの外にある。作業ツリーの中で実行する";
   }
-  return "touryou の子の作業ツリーで、まだ紐付けが済んでいない（または、紐付けが外れた・daemon がこのセッションを子と認めない）。先に child_bind を引数なしで呼ぶ。それでも通らないときは、自分で原因を探したり別の手を試したりせず、人に「紐付けをやり直して」と頼んで待つ";
+  return "touryou の子の作業ツリーで、まだ紐付けが済んでいない（または、紐付けが外れた・daemon がこのセッションを子と認めない）。先に child_bind を引数なしで呼ぶ。それでも通らないときは、自分で原因を探したり別の手を試したりせず、画面を見ている人に「親の統合セッションに、この子の紐付けの出し直し（node_bindCode）を頼んでください」と頼んで待つ";
 }
 
 /** フックを 1 回実行する。例外を出さない（予期しない失敗も、PreToolUse は拒否・受動のイベントは通す）。 */
