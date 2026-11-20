@@ -230,6 +230,7 @@ describe("印のある作業ツリーで daemon が none を返したとき", ()
 
   it.each([
     [{ noneReason: "unbound" }, "child_bind"],
+    [{ noneReason: "unbound" }, "自分で原因を探したり別の手を試したりせず、人に「紐付けをやり直して」と頼んで待つ"],
     [{ noneReason: "notLive", state: "done" }, "紐付けは済んでいる。状態が done なので"],
     [{ noneReason: "notLive" }, "紐付けは済んでいる"],
     [{ noneReason: "cwdMismatch" }, "作業ツリーの中で実行する"],
