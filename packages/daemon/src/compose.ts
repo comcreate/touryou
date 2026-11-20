@@ -2103,7 +2103,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       // 使われたコードのファイルを消す（コードは、もうメモリにない）
       const st = log.state();
       const worktree =
-        latestLaunch(st, nodeId)?.worktree ?? st.nodes.find((n) => n.id === nodeId)?.adopted?.worktree;
+        latestLaunch(st, nodeId)?.worktree ??
+        st.nodes.find((n) => n.id === nodeId)?.adopted?.worktree;
       if (worktree !== undefined) parentAdapter?.discardCode(nodeId, worktree, false);
     },
     ...(desktopAdapter === undefined ? { onBindInvalid: noticeRebind } : {}),

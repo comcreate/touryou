@@ -125,7 +125,9 @@ export interface GitPortsOptions {
    * 採用したノード（`node.adopted`。#163）の作業ツリーとブランチ。あれば、ノード ID から導く値の代わりに使い、
    * 回収でも作業ツリーとブランチは消さない（採用は、既存の作業ツリーを預かるだけ）。daemon の記録（状態）から引く。
    */
-  readonly adoptedOf?: (nodeId: string) => { readonly worktree: string; readonly branch: string } | undefined;
+  readonly adoptedOf?: (
+    nodeId: string,
+  ) => { readonly worktree: string; readonly branch: string } | undefined;
   /** 保管する、破棄した成果（`refs/touryou/discarded/*`）の数の上限。上限に達したら、強制の回収は失敗する。省略すると 200。 */
   readonly discardedRefsMax?: number;
   /** 作業ツリーに設定ファイルを写した結果の通知（`worktree-seed.ts`）。省略すると、標準エラーに 1 行（JSON）出す。 */
@@ -237,9 +239,7 @@ export interface GitPorts {
   /** 採用の途中の失敗で、書いた印を片付ける（作業ツリーとブランチは消さない）。印がなくても成功する。 */
   unmarkAdopted(worktreePath: string): Promise<void>;
   /** 採用したノードの作業ツリーとブランチを引く関数を差し込む（記録は、口より後に作られるため）。 */
-  useAdopted(
-    resolve: (nodeId: string) => { worktree: string; branch: string } | undefined,
-  ): void;
+  useAdopted(resolve: (nodeId: string) => { worktree: string; branch: string } | undefined): void;
   cwdOf(nodeId: string): Promise<string | undefined>;
 }
 

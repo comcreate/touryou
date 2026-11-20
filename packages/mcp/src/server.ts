@@ -289,7 +289,9 @@ export function createToolServer(init: ToolServerDeps): Server {
       if (!parsed.ok) return asError(parsed.error);
       const { operation, view } = parsed.value;
       const forward =
-        (operation === "node.bindCode" || operation === "node.spawn" || operation === "node.adopt") &&
+        (operation === "node.bindCode" ||
+          operation === "node.spawn" ||
+          operation === "node.adopt") &&
         init.parentSessionId !== undefined
           ? { ...(parsed.value.forward as object), parentSessionId: init.parentSessionId }
           : operation === "parent.request" && init.pluginRoot !== undefined

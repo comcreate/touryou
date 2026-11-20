@@ -131,7 +131,8 @@ export function createAdoptHandlers(deps: AdoptHandlerDeps) {
           }
 
           const parent = nodeOf(state, p.parentId);
-          if (parent === undefined) return fail("notFound", "親のノードが見つからない", "ID を確認する");
+          if (parent === undefined)
+            return fail("notFound", "親のノードが見つからない", "ID を確認する");
           if (!isInSubtree(state.nodes, caller, p.parentId)) {
             return fail("forbidden", "親が自分の部分木の外にある", "親（統合ノード）に依頼する");
           }
@@ -202,8 +203,9 @@ export function createAdoptHandlers(deps: AdoptHandlerDeps) {
           }
 
           // 以降の失敗は、書いた印とコードだけを片付ける（作業ツリーとブランチは消さない）。
-          const marked = await ports.markAdopted(nodeId, worktreePath).catch(
-            (e: unknown): Result<undefined, Failure> => {
+          const marked = await ports
+            .markAdopted(nodeId, worktreePath)
+            .catch((e: unknown): Result<undefined, Failure> => {
               note(nodeId, `印を書けない: ${String(e)}`);
               return {
                 ok: false,
@@ -213,8 +215,7 @@ export function createAdoptHandlers(deps: AdoptHandlerDeps) {
                   nextActions: ["git のディレクトリの権限とディスクの空きを確かめて、もう一度試す"],
                 },
               };
-            },
-          );
+            });
           if (!marked.ok) return marked;
           const undo = async (): Promise<void> => {
             try {

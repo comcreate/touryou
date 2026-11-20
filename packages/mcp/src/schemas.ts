@@ -282,7 +282,11 @@ export function inputSchemaFor(operation: DaemonOperation): JsonSchema {
         unknown
       >;
       if (js.type === "object" && js.oneOf === undefined && js.anyOf === undefined) {
-        if (operation === "node.spawn" || operation === "node.split" || operation === "node.adopt") {
+        if (
+          operation === "node.spawn" ||
+          operation === "node.split" ||
+          operation === "node.adopt"
+        ) {
           // 採用は、依存先（dependsOn）を持たない
           const { dependsOn: _dependsOn, ...briefProps } = BRIEF_PROPERTIES;
           const props = (js.properties ?? {}) as Record<string, unknown>;
