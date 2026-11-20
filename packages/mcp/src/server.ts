@@ -172,6 +172,7 @@ async function whoamiTool(deps: { role: McpRole; relay: Relay; bound?: boolean }
   return asValue({
     nodeId: who.value.nodeId,
     role: who.value.role,
+    ...(who.value.daemon === undefined ? {} : { daemon: who.value.daemon }),
     ...(deps.bound === true ? { note: BOUND_NOTE } : {}),
   });
 }

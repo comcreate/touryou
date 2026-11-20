@@ -8,9 +8,11 @@
 - **状態画面が、変わったことを読み上げるようにした**: スクリーンリーダーで、「あなたの答え待ちが増えた」「失敗した作業が増えた」「daemon との接続が切れた」の 3 つだけを知らせる。答え待ちと失敗は、数が増えたときに読む（減ったとき・同じときは読まない）。ほかの変化では読み上げない。日本語と英語の両方。
 - **スマホの幅で、小さいボタンを押しやすくした**: スマホの幅のとき、「写す」・設定の歯車・図の拡大縮小などのボタンの高さを 44px 以上にした。設定の窓の切り替えのボタン（`.seg button`）は、幅も 44px 以上にした。
 - **OS の「視差効果を減らす」（「動きを減らす」）のとき、図の上を動く玉を隠すようにした**: 線の流れは止まり、玉も出さない。線と箱の色・文字だけで状態が読める。設定の窓の「動きを止める」でも同じ。
+- **統合ノードの `whoami` に、daemon の場所と識別子を足した**（#164）: `GET /v1/whoami` と MCP の `whoami` の結果に、統合ノードにだけ `daemon: { rootCwd, repoRoot, daemonId }` が付く（`daemonId` は `docs/daemon-identity.md` の識別子）。子・人間には出さない。
 
 ### 直したこと
 
+- **plugin の MCP（`touryou-mcp --stdio`）が、環境変数 `TOURYOU_DAEMON_CONFIG` を読まなかった**（#162）: 設定の決め方を、`touryou` と同じ「`--config` の引数 → 環境変数 `TOURYOU_DAEMON_CONFIG`（空は無視）→ `$HOME/.touryou/config.json`」にした。設定が `$HOME/.touryou` の外（例 `~/.touryou-renga/config.json`）にあるときも、権限の検査の対象を設定ファイルの親ディレクトリにして、通るようにした。
 - **受理・回収・archive した子の、古い「停止未完了」「失敗」の知らせが受信箱に残り続けた**: 受理（`node.review` の accept）・回収可能にしたとき・archive にしたときに、その子の未解決の stopIncomplete・failure を、system の `inbox.resolved` で解決済みにする（core の `staleInboxItems` が対象を選ぶ）。daemon の起動時の整合も、すでに残っている古い知らせを、追記だけで 1 回だけ解決済みにする（記録は書き換えず、2 回目は何も足さない）。running・waiting・stopping・停止未完了の子の知らせは、解決済みにしない。あわせて、受理後の子の停止の報告で、プロセスが調べられない・すでに回収済みのときは stopIncomplete を新しく作らず info にとどめる（プロセスが残っているときは、今までどおり stopIncomplete）。セッションの削除を親が拒まれた失敗（removeRefused）は、人が判断するので解決済みにしない。
 - **plugin が本体より古いとき、版の違いの知らせが「本体を上げて」と言い、`/touryou:setup` が古い版に入れ替えてしまった**（#154）: セッションの始まりの知らせが、本体と plugin のどちらが新しいかで文を変える。plugin が古いときは「先に plugin を新しくする」と案内する。`/touryou:setup` は、plugin が古いと、何も変えずに止まり、plugin を新しくする案内を出す（常駐していても同じ）。`--scope user` の付け忘れで plugin が古いままになる場合も、この案内で直せる。
 - **手順書の plugin の update に `--scope user` を足した**（#153）: clone の中で `claude plugin update touryou@touryou` だけを実行すると、その clone の中だけが新しくなり、自分のアカウント全体の plugin は古いままになる。手順書（`docs/setup-verification.md` の C・`README.md`・`docs/plugin.md`）・`/touryou:setup`・script の止める文・この CHANGELOG の update の例のすべてに `--scope user` を書いた。
