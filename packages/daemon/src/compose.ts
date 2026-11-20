@@ -65,8 +65,8 @@ import {
   writeIdentityFile,
 } from "./api/identity.js";
 import {
-  type ApiLogger,
   type AdoptPorts,
+  type ApiLogger,
   type BindCodes,
   createApiServer,
   createBindCodes,

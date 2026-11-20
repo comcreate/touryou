@@ -39,6 +39,7 @@ import type { RuntimeAdapter } from "../../sdk/runtime.js";
 import { selfIntroLines } from "../../self-intro.js";
 import type { CredentialStore } from "../credentials.js";
 import type { HandlerRequest } from "../server.js";
+import { childScopeProblem } from "./child-scope-check.js";
 import {
   alreadyApplied,
   appendAtomically,
@@ -49,7 +50,6 @@ import {
   notice,
   summarize,
 } from "./context.js";
-import { childScopeProblem } from "./child-scope-check.js";
 import { createExclusive } from "./inflight.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;

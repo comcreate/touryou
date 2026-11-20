@@ -21,9 +21,9 @@ import { createScopeHandlers } from "./scope-handlers.js";
 import { createSpawner, type SpawnHandlerDeps } from "./spawn-handlers.js";
 import { createStateHandlers, type StateHandlerDeps } from "./state-handlers.js";
 
+export type { AdoptPorts } from "./adopt-handlers.js";
 export type { LogPort } from "./context.js";
 export { createPauseHandlers, type PauseHandlerDeps } from "./pause-handlers.js";
-export type { AdoptPorts } from "./adopt-handlers.js";
 export {
   createPurgeHandlers,
   type PurgeHandlerDeps,
