@@ -2,7 +2,8 @@
  * 受理・回収・archive のあとに残る、古い停止未完了・失敗の項目の解決（案 A+B）。
  * - 受理（node.review accept）で、その子の未解決の stopIncomplete・failure を inbox.resolved（system）で解決にする。
  * - 起動時の整合で、既存の記録を追記だけで 1 回だけ解決にする（2 回目は何も足さない）。
- * - 受理後のノードの停止の報告で、プロセスが残っていても stopIncomplete を作らず info にする。
+ * - 受理後のノードの停止の報告で、プロセスが残るときは stopIncomplete にする。
+ * - 差し戻し（reject）では、項目を解決にしない。
  */
 import type { EventBody, InboxKind, NodeEvent, ProcessInfo } from "@touryou/core";
 import { describe, expect, it } from "vitest";
@@ -121,8 +122,25 @@ describe("起動時の整合で、古い項目を 1 回だけ追記で解決に�
   });
 });
 
-describe("受理後のノードの停止の報告で、stopIncomplete を作らない（B）", () => {
-  it("プロセスが残っていても、受理後（verified）は info にする", async () => {
+describe("差し戻しでは、古い項目を解決にしない", () => {
+  it("reject した子の未解決の stopIncomplete・failure は残る", async () => {
+    const r = rig({ a: [DONE] });
+    r.item("a", "stopIncomplete");
+    r.item("a", "failure");
+    const res = await createStateHandlers({ log: r.log, clock: () => T0 })["node.review"]({
+      requestId: `q-${++n}`,
+      operation: "node.review",
+      role: "integrator",
+      caller: { nodeId: "root" },
+      params: { nodeId: "a", verdict: "reject", feedback: "直してください" },
+    } as unknown as HandlerRequest<"node.review">);
+    expect(res.ok).toBe(true);
+    expect(r.unresolved("a")).toEqual(["failure-a", "stopIncomplete-a"]);
+  });
+});
+
+describe("受理後のノードの停止の報告で、プロセスが残るときは stopIncomplete にする（B）", () => {
+  it("プロセスが残っていれば、受理後（verified）でも stopIncomplete にする", async () => {
     const r = rig({ a: [DONE] });
     r.add({
       type: "node.parentRequested",
@@ -149,7 +167,7 @@ describe("受理後のノードの停止の報告で、stopIncomplete を作ら�
     } as unknown as HandlerRequest<"parent.report">);
     expect(res.ok).toBe(true);
     const items = r.log.state().inbox.filter((i) => i.nodeId === "a");
-    expect(items.some((i) => i.kind === "stopIncomplete")).toBe(false);
+    expect(items.some((i) => i.kind === "stopIncomplete")).toBe(true);
     expect(r.log.state().nodes.find((x) => x.id === "a")?.state).toBe("verified");
   });
 });

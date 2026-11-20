@@ -12,7 +12,7 @@
  *   - 起動の失敗: 受信箱に failure。
  *   - 停止の「止めた」: 親の報告だけでは決めない。`lsof-probe` で作業ツリーを使うプロセスがないと確かめてから stopped にし、続けて
  *     削除（`claude rm`）を依頼する。残っている・確かめられないときは、停止未完了のまま受信箱に出す
- *     （受理後〔verified・reclaimable・archived〕のノードは、対処が要る状態でないので、stopIncomplete でなく info にとどめる）。
+ *     （受理後〔verified・reclaimable・archived〕のノードは、プロセスが残らない・確かめられないときだけ、stopIncomplete でなく info にとどめる）。
  *   - 削除の失敗（`claude rm` が拒んだ）: 消さずに受信箱に出す（成果を捨てるかは人間が決める）。`claude rm` は子のセッションだけを消し、
  *     touryou の作業ツリーとコミットは残る（未 push を守るのは Claude Code 自身が作った作業ツリーのときだけ）ので、拒まれるのは念のための備え。作業ツリーの片付けは回収（node.reclaimPreview → node.reclaim）。
  * - 直接の親か人間だけ（`SUBTREE_RULES` の directChild。窓口の `authorize` が適用する）。
@@ -459,8 +459,11 @@ export function createParentRequestHandlers(deps: ParentRequestHandlerDeps) {
               ? add("session-stopped", "info", notice("sessionStopped", { node: nodeId }))
               : add(
                   "stop-unconfirmed",
-                  // 受理後（verified など）のノードは、対処が要る停止未完了の状態でないので、info にとどめる（古い項目を残さない）
-                  nodeState !== undefined && SETTLED_STATES.has(nodeState)
+                  // 受理後（verified など）のノードでも、作業ツリーのプロセスが残るときは対処が要るので stopIncomplete にする。
+                  // プロセスが残らない・調べられないときは、対処が要る状態でないので info にとどめる（古い項目を残さない）
+                  nodeState !== undefined &&
+                    SETTLED_STATES.has(nodeState) &&
+                    (left === null || left.length === 0)
                     ? "info"
                     : "stopIncomplete",
                   left === null

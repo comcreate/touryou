@@ -47,16 +47,25 @@ export const unresolvedInbox = (items: readonly InboxItem[]): InboxItem[] =>
 /** 受理・回収・archive のあとは、もう対処のいらない、停止の未完了と失敗の記録を残さない（`staleInboxItems`）。 */
 export const SETTLED_STATES: ReadonlySet<string> = new Set(["verified", "reclaimable", "archived"]);
 const STALE_KINDS: ReadonlySet<InboxKind> = new Set(["stopIncomplete", "failure"]);
+/** 受理した子のセッション削除を親が拒まれた知らせ（人が判断するので、自動では解決にしない）。 */
+const HUMAN_JUDGED_KEYS: ReadonlySet<string> = new Set(["removeRefused", "removeRefusedNoReason"]);
 
 /**
  * 受理（verified）・回収可能（reclaimable）・archive 済みのノードに、古い記録として残っている、未解決の stopIncomplete・failure。
  * running・waiting・stopping・stopIncomplete などの、まだ対処が要るかもしれないノードの項目は含めない。
+ * セッション削除を拒まれた失敗（removeRefused・removeRefusedNoReason）も含めない。
  * 並びは `seq` の昇順（決定的）。daemon が、これを `inbox.resolved`（system）で解決にする。
  */
 export function staleInboxItems(state: Pick<OrchState, "nodes" | "inbox">): InboxItem[] {
   const settled = new Set(state.nodes.filter((n) => SETTLED_STATES.has(n.state)).map((n) => n.id));
   return state.inbox
-    .filter((i) => i.resolved === undefined && STALE_KINDS.has(i.kind) && settled.has(i.nodeId))
+    .filter(
+      (i) =>
+        i.resolved === undefined &&
+        STALE_KINDS.has(i.kind) &&
+        settled.has(i.nodeId) &&
+        !(i.msg !== undefined && HUMAN_JUDGED_KEYS.has(i.msg.key)),
+    )
     .sort((a, b) => a.seq - b.seq);
 }
 

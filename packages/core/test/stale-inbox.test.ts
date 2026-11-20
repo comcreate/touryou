@@ -43,6 +43,23 @@ describe("staleInboxItems", () => {
     expect(staleInboxItems(stateOf({ a: "verified" }, inbox))).toEqual([]);
   });
 
+  it("セッション削除を拒まれた failure（removeRefused・removeRefusedNoReason）は含めず、停止の失敗は含める", () => {
+    const withKey = (seq: number, key: string): InboxItem => ({
+      ...item(seq, "a", "failure"),
+      msg: { key, args: {} },
+    });
+    const inbox = [
+      withKey(1, "removeRefused"),
+      withKey(2, "removeRefusedNoReason"),
+      withKey(3, "parentFailed"),
+      withKey(4, "parentFailedNoReason"),
+    ];
+    expect(staleInboxItems(stateOf({ a: "verified" }, inbox)).map((i) => i.id)).toEqual([
+      "i3",
+      "i4",
+    ]);
+  });
+
   it("解決済みの項目は含めない", () => {
     const by = { system: true } as const;
     const inbox = [
