@@ -313,7 +313,7 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
     const text =
       decision === "approve"
         ? ext.target.kind === "command"
-          ? `範囲の拡張の要求（${what}）は承認された。使ってよい。承認は引数まで含めたこの形にだけ効く（git add・git status・git ls-files は、うしろに安全な旗とパスを足してもよい）。形が違うと断られる`
+          ? `範囲の拡張の要求（${what}）は承認された。使ってよい。承認は引数まで含めたこの形にだけ効く（git add・git status・git ls-files は、うしろに安全な旗とパスを足してもよい。mkdir・touch・cp・git rm・git mv は、パスが書き込める場所（承認した場所を含む）の中にあるときだけ）。形が違うと断られる`
           : `範囲の拡張の要求（${what}）は承認された。使ってよい`
         : decision === "reject"
           ? `範囲の拡張の要求（${what}）は却下された。範囲の内側で進める`

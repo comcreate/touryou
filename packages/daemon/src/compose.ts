@@ -122,6 +122,7 @@ import { latestLaunch, ParentRequestCliAdapter } from "./sdk/cli-adapter.js";
 import { DesktopRuntimeAdapter, touryouChildCommands } from "./sdk/desktop-adapter.js";
 import {
   decideToolUse,
+  grantedBashByExtension,
   grantedOnlyByExtension,
   resolveScope,
   withRealWritePath,
@@ -1672,6 +1673,30 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
         return { allow: true, permit: "readOnlySearch" };
       }
       const brief = log.state().nodes.find((n) => n.id === nodeId)?.scope;
+      // Bash: 承認済みの拡張で通る形。足したパス（mkdir・touch・cp・git rm・git mv。#135）は、実パスで書き込める場所の中かを照らす。
+      // 形は承認されているのにパスだけが外のときは、許可なしで通す（Claude Code が理由なく断る）のでなく、理由つきで拒否して記録する
+      if (toolName === "Bash" && typeof command === "string") {
+        if (brief === undefined) return { allow: true };
+        const grant = await grantedBashByExtension(brief, scope, command, {
+          scope: resolved,
+          worktree: wt,
+          here,
+          resolve: resolveHookPath,
+          guardTrees: gitDir === undefined ? [join(wt, ".git")] : [gitDir, join(wt, ".git")],
+        });
+        if (grant.granted) return { allow: true, permit: "extension" };
+        if (grant.denied !== undefined) {
+          if (grant.denied.violation !== undefined)
+            recordDesktopViolation(
+              nodeId,
+              grant.denied.violation.reason,
+              grant.denied.violation.subject,
+              trust,
+            );
+          return { allow: false, reason: grant.denied.reason };
+        }
+        return { allow: true };
+      }
       const input = await withRealWritePath(toolName, toolInput, here, resolveHookPath);
       if (brief !== undefined && grantedOnlyByExtension(brief, scope, toolName, input, wt)) {
         return { allow: true, permit: "extension" };

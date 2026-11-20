@@ -81,7 +81,21 @@ async function setup() {
       rootCwd: repoRoot,
       rootNodeId: "root",
       // 根の範囲は、子が拡張で頼むコマンド（#130）も含む
-      rootScope: { ...scope, allowedCommands: ["git status", "git add", "git log", "git rm"] },
+      // 書き込む形（#135）の 1 語のコマンドも、根の範囲に書く。書き込みの場所 docs は、子が拡張で頼む場所
+      rootScope: {
+        ...scope,
+        writableLocations: ["src", "docs"],
+        allowedCommands: [
+          "git status",
+          "git add",
+          "git log",
+          "git rm",
+          "git mv",
+          "mkdir",
+          "touch",
+          "cp",
+        ],
+      },
       port: 0,
     },
     deps,
@@ -122,6 +136,12 @@ async function setup() {
   mkdirSync(join(base, "outside", "out", "deep"), { recursive: true });
   writeFileSync(join(base, "outside", "out", "secret.txt"), "foo\n");
   symlinkSync(join(base, "outside", "out", "deep"), join(tree, "x"));
+  // 書き込める場所（src）の中の、外を指すリンク・ぶら下がりリンク・外のファイルへのリンクを含むディレクトリ（#135）
+  symlinkSync(join(base, "outside", "out"), join(tree, "src", "ext"));
+  symlinkSync(join(base, "nowhere"), join(tree, "src", "dang"));
+  mkdirSync(join(tree, "src", "okdir"));
+  mkdirSync(join(tree, "src", "dir"));
+  symlinkSync(join(base, "outside", "out", "secret.txt"), join(tree, "src", "dir", "a.ts"));
   const hook = async (command: string, cwd = tree) => {
     const res = await fetch(`${run.url}/v1/hook`, {
       method: "POST",
@@ -159,7 +179,15 @@ async function setup() {
     });
     await request(rootToken, "scope.decide", { extensionId, decision: "approve" });
   };
-  return { base, repoRoot, stateDir, tree, linkedTree, other, hook, approveCommand };
+  /** 子が書き込みの場所の拡張を頼み、人（ここでは根）が承認する */
+  const approveWrite = async (value: string) => {
+    const { extensionId } = await request(child.token, "scope.extend", {
+      target: { kind: "write", value },
+      reason: "試験",
+    });
+    await request(rootToken, "scope.decide", { extensionId, decision: "approve" });
+  };
+  return { base, repoRoot, stateDir, tree, linkedTree, other, hook, approveCommand, approveWrite };
 }
 
 describe("CLI の子のフック: 作業ツリーの中を探すコマンド（#92）", () => {
@@ -304,7 +332,7 @@ describe("CLI の子のフック: 承認した拡張のコマンドに引数を�
     }
   });
 
-  it("git rm は一覧の外: git rm x を承認しても、git rm -r . には明示の許可を付けない", async () => {
+  it("git rm x を承認しても、git rm -r . には明示の許可を付けない（書き込める場所の外・位置の引数のあとの旗）", async () => {
     const s = await setup();
     await s.approveCommand("git rm src/a.ts");
     expect(await s.hook("git rm src/a.ts")).toEqual({ decision: "allow", permit: "extension" });
@@ -318,5 +346,125 @@ describe("CLI の子のフック: 承認した拡張のコマンドに引数を�
     expect(await s.hook("git log --oneline")).toEqual({ decision: "allow", permit: "extension" });
     expect((await s.hook("git log --oneline -5")).permit).toBeUndefined();
     expect((await s.hook("git log --oneline --output=x")).permit).toBeUndefined();
+  });
+});
+
+describe("CLI の子のフック: 承認した場所へ Bash で書き込む形（#135）", () => {
+  const PERMIT = { decision: "allow", permit: "extension" };
+  const approveAll = async (s: Awaited<ReturnType<typeof setup>>) => {
+    for (const c of ["mkdir", "touch", "cp", "git rm", "git mv"]) await s.approveCommand(c);
+  };
+
+  it("書き込める場所の中を指す形には、明示の許可（permit: extension）が付く", async () => {
+    const s = await setup();
+    await approveAll(s);
+    for (const command of [
+      "mkdir -p src/new/dir",
+      "mkdir -pv src/n1 src/n2",
+      "touch src/n.ts",
+      "touch -c -a src/n.ts",
+      "touch -- src/-n",
+      `touch ${s.tree}/src/abs.ts`,
+      "cp src/a.ts src/b.ts",
+      "cp -n -v src/a.ts src/okdir",
+      "cp /etc/hosts src/hosts",
+      "git rm src/a.ts",
+      "git rm -r -f --cached src/a.ts src/b.ts",
+      "git mv src/a.ts src/c.ts",
+      "git mv -f src/a.ts src/okdir",
+      "mkdir -p src/x && touch src/x/y",
+    ]) {
+      expect(await s.hook(command), command).toEqual(PERMIT);
+    }
+    // 相対のパスは、cd した先ではなく、フックの cwd から解く
+    expect(await s.hook("touch n.ts", join(s.tree, "src"))).toEqual(PERMIT);
+    expect(await s.hook("touch src/z", s.linkedTree)).toEqual(PERMIT);
+  });
+
+  it("書き込める場所の外を指す形・リンクを通って外へ出る形は、理由つきで拒否する", async () => {
+    const s = await setup();
+    await approveAll(s);
+    for (const command of [
+      "mkdir ../x",
+      "touch /tmp/touryou-135-x",
+      "cp src/a.ts /tmp/touryou-135-x",
+      "touch docs/x", // 承認した場所の外（docs はまだ頼んでいない）
+      "touch README.md",
+      "mkdir -p src/a && touch docs/b", // 区切りの片方だけ外
+      "touch src/ext/x", // 外を指すリンクの中
+      "cp src/a.ts src/ext",
+      "mkdir -p src/ext/new",
+      "touch src/dang/x", // ぶら下がりリンクの中
+      "mkdir -p src/nope/../../x", // 存在しない部分の ..
+      "cp src/a.ts src/dir", // src/dir/a.ts が外のファイルへのリンク（宛先のディレクトリの中の名前で書く先）
+      "git mv src/a.ts src/dir",
+      "git rm src/ext",
+      "git mv src/a.ts ../c.ts",
+      "touch .git/x",
+      "cp src/a.ts .git/hooks/pre-commit",
+    ]) {
+      expect((await s.hook(command)).decision, command).toBe("deny");
+    }
+  });
+
+  it("承認した書き込みの場所（docs）を足すと、そこへの形にも許可が付く", async () => {
+    const s = await setup();
+    await approveAll(s);
+    expect((await s.hook("touch docs/x")).decision).toBe("deny");
+    await s.approveWrite("docs");
+    expect(await s.hook("touch docs/x")).toEqual(PERMIT);
+    expect(await s.hook("cp src/a.ts docs/a.ts")).toEqual(PERMIT);
+    expect(await s.hook("git mv src/a.ts docs/a.ts")).toEqual(PERMIT);
+  });
+
+  it("形の問題（旗・語・並び）がある形には、明示の許可を付けない", async () => {
+    const s = await setup();
+    await approveAll(s);
+    for (const command of [
+      "mkdir src/a -p", // BSD は最初の位置の引数より後ろを並べ替えず、-p をファイル名にする
+      "mkdir src/a -- b",
+      "touch src/a -c",
+      "cp src/a.ts src/b.ts -f",
+      "git rm src/a.ts -r",
+      "mkdir -m 777 src/a",
+      "mkdir --mode=777 src/a",
+      "touch -r src/a.ts src/n",
+      "touch -h src/n",
+      "touch -d yesterday src/n",
+      "cp -l src/a.ts src/b",
+      "cp -s src/a.ts src/b",
+      "cp -r src src/y",
+      "cp -R src src/y",
+      "cp -a src/a.ts src/b",
+      "cp -t src src/a.ts",
+      "cp -i src/a.ts src/b",
+      "cp src/a.ts", // 元だけ（宛先がない）
+      "git mv src/a.ts",
+      "mkdir -p", // 位置の引数なし
+      "git rm --pathspec-from-file=src/a.ts",
+      "git rm ':/src/a.ts'",
+      "git mv ':(top)src/a.ts' src/b",
+      "touch src/*.ts",
+      "touch 'src/*.ts'",
+      "git rm 'src/*'",
+      "mkdir src/{a,b}",
+      "touch 'src/a b'",
+      "touch ~/x",
+      "touch $HOME/x",
+      "touch src/a > src/b",
+    ]) {
+      const r = await s.hook(command);
+      expect(r.permit, command).toBeUndefined();
+    }
+  });
+
+  it("承認していない形・承認の前・cd を前に付けた形には、許可が付かない", async () => {
+    const s = await setup();
+    expect((await s.hook("touch src/n.ts")).decision).toBe("deny"); // 承認の前
+    await s.approveCommand("mkdir");
+    expect(await s.hook("mkdir -p src/n")).toEqual(PERMIT);
+    expect((await s.hook("cp src/a.ts src/b.ts")).decision).toBe("deny"); // cp は承認していない
+    expect((await s.hook("cd src && mkdir n")).decision).toBe("deny");
+    expect((await s.hook("mkdir -p src/n; cp src/a.ts src/b.ts")).decision).toBe("deny");
   });
 });
