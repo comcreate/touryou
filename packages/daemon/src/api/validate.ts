@@ -198,6 +198,38 @@ const VALIDATORS: Validators = {
       ...(o.parentSessionId === undefined ? {} : { parentSessionId: o.parentSessionId as string }),
     };
   },
+  "node.adopt": (p) => {
+    const o = strict(p, [
+      "parentId",
+      "role",
+      "worktree",
+      "branch",
+      "sessionRef",
+      "parentSessionId",
+      "objective",
+      "acceptanceCriteria",
+      "scope",
+    ]);
+    if (o.parentSessionId !== undefined && !isSessionId(o.parentSessionId))
+      fail("parentSessionId が不正");
+    if (o.sessionRef !== undefined && !isSessionRef(o.sessionRef)) fail("sessionRef が不正");
+    const worktree = nonBlank(o, "worktree", 4096);
+    if (!worktree.startsWith("/")) fail("worktree は絶対パス");
+    // ブリーフ（目的・受け入れ基準・範囲）の検査は spawn と同じ（dependsOn は受けない）
+    return {
+      parentId: id(o, "parentId"),
+      role: oneOf(o, "role", NODE_ROLES),
+      worktree,
+      branch: nonBlank(o, "branch", LIMITS.reason),
+      ...brief({
+        objective: o.objective,
+        acceptanceCriteria: o.acceptanceCriteria,
+        scope: o.scope,
+      }),
+      ...(o.sessionRef === undefined ? {} : { sessionRef: o.sessionRef as string }),
+      ...(o.parentSessionId === undefined ? {} : { parentSessionId: o.parentSessionId as string }),
+    };
+  },
   "node.send": (p) => {
     const o = strict(p, ["nodeId", "text"]);
     return { nodeId: id(o, "nodeId"), text: text(o, "text", LIMITS.reportText) };

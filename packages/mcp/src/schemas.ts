@@ -61,6 +61,26 @@ const SCHEMAS: Readonly<Record<McpOperation, z.ZodType>> = {
     parentId: id,
     role: z.enum(NODE_ROLES).describe(`子のロール（${NODE_ROLES.join("・")} のどれか）`),
   }),
+  "node.adopt": z
+    .strictObject({
+      parentId: id,
+      role: z.enum(NODE_ROLES).describe(`子のロール（${NODE_ROLES.join("・")} のどれか）`),
+      worktree: nonBlank(4096)
+        .refine((v) => v.startsWith("/"), { message: "絶対パス" })
+        .describe("採用する作業ツリーの絶対パス"),
+      branch: nonBlank(LIMITS.reason).describe("その作業ツリーのブランチ名"),
+      sessionRef: z
+        .string()
+        .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/)
+        .optional(),
+      objective: z.unknown(),
+      acceptanceCriteria: z.unknown(),
+      scope: z.unknown(),
+    })
+    .superRefine((o, ctx) => {
+      const problem = briefProblem(o);
+      if (problem !== undefined) ctx.addIssue({ code: "custom", message: problem });
+    }),
   "node.send": z.strictObject({ nodeId: id, text: text(LIMITS.reportText) }),
   "node.stop": z.discriminatedUnion("mode", [
     z.strictObject({
@@ -262,7 +282,9 @@ export function inputSchemaFor(operation: DaemonOperation): JsonSchema {
         unknown
       >;
       if (js.type === "object" && js.oneOf === undefined && js.anyOf === undefined) {
-        if (operation === "node.spawn" || operation === "node.split") {
+        if (operation === "node.spawn" || operation === "node.split" || operation === "node.adopt") {
+          // 採用は、依存先（dependsOn）を持たない
+          const { dependsOn: _dependsOn, ...briefProps } = BRIEF_PROPERTIES;
           const props = (js.properties ?? {}) as Record<string, unknown>;
           const required = new Set([
             ...((js.required as string[] | undefined) ?? []),
@@ -271,7 +293,10 @@ export function inputSchemaFor(operation: DaemonOperation): JsonSchema {
           return {
             ...js,
             type: "object",
-            properties: { ...props, ...BRIEF_PROPERTIES },
+            properties: {
+              ...props,
+              ...(operation === "node.adopt" ? briefProps : BRIEF_PROPERTIES),
+            },
             required: [...required],
           };
         }

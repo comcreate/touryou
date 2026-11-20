@@ -163,6 +163,10 @@ export interface OperationMap {
    * Desktop の子の紐付け（FR_032）。一度きりの紐付けコードを新しく発行し（古いコードは無効）、親が Desktop の
    * タスク生成に渡す起動の文面（ID・ブリーフ・紐付けと報告の手順）を返す。コードは記録しない（応答だけ）。
    */
+  "node.adopt": {
+    params: AdoptParams;
+    result: AdoptResult;
+  };
   "node.bindCode": {
     /** `parentSessionId`: 呼んだ親の Claude Code の session_id（mcp が付ける。知らせの宛先）。 */
     params: { nodeId: string; parentSessionId?: string };
@@ -526,10 +530,43 @@ export interface ParentRequestView {
   readonly next: string;
 }
 
+/**
+ * 既存の作業ツリーを子ノードとして採用する（#163）。親（`parentId`）の下に、`worktree`（`repoRoot` に登録済みの実パス）と
+ * `branch`（その作業ツリーで検出している、親のブランチを上流にしたブランチ）を持つノードを作る。作業ツリー・ブランチは動かさない。
+ * `scope` は親の範囲（根の子は根の範囲）の部分集合に限る。
+ */
+export interface AdoptParams {
+  readonly parentId: string;
+  readonly role: NodeRole;
+  readonly worktree: string;
+  readonly branch: string;
+  readonly objective: string;
+  readonly acceptanceCriteria: readonly string[];
+  readonly scope: Scope;
+  /** 既存セッションの参照（`claude agents --json` の id。停止の依頼に使う。任意）。 */
+  readonly sessionRef?: string;
+  /** 呼んだ親の Claude Code の session_id（mcp が付ける。知らせの宛先）。 */
+  readonly parentSessionId?: string;
+}
+
+export interface AdoptResult {
+  readonly nodeId: string;
+  /** 採用した作業ツリーとブランチ（検査で確かめたもの）。 */
+  readonly worktree: string;
+  readonly branch: string;
+  /** 未コミットの変更があるまま採用したか。 */
+  readonly dirty: boolean;
+  /** 既存セッションに伝える手順（child_bind の前に /mcp で再接続する、など）。 */
+  readonly instruction: string;
+  /** `duplicate`: 同じ requestId の再送で、すでに記録済み。 */
+  readonly duplicate: boolean;
+}
+
 /** ロールごとに公開する操作（NFR_004）。`node.purge`・`node.purgePreview` は人間のコマンドだけ（DC_003）。 */
 export const ROLE_OPERATIONS = {
   integrator: [
     "node.spawn",
+    "node.adopt",
     "node.send",
     "node.stop",
     "node.confirmStopped",
@@ -612,6 +649,7 @@ export type SubtreeOperation = Exclude<RoleOperation<"integrator">, NonSubtreeIn
  */
 export const SUBTREE_RULES: Readonly<Record<SubtreeOperation, SubtreeRule>> = {
   "node.spawn": "selfOrDescendant",
+  "node.adopt": "selfOrDescendant", // 対象は採用先の親（`parentId`）。spawn と同じ
   "node.send": "strictDescendant",
   "node.stop": "strictDescendant",
   "node.confirmStopped": "strictDescendant",
@@ -642,6 +680,7 @@ export const INTEGRATOR_OPERATION_CLASS: Readonly<
   Record<RoleOperation<"integrator">, "subtree" | "callerFiltered" | "denied">
 > = {
   "node.spawn": "subtree",
+  "node.adopt": "subtree",
   "node.send": "subtree",
   "node.stop": "subtree",
   "node.confirmStopped": "subtree",
