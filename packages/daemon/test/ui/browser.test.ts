@@ -100,7 +100,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(box?.width).toBeGreaterThan(50);
   });
 
-  it("段で流れ方が変わる。sent だけに玉が走り、offset-path が効いている。終わった子の線は止まる", async () => {
+  it("段で流れ方が変わる。sent だけに彗星が走り、offset-path が効いている。終わった子の線は止まる", async () => {
     const anim = (sel: string) =>
       page.evaluate(
         (s: string) => getComputedStyle(document.querySelector(s) as Element).animationName,
@@ -110,12 +110,16 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(await anim("path.line.g-unknown")).toBe("gflow");
     expect(await anim("path.line.g-delivered")).toBe("gflow");
     expect(await anim("path.line.g-done")).toBe("none");
-    // sent は root → m1 の 1 本だけ（unknown は届いたか分からないので玉を走らせない）
+    // sent は root → m1 の 1 本だけ（unknown は届いたか分からないので彗星を走らせない）
     expect(await page.locator(".pip").count()).toBe(1);
-    const op = await page.evaluate(
-      () => getComputedStyle(document.querySelector(".pip") as Element).offsetPath,
-    );
-    expect(op).toMatch(/^path\("M /);
+    const pip = await page.evaluate(() => {
+      const s = getComputedStyle(document.querySelector(".pip") as Element);
+      return { offsetPath: s.offsetPath, offsetRotate: s.offsetRotate, backgroundImage: s.backgroundImage };
+    });
+    expect(pip.offsetPath).toMatch(/^path\("M /);
+    // 彗星: 道の接線に沿って向きが変わり、尾はグラデーションで薄れる
+    expect(pip.offsetRotate).toBe("auto");
+    expect(pip.backgroundImage).toContain("linear-gradient");
   });
 
   it("読み取り専用：箱は引っぱっても動かない。拡大（ホイール）は効く", async () => {
@@ -147,7 +151,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(problems).toEqual([]);
   });
 
-  it("prefers-reduced-motion のとき、線も玉も動かない", async () => {
+  it("prefers-reduced-motion のとき、線も彗星も動かない", async () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     const names = await page.evaluate(() =>
       [...document.querySelectorAll("#g path.line, #g .pip")].map(

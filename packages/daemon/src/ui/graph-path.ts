@@ -1,6 +1,6 @@
 /**
  * 関係図の線（#89。設計の下書き 7 節）。`d` は数だけで組む（命令 M・L・Q・Z）。
- * 動く玉の `offset-path` を設定するのも、この 1 か所（`setRunnerPath`）だけ。
+ * 動く彗星の `offset-path` を設定するのも、この 1 か所（`setRunnerPath`）だけ。
  */
 import { BOX_H, BOX_W, type Layout, type LayoutPos, MARGIN, ROW_H } from "./graph-layout.js";
 import { PATH_PATTERN } from "./svg-el.js";
@@ -29,7 +29,7 @@ export function pathD(cmds: readonly (readonly [string, ...number[]])[]): string
 export type Dir = "up" | "down";
 
 export interface Lane {
-  /** 線の道（矢印の手前まで）。玉もこの道を走る。 */
+  /** 線の道（矢印の手前まで）。彗星もこの道を走る。 */
   readonly d: string;
   /** 矢印の三角。 */
   readonly tip: string;
@@ -135,7 +135,7 @@ export function roleIconOf(integrator: boolean): string {
       ]);
 }
 
-/** 動く玉に道を設定する。中身は `d` と同じ検査を通したものだけ。 */
+/** 動く彗星に道を設定する。中身は `d` と同じ検査を通したものだけ。 */
 export function setRunnerPath(dot: HTMLElement, d: string): void {
   if (!PATH_PATTERN.test(d)) throw new Error("path: shape");
   dot.style.offsetPath = `path('${d}')`;

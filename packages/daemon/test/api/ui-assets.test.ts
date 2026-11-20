@@ -1359,7 +1359,7 @@ describe("画面の使い勝手（#13）", () => {
     expect(UI_CSS).toContain(
       ".still *,.still *::before{animation:none!important;transition:none!important}",
     );
-    // 図の上を動く玉は、動きを減らす設定と「動きを止める」のとき隠す（線と箱は残る）
+    // 図の上を動く彗星は、動きを減らす設定と「動きを止める」のとき隠す（線と箱は残る）
     expect(UI_CSS).toMatch(
       /@media \(prefers-reduced-motion: reduce\)\{[^@]*\.pip\{display:none\}\}/,
     );
