@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>状態画面 第 5 弾 最終提案</title>
+<style>
+:root{--paper:#f4f1ea;--sheet:#fffefa;--ink:#1d1f22;--ink2:#555a60;--rule:#d6d3c8;--accent:#2a5fa8;--kaki:#b04a00}
+@media (prefers-color-scheme:dark){:root{--paper:#0b0d10;--sheet:#13161a;--ink:#e8ebef;--ink2:#9aa1aa;--rule:#2b3036;--accent:#7fb0ee;--kaki:#ffa04a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.8 "Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:22px;margin:0 0 4px}h2{font-size:17px;margin:32px 0 8px;border-bottom:1px solid var(--rule);padding-bottom:4px}h3{font-size:15px;margin:18px 0 4px}
+a{color:var(--accent)}:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.lead{color:var(--ink2);margin:0 0 16px}
+.go{display:inline-block;margin:8px 0;padding:10px 18px;border:1px solid var(--accent);border-radius:2px;background:var(--sheet);font-weight:700}
+table{border-collapse:collapse;width:100%;background:var(--sheet);font-size:14px}
+th,td{border:1px solid var(--rule);padding:6px 10px;text-align:left;vertical-align:top}
+th{background:var(--paper);font-weight:700}
+.scroll{overflow-x:auto}
+ul{padding-left:1.4em}li{margin:2px 0}
+.todo{border:2px solid var(--kaki);background:var(--sheet);padding:4px 16px 12px;border-radius:2px}
+.todo h2{border-bottom:0;color:var(--kaki)}
+code{font:13px Menlo,Consolas,monospace}
+</style>
+</head>
+<body>
+<main>
+<h1>状態画面（/ui）デザイン案 第 5 弾：最終提案</h1>
+<p class="lead">第 4 弾の案 2（回路基板）に決めた版です。利用者の判断「案 2 か案 3 が良い。窓は全部を並べず、同系統のものをタブで切り替えたい」と、その後の「線の見た目は回路基板」を受けて作りました。値はすべて作り物の静的な見本で、外の通信はありません。</p>
+<p><a class="go" href="proposal-final.html">最終提案を開く（proposal-final.html）</a></p>
+
+<h2>1. 何を決めた版か</h2>
+<ul>
+<li><b>図は 1 つ、線の見た目は回路基板</b>：＋・－・全体は図の右上に重ねたアイコンだけのボタン 3 つ、説明文は図の下の小さい文字です。「作業のようす」の向きは上下の矢印だけ（↑ 上り＝子から親への報告は青、↓ 下り＝親から子への頼みは緑）で、窓の下に小さい凡例を固定しています。</li>
+<li><b>窓は左右の 2 つだけ</b>：PC は図が中央で左右に窓（900〜1279px は上段に「あなたの番」を横いっぱい、下段に図と「作業のようす」の 2 列）。スマホは 1 列で、下の切り替え（出番／図／作業）で窓を選びます。</li>
+<li><b>同系統は 1 つの窓のタブ</b>：下の「2. 系統の分け方と理由」のとおり。</li>
+</ul>
+
+<h2>2. 系統の分け方と理由</h2>
+<div class="scroll"><table>
+<tr><th>窓</th><th>タブ</th><th>入っているもの（第 4 弾の窓）</th></tr>
+<tr><td rowspan="2"><b>左「あなたの番」</b><br>（あなたに向かってくるもの）</td><td>判断・答え待ち</td><td>「出番」の窓：答えるボタン、状態の見本、接続を切る見本（件数は窓の見出しの「未解決 N 件」とタブのバッジだけで示し、本文の大きな数字と文は置かない）</td></tr>
+<tr><td>受信箱の知らせ</td><td>「受信箱」の窓：最近のやり取りの一覧（判断・頼み・進み・失敗の知らせ）</td></tr>
+<tr><td rowspan="2"><b>右「作業のようす」</b><br>（作業の側から見たもの）</td><td>選んだ作業</td><td>「詳細」の窓：図で選んだ作業のようすとやり取りの記録</td></tr>
+<tr><td>作業の一覧</td><td>「作業」の窓：作業ごとのカード</td></tr>
+</table></div>
+<h3>理由</h3>
+<ul>
+<li><b>「いま、誰が動く番か」で分けた。</b>左は、利用者が答える・確かめるために見るもの。答え待ちの項目と、その元になる受信箱の知らせは、同じ出来事を「行動」と「記録」で見ているので、切り替えても文脈が切れません。</li>
+<li>右は、「この作業はどうなっているか」で見るもの。図で箱を選ぶと、PC では右の窓が「選んだ作業」に切り替わります。一覧のカードの「詳しく」からも同じ表示に移れ、行き来が 1 つの窓の中で済みます。</li>
+<li>図は常に見えている必要があるのでタブにせず、中央に固定しました。これで、図の箱を押す→右に詳細が出る、答え待ちに答える→図のバッジが減る、という対応が 1 画面で見えます。</li>
+<li>第 4 弾の 5 つの窓を 2 つのタブつき窓に減らし、同時に見える窓の数を 3 つ（左・図・右）にしました。</li>
+<li>タブは 1 つの窓に 2 つまで。多くなると、探す手間がタブのほうに移ってしまうためです。</li>
+</ul>
+<h3>タブの操作</h3>
+<ul>
+<li>ARIA：<code>tablist</code>・<code>tab</code>・<code>tabpanel</code>。選んでいるタブだけ <code>tabindex="0"</code>、ほかは <code>-1</code>（矢印で動かす型）。<code>aria-selected</code>・<code>aria-controls</code>・<code>aria-labelledby</code> を対応づけています。</li>
+<li>キーボード：左右の矢印でタブを動かす（端では反対側へ回る）、Home で先頭、End で末尾。動かすと同時に切り替わります。</li>
+<li>スマホの下の切り替えは、窓を選ぶだけなのでタブ型にせず、いまの窓に <code>aria-current="page"</code> を付けています。</li>
+</ul>
+
+<h2>3. 線の見た目（回路基板）</h2>
+<div class="scroll"><table>
+<tr><th>項目</th><th>回路基板</th></tr>
+<tr><td>線の形</td><td>直角に折れる実線（折れ角は小さく丸める）</td></tr>
+<tr><td>線の太さ</td><td>1.7（新しい）〜1.3（古い）、答え待ちは 2.8</td></tr>
+<tr><td>バーの点</td><td>四角い点</td></tr>
+<tr><td>矢じり</td><td>開いた山形</td></tr>
+<tr><td>札（向き・種類・経過時間）</td><td>子の手前の水平の線の上に、枠つきで置く</td></tr>
+<tr><td>送った・届いたの表し方</td><td>送った＝流れる破線、届いたか分からない＝点線</td></tr>
+<tr><td>種類の色</td><td>判断＝橙、進み＝青、失敗＝赤、頼み＝緑、済み＝薄い灰</td></tr>
+</table></div>
+<p>共通：バー（親ごとに 1 本、線 1 本ごとに別の点を 18px 間隔で並べる）、線の重ならない並べ方、凡例、新しさの濃淡。</p>
+
+<h2>4. 第 4 弾から引き継いだ項目</h2>
+<ul>
+<li>図のパン・ズーム・全体表示：ドラッグ・ホイール・ピンチ・図の右上のアイコンボタン（＋ − 全体）・キーボード（図を選んで矢印・＋ −・0）。</li>
+<li>矢印の札：向き＋種類＋経過時間（例「↑ 判断を求める 3 分前」。↑ 上りは青、↓ 下りは緑）。</li>
+<li>出入口の点つきの細いバー。</li>
+<li>ヘッダーの高さ：PC 36px（タイトルと接続を左、明るさ・設定を右に置いた 1 行の細い帯）／スマホ 48px。</li>
+<li>利用者の指摘 4 点の反映：「あなたの番」のカードの高さを一番高いものに揃えて窓もそれに合わせる（カードの下に、集計・状態の見本・接続を切る見本を折りたたまず通常の表示で続ける。窓の高さは 900〜1279px で 420px までに抑え、1280px 以上は列の高さに収め、はみ出した分は窓の中を縦にスクロールして見る。スマホはページを縦にスクロール）、カードの長いタイトルは「…」で省略（全文は title 属性）、ダークのスクロールバーを暗い色に、図の倍率「100%」を左上へ移して凡例と重ならないようにした。</li>
+<li>ダーク／ライト／自動（ヘッダーのボタンと設定の窓）。</li>
+<li>動きを止める設定、および OS の reduced-motion の設定：流れる破線・点滅・フラッシュを止める。</li>
+<li>6 つの見本の状態：動いている・答え待ち・済んだ・失敗・止まっているかも・接続が切れた（左の窓の「判断・答え待ち」の下）。接続を切る見本つき。</li>
+<li>日本語／英語（設定の窓。既定はブラウザの言語）。</li>
+</ul>
+
+<h2>5. 本番への影響範囲</h2>
+<ul>
+<li>この第 5 弾は、<code>.sdd/task/ui-design-proposals/round5/</code> の静的な HTML 2 枚だけです。本番のコード（packages・scripts・plugin）は変更していません。</li>
+<li>本番に取り込む場合に影響するのは、状態画面の<b>描画の層</b>だけです：窓の並び（左・図・右の 3 つ）、窓の中のタブ、図の線の描き分け、日英の文言の追加（上り・下りの凡例など）。</li>
+<li>daemon の API とデータの形は変えません。この見本は、第 4 弾と同じ作り物のデータ（作業・やり取り・答え待ち）を同じ形で使っています。</li>
+<li>タブの切り替えの状態（どのタブを選んでいるか）は画面の中だけの状態で、記憶しません。</li>
+</ul>
+
+<div class="todo">
+<h2>6. 【未実行】一覧</h2>
+<p>この作業の環境では、ブラウザの表示やスクリプトの実行ができなかったので、次は<b>確かめていません</b>。</p>
+<ul>
+<li>【未実行】ブラウザでの表示（PC・タブレット幅・スマホ幅の見た目と余白、窓の高さの収まり、図の重なり）。</li>
+<li>【未実行】幅 900〜1279px の並び（上段「あなたの番」、下段に図と「作業のようす」）の実表示。図の高さが 240px 以上あること、上段の窓は max-height 420px で抑え、中身が長いときは窓の内側でスクロールする作りですが、420px にカード 1 段が収まるかは、ブラウザでは確かめていません（カードの高さからの見積もりで、言語・幅で足りないときは値の調整が要る）。</li>
+<li>【未実行】インラインのスクリプトの実行と構文の機械的な検査（<code>node --check</code> 相当）。読んで確かめただけで、実行時エラーが無いことは未確認。</li>
+<li>【未実行】タブのキーボード操作（矢印・Home・End）、図の操作（ドラッグ・ホイール・ピンチ・キーボード）の実機での確認。</li>
+<li>【未実行】スクリーンリーダー（VoiceOver など）での読み上げの確認。</li>
+<li>【未実行】reduced-motion（OS の設定）と「動きを止める」の動作の確認（破線の停止）。</li>
+<li>【未実行】ダーク・ライト・自動での、文字と背景の色の差（コントラスト）の測定。</li>
+<li>【未実行】日本語と英語での、札・窓の見出し・タブの文字の折り返しと重なりの確認。</li>
+<li>【未実行】localStorage が使えない環境（プライベートモードなど）での動作の確認（例外は握りつぶす作りだが、実行はしていない）。</li>
+<li>【未実行】Safari・Firefox・Chrome それぞれでの確認。</li>
+</ul>
+</div>
+<p><a href="proposal-final.html">最終提案を開く</a></p>
+</main>
+</body>
+</html>
