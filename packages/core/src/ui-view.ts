@@ -491,7 +491,7 @@ export function flowsOf(state: OrchState): UiFlow[] {
     return at === undefined ? { deliveryUnknown: true } : { deliveredAt: t(at) };
   };
   const out: { flow: UiFlow; seq: number }[] = [];
-  const push =(flow: UiFlow, seq: number): void => {
+  const push = (flow: UiFlow, seq: number): void => {
     if (flow.from === "" || flow.to === "" || flow.sentAt === "") return;
     out.push({ flow, seq });
   };

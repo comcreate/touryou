@@ -144,7 +144,7 @@ daemon の窓口が、状態を見るための HTML 画面を配る。**状態�
 
 - 表示モデルの値（`title`・`lastActivityAt`・`needsHuman`・`band`・`flows` など）は、上の「表示モデル」のとおり、画面が使っている。
 - 関係図（横向きの木・子ごとの端子・角丸の折れ線・やり取りの段 `sent`・`delivered`・`done`）と、木の一覧の切り替え。`/ui/graph.js` が、`rete`・`rete-area-plugin`・`rete-readonly-plugin` を束ねる（描画のプラグインは使わない）。CSP は変えていない。SVG を作るのは `svgEl` の 1 か所。彗星は、`g-sent` の線と同じ `d` の重ね線（`.comet`。固定色・太さ 5・丸い端・光の影）に mask（`comet-mask-N`）をかけ、mask の中の窓（rect。尾が薄く頭が明るいグラデーション `comet-fade-N`）を CSS の `transform: translateX`（`gcomet`・`gcomet-left`）で動かして描く。mask の範囲は図の座標（`maskUnits="userSpaceOnUse"`）で、水平・垂直の線でも描かれ、折れ線・曲線でも尾は線の形に沿う（線の `d` で切るため）。走る向きは線の向き（上りは左へ、下りは右へ）。`id`・`mask`・`fill` に許すのは、この `comet-mask-N`・`comet-fade-N` の形だけ。
-- あとで足す：受信箱の片付け（#99）、統合の受け取りの記録（#102。それまで子 → 親の「届いた」は分からないと示す）。
+- あとで足す：受信箱の片付け（#99）。統合の受け取りの記録（#102）は入った（子 → 親の答え待ちに受け取りの記録があるときだけ「届いた」になり、なければ「届いたかは分からない」のまま。人の `touryou inbox` の取得は、この「届いた」に含まない）。
 
 ### 関係図の束（`/ui/graph.js`）
 
