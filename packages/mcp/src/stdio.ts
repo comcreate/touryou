@@ -424,6 +424,8 @@ export function openPendingStdioSession(
       if (!read.ok && read.reason === "missing" && deps.markerNodeId !== undefined) {
         const re = await rebindChild(childBindOptions(), deps.markerNodeId);
         if (re?.ok === true) return adopt(re.value);
+        // daemon に届かない・本人確認の失敗・失敗の上限は、案内に落とさずそのまま返す（コードの出し直しでは直らない）
+        if (re?.ok === false && re.error.code !== "bind_failed") return re;
       }
       if (!read.ok || deps.markerNodeId === undefined) {
         if (read.ok === false && read.reason === "unsafe" && read.path !== undefined) {

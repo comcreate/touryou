@@ -8,7 +8,7 @@
  * - `cwd` は、このプロセスの作業ディレクトリ（Claude Code が、セッションの作業ディレクトリで stdio の mcp を起動する前提。推測）。daemon は、それがノードの作業ツリーかを確かめる（FR_006）。
  * - 失敗は区別せず（daemon は 401 だけを返す）、次の操作を添えて返す。
  */
-import { type Failure, failure, isSafeId, ok, type Result } from "@touryou/core";
+import { type Failure, failure, isSafeId, isSessionId, ok, type Result } from "@touryou/core";
 import type { IdentityVerifier } from "./identity.js";
 
 export { CHILD_BIND_TOOL } from "./tools.js";
@@ -73,8 +73,7 @@ export async function rebindChild(
   return postBind(opts, nodeId, undefined);
 }
 
-const isSessionIdShape = (s: string | undefined): s is string =>
-  s !== undefined && /^[A-Za-z0-9_-]{1,128}$/.test(s);
+const isSessionIdShape = (s: string | undefined): s is string => isSessionId(s);
 
 async function postBind(
   opts: ChildBindOptions,

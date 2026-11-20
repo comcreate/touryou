@@ -53,6 +53,7 @@ const rig = async (opts: { cli?: boolean } = {}) => {
   const recorded = new Map<string, string>();
   const logs: ApiLogEvent[] = [];
   let invalid = 0;
+  let bound = 0;
   server = createApiServer({
     credentials,
     bind,
@@ -67,6 +68,7 @@ const rig = async (opts: { cli?: boolean } = {}) => {
         }
       : {}),
     onBindSucceeded: (nodeId, info) => {
+      bound++;
       if (info.sessionId !== undefined) recorded.set(nodeId, info.sessionId);
     },
     onBindInvalid: () => {
@@ -116,6 +118,7 @@ const rig = async (opts: { cli?: boolean } = {}) => {
     post,
     logs,
     invalid: () => invalid,
+    bound: () => bound,
     advance: (ms: number) => (now += ms),
   };
 };
@@ -174,6 +177,37 @@ describe("つなぎ直し（POST /v1/bind。コードなし）", () => {
     await r2.first();
     r2.credentials.revokeNode("a");
     expect((await r2.rebind()).status).toBe(401);
+  });
+
+  it("期限が切れて、まだ掃除されていない紐付けのトークンでは、つなぎ直せない", async () => {
+    const r = await rig();
+    await r.first();
+    r.advance(2 * 3_600_000); // sweepExpired は呼ばない
+    expect((await r.rebind()).status).toBe(401);
+  });
+
+  it("つなぎ直しは、発行の時刻を引き継ぐ。24 時間の上限は延びない", async () => {
+    const r = await rig();
+    await r.first();
+    // 1 時間未満の間隔でつなぎ直し続ける（アイドルでは切れない）
+    let last = "";
+    for (let i = 0; i < 30; i++) {
+      r.advance(3_000_000);
+      const res = await r.rebind();
+      if (res.status !== 200) break;
+      last = res.json.value?.token ?? "";
+    }
+    // 発行から 24 時間（bindAbsoluteMs）を過ぎたら、つなぎ直せない
+    expect((await r.rebind()).status).toBe(401);
+    expect(last).not.toBe("");
+  });
+
+  it("つなぎ直しは、紐付けの記録（onBindSucceeded）を作らない", async () => {
+    const r = await rig();
+    await r.first();
+    expect(r.bound()).toBe(1);
+    expect((await r.rebind()).status).toBe(200);
+    expect(r.bound()).toBe(1);
   });
 
   it("木にないノードは断る", async () => {

@@ -1807,7 +1807,6 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     if (b?.bindCode === undefined) {
       const ok =
         deps.rebindOk?.(nodeId, b?.sessionId as string) === true &&
-        deps.credentials.hasBindToken?.(nodeId) === true &&
         checkPrincipal({ role: "child", nodeId }, deps.getState()).ok;
       if (!ok) {
         return denied(
@@ -1816,21 +1815,22 @@ export function createApiServer(deps: ApiDeps): ApiServer {
           { "www-authenticate": "Bearer" },
         );
       }
-      let rebound: string;
+      // 有効な（期限内の）紐付けのトークンを持つときだけ、発行の時刻を引き継いで出し直す（24 時間の上限は延びない）。
+      // 紐付けの記録（node.sessionBound）の追記・コードのファイルの削除は、コードでの紐付けのときだけ（ここでは行わない）。
+      let rebound: string | undefined;
       try {
-        rebound = deps.credentials.issueNodeToken(nodeId, "child", "bind");
+        rebound = deps.credentials.rebindNodeToken?.(nodeId);
       } catch (error) {
         return internalError(res, "bind", "bind", error);
       }
-      log({ event: "bindSucceeded", nodeId, at: now(), route: "rebind" });
-      try {
-        deps.onBindSucceeded?.(nodeId, {
-          sessionId: b?.sessionId as string,
-          cwd: b?.cwd as string,
-        });
-      } catch {
-        // 記録の失敗で、紐付けの応答を変えない
+      if (rebound === undefined) {
+        return denied(
+          failure("unauthenticated", "bind コードが無効", "bind コードを再発行する"),
+          "rejected",
+          { "www-authenticate": "Bearer" },
+        );
       }
+      log({ event: "bindSucceeded", nodeId, at: now(), route: "rebind" });
       return send(res, 200, { ok: true, value: { nodeId, token: rebound } });
     }
     // 結び付いたノードが、子ロールで、トークンを持てる状態か（統合ノード・木にない・停止後などは不可）を先に確かめ、
