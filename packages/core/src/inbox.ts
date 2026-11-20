@@ -16,6 +16,7 @@
 import type { Actor, OrchState } from "./events.js";
 import { type InboxKind, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
 import type { InboxMessage } from "./inbox-messages.js";
+import type { NodeState } from "./index.js";
 
 export interface InboxItem {
   /** daemon が採番する単調増加の番号。差分取得の cursor に使う。 */
@@ -45,7 +46,11 @@ export const unresolvedInbox = (items: readonly InboxItem[]): InboxItem[] =>
   items.filter((i) => i.resolved === undefined);
 
 /** 受理・回収・archive のあとは、もう対処のいらない、停止の未完了と失敗の記録を残さない（`staleInboxItems`）。 */
-export const SETTLED_STATES: ReadonlySet<string> = new Set(["verified", "reclaimable", "archived"]);
+export const SETTLED_STATES: ReadonlySet<NodeState> = new Set<NodeState>([
+  "verified",
+  "reclaimable",
+  "archived",
+]);
 const STALE_KINDS: ReadonlySet<InboxKind> = new Set(["stopIncomplete", "failure"]);
 /** 受理した子のセッション削除を親が拒まれた知らせ（人が判断するので、自動では解決にしない）。 */
 const HUMAN_JUDGED_KEYS: ReadonlySet<string> = new Set(["removeRefused", "removeRefusedNoReason"]);

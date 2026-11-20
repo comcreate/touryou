@@ -137,7 +137,12 @@ export async function reconcileOnStartup(deps: ReconcileDeps): Promise<Reconcile
       { system: true },
       staleBodies,
     );
-    if (!r.ok) deps.onFailure?.("", `古い項目を解決にできない: ${r.error.code}: ${r.error.cause}`);
+    if (!r.ok) {
+      deps.onFailure?.(
+        "（対象なし）",
+        `古い項目を解決にできない: ${r.error.code}: ${r.error.cause}`,
+      );
+    }
   }
   // 置き場全体を 1 回だけ調べて共有する（調べられなければ null。全ノードを安全側にする）。
   let shared: readonly ProcessInfo[] | null | undefined;
