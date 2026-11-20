@@ -140,6 +140,7 @@ const rig = () => {
     p: Record<string, unknown>,
     caller = "m1",
     requestId = `q-${++n}`,
+    // biome-ignore lint/suspicious/noExplicitAny: 試験の戻り値の形を緩く受ける
   ): Promise<{ ok: boolean; value?: any; error?: Failure }> => {
     const req = {
       requestId,
@@ -148,8 +149,10 @@ const rig = () => {
       caller: { nodeId: caller },
       params: p,
     } as unknown as HandlerRequest<"node.adopt">;
+    // biome-ignore lint/suspicious/noExplicitAny: 試験の戻り値の形を緩く受ける
     return (await h["node.adopt"](req)) as Result<any, Failure> as {
       ok: boolean;
+      // biome-ignore lint/suspicious/noExplicitAny: 試験の戻り値の形を緩く受ける
       value?: any;
       error?: Failure;
     };
@@ -226,9 +229,7 @@ describe("node.adopt（既存の作業ツリーの採用。#163）", () => {
 
   it("親の範囲に収まらない子の範囲は、作業ツリーに触れる前に scopeNotSubset で失敗する", async () => {
     const r = rig();
-    const res = await r.call(
-      params({ scope: { ...CHILD_SCOPE, allowedCommands: ["rm -rf"] } }),
-    );
+    const res = await r.call(params({ scope: { ...CHILD_SCOPE, allowedCommands: ["rm -rf"] } }));
     expect(res.ok).toBe(false);
     expect(res.error?.code).toBe("scopeNotSubset");
     expect(r.s().nodes.map((x) => x.id)).toEqual(["root", "m1", "a", "m2"]);
@@ -258,9 +259,7 @@ describe("node.adopt（既存の作業ツリーの採用。#163）", () => {
 
   it("範囲が作業ツリーの規則を満たさなければ、印を書かずに scopeInvalid で失敗する", async () => {
     const r = rig();
-    const res = await r.call(
-      params({ scope: { ...CHILD_SCOPE, writableLocations: ["/etc"] } }),
-    );
+    const res = await r.call(params({ scope: { ...CHILD_SCOPE, writableLocations: ["/etc"] } }));
     expect(res.ok).toBe(false);
     expect(["scopeNotSubset", "scopeInvalid"]).toContain(res.error?.code);
     expect(r.calls.marked).toEqual([]);
