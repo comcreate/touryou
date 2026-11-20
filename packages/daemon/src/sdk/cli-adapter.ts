@@ -114,7 +114,10 @@ export class ParentRequestCliAdapter implements RuntimeAdapter {
 
   has(nodeId: string): boolean {
     // 親が起動の失敗を報告した子は、動いていない（管理していない）
-    const launch = latestLaunch(this.deps.log.state(), nodeId);
+    const state = this.deps.log.state();
+    // 採用した既存の作業ツリー（#163）は、起動の依頼がなくても、daemon の外で動く子として管理する
+    if (state.nodes.find((n) => n.id === nodeId)?.adopted !== undefined) return true;
+    const launch = latestLaunch(state, nodeId);
     return launch !== undefined && launch.report?.outcome !== "failed";
   }
 
@@ -206,7 +209,14 @@ export class ParentRequestCliAdapter implements RuntimeAdapter {
 
   async stop(nodeId: string, request: StopRequest): Promise<Result<StopValue, Failure>> {
     const state = this.deps.log.state();
-    const launch = latestLaunch(state, nodeId);
+    // 採用した既存の作業ツリー（#163）は、起動の依頼がない。動いているセッションがあるとみなし、起動の報告を受けた子と同じに扱う
+    // （親に claude stop を依頼する。止めたとは、自分では記録しない）。
+    const adopted = state.nodes.find((n) => n.id === nodeId)?.adopted;
+    const launch =
+      latestLaunch(state, nodeId) ??
+      (adopted === undefined
+        ? undefined
+        : { worktree: adopted.worktree, report: { outcome: "done" as const } });
     const record = (key: string, bodies: Parameters<typeof appendAtomically>[4]) =>
       appendAtomically(
         this.deps.log,
@@ -287,7 +297,13 @@ export class ParentRequestCliAdapter implements RuntimeAdapter {
   }
 
   release(nodeId: string): void {
-    this.discardCode(nodeId, latestLaunch(this.deps.log.state(), nodeId)?.worktree, true);
+    const state = this.deps.log.state();
+    this.discardCode(
+      nodeId,
+      latestLaunch(state, nodeId)?.worktree ??
+        state.nodes.find((n) => n.id === nodeId)?.adopted?.worktree,
+      true,
+    );
   }
 
   updateScope(_nodeId: string, _scope: Scope): Result<undefined, Failure> {
