@@ -107,6 +107,55 @@ describe("分からないときは拒む（ACL の確かめを差し替える。
   });
 });
 
+/** $HOME/.touryou の外の設定（<dir>/config.json と <dir>/state/port）。`port` で、どの設定を読んだかを見分ける。 */
+const outside = (port: number) => {
+  const dir = tmp("touryou-acl-outside-");
+  const state = join(dir, "state");
+  mkdirSync(state);
+  chmodSync(dir, 0o700);
+  chmodSync(state, 0o700);
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ stateDir: state }), { mode: 0o600 });
+  writeFileSync(join(state, "port"), `${port}\n`, { mode: 0o600 });
+  return { dir, state, config: join(dir, "config.json") };
+};
+
+describe("設定ファイルの決め方（--config → TOURYOU_DAEMON_CONFIG → $HOME/.touryou/config.json）", () => {
+  const url = (r: ReturnType<typeof resolveDaemonEndpoint>) => (r.ok ? r.value.daemonUrl : r.error);
+
+  it("環境変数だけ: その設定の daemon に向く（$HOME/.touryou の外でも、親ディレクトリの検査が通る）", () => {
+    const x = home();
+    const o = outside(45679);
+    const r = resolveDaemonEndpoint([], { HOME: x.h, TOURYOU_DAEMON_CONFIG: o.config });
+    expect(url(r)).toBe("http://127.0.0.1:45679");
+    expect(r.ok && r.value.stateDir).toBe(o.state);
+  });
+  it("引数と環境変数の両方: 引数が優先", () => {
+    const x = home();
+    const o = outside(45679);
+    const r = resolveDaemonEndpoint(["--config", x.config], {
+      HOME: x.h,
+      TOURYOU_DAEMON_CONFIG: o.config,
+    });
+    expect(url(r)).toBe("http://127.0.0.1:45678");
+  });
+  it("環境変数が空: 無視して、$HOME/.touryou/config.json", () => {
+    const x = home();
+    const r = resolveDaemonEndpoint([], { HOME: x.h, TOURYOU_DAEMON_CONFIG: "" });
+    expect(url(r)).toBe("http://127.0.0.1:45678");
+  });
+  it("どちらもない: $HOME/.touryou/config.json", () => {
+    const x = home();
+    expect(url(resolveDaemonEndpoint([], { HOME: x.h }))).toBe("http://127.0.0.1:45678");
+  });
+  it("設定の親ディレクトリの権限が緩ければ、$HOME/.touryou が正しくても拒む", () => {
+    const x = home();
+    const o = outside(45679);
+    chmodSync(o.dir, 0o777);
+    const r = resolveDaemonEndpoint([], { HOME: x.h, TOURYOU_DAEMON_CONFIG: o.config });
+    expect(r.ok).toBe(false);
+  });
+});
+
 describe.runIf(isMac)("macOS の本物のファイル", () => {
   for (const s of STATES) {
     it(`身元の秘密: ${s.name}`, () => {

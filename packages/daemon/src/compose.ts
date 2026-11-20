@@ -65,6 +65,7 @@ import {
   writeIdentityFile,
 } from "./api/identity.js";
 import {
+  type AdoptPorts,
   type ApiLogger,
   type BindCodes,
   createApiServer,
@@ -189,6 +190,12 @@ export interface WorktreePorts {
   cwdOf(nodeId: string): Promise<string | undefined>;
   /** 子のブランチを親のブランチへ fast-forward で統合する。省略すると `node.integrate` は `notSupported`。 */
   integrate?: GitPorts["integrate"];
+  /** 既存の作業ツリーの採用（#163）の口。4 つそろって省略されたときは、`node.adopt` は無効（501）。 */
+  inspectAdoption?: GitPorts["inspectAdoption"];
+  markAdopted?: GitPorts["markAdopted"];
+  unmarkAdopted?: GitPorts["unmarkAdopted"];
+  /** 採用したノードの作業ツリーとブランチを引く関数を差し込む（記録は、口より後に作られるため）。 */
+  useAdopted?: GitPorts["useAdopted"];
 }
 
 export interface DaemonDeps {
@@ -859,8 +866,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
         const prev = seen.get(n.id);
         seen.set(n.id, n.state);
         if (prev === n.state || !TOKEN_REVOKE_ON_ENTER.has(n.state)) continue;
-        const launch = latestLaunch(st, n.id);
-        if (launch !== undefined) parentAdapter.discardCode(n.id, launch.worktree, true);
+        const worktree = latestLaunch(st, n.id)?.worktree ?? n.adopted?.worktree;
+        if (worktree !== undefined) parentAdapter.discardCode(n.id, worktree, true);
       }
       // 人間が破棄を決めたノードで、削除（claude rm）が拒まれたままなら、旗つきの削除を依頼し直す
       // 追記の通知の中では追記しない（入れ子を避ける）。次の小さな仕事で、その時点の記録から決め直す
@@ -907,10 +914,10 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     const st = log.state();
     const node = st.nodes.find((n) => n.id === nodeId);
     const launch = latestLaunch(st, nodeId);
-    if (node === undefined || launch === undefined) return;
+    if (node === undefined || (launch === undefined && node.adopted === undefined)) return;
     if (node.state !== "running" && node.state !== "waiting") return;
     rebindNoticedAt.set(nodeId, nowMs);
-    const key = `rebind/${nodeId}/${launch.requestRef}/${st.lastSeq}`;
+    const key = `rebind/${nodeId}/${launch?.requestRef ?? `adopted-${node.adopted?.seq}`}/${st.lastSeq}`;
     const r = appendAtomically(log, clock, key, { system: true }, [
       {
         type: "inbox.added",
@@ -933,6 +940,13 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       if (removeBindCodeFile(r.worktree)) {
         note("staleBindCodeFileRemoved", { nodeId: r.nodeId });
         noticeRebind(r.nodeId);
+      }
+    }
+    // 採用した既存の作業ツリー（#163）の、残ったコードのファイルも同じに片付ける
+    for (const n of log.state().nodes) {
+      if (n.adopted !== undefined && removeBindCodeFile(n.adopted.worktree)) {
+        note("staleBindCodeFileRemoved", { nodeId: n.id });
+        noticeRebind(n.id);
       }
     }
   }
@@ -1722,6 +1736,30 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
   };
   const onFailure = (nodeId: string, cause: string): void =>
     note("handlerFailure", { nodeId, cause });
+  // 採用した既存の作業ツリー（#163）: ノードの作業ツリーとブランチは、記録（node.adopted）から引く。
+  deps.worktree.useAdopted?.((id) => {
+    const a = log.state().nodes.find((n) => n.id === id)?.adopted;
+    return a === undefined ? undefined : { worktree: a.worktree, branch: a.branch };
+  });
+  const { inspectAdoption, markAdopted, unmarkAdopted } = deps.worktree;
+  // CLI の子（親への依頼の形）だけ採用できる。紐付けのコードは、起動の代わりに採用の時点で出す。
+  const adopt: AdoptPorts | undefined =
+    inspectAdoption === undefined ||
+    markAdopted === undefined ||
+    unmarkAdopted === undefined ||
+    desktopAdapter !== undefined ||
+    parentAdapter === undefined
+      ? undefined
+      : {
+          cwdOf,
+          inspectAdoption: (r) => inspectAdoption.call(deps.worktree, r),
+          markAdopted: (id, path) => markAdopted.call(deps.worktree, id, path),
+          unmarkAdopted: (path) => unmarkAdopted.call(deps.worktree, path),
+          issueBindCode: (id, path) => {
+            parentAdapter.issueCodeFile(id, path);
+          },
+          discardBindCode: (id, path) => parentAdapter.discardCode(id, path, true),
+        };
   const purgeDeps: PurgeHandlerDeps = {
     log,
     nowMs: () => Date.parse(clock()),
@@ -1788,6 +1826,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       credentials,
       // 子の `node.created` に記録する実行環境（設定 childRuntime と同じ値。記録だけで、振り分けには使わない。#159）
       runtime: config.childRuntime === "desktop" ? "desktop" : "cli",
+      ...(adopt === undefined ? {} : { adopt }),
       rootScope: config.rootScope,
       onFailure,
       ...(config.startLimits === undefined ? {} : { startLimits: config.startLimits }),
@@ -1968,6 +2007,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     stopDelegated: stopDelegatedOf(adapter),
     // 画面の claude attach を打つ場所（#136）
     attachDir: config.repoRoot,
+    // 統合ノードの whoami に出す daemon の場所（#164）
+    daemonInfo: { rootCwd: config.rootCwd, repoRoot: config.repoRoot },
     ...(confirmGate === undefined
       ? {}
       : {
@@ -1993,9 +2034,12 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
         ...(desktopAdapter === undefined && parentAdapter !== undefined
           ? {
               cliIssueFile: (nodeId: string) => {
-                const launch = latestLaunch(log.state(), nodeId);
-                if (launch === undefined) throw new Error("起動の依頼がない");
-                const issued = parentAdapter.issueCodeFile(nodeId, launch.worktree);
+                const st = log.state();
+                const worktree =
+                  latestLaunch(st, nodeId)?.worktree ??
+                  st.nodes.find((n) => n.id === nodeId)?.adopted?.worktree;
+                if (worktree === undefined) throw new Error("起動の依頼も、採用の記録もない");
+                const issued = parentAdapter.issueCodeFile(nodeId, worktree);
                 rebindNoticedAt.delete(nodeId);
                 return issued;
               },
@@ -2061,8 +2105,11 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     onBindSucceeded: (nodeId, info) => {
       if (!sessionBindings.bound(nodeId, info)) note("sessionBindFailed", { nodeId });
       // 使われたコードのファイルを消す（コードは、もうメモリにない）
-      const launch = latestLaunch(log.state(), nodeId);
-      if (launch !== undefined) parentAdapter?.discardCode(nodeId, launch.worktree, false);
+      const st = log.state();
+      const worktree =
+        latestLaunch(st, nodeId)?.worktree ??
+        st.nodes.find((n) => n.id === nodeId)?.adopted?.worktree;
+      if (worktree !== undefined) parentAdapter?.discardCode(nodeId, worktree, false);
     },
     ...(desktopAdapter === undefined ? { onBindInvalid: noticeRebind } : {}),
     clock,

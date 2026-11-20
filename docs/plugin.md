@@ -8,6 +8,7 @@
 |:--|:--|:--|
 | skill | `integrator` | 統合ノードの手順。子の作成・追加指示・受理と差し戻し・範囲拡張の判定・回収。使うツールは `mcp__node__*`（統合ロールの全ツールを説明している） |
 | skill | `child` | 子ノードの手順。進捗・判断・範囲外の申告・完了の報告・範囲拡張の要求（子ロールの全ツールを説明している） |
+| skill | `adopt` | すでにある作業ツリーと、そこで動くセッションを、子として採用する手順（`node_adopt` → セッションで `/mcp` の Reconnect → `child_bind`）。下の「既存の作業ツリーを子として採用する」 |
 | コマンド | `start` | 接続の確認（`mcp__node__whoami`）と、daemon の起動の案内。接続（統合セッションの MCP）は plugin の `.mcp.json` が stdio で済ませる（環境変数は要らない）。失敗の理由（`[touryou mcp] …`）ごとの直し方を示す |
 | コマンド | `setup` | 配布物（macOS の arm64）を、plugin の中の script（`scripts/install-runtime.sh`。1 回の承認）で、GitHub Release から `curl`（認証なし）で取得し、sha256 が一致したときだけ、`$HOME` の下の `.touryou` に展開して `current` を付け替える。続けて設定（1 回）と常駐の登録（1 回）。承認の確認は約 3 回。auto モード（権限の自動判定）では、ほとんど出ない見込み（推測。checklist の Q7）。自動判定で止められたら、出た文面を伝えて手で許可する。チャットでの「はい」（常駐の同意・`--yes` の前）は、auto モードでも必ず取る。詳細は `plugin/commands/setup.md` |
 | コマンド | `status` | 木と受信箱の読み取りだけの要約 |
@@ -51,11 +52,22 @@ touryou のリポジトリで開発する人へ: このリポジトリの中で 
 前提: `git`（Xcode の Command Line Tools）が要ります（daemon が、子の作業ツリーを `git worktree` で作るため。Xcode か Command Line Tools のどちらかがあればよい）。入っていなければ、Terminal で `xcode-select --install` を実行します（`/setup` は、最初に `xcode-select -p` で確かめ、なければ止まります）。
 
 1. daemon を起動する（`touryou-daemon --config <設定ファイル> [--port <1〜65535>]`）。窓口のポートは、`--port` → 設定の `port`（0 以外）→ stateDir の `port` のファイル（前回のポート。0600）→ 空いているポート（そのファイルに保存する）の順で決まり、再起動しても変わらない。保存したポートが使われていれば、別のポートには移らず、起動しない（理由と直し方を出す）。起動の記録（`started`）の `portSource` に、どこから決まったか（`option`・`config`・`saved`・`new`）が出る。OS が選ぶポートは一時的なポートの範囲なので、まれにほかの接続が使う。止まったら `--port` で範囲外の番号を指定する。ファイルが壊れている・権限が緩い・リンクのときは `portFileInvalid` で起動しない（権限を 0600 にするか、ファイルを消す）。新規のポートを保存できないとき、Desktop の子（`childRuntime: "desktop"`）では `portSaveFailed` で起動しない。同じ stateDir で、2 つの daemon を動かさない。
-2. 統合セッションを、この plugin つきで起動する（marketplace から入れるか、`claude --plugin-dir <plugin のパス>`）。MCP サーバー `node` は、plugin の `.mcp.json` が stdio で起動し、根のトークンは `touryou-mcp --stdio` が `$HOME/.touryou/config.json` の `stateDir` の `root-token` から読む（環境変数は使わない・要らない）。`stateDir` を標準の置き場以外にしたときも、`$HOME/.touryou/config.json` の `stateDir` をその場所にすれば読める。**トークンの値は、設定ファイルに書かない・チャットに貼らない**。
+2. 統合セッションを、この plugin つきで起動する（marketplace から入れるか、`claude --plugin-dir <plugin のパス>`）。MCP サーバー `node` は、plugin の `.mcp.json` が stdio で起動し、根のトークンは `touryou-mcp --stdio` が `$HOME/.touryou/config.json` の `stateDir` の `root-token` から読む（環境変数は使わない・要らない）。`stateDir` を標準の置き場以外にしたときは、`$HOME/.touryou/config.json` の `stateDir` をその場所にする。設定ファイル自体を別の場所に置くときは、環境変数 `TOURYOU_DAEMON_CONFIG` にそのパスを入れて統合セッションを起動する（`docs/config.md`）。**トークンの値は、設定ファイルに書かない・チャットに貼らない**。
 3. `/touryou:start` で接続を確かめ、`integrator` の skill に沿って作業する。
 4. 状態画面は `/touryou:ui` で開く（`touryou ui` を 1 回実行し、使い捨てのチケットで既定のブラウザに開く。トークンの貼り付けは要らない。モデルはトークンのファイルを読まず、チケットも見ない。再読み込みしたら、もう一度 `/touryou:ui`。Claude Code がクラウドで動いているなど、ブラウザを開けないときは、Mac のターミナルで `touryou ui` を実行する。`docs/ui.md`）。
 
 daemon は、CLI の子を起動しない。親のセッションが起動する（下の「親から子を起動する流れ」）。
+
+## 既存の作業ツリーを子として採用する
+
+手で作った作業ツリー（`git worktree add`）と、そこで動いているセッションを、あとから木の子にできる（#163。CLI の木だけ。統合ノードの MCP の `node_adopt`。人間の CLI には足していない）。手順書は `plugin/skills/adopt/SKILL.md`（`/touryou:adopt`）。
+
+1. 統合ノードが `node_adopt` を呼ぶ（`parentId`・`role`・`worktree`〔絶対パス〕・`branch`・`objective`・`acceptanceCriteria`・`scope`）。daemon は、作業ツリーを調べ（登録済み・主や親の作業ツリーでない・ブランチが付いている〔指定の `branch` と同じ・親と別・上流が親のブランチ〕・すでに別の子の作業ツリーでない）、範囲が親の範囲に収まることを確かめる。満たさなければ、何も変えずに、原因（`cause`）と次の操作（`nextActions`）を返す。
+2. 成功すると、`nodeId` と `instruction` が返る。作業ツリーに、子であることの印（git のディレクトリのファイル）と紐付けのコードが書かれる。
+3. 動いていたセッションで、`/mcp` から touryou を Reconnect し（これでこのセッションが子として動ける。印は MCP の起動のときにしか見ないため）、`child_bind` を引数なしで 1 回呼ぶ。
+4. 採用した子には、起動の知らせの自動の流れがないので、子が `inbox_fetch` を自分で読む。受理・統合は、普通の子と同じ。
+
+記録は、`node.created`（範囲）・`node.stateChanged`・`node.adopted`（作業ツリー・ブランチ）を 1 回で追記する。回収は、採用した作業ツリーとブランチを消さない（子の印と紐付けのコードを外すだけ）。`node.adopted` を含むログは、古い daemon では読み直せない。
 
 ## 親から子を起動する流れ
 
@@ -148,7 +160,7 @@ TouRyou は、**セッションを起動しません**。**Anthropic の認証�
 | `node` の道具がない。標準エラーに `[touryou mcp] 配布物の touryou-mcp がまだない…` | `/setup` をしていない（`$HOME/.touryou/current/bin/touryou-mcp` がない）。中継が待っている | `/touryou:setup` を実行して daemon を起動すれば、10 秒ほどで自動でつながる。つながらなければ `/mcp` で Reconnect |
 | failed。`[touryou mcp] 失敗 [daemon_unreachable]: daemon が動いていません…` | daemon が起動していない（`state/port` がない、または応答がない） | launchd（`docs/launchd.md`）か `touryou-daemon --config …` で起動してから、`/mcp` で Reconnect |
 | failed。`[touryou mcp] 失敗 [unauthenticated]: 根のトークン…` | `root-token` がない・リンク・自分のでない・権限が 0600 でない・ACL つき | daemon を起動して `root-token` を作らせる。権限は `chmod 600`、ACL は `chmod -N` で外す |
-| failed。`[touryou mcp] 失敗 [invalid_config]: …` | `$HOME/.touryou/config.json` がない・リンク・他の人が書ける、`stateDir` が絶対パスでない、置き場（`$HOME/.touryou`・`stateDir`・その親）がリンク・自分のでない・権限が `drwx------`／`drwxr-xr-x` でない・ACL つき | `/setup` をやり直す。置き場は `chmod 700` |
+| failed。`[touryou mcp] 失敗 [invalid_config]: …` | 設定ファイル（`$HOME/.touryou/config.json`。`TOURYOU_DAEMON_CONFIG` で別の場所を指しているときは、そのファイル）がない・リンク・他の人が書ける、`stateDir` が絶対パスでない、置き場（`$HOME/.touryou`・`stateDir`・その親）がリンク・自分のでない・権限が `drwx------`／`drwxr-xr-x` でない・ACL つき | `/setup` をやり直す。置き場は `chmod 700` |
 | `/mcp` の Reconnect で `Failed to reconnect to plugin:touryou:node: CONNECTION_CLOSED` だけが出る | `touryou-mcp --stdio` が起動時の確認で終わった（daemon が止まっている、または `/setup` の前）。理由の文（`[touryou mcp] …`）は `/mcp` には出ない | まず daemon が動いているか（launchd か手で起動したもの）と `$HOME/.touryou/current` があるかを確かめ、直してから Reconnect。理由の文は `claude --debug` で見る |
 | 統合セッションの途中で daemon を止めると、ツールが `daemon_unreachable`（`daemon に届かない（止まっているか、起動し直している途中。トークンは送っていない）`） | daemon が止まっている | daemon を起動する。起動し直せば Reconnect なしで戻る |
 | 全ツールが拒否される（`[touryou hook]` の片方だけ） | 統合セッションの環境に `TOURYOU_DAEMON_URL` がある | `unset TOURYOU_DAEMON_URL` して起動し直す |

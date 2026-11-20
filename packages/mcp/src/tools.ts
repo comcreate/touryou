@@ -36,6 +36,8 @@ type McpOperation = RoleOperation<McpRole>;
 const DESCRIPTIONS: Readonly<Record<McpOperation, string>> = {
   "node.spawn":
     "子を生成する。parentId は、自分の ID（起動の指示の先頭か、tree_list の self 列が「あなた」の行で分かる）か、子孫の ID を、短縮しないでそのまま渡す（作業ツリーのディレクトリ名は ID ではない）。引数: parentId・role・objective（目的）・acceptanceCriteria（受け入れ基準）・scope（writableLocations・forbiddenLocations は作業ツリー内の相対パス、allowedCommands）・dependsOn（省略可）。作業ツリーとブランチは指定しない（システムが親のブランチから決める）。結果は { nodeId, status: running か pending, waitingFor? }（依存先が未完了なら pending で、待っている先行ノードを waitingFor に示す）",
+  "node.adopt":
+    "すでにある作業ツリーと、そこで動いているセッションを、子として採用する（起動しない。CLI の木だけ）。引数: parentId（自分の ID か子孫の ID）・role・worktree（実在する作業ツリーの絶対パス）・branch（そのブランチ名。上流は親のブランチにしておく）・objective・acceptanceCriteria・scope（spawn と同じ。親の範囲に収まること）・sessionRef（省略可）。作業ツリーとブランチは削除しない（回収でも消えない）。検査に通らないときは、原因と次の操作を返す。結果は { nodeId, worktree, branch, dirty（未コミットの変更あり）, instruction, duplicate }。instruction を、そのセッションの人に伝える（セッションで /mcp の Reconnect → child_bind を引数なしで呼ぶ）。コードが切れたら node_bindCode で出し直す",
   "node.send":
     "稼働中の子へ追加指示を送る。結果は { status: queued, duplicate }（受け付けた。duplicate は同じ要求の重複。届いたかは受信箱・状態で確認する）",
   "node.stop":
@@ -104,7 +106,7 @@ export const DESCRIPTION_HEAD_MAX = 70;
 export const roleInstructions = (role: McpRole): string =>
   `${ROLE_GUIDE[role]}注意: ID は、${role === "integrator" ? "起動の指示の先頭か tree_list に出たもの" : "起動の指示の先頭に書かれたもの"}を短縮しないで渡す。結果の status・duplicate を見て、届いたかは受信箱で確かめる。${role === "integrator" ? "daemon が動いていなければ、道具は daemon_unreachable で失敗する（Claude Code で touryou の setup のコマンドの案内に沿って起動する）。" : "道具が失敗したら、その理由を report_progress で親へ報告する。"}`;
 export const whoamiDescription = (role: McpRole): string =>
-  `${ROLE_GUIDE[role]}自分の nodeId と role を返す（{ nodeId, role }）。起動の指示の先頭に書かれた ID の確認に使える${role === "integrator" ? "（tree_list の self 列でも分かる）" : ""}。引数はない`;
+  `${ROLE_GUIDE[role]}自分の nodeId と role を返す（${role === "integrator" ? "{ nodeId, role, daemon: { rootCwd, repoRoot, daemonId } }。daemon は統合だけに付く" : "{ nodeId, role }"}）。起動の指示の先頭に書かれた ID の確認に使える${role === "integrator" ? "（tree_list の self 列でも分かる）" : ""}。引数はない`;
 
 /** 操作名から MCP のツール名への変換（`.` を `_` にする）。ツール名を扱う箇所はすべてこれを使う。 */
 export const toolName = (op: DaemonOperation): string =>

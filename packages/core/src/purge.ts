@@ -133,6 +133,7 @@ export function purgeEventSeqs(
       case "node.parentSessionSet":
       case "node.parentRequested":
       case "node.parentReported":
+      case "node.adopted":
         subject = e.payload.nodeId;
         break;
       case "inbox.added":

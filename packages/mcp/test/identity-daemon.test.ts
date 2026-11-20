@@ -333,6 +333,8 @@ describe("ビルドした touryou-mcp --stdio（bin.ts と StdioServerTransport 
       { mode: 0o600 },
     );
     const child = spawn(process.execPath, [bin, "--stdio"], {
+      // 子の作業ツリー（印のあるディレクトリ）で試験を動かしても、根のモードで開くように、印のない場所で起動する
+      cwd: dir,
       env: { HOME: home, PATH: process.env.PATH ?? "/usr/bin:/bin" },
       stdio: ["pipe", "pipe", "pipe"],
     });

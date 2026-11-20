@@ -23,11 +23,9 @@ import {
   type Actor,
   COMPLETED_STATES,
   type EventBody,
-  effectiveScope,
   type Failure,
   isInSubtree,
   isPathUnder,
-  isScopeSubset,
   type NodeRecord,
   type NodeRuntime,
   normalizePath,
@@ -42,6 +40,7 @@ import type { RuntimeAdapter } from "../../sdk/runtime.js";
 import { selfIntroLines } from "../../self-intro.js";
 import type { CredentialStore } from "../credentials.js";
 import type { HandlerRequest } from "../server.js";
+import { childScopeProblem } from "./child-scope-check.js";
 import {
   alreadyApplied,
   appendAtomically,
@@ -460,36 +459,14 @@ export function createSpawner(deps: SpawnHandlerDeps) {
     }
 
     // 親の範囲に収まるか（作業ツリーを作る前に検査する。相対パスは、親の作業ツリー基準で子も親も比べる）。
-    const parentScope = effectiveScope(state, parentId) ?? deps.rootScope;
-    if (parentScope === undefined) {
-      return fail(
-        "rootScopeUnconfigured",
-        `親 ${parentId} にブリーフがなく、根の範囲の設定（許可リスト）もない。子の権限を決められない`,
-        "daemon の設定に、根の範囲（許可する場所とコマンド）を書く",
-      );
-    }
-    if (deps.rootScope === parentScope && validateScope(parentScope, parentCwd).length > 0) {
-      return fail(
-        "rootScopeInvalid",
-        "daemon の設定の根の範囲が、根の作業ツリーの規則を満たさない",
-        "設定の根の範囲を、根の作業ツリーの内側の場所に直す",
-      );
-    }
-    if (!isScopeSubset(brief.scope, parentScope, { child: parentCwd, parent: parentCwd })) {
-      // 上限が根の範囲（設定ファイル）のときは、直す場所と、起動し直しが要ることを出す（Issue #5）
-      if (deps.rootScope === parentScope)
-        return fail(
-          "scopeNotSubset",
-          "子の範囲が、根の範囲（設定ファイル config.json の rootScope）に収まらない（コマンド・書き込み可能な場所・禁止の場所）",
-          "子の範囲を、根の範囲の内側に絞って指定し直す（forbiddenLocations には、根の禁止の場所をすべて含める。禁止は根から引き継ぐ）",
-          "根の範囲を広げるなら、人に確かめてから config.json の rootScope（allowedCommands・writableLocations）を直し、daemon を起動し直す（起動し直すまで、変更は効かない）",
-        );
-      return fail(
-        "scopeNotSubset",
-        "子の範囲が、親の範囲に収まらない（コマンド・書き込み可能な場所・禁止の場所）",
-        "親の範囲の内側に絞って指定し直す（forbiddenLocations には、親の禁止の場所をすべて含める。禁止は親から引き継ぐ）",
-      );
-    }
+    const scopeProblem = childScopeProblem({
+      state,
+      parentId,
+      parentCwd,
+      scope: brief.scope,
+      rootScope: deps.rootScope,
+    });
+    if (scopeProblem !== undefined) return { ok: false, error: scopeProblem };
 
     // 作業ツリーを作る（以降の失敗は、片付ける）。
     let provisioned: Result<{ worktreePath: string }, Failure>;
