@@ -144,6 +144,8 @@ describe("自ノードの MCP ツールは許可し、未知のツールは拒�
         expect(d.violation, tool).toBeUndefined();
         expect(d.unknownTool, tool).toBe(tool === "" ? "(ツール名が空)" : tool);
         expect(d.reason).toContain("使えない");
+        expect(d.reason).toContain("自分で原因を探したり");
+        expect(d.reason).toContain("紐付けの出し直し");
         expect(d.reason).not.toContain("作業範囲");
       }
     }

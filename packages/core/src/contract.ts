@@ -177,7 +177,15 @@ export interface OperationMap {
     params: { nodeId: string };
     result: { token: string; nodeId: string; daemonUrl: string };
   };
-  "inbox.fetch": { params: { sinceSeq?: number }; result: { items: readonly InboxItem[] } };
+  /**
+   * `ackItemIds`（#102。統合ノードだけ）: mcp が前の応答を受け取ったあと、応答に載せた項目の ID を付けて呼ぶ。見える項目のうち、
+   * その ID のものを、受け取ったものとして記録する（`inbox.acknowledged`。項目は返さない）。応答は優先度順で件数で分けるので、
+   * 子の `ackThrough`（最大の番号）のように番号では指さず、載せた項目だけを指す（載せていない項目を受け取ったことにしない）。
+   */
+  "inbox.fetch": {
+    params: { sinceSeq?: number; ackItemIds?: readonly string[] };
+    result: { items: readonly InboxItem[] };
+  };
   /**
    * 受信箱の項目を片付ける（人間だけ。#99）。片付けた項目は解決済みになり、「要対応」の数に入らない（記録に残る。`inbox.reopen` で戻せる）。
    * 片付けてよい種類は `HUMAN_RESOLVABLE_KINDS`（progress・done・info）だけ。判断・違反・停止未完了などが 1 件でも含まれると、

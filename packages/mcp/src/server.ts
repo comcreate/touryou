@@ -172,6 +172,7 @@ async function whoamiTool(deps: { role: McpRole; relay: Relay; bound?: boolean }
   return asValue({
     nodeId: who.value.nodeId,
     role: who.value.role,
+    ...(who.value.daemon === undefined ? {} : { daemon: who.value.daemon }),
     ...(deps.bound === true ? { note: BOUND_NOTE } : {}),
   });
 }
@@ -324,6 +325,13 @@ export function createToolServer(init: ToolServerDeps): Server {
           } catch {
             // 報告の失敗で、ツールの応答を変えない
           }
+        }
+        // 受け取った（#102）: 応答を作れたら、応答に載せた項目の ID を daemon に知らせる（子の child.inbox と同じ 2 回目の呼び出し。
+        // 失敗しても、受け取りの記録がないだけ。画面は「届いたかは分からない」のまま。古い daemon は未知のキーで断るが、同じ）
+        if (page.ok && deps.role === "integrator" && page.value.entries.length > 0) {
+          await deps.relay
+            .request("inbox.fetch", { ackItemIds: page.value.entries.map((e) => e.id) })
+            .catch(() => undefined);
         }
         return page.ok ? asValue(page.value) : asError(page.error);
       }
