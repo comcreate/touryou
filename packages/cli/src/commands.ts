@@ -12,6 +12,8 @@
  *   touryou hook-unbind <nodeId> [--request-id <id>]
  *   eval "$(touryou hook-env <nodeId>)"
  *   touryou inbox [--detail] [--limit <1〜100>] [--offset <n>] [--since <seq>] [--request-id <id>]
+ *   touryou inbox resolve <項目 ID>… [--request-id <id>]
+ *   touryou inbox reopen <項目 ID>… [--request-id <id>]
  *   touryou discarded list
  *   touryou discarded restore <nodeId|key> [--branch <名前>] [--request-id <id>]
  *   touryou discarded drop <nodeId|key> [--yes] [--request-id <id>]
@@ -113,6 +115,11 @@ const USAGE = `使い方:
       --limit    1 回に出す件数（1〜100。既定 20）
       --offset   整列後の先頭からの位置（既定 0）。続きは、末尾に出る案内のとおり（取得のたびに数え直す近似。新しい項目の取りこぼしを避けるには --since）
       --since    この seq より後の項目だけ（差分。既定 0）
+  touryou inbox resolve <項目 ID>… [--request-id <id>]
+      受信箱の、済んだ項目を片付ける（人間だけ。項目の ID は "$HOME/.touryou/current/bin/touryou" inbox --detail の id=）。片付けられる種類は、進捗（progress）・完了（done）・情報（info）だけ。
+      判断・違反（拡張要求）・停止未完了などが 1 件でも含まれると、何も片付けずに断る。片付けた項目は「要対応」の数に入らず、記録に残る
+  touryou inbox reopen <項目 ID>… [--request-id <id>]
+      人が片付けた項目を、未解決に戻す（システム・ノードが解決にした項目は戻せない）
   touryou discarded list
       強制の回収で破棄した成果の保管（refs/touryou/discarded/*）の一覧: 名前・ノード・先端の SHA・日時・件名（コミットメッセージ由来の、信頼できない入力）。孤立（ノードがもうない）も出る。
       保管は、最終削除（"$HOME/.touryou/current/bin/touryou" purge）のときに、その木のノードの分が消える。数の上限（daemon の設定 discardedRefsMax）に達すると、強制の回収は失敗する
@@ -143,6 +150,8 @@ const ALLOWED_FLAGS: Readonly<Record<string, readonly string[]>> = {
   "hook-unbind": [],
   "hook-env": [],
   inbox: ["--detail", "--limit", "--offset", "--since"],
+  "inbox-resolve": [],
+  "inbox-reopen": [],
   tree: ["--json"],
   state: ["--json"],
   decisions: ["--json"],
@@ -984,6 +993,56 @@ async function runInbox(
   };
 }
 
+const isResolveResult = (v: unknown): v is { resolved: readonly string[]; alreadyResolved: readonly string[] } =>
+  isRecord(v) && isStringArray(v.resolved) && isStringArray(v.alreadyResolved);
+const isReopenResult = (v: unknown): v is { reopened: readonly string[]; alreadyOpen: readonly string[] } =>
+  isRecord(v) && isStringArray(v.reopened) && isStringArray(v.alreadyOpen);
+
+/** `touryou inbox resolve <項目 ID>…`（片付ける）・`touryou inbox reopen <項目 ID>…`（片付けた項目を戻す）。#99 */
+async function runInboxResolve(
+  resolve: boolean,
+  positional: readonly string[],
+  requestId: string | undefined,
+  deps: CommandDeps,
+): Promise<CommandResult> {
+  const sub = resolve ? "resolve" : "reopen";
+  if (positional.length === 0) {
+    return usageError(`touryou inbox ${sub} には、受信箱の項目の ID を 1 つ以上指定する`);
+  }
+  if (positional.length > LIMITS.inboxResolveItems) {
+    return usageError(`項目の ID は ${LIMITS.inboxResolveItems} 個まで`);
+  }
+  const bad = positional.find((p) => !isSafeId(p));
+  if (bad !== undefined) {
+    return usageError(
+      `項目の ID が不正: ${JSON.stringify(bad)}（英数字で始まり、英数字と . _ : - のみ）`,
+    );
+  }
+  const itemIds = [...new Set(positional)];
+  const id = requestId ?? deps.newRequestId();
+  const rerun = `"$HOME/.touryou/current/bin/touryou" inbox ${sub} ${itemIds.join(" ")} --request-id ${id}`;
+  if (resolve) {
+    const res = await invoke(deps.client, id, "inbox.resolve", { itemIds }, isResolveResult);
+    if (res.kind === "failure") return failed(res.failure);
+    if (res.kind === "unconfirmed") return unconfirmed(res.reason, rerun, id);
+    const { resolved, alreadyResolved } = res.value;
+    return {
+      exitCode: 0,
+      stdout: `片付けた: ${resolved.length} 件${alreadyResolved.length === 0 ? "" : `（すでに片付け済み ${alreadyResolved.length} 件）`}\n戻すには: "$HOME/.touryou/current/bin/touryou" inbox reopen <項目 ID>…\nrequestId: ${id}\n`,
+      stderr: "",
+    };
+  }
+  const res = await invoke(deps.client, id, "inbox.reopen", { itemIds }, isReopenResult);
+  if (res.kind === "failure") return failed(res.failure);
+  if (res.kind === "unconfirmed") return unconfirmed(res.reason, rerun, id);
+  const { reopened, alreadyOpen } = res.value;
+  return {
+    exitCode: 0,
+    stdout: `戻した: ${reopened.length} 件${alreadyOpen.length === 0 ? "" : `（すでに未解決 ${alreadyOpen.length} 件）`}\nrequestId: ${id}\n`,
+    stderr: "",
+  };
+}
+
 export async function runCommand(
   argv: readonly string[],
   deps: CommandDeps,
@@ -993,6 +1052,10 @@ export async function runCommand(
   }
   let [command, ...rest] = argv;
   if (command === undefined) return usageError("コマンドを指定する");
+  if (command === "inbox" && (rest[0] === "resolve" || rest[0] === "reopen")) {
+    command = `inbox-${rest[0]}`;
+    rest = rest.slice(1);
+  }
   if (command === "discarded") {
     const sub = rest[0];
     if (sub !== "list" && sub !== "restore" && sub !== "drop") {
@@ -1036,6 +1099,9 @@ export async function runCommand(
     }
   }
   if (command === "inbox") return runInbox(flags, values, positional, requestId, deps);
+  if (command === "inbox-resolve" || command === "inbox-reopen") {
+    return runInboxResolve(command === "inbox-resolve", positional, requestId, deps);
+  }
   if (command === "discarded-list") {
     if (positional.length !== 0) return usageError("touryou discarded list に、引数はない");
     const res = await invoke(

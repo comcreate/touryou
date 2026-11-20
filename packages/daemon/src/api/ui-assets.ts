@@ -884,6 +884,11 @@ export const UI_JS = `'use strict';
       if (!items.has(i.nodeId)) items.set(i.nodeId, []);
       items.get(i.nodeId).push(i);
     });
+    resolvedByNode = new Map();
+    (view.resolved || []).forEach(function (i) {
+      if (!resolvedByNode.has(i.nodeId)) resolvedByNode.set(i.nodeId, []);
+      resolvedByNode.get(i.nodeId).push(i);
+    });
     var turn = view.nodes.filter(function (n) { return n.band === 'turn'; }).sort(byActivity);
     var running = view.nodes.filter(function (n) { return n.band !== 'turn' && n.band !== 'finished'; }).sort(byActivity);
     var finished = view.nodes.filter(function (n) { return n.band === 'finished'; }).sort(byActivity);
@@ -998,8 +1003,16 @@ export const UI_JS = `'use strict';
     if (list.length) {
       var sorted = list.slice().sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });
       var d = fold('inbox-' + n.id, t(band === 'finished' ? 'card.inboxFinished' : 'card.inbox', { n: sorted.length }));
+      var clearable = sorted.filter(isClearable);
+      if (clearable.length > 1) d.appendChild(resolveButton(t('resolve.bulk'), clearable, 'resolve.bulk'));
       sorted.forEach(function (i) { d.appendChild(entryRow(i, delegated)); });
       card.appendChild(d);
+    }
+    var cleared = resolvedByNode.get(n.id) || [];
+    if (cleared.length) {
+      var cf = fold('resolved-' + n.id, t('resolve.fold', { n: cleared.length }));
+      cleared.forEach(function (r) { cf.appendChild(resolvedRow(r)); });
+      card.appendChild(cf);
     }
     card.appendChild(nodeOps(n));
     return card;
@@ -1061,6 +1074,45 @@ export const UI_JS = `'use strict';
       row.appendChild(d);
     } else if (text) {
       row.appendChild(el('div', 'confirm-line', text));
+    }
+    if (isClearable(i)) row.appendChild(resolveButton(t('resolve.button'), [i], 'resolve.button'));
+    return row;
+  }
+  // 人が片付けられる種類（進み具合・完了・お知らせ。daemon の inbox.resolve と同じ決め方。ほかは daemon が断る）
+  var CLEARABLE_KINDS = { progress: true, done: true, info: true };
+  var resolvedByNode = new Map();
+  function isClearable(i) { return Object.hasOwn(CLEARABLE_KINDS, i.kind) && i.stall !== true && ID_RE.test(i.id); }
+  // 片付ける（取り消せる操作なので、打ち込みはない。「片付けた項目」から戻せる）
+  function resolveButton(label, list, key) {
+    var b = el('button', 'sm', label);
+    b.dataset.key = key;
+    b.addEventListener('click', function () {
+      var lines = [[t('line.content'), t('resolve.content')], [t('line.record'), t('resolve.record')]];
+      list.slice(0, 10).forEach(function (i) { lines.push([t('line.target'), cleanText(itemText(i) || i.id, 60)]); });
+      if (list.length > 10) lines.push([t('line.target'), t('more.n', { n: list.length - 10 })]);
+      openConfirm(t('resolve.title'), lines, 'inbox.resolve', { itemIds: list.map(function (i) { return i.id; }) }, function (value) {
+        return t('resolve.done', { n: value && Array.isArray(value.resolved) ? value.resolved.length : 0, m: value && Array.isArray(value.alreadyResolved) ? value.alreadyResolved.length : 0 });
+      });
+    });
+    return b;
+  }
+  // 片付けた項目 1 件（戻せる）
+  function resolvedRow(r) {
+    var row = el('div', 'entry');
+    var head = el('div', '');
+    head.appendChild(el('span', 'chip', name(KIND_NAMES, r.kind)));
+    head.appendChild(el('span', 'when', timeText(r.resolvedAt, Date.now())));
+    row.appendChild(head);
+    var text = itemText(r);
+    if (text) row.appendChild(el('div', 'confirm-line', cleanText(text, 120)));
+    if (ID_RE.test(r.id)) {
+      var undo = el('button', 'sm', t('reopen.button'));
+      undo.addEventListener('click', function () {
+        openConfirm(t('reopen.title'), [[t('line.content'), t('reopen.content')], [t('line.target'), cleanText(text || r.id, 60)]], 'inbox.reopen', { itemIds: [r.id] }, function (value) {
+          return t('reopen.done', { n: value && Array.isArray(value.reopened) ? value.reopened.length : 0 });
+        });
+      });
+      row.appendChild(undo);
     }
     return row;
   }
@@ -1765,7 +1817,7 @@ export const UI_JS = `'use strict';
     attachDir = typeof view.attachDir === 'string' ? view.attachDir : '';
     renderApprovals(view.confirmations);
     var flows = Array.isArray(view.flows) ? view.flows : [];
-    var v = { nodes: view.nodes, inbox: view.inbox, decisions: view.decisions, extensions: view.extensions, flows: flows };
+    var v = { nodes: view.nodes, inbox: view.inbox, resolved: Array.isArray(view.resolved) ? view.resolved : [], decisions: view.decisions, extensions: view.extensions, flows: flows };
     var byId = new Map();
     view.nodes.forEach(function (n) { byId.set(n.id, n); });
     titleById = new Map();

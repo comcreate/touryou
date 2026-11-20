@@ -195,6 +195,14 @@ export type EventBody =
       readonly payload: { readonly itemId: string };
     }
   | {
+      /**
+       * 解決済みの受信箱の項目を、未解決に戻す（記録のみ。#99）。人間が片付けた項目を取り消す操作で、封筒の `actor` は人間。
+       * 未解決の項目に対しては何もしない（状態は変えない）。
+       */
+      readonly type: "inbox.reopened";
+      readonly payload: { readonly itemId: string };
+    }
+  | {
       /** 追加指示の配送の記録（アダプタが子へ届けた）。`instructedSeq` は、対応する `node.instructed` のイベントの `seq`。記録のみ。 */
       readonly type: "node.instructionDelivered";
       readonly payload: { readonly instructedSeq: number };
@@ -1877,6 +1885,27 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
           ...cur,
           resolved: Object.freeze({ seq, at: raw.at as string, by: actor }),
         });
+      }
+      return commit();
+    }
+
+    case "inbox.reopened": {
+      const { itemId } = p;
+      if (!isId(itemId)) return invalid(seq, "inbox.reopened の itemId");
+      const i = d.inbox.findIndex((x) => x.id === itemId);
+      const cur = d.inbox[i];
+      if (cur === undefined) {
+        return reject(
+          seq,
+          "unknownInboxItem",
+          `受信箱の項目 ${itemId} は存在しない`,
+          "受信箱の項目の ID を確認する",
+        );
+      }
+      // 未解決の項目は、そのまま（状態は変えない）。解決済みなら、解決の記録を外す。
+      if (cur.resolved !== undefined) {
+        const { resolved: _resolved, ...rest } = cur;
+        d.inbox[i] = freezeRecord(rest);
       }
       return commit();
     }

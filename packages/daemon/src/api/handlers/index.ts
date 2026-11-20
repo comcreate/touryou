@@ -3,6 +3,7 @@
 import { createReadHandlers } from "../read-handlers.js";
 import type { Handlers } from "../server.js";
 import { createChildInboxHandlers } from "./child-inbox-handlers.js";
+import { createInboxResolveHandlers } from "./inbox-resolve-handlers.js";
 import { createInstructionDelivery } from "./instruction-delivery.js";
 import { createParentRequestHandlers } from "./parent-request-handlers.js";
 import { createPauseHandlers } from "./pause-handlers.js";
@@ -148,6 +149,7 @@ export function createHandlersWithScheduler(
       release: (id) => runtime?.adapterFor(id)?.release?.(id),
     }),
     ...createChildInboxHandlers(deps),
+    ...createInboxResolveHandlers(deps),
     ...(rt === undefined ? {} : rt),
     ...(reclaim === undefined ? {} : createReclaimHandlers({ ...deps, ports: reclaim })),
     ...(purgeTree === undefined ||

@@ -166,6 +166,24 @@ const nodeIdOnly = (p: unknown) => {
   return { nodeId: id(o, "nodeId") };
 };
 
+/** 受信箱の項目の ID の一覧（`inbox.resolve`・`inbox.reopen`）。1〜`LIMITS.inboxResolveItems` 件で、重複なし。 */
+const itemIds = (p: unknown): string[] => {
+  const o = strict(p, ["itemIds"]);
+  const v = o.itemIds;
+  if (
+    !Array.isArray(v) ||
+    v.length < 1 ||
+    v.length > LIMITS.inboxResolveItems ||
+    !v.every((x) => isSafeId(x)) ||
+    new Set(v).size !== v.length
+  ) {
+    fail(
+      `itemIds が不正（受信箱の項目の ID の配列。重複なし、1〜${LIMITS.inboxResolveItems} 件）`,
+    );
+  }
+  return [...(v as string[])];
+};
+
 const BRIEF_KEYS = ["objective", "acceptanceCriteria", "scope", "dependsOn"] as const;
 /** ブリーフ（spec 5.2）の検査は core の `briefProblem` を使う（作業ツリー・ブランチは受けない）。 */
 const brief = (o: Rec): Brief => {
@@ -238,6 +256,8 @@ const VALIDATORS: Validators = {
       fail("sinceSeq が 0 以上の整数でない");
     return { sinceSeq: s as number };
   },
+  "inbox.resolve": (p) => ({ itemIds: itemIds(p) }),
+  "inbox.reopen": (p) => ({ itemIds: itemIds(p) }),
   "tree.list": (p) => {
     strict(p, []);
     return {};

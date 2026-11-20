@@ -334,6 +334,7 @@ describe("子が入れる文字列・配列の上限（コードポイントで�
       pauseNodeCount: 100,
       purgeNodeCount: 10_000,
       commit: 128,
+      inboxResolveItems: 200,
       feedback: 8 * 1024,
     });
   });
