@@ -2005,6 +2005,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     stopDelegated: stopDelegatedOf(adapter),
     // 画面の claude attach を打つ場所（#136）
     attachDir: config.repoRoot,
+    // 統合ノードの whoami に出す daemon の場所（#164）
+    daemonInfo: { rootCwd: config.rootCwd, repoRoot: config.repoRoot },
     ...(confirmGate === undefined
       ? {}
       : {

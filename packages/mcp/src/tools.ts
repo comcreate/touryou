@@ -106,7 +106,7 @@ export const DESCRIPTION_HEAD_MAX = 70;
 export const roleInstructions = (role: McpRole): string =>
   `${ROLE_GUIDE[role]}注意: ID は、${role === "integrator" ? "起動の指示の先頭か tree_list に出たもの" : "起動の指示の先頭に書かれたもの"}を短縮しないで渡す。結果の status・duplicate を見て、届いたかは受信箱で確かめる。${role === "integrator" ? "daemon が動いていなければ、道具は daemon_unreachable で失敗する（Claude Code で touryou の setup のコマンドの案内に沿って起動する）。" : "道具が失敗したら、その理由を report_progress で親へ報告する。"}`;
 export const whoamiDescription = (role: McpRole): string =>
-  `${ROLE_GUIDE[role]}自分の nodeId と role を返す（{ nodeId, role }）。起動の指示の先頭に書かれた ID の確認に使える${role === "integrator" ? "（tree_list の self 列でも分かる）" : ""}。引数はない`;
+  `${ROLE_GUIDE[role]}自分の nodeId と role を返す（${role === "integrator" ? "{ nodeId, role, daemon: { rootCwd, repoRoot, daemonId } }。daemon は統合だけに付く" : "{ nodeId, role }"}）。起動の指示の先頭に書かれた ID の確認に使える${role === "integrator" ? "（tree_list の self 列でも分かる）" : ""}。引数はない`;
 
 /** 操作名から MCP のツール名への変換（`.` を `_` にする）。ツール名を扱う箇所はすべてこれを使う。 */
 export const toolName = (op: DaemonOperation): string =>

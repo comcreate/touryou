@@ -181,7 +181,15 @@ export interface OperationMap {
     params: { nodeId: string };
     result: { token: string; nodeId: string; daemonUrl: string };
   };
-  "inbox.fetch": { params: { sinceSeq?: number }; result: { items: readonly InboxItem[] } };
+  /**
+   * `ackItemIds`（#102。統合ノードだけ）: mcp が前の応答を受け取ったあと、応答に載せた項目の ID を付けて呼ぶ。見える項目のうち、
+   * その ID のものを、受け取ったものとして記録する（`inbox.acknowledged`。項目は返さない）。応答は優先度順で件数で分けるので、
+   * 子の `ackThrough`（最大の番号）のように番号では指さず、載せた項目だけを指す（載せていない項目を受け取ったことにしない）。
+   */
+  "inbox.fetch": {
+    params: { sinceSeq?: number; ackItemIds?: readonly string[] };
+    result: { items: readonly InboxItem[] };
+  };
   /**
    * 子の受信箱（子のロールだけ。自分のノードの分だけ）。最初にブリーフ（目的・受け入れ基準・範囲・依存）を、続けて、まだ受け取って
    * いない追加の指示（差し戻しの理由・判断の回答を含む）を古い順に返す。`all: true` なら、受け取ったものも含める。返した指示は受け取った

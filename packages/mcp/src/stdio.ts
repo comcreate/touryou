@@ -2,7 +2,8 @@
  * `touryou-mcp --stdio`: 統合セッション用の入口。Claude Code が plugin の `.mcp.json`（stdio 型）から、
  * 統合セッションごとに 1 つ起動する。子用の HTTP の `touryou-mcp`（`main.ts`）は、そのまま残る。
  *
- * - 状態の置き場: `$HOME/.touryou/config.json` の `stateDir`（`--config` で変えられる）。
+ * - 状態の置き場: 設定ファイルの `stateDir`。設定ファイルは、`--config` の引数 → 環境変数 `TOURYOU_DAEMON_CONFIG`（空は無視）→
+ *   `$HOME/.touryou/config.json` の順に決める。設定ファイルの親ディレクトリも、下の `$HOME/.touryou` と同じ検査を通す。
  * - 根のトークン: `<stateDir>/root-token` だけから読む（環境変数は使わない。Claude Code の環境に残ると、Bash などで見えうるため）。
  *   ファイルは、リンクを開かない（`O_NOFOLLOW`）・通常のファイル・自分の・権限の文字列が `-rw-------`（macOS の拡張属性 `@` は可、
  *   ACL の `+` は不可）のときだけ読む。`$HOME/.touryou`・`stateDir`・その親も、リンクでない・自分の・権限の文字列が `drwx------` か
@@ -170,11 +171,18 @@ export function resolveDaemonEndpoint(
     return fail("invalid_config", "HOME が絶対パスでない（置き場を決められない）", SETUP);
   }
   const touryou = join(home, ".touryou");
-  configPath ??= join(touryou, "config.json");
+  // 優先順位: --config の引数 → 環境変数 TOURYOU_DAEMON_CONFIG（空は無視）→ $HOME/.touryou/config.json（touryou の cli と同じ）
+  const envConfig = env.TOURYOU_DAEMON_CONFIG;
+  configPath ??=
+    envConfig === undefined || envConfig === "" ? join(touryou, "config.json") : envConfig;
   const dirProblem = (dir: string): Result<never> | undefined => {
     const why = ops.checkDir(dir);
     if (why !== undefined)
-      return fail("invalid_config", `置き場のディレクトリが使えない: ${why}`, SETUP);
+      return fail(
+        "invalid_config",
+        `設定ファイルの置き場のディレクトリが使えない（${dir}）: ${why}`,
+        SETUP,
+      );
     const m = ops.modeString(dir);
     if (m === undefined || !DIR_MODES.has(m)) {
       return fail(
@@ -185,8 +193,9 @@ export function resolveDaemonEndpoint(
     }
     return undefined;
   };
-  const touryouProblem = dirProblem(touryou);
-  if (touryouProblem !== undefined) return touryouProblem;
+  // 設定が $HOME/.touryou の外にあっても検査が通るよう、対象は設定ファイルの親ディレクトリにする
+  const configDirProblem = dirProblem(dirname(configPath));
+  if (configDirProblem !== undefined) return configDirProblem;
   let json: unknown;
   try {
     json = JSON.parse(ops.read(configPath, 0o022));
