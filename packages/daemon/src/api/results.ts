@@ -23,6 +23,8 @@ export const RESULT_KEYS: ResultKeys = {
   "parent.report": ["recorded", "duplicate"],
   "child.inbox": ["brief", "instructions"],
   "inbox.fetch": ["items"],
+  "inbox.resolve": ["resolved", "alreadyResolved"],
+  "inbox.reopen": ["reopened", "alreadyOpen"],
   "tree.list": ["table", "nodes"],
   "decision.present": ["decisionId"],
   "node.split": ["newNodeId"],
