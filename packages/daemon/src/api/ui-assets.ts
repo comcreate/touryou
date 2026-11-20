@@ -231,7 +231,7 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .edge{display:inline-block;width:4px;height:14px;border-radius:2px;background:var(--ai)}.edge.turn{background:var(--kaki)}.edge.stall{background:var(--kiiro)}.edge.fail{background:var(--shu)}.edge.over{background:var(--line)}
 .pip{position:absolute;left:0;top:0;width:56px;height:4px;margin:0;border-radius:999px;background:var(--ai);background:linear-gradient(90deg,transparent 0%,color-mix(in srgb,var(--ai) 80%,transparent) 70%,var(--ai) 95%,transparent 100%);offset-rotate:auto;offset-anchor:100% 50%;opacity:0;animation:gtravel 1.6s linear infinite}
 @keyframes galive{0%,100%{opacity:1}50%{opacity:.45}}
-@keyframes gflow{to{stroke-dashoffset:-14}}@keyframes gtravel{0%{offset-distance:0%;opacity:0}30%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}
+@keyframes gflow{to{stroke-dashoffset:-14}}@keyframes gtravel{0%{offset-distance:56px;opacity:0}15%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}
 .still *,.still *::before{animation:none!important;transition:none!important}
 .still .pip{display:none}
 @media (prefers-reduced-motion: reduce){*,*::before{animation:none!important;transition:none!important}.pip{display:none}}
