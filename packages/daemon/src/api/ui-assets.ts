@@ -35,7 +35,7 @@ export const UI_HTML = `<!doctype html>
 <p id="live" class="sr" aria-live="polite"></p><header class="top"><h1 data-t="page.title">touryou 状態画面</h1><span id="status" class="status" data-t="conn.none">未接続</span><span class="tools"><button id="open-settings" class="quiet sm gear" type="button" data-t-aria="settings.title" data-t-title="settings.title" aria-label="設定" title="設定" aria-haspopup="dialog" aria-controls="settings"><span aria-hidden="true">⚙</span></button></span></header>
 <dialog id="settings" class="settings" aria-labelledby="settings-title"><h2 id="settings-title" data-t="settings.title">設定</h2>
 <fieldset><legend data-t="settings.a11y">アクセシビリティ</legend>
-<label class="opt"><input id="set-still" type="checkbox"> <span data-t="settings.still">動きを止める</span></label><p class="note" data-t="settings.stillNote">新しい項目の入る動き・線を流れる玉・光る縁などを止めます。OS の「視差効果を減らす」を入れているときは、ここを切っていても止まります。</p>
+<label class="opt"><input id="set-still" type="checkbox"> <span data-t="settings.still">動きを止める</span></label><p class="note" data-t="settings.stillNote">新しい項目の入る動き・線を流れる彗星・光る縁などを止めます。OS の「視差効果を減らす」を入れているときは、ここを切っていても止まります。</p>
 <div role="radiogroup" aria-labelledby="set-theme-label" class="opts"><span id="set-theme-label" class="opts-label" data-t="settings.theme">明暗</span>
 <label class="opt"><input type="radio" name="set-theme" value="auto" checked> <span data-t="settings.themeAuto">OS に合わせる</span></label>
 <label class="opt"><input type="radio" name="set-theme" value="light"> <span data-t="settings.themeLight">明るい</span></label>
@@ -229,12 +229,14 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .legend{display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 0 0;font-size:12.5px;color:var(--muted)}.lg{display:inline-flex;align-items:center;gap:4px}
 .sw{display:inline-block;width:22px;height:0;border-top:2.5px dashed var(--ai)}.sw.down{border-top-color:var(--ai-2)}.sw.a1{border-top-width:3px}.sw.a3{opacity:.65}.sw.a4{opacity:.45}.sw.wait{border-top:3.5px dashed var(--kaki)}
 .edge{display:inline-block;width:4px;height:14px;border-radius:2px;background:var(--ai)}.edge.turn{background:var(--kaki)}.edge.stall{background:var(--kiiro)}.edge.fail{background:var(--shu)}.edge.over{background:var(--line)}
-.pip{position:absolute;left:0;top:0;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:var(--ai);offset-rotate:0deg;animation:gtravel 1.6s linear infinite}
+.comet{fill:none;stroke:var(--ai);stroke-width:5;stroke-linecap:round;filter:drop-shadow(0 0 4px var(--ai))}
+.comet-win{transform-box:fill-box;animation:gcomet 1.6s linear infinite}.comet-win-left{animation-name:gcomet-left}
+.comet-clear{stop-color:#fff;stop-opacity:0}.comet-mid{stop-color:#fff;stop-opacity:.8}.comet-lit{stop-color:#fff;stop-opacity:1}
 @keyframes galive{0%,100%{opacity:1}50%{opacity:.45}}
-@keyframes gflow{to{stroke-dashoffset:-14}}@keyframes gtravel{from{offset-distance:0%}to{offset-distance:100%}}
+@keyframes gflow{to{stroke-dashoffset:-14}}@keyframes gcomet{from{transform:translateX(0)}to{transform:translateX(100%)}}@keyframes gcomet-left{from{transform:translateX(0)}to{transform:translateX(-100%)}}
 .still *,.still *::before{animation:none!important;transition:none!important}
-.still .pip{display:none}
-@media (prefers-reduced-motion: reduce){*,*::before{animation:none!important;transition:none!important}.pip{display:none}}
+.still .comet{display:none}
+@media (prefers-reduced-motion: reduce){*,*::before{animation:none!important;transition:none!important}.comet{display:none}}
 @media (max-width:640px){.now .count{font-size:44px}.now h2{font-size:18px}.top .tools{margin-left:0}button.sm,button.copy,button.gear{min-height:44px}.zoom{top:4px}.zoom button{min-width:44px;min-height:44px}.seg button{min-width:44px}}
 `;
 
@@ -887,6 +889,11 @@ export const UI_JS = `'use strict';
       if (!items.has(i.nodeId)) items.set(i.nodeId, []);
       items.get(i.nodeId).push(i);
     });
+    resolvedByNode = new Map();
+    (view.resolved || []).forEach(function (i) {
+      if (!resolvedByNode.has(i.nodeId)) resolvedByNode.set(i.nodeId, []);
+      resolvedByNode.get(i.nodeId).push(i);
+    });
     var turn = view.nodes.filter(function (n) { return n.band === 'turn'; }).sort(byActivity);
     var running = view.nodes.filter(function (n) { return n.band !== 'turn' && n.band !== 'finished'; }).sort(byActivity);
     var finished = view.nodes.filter(function (n) { return n.band === 'finished'; }).sort(byActivity);
@@ -997,12 +1004,27 @@ export const UI_JS = `'use strict';
       row.appendChild(copyButton(cmd));
       card.appendChild(row);
     }
+    // 子の実行環境（記録のあるものだけ）の開き方と安全面の注記（#159）。たたむ
+    if (n.runtime === 'cli' || n.runtime === 'desktop') {
+      var rt = fold('runtime-' + n.id, t(n.runtime === 'cli' ? 'runtime.cli' : 'runtime.desktop'));
+      rt.appendChild(el('div', 'confirm-line', n.runtime === 'cli' ? t('runtime.openCli', { id: n.id }) : t('runtime.openDesktop')));
+      rt.appendChild(el('div', 'confirm-line', t(n.runtime === 'cli' ? 'runtime.safetyCli' : 'runtime.safetyDesktop')));
+      card.appendChild(rt);
+    }
     // 受信箱の項目は、たたむ（新しい順）
     if (list.length) {
       var sorted = list.slice().sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });
       var d = fold('inbox-' + n.id, t(band === 'finished' ? 'card.inboxFinished' : 'card.inbox', { n: sorted.length }));
+      var clearable = sorted.filter(isClearable);
+      if (clearable.length > 1) d.appendChild(resolveButton(t('resolve.bulk'), clearable, 'resolve.bulk'));
       sorted.forEach(function (i) { d.appendChild(entryRow(i, delegated)); });
       card.appendChild(d);
+    }
+    var cleared = resolvedByNode.get(n.id) || [];
+    if (cleared.length) {
+      var cf = fold('resolved-' + n.id, t('resolve.fold', { n: cleared.length }));
+      cleared.forEach(function (r) { cf.appendChild(resolvedRow(r)); });
+      card.appendChild(cf);
     }
     card.appendChild(nodeOps(n));
     return card;
@@ -1064,6 +1086,47 @@ export const UI_JS = `'use strict';
       row.appendChild(d);
     } else if (text) {
       row.appendChild(el('div', 'confirm-line', text));
+    }
+    if (isClearable(i)) row.appendChild(resolveButton(t('resolve.button'), [i], 'resolve.button'));
+    return row;
+  }
+  // 人が片付けられる種類（進み具合・完了・お知らせ。daemon の inbox.resolve と同じ決め方。ほかは daemon が断る）
+  var CLEARABLE_KINDS = { progress: true, done: true, info: true };
+  var resolvedByNode = new Map();
+  function isClearable(i) { return Object.hasOwn(CLEARABLE_KINDS, i.kind) && i.stall !== true && ID_RE.test(i.id); }
+  // 片付ける（取り消せる操作なので、打ち込みはない。「片付けた項目」から戻せる）
+  function resolveButton(label, list, key) {
+    var b = el('button', 'sm', label);
+    b.dataset.key = key;
+    if (list.length === 1) b.ariaLabel = label + ': ' + cleanText(itemText(list[0]) || list[0].id, 60);
+    b.addEventListener('click', function () {
+      var lines = [[t('line.content'), t('resolve.content')], [t('line.record'), t('resolve.record')]];
+      list.slice(0, 10).forEach(function (i) { lines.push([t('line.target'), cleanText(itemText(i) || i.id, 60)]); });
+      if (list.length > 10) lines.push([t('line.target'), t('more.n', { n: list.length - 10 })]);
+      openConfirm(t('resolve.title'), lines, 'inbox.resolve', { itemIds: list.map(function (i) { return i.id; }) }, function (value) {
+        return t('resolve.done', { n: value && Array.isArray(value.resolved) ? value.resolved.length : 0, m: value && Array.isArray(value.alreadyResolved) ? value.alreadyResolved.length : 0 });
+      });
+    });
+    return b;
+  }
+  // 片付けた項目 1 件（戻せる）
+  function resolvedRow(r) {
+    var row = el('div', 'entry');
+    var head = el('div', '');
+    head.appendChild(el('span', 'chip', name(KIND_NAMES, r.kind)));
+    head.appendChild(el('span', 'when', timeText(r.resolvedAt, Date.now())));
+    row.appendChild(head);
+    var text = itemText(r);
+    if (text) row.appendChild(el('div', 'confirm-line', cleanText(text, 120)));
+    if (ID_RE.test(r.id)) {
+      var undo = el('button', 'sm', t('reopen.button'));
+      undo.ariaLabel = t('reopen.button') + ': ' + cleanText(text || r.id, 60);
+      undo.addEventListener('click', function () {
+        openConfirm(t('reopen.title'), [[t('line.content'), t('reopen.content')], [t('line.target'), cleanText(text || r.id, 60)]], 'inbox.reopen', { itemIds: [r.id] }, function (value) {
+          return t('reopen.done', { n: value && Array.isArray(value.reopened) ? value.reopened.length : 0 });
+        });
+      });
+      row.appendChild(undo);
     }
     return row;
   }
@@ -1768,7 +1831,7 @@ export const UI_JS = `'use strict';
     attachDir = typeof view.attachDir === 'string' ? view.attachDir : '';
     renderApprovals(view.confirmations);
     var flows = Array.isArray(view.flows) ? view.flows : [];
-    var v = { nodes: view.nodes, inbox: view.inbox, decisions: view.decisions, extensions: view.extensions, flows: flows };
+    var v = { nodes: view.nodes, inbox: view.inbox, resolved: Array.isArray(view.resolved) ? view.resolved : [], decisions: view.decisions, extensions: view.extensions, flows: flows };
     var byId = new Map();
     view.nodes.forEach(function (n) { byId.set(n.id, n); });
     titleById = new Map();

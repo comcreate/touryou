@@ -228,7 +228,7 @@ describe("whoami ツール", () => {
       expect(who?.description).toContain("起動の指示の先頭に書かれた ID の確認に使える");
       expect(who?.description?.includes("tree_list")).toBe(role === "integrator");
     }
-    expect(counts).toEqual({ integrator: 21, child: 7 });
+    expect(counts).toEqual({ integrator: 22, child: 7 });
   });
 
   it.each(MCP_ROLES)(

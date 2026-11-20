@@ -8,7 +8,7 @@
  * - `cwd` は、このプロセスの作業ディレクトリ（Claude Code が、セッションの作業ディレクトリで stdio の mcp を起動する前提。推測）。daemon は、それがノードの作業ツリーかを確かめる（FR_006）。
  * - 失敗は区別せず（daemon は 401 だけを返す）、次の操作を添えて返す。
  */
-import { type Failure, failure, isSafeId, ok, type Result } from "@touryou/core";
+import { type Failure, failure, isSafeId, isSessionId, ok, type Result } from "@touryou/core";
 import type { IdentityVerifier } from "./identity.js";
 
 export { CHILD_BIND_TOOL } from "./tools.js";
@@ -58,6 +58,28 @@ export async function bindChild(
       ),
     };
   }
+  return postBind(opts, nodeId, bindCode);
+}
+
+/**
+ * コードなしのつなぎ直し（#145。`claude attach` で mcp が入れ替わったあと）。セッションの ID・作業ツリー・ノード ID を送り、
+ * daemon が記録の値と全部合うときだけ、トークンが出し直される。セッションの ID がなければ送らない（`undefined` が返る）。
+ */
+export async function rebindChild(
+  opts: ChildBindOptions,
+  nodeId: unknown,
+): Promise<Result<ChildCredential> | undefined> {
+  if (!isSafeId(nodeId) || !isSessionIdShape(opts.sessionId)) return undefined;
+  return postBind(opts, nodeId, undefined);
+}
+
+const isSessionIdShape = (s: string | undefined): s is string => isSessionId(s);
+
+async function postBind(
+  opts: ChildBindOptions,
+  nodeId: string,
+  bindCode: string | undefined,
+): Promise<Result<ChildCredential>> {
   let expectedDaemonId: string | undefined;
   if (opts.verifier !== undefined) {
     const v = await opts.verifier.verify();
@@ -84,11 +106,9 @@ export async function bindChild(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         nodeId,
-        bindCode,
+        ...(bindCode === undefined ? {} : { bindCode }),
         cwd: (opts.cwd ?? (() => process.cwd()))(),
-        ...(opts.sessionId !== undefined && /^[A-Za-z0-9_-]{1,128}$/.test(opts.sessionId)
-          ? { sessionId: opts.sessionId }
-          : {}),
+        ...(isSessionIdShape(opts.sessionId) ? { sessionId: opts.sessionId } : {}),
       }),
     });
     if (

@@ -53,6 +53,8 @@ export const LIMITS = {
   /** 自動の最終削除の保留: 理由の長さ（文字）と、保留の期限の上限（日）。 */
   purgeHoldReason: 200,
   purgeHoldMaxDays: 365,
+  /** 受信箱の項目を片付ける（`inbox.resolve`）・戻す（`inbox.reopen`）の、1 回に渡せる項目の件数。画面の項目の上限（`UI_LIMITS.inbox`）に合わせる。 */
+  inboxResolveItems: 200,
   /** 完了の判定（`node.review`）の差し戻し理由・コメント。 */
   feedback: 8 * 1024,
 } as const;

@@ -65,6 +65,8 @@ export type EventBody =
         readonly objective?: string;
         readonly acceptanceCriteria?: readonly string[];
         readonly scope?: Scope;
+        /** 子の実行環境（#159）。子の生成で、daemon の設定 `childRuntime` と同じ値を記録する。根や以前の記録では省略。 */
+        readonly runtime?: NodeRuntime;
       };
     }
   | {
@@ -197,6 +199,22 @@ export type EventBody =
       readonly payload: { readonly itemId: string };
     }
   | {
+      /**
+       * 解決済みの受信箱の項目を、未解決に戻す（記録のみ。#99）。人間が片付けた項目を取り消す操作で、封筒の `actor` は人間。
+       * 未解決の項目に対しては何もしない（状態は変えない）。
+       */
+      readonly type: "inbox.reopened";
+      readonly payload: { readonly itemId: string };
+    }
+  | {
+      /**
+       * 統合が受信箱の項目を受け取った記録（#102。`inbox.fetch` の `ackThrough`）。受け取った者は封筒の `actor`。記録のみ
+       * （項目は消えない・解決済みにもならない）。子 → 親のやり取りの「届いた」を、状態画面に出すために使う。
+       */
+      readonly type: "inbox.acknowledged";
+      readonly payload: { readonly itemId: string };
+    }
+  | {
       /** 追加指示の配送の記録（アダプタが子へ届けた）。`instructedSeq` は、対応する `node.instructed` のイベントの `seq`。記録のみ。 */
       readonly type: "node.instructionDelivered";
       readonly payload: { readonly instructedSeq: number };
@@ -291,6 +309,20 @@ export type EventBody =
         readonly sessionRef?: string;
         readonly reason?: string;
         readonly agentState?: string;
+      };
+    }
+  | {
+      /**
+       * 既存の作業ツリーを子ノードとして採用した記録（#163）。採用した者は封筒の `actor`、範囲（scope）は同じトランザクションの
+       * `node.created` が持つ。作業ツリーとブランチは動かさず、ノードの導出（`nameOf`）を上書きする値として持つ。
+       * `sessionRef` は、既存セッションの参照（停止の依頼に使う。任意）。
+       */
+      readonly type: "node.adopted";
+      readonly payload: {
+        readonly nodeId: string;
+        readonly worktree: string;
+        readonly branch: string;
+        readonly sessionRef?: string;
       };
     }
   | {
@@ -414,6 +446,10 @@ export const isAgentState = (x: unknown): x is string =>
 export const isSessionId = (x: unknown): x is string =>
   typeof x === "string" && SESSION_ID_SHAPE.test(x);
 
+/** 子の実行環境。`cli`: 親が `claude --bg` で起動する子、`desktop`: Claude のデスクトップアプリの子。 */
+export const NODE_RUNTIMES = ["cli", "desktop"] as const;
+export type NodeRuntime = (typeof NODE_RUNTIMES)[number];
+
 export interface NodeRecord {
   readonly id: string;
   readonly role: NodeRole;
@@ -424,6 +460,8 @@ export interface NodeRecord {
   readonly objective?: string;
   readonly acceptanceCriteria?: readonly string[];
   readonly scope?: Scope;
+  /** 子の実行環境（`node.created` の `runtime`。記録だけで、振り分けには使わない）。根や以前の記録にはない。 */
+  readonly runtime?: NodeRuntime;
   /** 破棄の判断（停止したノードだけ。再開すると消える）。回収の再判定の入力 `facts.discarded` の情報源。 */
   readonly discarded?: {
     readonly seq: number;
@@ -433,6 +471,15 @@ export interface NodeRecord {
     readonly expectTip?: string;
     /** 判断のときに、先端がなかった（ブランチがなかった）。今の先端が取れるなら、回収のときに拒否する。 */
     readonly noTip?: true;
+  };
+  /** 採用した既存の作業ツリー（`node.adopted`）。ある間、作業ツリー・ブランチは導出でなくこの値。回収では作業ツリー・ブランチを消さない。 */
+  readonly adopted?: {
+    readonly seq: number;
+    readonly at: string;
+    readonly by: Actor;
+    readonly worktree: string;
+    readonly branch: string;
+    readonly sessionRef?: string;
   };
   /** 自動の最終削除の保留（`node.purgeHeld`）。`until` がなければ無期限。 */
   readonly purgeHold?: {
@@ -1322,6 +1369,10 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
         const problem = briefProblem({ objective, acceptanceCriteria, scope, dependsOn });
         if (problem !== undefined) return invalid(seq, `node.created のブリーフ（${problem}）`);
       }
+      const { runtime } = p;
+      if (runtime !== undefined && !NODE_RUNTIMES.includes(runtime as NodeRuntime)) {
+        return invalid(seq, "node.created の runtime");
+      }
       const ancestors = ancestorIds(d, parentId);
       for (const dep of dependsOn) {
         if (dep === nodeId || !d.nodeIdx.has(dep)) {
@@ -1350,6 +1401,7 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
           dependsOn: [...dependsOn],
           state: "pending",
           ...(hasBrief ? briefRecord(objective, acceptanceCriteria, scope) : {}),
+          ...(runtime === undefined ? {} : { runtime: runtime as NodeRuntime }),
         }),
       );
       if (parentId !== null)
@@ -1887,6 +1939,50 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
       return commit();
     }
 
+    case "inbox.reopened": {
+      const { itemId } = p;
+      if (!isId(itemId)) return invalid(seq, "inbox.reopened の itemId");
+      const i = d.inbox.findIndex((x) => x.id === itemId);
+      const cur = d.inbox[i];
+      if (cur === undefined) {
+        return reject(
+          seq,
+          "unknownInboxItem",
+          `受信箱の項目 ${itemId} は存在しない`,
+          "受信箱の項目の ID を確認する",
+        );
+      }
+      // 未解決の項目は、そのまま（状態は変えない）。解決済みなら、解決の記録を外す。
+      if (cur.resolved !== undefined) {
+        const { resolved: _resolved, ...rest } = cur;
+        d.inbox[i] = freezeRecord(rest);
+      }
+      return commit();
+    }
+
+    case "inbox.acknowledged": {
+      const { itemId } = p;
+      if (!isId(itemId)) return invalid(seq, "inbox.acknowledged の itemId");
+      const i = d.inbox.findIndex((x) => x.id === itemId);
+      const cur = d.inbox[i];
+      if (cur === undefined) {
+        return reject(
+          seq,
+          "unknownInboxItem",
+          `受信箱の項目 ${itemId} は存在しない`,
+          "受信箱の項目の ID を確認する",
+        );
+      }
+      // 二度目の受け取りの記録は、最初の記録を残す（状態は変えない）。
+      if (cur.acknowledged === undefined) {
+        d.inbox[i] = freezeRecord({
+          ...cur,
+          acknowledged: Object.freeze({ seq, at: raw.at as string, by: actor }),
+        });
+      }
+      return commit();
+    }
+
     case "node.instructionDelivered": {
       const { instructedSeq } = p;
       if (!Number.isInteger(instructedSeq) || (instructedSeq as number) < 0) {
@@ -2175,6 +2271,41 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
           ...(reason === undefined ? {} : { reason }),
           ...(agentState === undefined ? {} : { agentState }),
           actor,
+        }),
+      });
+      return commit();
+    }
+
+    case "node.adopted": {
+      const { nodeId, worktree, branch, sessionRef } = p;
+      if (
+        !isId(nodeId) ||
+        !isBoundedText(worktree, PARENT_WORKTREE_MAX) ||
+        !worktree.startsWith("/") ||
+        !isBoundedText(branch, LIMITS.reason) ||
+        branch === "" ||
+        (sessionRef !== undefined && !isSessionRef(sessionRef))
+      )
+        return invalid(seq, "node.adopted の payload");
+      const node = nodeAt(d, nodeId);
+      if (node === undefined) return unknownNode(seq, nodeId);
+      if (node.adopted !== undefined) {
+        return reject(
+          seq,
+          "invalidState",
+          `ノード ${nodeId} は、もう採用済み`,
+          "別のノードとして採用するか、採用済みの作業ツリーを使う",
+        );
+      }
+      d.nodes[d.nodeIdx.get(nodeId) as number] = freezeRecord({
+        ...node,
+        adopted: freezeRecord({
+          seq,
+          at: raw.at,
+          by: actor,
+          worktree,
+          branch,
+          ...(sessionRef === undefined ? {} : { sessionRef }),
         }),
       });
       return commit();

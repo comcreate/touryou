@@ -17,7 +17,15 @@ import {
   graphModelOf,
   stageText,
 } from "./graph-model.js";
-import { type Lane, laneOf, roleIconOf, setRunnerPath, trunkOf, twigOf } from "./graph-path.js";
+import {
+  COMET_TAIL,
+  cometSpanOf,
+  type Lane,
+  laneOf,
+  roleIconOf,
+  trunkOf,
+  twigOf,
+} from "./graph-path.js";
 import { graphString, type Lang } from "./graph-text.js";
 import { svgEl } from "./svg-el.js";
 
@@ -491,7 +499,10 @@ function drawShape(element: HTMLElement, s: Shape | undefined, w: number, h: num
     const look = s.look ?? "";
     const line = svgEl("path", { class: `line ${look}`, d: s.d });
     line.append(svgEl("title", {}, s.title ?? ""));
-    svg.append(line, svgEl("path", { class: `tip ${look}`, d: lane.tip }));
+    svg.append(line);
+    // 彗星は g-sent の線だけ。線と同じ `d` の重ね線に、尾の薄い窓（mask）をかけて走らせる
+    if (look.endsWith("g-sent")) svg.append(...cometOf(s.d, w, h));
+    svg.append(svgEl("path", { class: `tip ${look}`, d: lane.tip }));
     if (lane.portX !== undefined && lane.portY !== undefined)
       svg.append(
         svgEl("rect", {
@@ -509,9 +520,61 @@ function drawShape(element: HTMLElement, s: Shape | undefined, w: number, h: num
     );
   }
   element.append(svg);
-  if (s.kind === "lane" && (s.look ?? "").endsWith("g-sent")) {
-    const dot = el("span", "pip");
-    setRunnerPath(dot, s.d);
-    element.append(dot);
-  }
+}
+
+/** 彗星の mask・グラデーションの `id` の通し番号（線ごとに一意にする）。 */
+let cometSeq = 0;
+
+/**
+ * 線 `d` の上を走る彗星：defs（グラデーション・mask）と、`d` と同じ形の重ね線。
+ * mask の中の窓（rect）は、走る範囲＋尾の長さ。CSS の translate（幅の 100%）で動かす。
+ * 窓は幅が 0 でない rect なので、水平・垂直の線でも描かれる。
+ */
+function cometOf(d: string, w: number, h: number): SVGElement[] {
+  const { from, to } = cometSpanOf(d);
+  const seq = ++cometSeq;
+  const fade = `comet-fade-${seq}`;
+  const mask = `comet-mask-${seq}`;
+  const right = to >= from;
+  const len = Math.abs(to - from);
+  const span = len + COMET_TAIL;
+  // 頭が最も明るく、尾が薄れる（0 透明 → 70% で .8 → 95% で 1 → 100% で透明）。頭は進む向きの端
+  const t = COMET_TAIL / span;
+  const stops: readonly (readonly [number, string])[] = right
+    ? [
+        [0, "comet-clear"],
+        [1 - t, "comet-clear"],
+        [1 - t + 0.7 * t, "comet-mid"],
+        [1 - t + 0.95 * t, "comet-lit"],
+        [1, "comet-clear"],
+      ]
+    : [
+        [0, "comet-clear"],
+        [0.05 * t, "comet-lit"],
+        [0.3 * t, "comet-mid"],
+        [t, "comet-clear"],
+        [1, "comet-clear"],
+      ];
+  const gradient = svgEl("linearGradient", { id: fade });
+  for (const [offset, cls] of stops) gradient.append(svgEl("stop", { offset, class: cls }));
+  const win = svgEl("rect", {
+    class: right ? "comet-win" : "comet-win comet-win-left",
+    x: right ? from - span : from,
+    y: 0,
+    width: span,
+    height: h,
+    fill: `url(#${fade})`,
+  });
+  const maskEl = svgEl("mask", {
+    id: mask,
+    maskUnits: "userSpaceOnUse",
+    x: 0,
+    y: 0,
+    width: w,
+    height: h,
+  });
+  maskEl.append(win);
+  const defs = svgEl("defs");
+  defs.append(gradient, maskEl);
+  return [defs, svgEl("path", { class: "comet", d, mask: `url(#${mask})` })];
 }

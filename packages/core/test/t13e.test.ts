@@ -459,3 +459,50 @@ describe("inbox.resolved（受信箱の項目を解決済みにする。記録�
     expect(r.ok).toBe(true);
   });
 });
+
+describe("inbox.acknowledged（統合が受信箱の項目を受け取った。記録のみ。#102）", () => {
+  const added = (id: string) =>
+    ev({ type: "inbox.added", payload: { id, kind: "info", nodeId: "a" } } as never);
+  const acked = (itemId: unknown, over: Parameters<typeof ev>[1] = {}) =>
+    ev({ type: "inbox.acknowledged", payload: { itemId } } as never, {
+      actor: SYS,
+      at: "2026-10-22T04:00:00Z",
+      ...over,
+    });
+
+  it("項目に、受け取った者・時刻・seq を記録する。項目は消えず、解決済みにもならない", () => {
+    const s = must(foldEvents([...base(), added("i1"), acked("i1", { seq: 9400 })]));
+    expect(s.inbox).toHaveLength(1);
+    expect(s.inbox[0]).toMatchObject({
+      id: "i1",
+      acknowledged: { seq: 9400, at: "2026-10-22T04:00:00Z", by: SYS },
+    });
+    expect(s.inbox[0]).not.toHaveProperty("resolved");
+  });
+
+  it("存在しない項目は unknownInboxItem、識別子の形式が不正なら invalidPayload", () => {
+    expect(code(foldEvents([...base(), acked("zz")]))).toBe("unknownInboxItem");
+    for (const bad of ["a b", "", 5, null, undefined]) {
+      expect(code(foldEvents([...base(), added("i1"), acked(bad)])), String(bad)).toBe(
+        "invalidPayload",
+      );
+    }
+  });
+
+  it("二度目の受け取りは、最初の記録を残す（状態は変わらない）", () => {
+    const s = must(
+      foldEvents([
+        ...base(),
+        added("i1"),
+        acked("i1", { seq: 9500, at: "2026-10-22T04:00:00Z" }),
+        acked("i1", { seq: 9600, at: "2026-10-23T05:00:00Z", actor: HUMAN }),
+      ]),
+    );
+    expect(s.inbox[0]?.acknowledged).toMatchObject({ seq: 9500, by: SYS });
+  });
+
+  it("受け取っていない項目には acknowledged がない（受け取りを返さない統合）", () => {
+    const s = must(foldEvents([...base(), added("i1"), added("i2"), acked("i1")]));
+    expect(s.inbox.find((x) => x.id === "i2")).not.toHaveProperty("acknowledged");
+  });
+});

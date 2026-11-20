@@ -12,6 +12,7 @@ type ResultKeys = {
 
 export const RESULT_KEYS: ResultKeys = {
   "node.spawn": ["nodeId", "status", "waitingFor"],
+  "node.adopt": ["nodeId", "worktree", "branch", "dirty", "instruction", "duplicate"],
   "node.send": ["status", "duplicate"],
   "node.stop": ["state"],
   "node.confirmStopped": ["state"],
@@ -22,6 +23,8 @@ export const RESULT_KEYS: ResultKeys = {
   "parent.report": ["recorded", "duplicate"],
   "child.inbox": ["brief", "instructions"],
   "inbox.fetch": ["items"],
+  "inbox.resolve": ["resolved", "alreadyResolved"],
+  "inbox.reopen": ["reopened", "alreadyOpen"],
   "tree.list": ["table", "nodes"],
   "decision.present": ["decisionId"],
   "node.split": ["newNodeId"],

@@ -100,7 +100,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(box?.width).toBeGreaterThan(50);
   });
 
-  it("段で流れ方が変わる。sent だけに玉が走り、offset-path が効いている。終わった子の線は止まる", async () => {
+  it("段で流れ方が変わる。sent だけに彗星が走り、線と同じ形の重ね線に mask がかかる。終わった子の線は止まる", async () => {
     const anim = (sel: string) =>
       page.evaluate(
         (s: string) => getComputedStyle(document.querySelector(s) as Element).animationName,
@@ -110,12 +110,47 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(await anim("path.line.g-unknown")).toBe("gflow");
     expect(await anim("path.line.g-delivered")).toBe("gflow");
     expect(await anim("path.line.g-done")).toBe("none");
-    // sent は root → m1 の 1 本だけ（unknown は届いたか分からないので玉を走らせない）
-    expect(await page.locator(".pip").count()).toBe(1);
-    const op = await page.evaluate(
-      () => getComputedStyle(document.querySelector(".pip") as Element).offsetPath,
-    );
-    expect(op).toMatch(/^path\("M /);
+    // sent は root → m1 の 1 本だけ（unknown は届いたか分からないので彗星を走らせない）
+    expect(await page.locator("svg.glink path.comet").count()).toBe(1);
+    const comet = await page.evaluate(() => {
+      const c = document.querySelector("svg.glink path.comet") as SVGGraphicsElement;
+      const line = document.querySelector("svg.glink path.line.g-sent") as Element;
+      const maskId = /^url\("?#(.+?)"?\)$/.exec(c.getAttribute("mask") ?? "")?.[1] ?? "";
+      const mask = document.getElementById(maskId);
+      const win = mask?.querySelector("rect") as SVGGraphicsElement;
+      const fillId = /^url\("?#(.+?)"?\)$/.exec(win.getAttribute("fill") ?? "")?.[1] ?? "";
+      return {
+        // 尾が線から外れない: 重ね線は、線と同じ d
+        sameD: c.getAttribute("d") === line.getAttribute("d"),
+        // 水平の線でも描かれる: 線の外接箱は高さ 0 だが、mask の範囲は図の座標で、窓は幅も高さもある
+        lineBoxHeight: (line as SVGGraphicsElement).getBBox().height,
+        maskUnits: mask?.getAttribute("maskUnits"),
+        winW: win.getBBox().width,
+        winH: win.getBBox().height,
+        stops: [...document.querySelectorAll(`#${fillId} stop`)].map((s) => [
+          s.getAttribute("offset"),
+          getComputedStyle(s).stopOpacity,
+        ]),
+        winAnimation: getComputedStyle(win).animationName,
+        cometDisplay: getComputedStyle(c).display,
+        painted: c.getBoundingClientRect().width > 0,
+      };
+    });
+    expect(comet.sameD).toBe(true);
+    expect(comet.lineBoxHeight).toBe(0);
+    expect(comet.maskUnits).toBe("userSpaceOnUse");
+    expect(comet.winW).toBeGreaterThan(0);
+    expect(comet.winH).toBeGreaterThan(0);
+    // 頭が最も明るく、尾が薄れる（右向き: 0 → 0 → .8 → 1 → 0。左向きは鏡写し）。止まり位置は小さい順
+    const ops = comet.stops.map(([, o]) => o);
+    expect(ops).toHaveLength(5);
+    expect(ops.includes("0.8") && ops.includes("1")).toBe(true);
+    expect(ops.filter((o) => o === "1")).toHaveLength(1);
+    const offs = comet.stops.map(([o]) => Number(o));
+    expect(offs).toEqual([...offs].sort((a, b) => a - b));
+    expect(comet.winAnimation).toMatch(/^gcomet/);
+    expect(comet.cometDisplay).not.toBe("none");
+    expect(comet.painted).toBe(true);
   });
 
   it("読み取り専用：箱は引っぱっても動かない。拡大（ホイール）は効く", async () => {
@@ -147,15 +182,19 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(problems).toEqual([]);
   });
 
-  it("prefers-reduced-motion のとき、線も玉も動かない", async () => {
+  it("prefers-reduced-motion のとき、線も彗星も動かず、彗星は隠れる", async () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     const names = await page.evaluate(() =>
-      [...document.querySelectorAll("#g path.line, #g .pip")].map(
+      [...document.querySelectorAll("#g path.line, #g .comet-win")].map(
         (e) => getComputedStyle(e).animationName,
       ),
     );
     expect(names.length).toBeGreaterThan(0);
     expect(new Set(names)).toEqual(new Set(["none"]));
+    const shown = await page.evaluate(() =>
+      [...document.querySelectorAll("#g .comet")].map((e) => getComputedStyle(e).display),
+    );
+    expect(shown).toEqual(["none"]);
     await page.emulateMedia({ reducedMotion: "no-preference" });
   });
 

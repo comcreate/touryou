@@ -312,6 +312,34 @@ export function createStateHandlers(deps: StateHandlerDeps) {
       // 人間は全ノード（touryou inbox）。統合ノードは自分の部分木だけ。
       const source =
         req.role === "human" ? log.state().inbox : visibleState(log.state(), callerOf(req)).inbox;
+      const ack = req.params.ackItemIds;
+      if (ack !== undefined) {
+        // 受け取り（#102）: mcp が前の応答を受け取ったあと、応答に載せた項目の ID で呼ぶ。統合ノードだけ（人間が読んだだけでは、
+        // 統合が受け取ったことにならない）。項目は返さない。付け直しても害がない（最初の記録を残す）。
+        const caller = callerOf(req);
+        if (req.role === "human" || caller === "") {
+          return fail(
+            "forbidden",
+            "統合ノードだけが、受信箱の受け取りを記録できる",
+            "統合の資格情報で呼ぶ",
+          );
+        }
+        const picked = new Set(ack);
+        for (const i of unresolvedInbox(source)) {
+          if (!picked.has(i.id) || i.acknowledged !== undefined) continue;
+          const r = appendAtomically(log, clock, `inbox-acknowledged-${i.id}`, { nodeId: caller }, [
+            { type: "inbox.acknowledged", payload: { itemId: i.id } },
+          ]);
+          if (!r.ok) {
+            try {
+              deps.onFailure?.(caller, `受信箱の受け取りを記録できない: ${r.error.code}`);
+            } catch {
+              // 記録先の失敗は、処理を止めない
+            }
+          }
+        }
+        return { ok: true, value: { items: [] } };
+      }
       const items = unresolvedInbox(source)
         .filter((i) => i.seq > since)
         .sort((a, b) => a.seq - b.seq);

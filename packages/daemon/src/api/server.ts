@@ -109,7 +109,13 @@ export type ApiLogEvent =
       readonly error: unknown;
       readonly at: string;
     }
-  | { readonly event: "bindSucceeded"; readonly nodeId: string; readonly at: string }
+  | {
+      readonly event: "bindSucceeded";
+      readonly nodeId: string;
+      readonly at: string;
+      /** `rebind`: コードなしのつなぎ直し（#145）。コードでの紐付けは省略。 */
+      readonly route?: "rebind";
+    }
   /** `POST /v1/request` を、画面のセッション（`touryou ui` のチケットから交換したもの）で受けた。トークン・チケットは書かない。 */
   | {
       readonly event: "uiSessionRequest";
@@ -188,6 +194,11 @@ export interface ApiDeps {
    */
   readonly attachDir?: string;
   /**
+   * `GET /v1/whoami` で、統合ノードにだけ返す daemon の場所（#164）。`daemonId` は `identity` の起動ごとの識別子
+   * （`docs/daemon-identity.md`）。省略すると、`daemon` は返さない。子には、どちらでも返さない。
+   */
+  readonly daemonInfo?: { readonly rootCwd: string; readonly repoRoot: string };
+  /**
    * 画面の表示モデルに出す、取り消せない操作の確認待ち（`confirmation-gate.ts`）。コードは含まない。`confirmationsVersion` は、
    * 確認待ちが変わるたびに増える数で、表示モデルのキャッシュの鍵と、SSE の変化の通知に足す（記録の seq は変わらないため）。
    */
@@ -252,6 +263,12 @@ export interface ApiDeps {
    * 偽なら、コードを消費せずに 401（`rejected`）で断る。
    */
   readonly bindSessionOk?: (nodeId: string, sessionId: string) => boolean;
+  /**
+   * コードなしのつなぎ直し（#145。`claude attach` で mcp が入れ替わった CLI の子）を許すか。渡すと、`POST /v1/bind` は
+   * `bindCode` なし・`cwd` と `sessionId` ありの本文を受け付け、記録にあるそのノードの session_id と一致し（`node.sessionBound`）、
+   * 動いているノードで、今も有効な紐付けのトークンを持つときだけ、トークンを出し直す。省略（Desktop の木）すると、コードなしは必ず断る。
+   */
+  readonly rebindOk?: (nodeId: string, sessionId: string) => boolean;
   readonly onBindSucceeded?: (
     nodeId: string,
     info: { readonly sessionId?: string; readonly cwd?: string },
@@ -965,12 +982,18 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       return;
     }
     // ノードのトークン（統合・子）には、自分の nodeId も返す（mcp の `whoami` ツール）。人間には、nodeId がない。
+    // 統合ノードにだけ、daemon の場所（rootCwd・repoRoot）と daemonId も返す（#164。子には出さない）。
+    const daemonId = deps.identity?.()?.daemonId;
+    const daemon =
+      principal.role === "integrator" && deps.daemonInfo !== undefined && daemonId !== undefined
+        ? { daemon: { ...deps.daemonInfo, daemonId } }
+        : {};
     send(res, 200, {
       ok: true,
       value:
         principal.role === "human"
           ? { role: principal.role }
-          : { role: principal.role, nodeId: principal.nodeId },
+          : { role: principal.role, nodeId: principal.nodeId, ...daemon },
     });
   }
 
@@ -1725,13 +1748,16 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       ) ||
       (b?.sessionId !== undefined && !isSessionId(b.sessionId)) ||
       !isSafeId(b?.nodeId) ||
-      !isBoundedText(b?.bindCode, 64) ||
+      // コードなし（つなぎ直し）は、CLI の木で、session_id と cwd の両方があるときだけ（#145）
+      (b?.bindCode === undefined
+        ? deps.rebindOk === undefined || b?.sessionId === undefined || b?.cwd === undefined
+        : !isBoundedText(b.bindCode, 64)) ||
       (b?.cwd !== undefined && !isBoundedText(b.cwd, BIND_MAX_CWD))
     ) {
       return denied(
         failure(
           "invalidRequest",
-          "本文は { nodeId, bindCode, cwd?, sessionId? } の形で送る",
+          "本文は { nodeId, bindCode, cwd?, sessionId? } の形で送る（つなぎ直しは bindCode なしで cwd と sessionId を送る）",
           "nodeId と bindCode を確認する",
         ),
         "malformed",
@@ -1775,6 +1801,37 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     // Desktop の子は、直前にフックが効いていなければ、紐付けない（コードは使わずに残す）
     if (deps.hookFresh !== undefined && !deps.hookFresh(nodeId)) {
       return reject(res, hooksNotActive(), CLOSE);
+    }
+    // つなぎ直し（コードなし。#145）: 記録にあるそのノードの session_id と作業ツリーが合い、かつ今も有効な紐付けの
+    // トークンを持つときだけ、トークンを出し直す。失敗の文・数え方はコードが無効なときと同じ（onBindInvalid は呼ばない）。
+    if (b?.bindCode === undefined) {
+      const ok =
+        deps.rebindOk?.(nodeId, b?.sessionId as string) === true &&
+        checkPrincipal({ role: "child", nodeId }, deps.getState()).ok;
+      if (!ok) {
+        return denied(
+          failure("unauthenticated", "bind コードが無効", "bind コードを再発行する"),
+          "rejected",
+          { "www-authenticate": "Bearer" },
+        );
+      }
+      // 有効な（期限内の）紐付けのトークンを持つときだけ、発行の時刻を引き継いで出し直す（24 時間の上限は延びない）。
+      // 紐付けの記録（node.sessionBound）の追記・コードのファイルの削除は、コードでの紐付けのときだけ（ここでは行わない）。
+      let rebound: string | undefined;
+      try {
+        rebound = deps.credentials.rebindNodeToken?.(nodeId);
+      } catch (error) {
+        return internalError(res, "bind", "bind", error);
+      }
+      if (rebound === undefined) {
+        return denied(
+          failure("unauthenticated", "bind コードが無効", "bind コードを再発行する"),
+          "rejected",
+          { "www-authenticate": "Bearer" },
+        );
+      }
+      log({ event: "bindSucceeded", nodeId, at: now(), route: "rebind" });
+      return send(res, 200, { ok: true, value: { nodeId, token: rebound } });
     }
     // 結び付いたノードが、子ロールで、トークンを持てる状態か（統合ノード・木にない・停止後などは不可）を先に確かめ、
     // 許されたときだけコードを消費する。

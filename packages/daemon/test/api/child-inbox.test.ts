@@ -164,4 +164,19 @@ describe("child.inbox", () => {
     expect(validateParams("child.inbox", { ackThrough: -1 }).ok).toBe(false);
     expect(validateParams("child.inbox", { nodeId: "b" }).ok).toBe(false);
   });
+
+  it("inbox.fetch の ackItemIds（#102）は、項目の ID の配列（100 件まで）だけ受ける", () => {
+    expect(validateParams("inbox.fetch", {}).ok).toBe(true);
+    expect(validateParams("inbox.fetch", { sinceSeq: 3 }).ok).toBe(true);
+    expect(validateParams("inbox.fetch", { ackItemIds: ["i1", "i2"] }).ok).toBe(true);
+    expect(validateParams("inbox.fetch", { sinceSeq: 3, ackItemIds: [] }).ok).toBe(true);
+    expect(validateParams("inbox.fetch", { ackItemIds: "i1" }).ok).toBe(false);
+    expect(validateParams("inbox.fetch", { ackItemIds: [1] }).ok).toBe(false);
+    expect(validateParams("inbox.fetch", { ackItemIds: ["a b"] }).ok).toBe(false);
+    expect(
+      validateParams("inbox.fetch", { ackItemIds: Array.from({ length: 101 }, (_, i) => `i${i}`) })
+        .ok,
+    ).toBe(false);
+    expect(validateParams("inbox.fetch", { ackThrough: 3 }).ok).toBe(false);
+  });
 });

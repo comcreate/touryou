@@ -168,7 +168,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   const csp = () => page.evaluate(() => (window as Win).__csp ?? []);
   const animations = () =>
     page.evaluate(() =>
-      [...document.querySelectorAll("#graph path.line, #graph .pip")].map(
+      [...document.querySelectorAll("#graph path.line, #graph .comet-win")].map(
         (e) => getComputedStyle(e).animationName,
       ),
     );
@@ -594,7 +594,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(await page.locator('input[name="set-lang"][value="en"]').isDisabled()).toBe(false);
   });
 
-  it("設定の窓の「動きを止める」で、図の線も玉も止まる。戻すと動く。再読み込みのあとも残る", async () => {
+  it("設定の窓の「動きを止める」で、図の線も彗星も止まる。戻すと動く。再読み込みのあとも残る", async () => {
     expect((await animations()).some((a) => a !== "none")).toBe(true);
     await page.click("#open-settings");
     await page.click("#set-still");
@@ -738,7 +738,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     await ctx.close();
   });
 
-  it("prefers-reduced-motion のとき、図の線も玉も動かない", async () => {
+  it("prefers-reduced-motion のとき、図の線も彗星も動かない", async () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     expect(new Set(await animations())).toEqual(new Set(["none"]));
     await page.emulateMedia({ reducedMotion: "no-preference" });

@@ -80,6 +80,57 @@ describe("uiViewOf の cli（#136）", () => {
   });
 });
 
+describe("node.created の runtime と uiViewOf の runtime（#159）", () => {
+  const rootEvents = (): OrchEvent[] => {
+    n = 0;
+    return [
+      created("root", "integrator", null),
+      ev({ type: "node.stateChanged", payload: { nodeId: "root", event: { type: "start" } } }),
+    ];
+  };
+
+  it("cli・desktop を NodeRecord に記録し、表示モデルに載せる", () => {
+    const s = must([
+      ...rootEvents(),
+      created("a", "implement", "root", { runtime: "cli" }),
+      created("b", "implement", "root", { runtime: "desktop" }),
+    ]);
+    expect(s.nodes.find((x) => x.id === "a")?.runtime).toBe("cli");
+    expect(s.nodes.find((x) => x.id === "b")?.runtime).toBe("desktop");
+    const v = uiViewOf(s);
+    expect(v.nodes.find((x) => x.id === "a")?.runtime).toBe("cli");
+    expect(v.nodes.find((x) => x.id === "b")?.runtime).toBe("desktop");
+  });
+
+  it("runtime のない古い記録は、そのまま畳み込め、記録にも表示にも runtime を付けない", () => {
+    const s = must(base());
+    expect(s.nodes.find((x) => x.id === "a")).not.toHaveProperty("runtime");
+    for (const x of uiViewOf(s).nodes) expect(x).not.toHaveProperty("runtime");
+  });
+
+  it("runtime のない古いノードでも、CLI の子と分かるもの（cli）は runtime を cli にする", () => {
+    const s = must([
+      ...base(),
+      ev({
+        type: "node.parentRequested",
+        payload: { nodeId: "a", requestRef: "r1", kind: "launch", worktree: "/w/a" },
+      } as never),
+      ev({
+        type: "node.parentReported",
+        payload: { nodeId: "a", requestRef: "r1", outcome: "done" },
+      } as never),
+    ]);
+    expect(s.nodes.find((x) => x.id === "a")).not.toHaveProperty("runtime");
+    expect(uiViewOf(s).nodes.find((x) => x.id === "a")?.runtime).toBe("cli");
+  });
+
+  it("cli・desktop 以外の runtime は invalidPayload で拒否する", () => {
+    const r = foldEvents([...rootEvents(), created("a", "implement", "root", { runtime: "web" })]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("invalidPayload");
+  });
+});
+
 describe("uiViewOf（画面の表示モデル）", () => {
   it("ノード・未解決の項目（優先度の降順）・件数を返す。解決済みの項目は含めない", () => {
     const s = must([
@@ -838,6 +889,96 @@ describe("uiViewOf の #89 の値（題・最後の動き・人の要対応・�
       stage: "done",
       doneAt: "2026-10-20T07:00:00Z",
     });
+  });
+
+  it("やり取り: 統合が項目を受け取った（inbox.acknowledged）子 → 親は delivered（届いた・返事を待っている）。受け取りを返さない統合は、届いたかは分からないのまま（#102）", () => {
+    const evs = [
+      ...base(),
+      start("a"),
+      ev({
+        type: "decision.requested",
+        payload: { decisionId: "d1", nodeId: "a", question: "q" },
+      } as never),
+      added("i-d", "decision", "a", { ref: "d1" }),
+      ev({
+        type: "scope.extensionRequested",
+        payload: {
+          extensionId: "x1",
+          nodeId: "a",
+          target: { kind: "write", value: "src/x.ts" },
+          reason: "r",
+        },
+      } as never),
+      added("i-x", "violation", "a", { ref: "x1" }),
+      report("r1", "a", "done"),
+      ev({
+        type: "node.stateChanged",
+        payload: { nodeId: "a", event: { type: "reportDone" } },
+      } as never),
+      added("i-r", "done", "a", { ref: "r1" }),
+    ];
+    const flows = (events: OrchEvent[]) => uiViewOf(must(events)).flows;
+    const of = (events: OrchEvent[], k: string) => flows(events).find((f) => f.kind === k);
+    // 受け取りがない: これまでどおり
+    for (const k of ["decision", "extension", "done"]) {
+      expect(of(evs, k), k).toMatchObject({ stage: "sent", deliveryUnknown: true });
+      expect(of(evs, k), k).not.toHaveProperty("deliveredAt");
+    }
+    // 受け取りがある: delivered・受け取った時刻。deliveryUnknown は外れる
+    const ack = (id: string, at: string) =>
+      ev({ type: "inbox.acknowledged", payload: { itemId: id } } as never, at);
+    const acked = [
+      ...evs,
+      ack("i-d", "2026-10-20T01:00:00Z"),
+      ack("i-x", "2026-10-20T01:10:00Z"),
+      ack("i-r", "2026-10-20T01:20:00Z"),
+    ];
+    expect(of(acked, "decision")).toMatchObject({
+      stage: "delivered",
+      deliveredAt: "2026-10-20T01:00:00Z",
+    });
+    expect(of(acked, "extension")).toMatchObject({
+      stage: "delivered",
+      deliveredAt: "2026-10-20T01:10:00Z",
+    });
+    expect(of(acked, "done")).toMatchObject({
+      stage: "delivered",
+      deliveredAt: "2026-10-20T01:20:00Z",
+    });
+    for (const k of ["decision", "extension", "done"]) {
+      expect(of(acked, k), k).not.toHaveProperty("deliveryUnknown");
+    }
+    // 一部だけ受け取った: 受け取っていない分は、届いたかは分からない
+    const partial = [...evs, ack("i-d", "2026-10-20T01:00:00Z")];
+    expect(of(partial, "decision")).toMatchObject({ stage: "delivered" });
+    expect(of(partial, "extension")).toMatchObject({ stage: "sent", deliveryUnknown: true });
+    // 判定・回答のあとは done のまま。受け取った時刻は残る
+    const decided = [
+      ...acked,
+      ev(
+        { type: "decision.answered", payload: { decisionId: "d1", answer: "日" } } as never,
+        "2026-10-20T04:00:00Z",
+      ),
+    ];
+    expect(of(decided, "decision")).toMatchObject({
+      stage: "done",
+      doneAt: "2026-10-20T04:00:00Z",
+      deliveredAt: "2026-10-20T01:00:00Z",
+    });
+    expect(of(decided, "decision")).not.toHaveProperty("deliveryUnknown");
+    // 進み具合の報告は、受け取りがなくても done。受け取りがあれば deliveryUnknown が外れる
+    const progress = [...evs, report("r2", "a", "progress", "2026-10-20T03:00:00Z")];
+    expect(of(progress, "report")).toMatchObject({ stage: "done", deliveryUnknown: true });
+    const progressAcked = [
+      ...progress,
+      added("i-p", "progress", "a", { ref: "r2" }),
+      ack("i-p", "2026-10-20T03:30:00Z"),
+    ];
+    expect(of(progressAcked, "report")).toMatchObject({
+      stage: "done",
+      deliveredAt: "2026-10-20T03:30:00Z",
+    });
+    expect(of(progressAcked, "report")).not.toHaveProperty("deliveryUnknown");
   });
 
   it("やり取りは UI_LIMITS.flows 件まで。切ったら truncated に flows", () => {

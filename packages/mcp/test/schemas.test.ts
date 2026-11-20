@@ -18,6 +18,13 @@ const brief = {
 
 const VALID: Record<string, unknown> = {
   node_spawn: { parentId: "root", role: "integrator", ...brief },
+  node_adopt: {
+    parentId: "root",
+    role: "integrator",
+    worktree: "/tmp/wt-adopt",
+    branch: "feature/adopt",
+    ...brief,
+  },
   node_send: { nodeId: "n1", text: "追加指示" },
   node_stop: { nodeId: "n1", mode: "graceful", graceMs: 1000 },
   node_confirmStopped: { nodeId: "n1", note: "Desktop でアーカイブした" },

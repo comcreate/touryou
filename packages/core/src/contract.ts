@@ -163,6 +163,10 @@ export interface OperationMap {
    * Desktop の子の紐付け（FR_032）。一度きりの紐付けコードを新しく発行し（古いコードは無効）、親が Desktop の
    * タスク生成に渡す起動の文面（ID・ブリーフ・紐付けと報告の手順）を返す。コードは記録しない（応答だけ）。
    */
+  "node.adopt": {
+    params: AdoptParams;
+    result: AdoptResult;
+  };
   "node.bindCode": {
     /** `parentSessionId`: 呼んだ親の Claude Code の session_id（mcp が付ける。知らせの宛先）。 */
     params: { nodeId: string; parentSessionId?: string };
@@ -177,7 +181,32 @@ export interface OperationMap {
     params: { nodeId: string };
     result: { token: string; nodeId: string; daemonUrl: string };
   };
-  "inbox.fetch": { params: { sinceSeq?: number }; result: { items: readonly InboxItem[] } };
+  /**
+   * `ackItemIds`（#102。統合ノードだけ）: mcp が前の応答を受け取ったあと、応答に載せた項目の ID を付けて呼ぶ。見える項目のうち、
+   * その ID のものを、受け取ったものとして記録する（`inbox.acknowledged`。項目は返さない）。応答は優先度順で件数で分けるので、
+   * 子の `ackThrough`（最大の番号）のように番号では指さず、載せた項目だけを指す（載せていない項目を受け取ったことにしない）。
+   */
+  "inbox.fetch": {
+    params: { sinceSeq?: number; ackItemIds?: readonly string[] };
+    result: { items: readonly InboxItem[] };
+  };
+  /**
+   * 受信箱の項目を片付ける（人間だけ。#99）。片付けた項目は解決済みになり、「要対応」の数に入らない（記録に残る。`inbox.reopen` で戻せる）。
+   * 片付けてよい種類は `HUMAN_RESOLVABLE_KINDS`（progress・done・info）だけ。判断・違反・停止未完了などが 1 件でも含まれると、
+   * 何も片付けずに `notResolvable` で失敗する。存在しない ID は `notFound`（何も片付けない）。すでに解決済みの項目は、`alreadyResolved` に入れる（冪等）。
+   */
+  "inbox.resolve": {
+    params: { itemIds: readonly string[] };
+    result: { resolved: readonly string[]; alreadyResolved: readonly string[] };
+  };
+  /**
+   * 人間が片付けた項目を、未解決に戻す（人間だけ。#99）。戻せるのは、人間が片付けた項目だけ（システム・ノードが解決にしたものは `notReopenable`）。
+   * すでに未解決の項目は、`alreadyOpen` に入れる（冪等）。
+   */
+  "inbox.reopen": {
+    params: { itemIds: readonly string[] };
+    result: { reopened: readonly string[]; alreadyOpen: readonly string[] };
+  };
   /**
    * 子の受信箱（子のロールだけ。自分のノードの分だけ）。最初にブリーフ（目的・受け入れ基準・範囲・依存）を、続けて、まだ受け取って
    * いない追加の指示（差し戻しの理由・判断の回答を含む）を古い順に返す。`all: true` なら、受け取ったものも含める。返した指示は受け取った
@@ -526,10 +555,43 @@ export interface ParentRequestView {
   readonly next: string;
 }
 
+/**
+ * 既存の作業ツリーを子ノードとして採用する（#163）。親（`parentId`）の下に、`worktree`（`repoRoot` に登録済みの実パス）と
+ * `branch`（その作業ツリーで検出している、親のブランチを上流にしたブランチ）を持つノードを作る。作業ツリー・ブランチは動かさない。
+ * `scope` は親の範囲（根の子は根の範囲）の部分集合に限る。
+ */
+export interface AdoptParams {
+  readonly parentId: string;
+  readonly role: NodeRole;
+  readonly worktree: string;
+  readonly branch: string;
+  readonly objective: string;
+  readonly acceptanceCriteria: readonly string[];
+  readonly scope: Scope;
+  /** 既存セッションの参照（`claude agents --json` の id。停止の依頼に使う。任意）。 */
+  readonly sessionRef?: string;
+  /** 呼んだ親の Claude Code の session_id（mcp が付ける。知らせの宛先）。 */
+  readonly parentSessionId?: string;
+}
+
+export interface AdoptResult {
+  readonly nodeId: string;
+  /** 採用した作業ツリーとブランチ（検査で確かめたもの）。 */
+  readonly worktree: string;
+  readonly branch: string;
+  /** 未コミットの変更があるまま採用したか。 */
+  readonly dirty: boolean;
+  /** 既存セッションに伝える手順（child_bind の前に /mcp で再接続する、など）。 */
+  readonly instruction: string;
+  /** `duplicate`: 同じ requestId の再送で、すでに記録済み。 */
+  readonly duplicate: boolean;
+}
+
 /** ロールごとに公開する操作（NFR_004）。`node.purge`・`node.purgePreview` は人間のコマンドだけ（DC_003）。 */
 export const ROLE_OPERATIONS = {
   integrator: [
     "node.spawn",
+    "node.adopt",
     "node.send",
     "node.stop",
     "node.confirmStopped",
@@ -560,6 +622,8 @@ export const ROLE_OPERATIONS = {
   ],
   human: [
     "inbox.fetch",
+    "inbox.resolve",
+    "inbox.reopen",
     "tree.list",
     "decision.get",
     "decision.answer",
@@ -612,6 +676,7 @@ export type SubtreeOperation = Exclude<RoleOperation<"integrator">, NonSubtreeIn
  */
 export const SUBTREE_RULES: Readonly<Record<SubtreeOperation, SubtreeRule>> = {
   "node.spawn": "selfOrDescendant",
+  "node.adopt": "selfOrDescendant", // 対象は採用先の親（`parentId`）。spawn と同じ
   "node.send": "strictDescendant",
   "node.stop": "strictDescendant",
   "node.confirmStopped": "strictDescendant",
@@ -642,6 +707,7 @@ export const INTEGRATOR_OPERATION_CLASS: Readonly<
   Record<RoleOperation<"integrator">, "subtree" | "callerFiltered" | "denied">
 > = {
   "node.spawn": "subtree",
+  "node.adopt": "subtree",
   "node.send": "subtree",
   "node.stop": "subtree",
   "node.confirmStopped": "subtree",

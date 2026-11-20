@@ -8,6 +8,7 @@
 |:--|:--|:--|
 | skill | `integrator` | 統合ノードの手順。子の作成・追加指示・受理と差し戻し・範囲拡張の判定・回収。使うツールは `mcp__node__*`（統合ロールの全ツールを説明している） |
 | skill | `child` | 子ノードの手順。進捗・判断・範囲外の申告・完了の報告・範囲拡張の要求（子ロールの全ツールを説明している） |
+| skill | `adopt` | すでにある作業ツリーと、そこで動くセッションを、子として採用する手順（`node_adopt` → セッションで `/mcp` の Reconnect → `child_bind`）。下の「既存の作業ツリーを子として採用する」 |
 | コマンド | `start` | 接続の確認（`mcp__node__whoami`）と、daemon の起動の案内。接続（統合セッションの MCP）は plugin の `.mcp.json` が stdio で済ませる（環境変数は要らない）。失敗の理由（`[touryou mcp] …`）ごとの直し方を示す |
 | コマンド | `setup` | 配布物（macOS の arm64）を、plugin の中の script（`scripts/install-runtime.sh`。1 回の承認）で、GitHub Release から `curl`（認証なし）で取得し、sha256 が一致したときだけ、`$HOME` の下の `.touryou` に展開して `current` を付け替える。続けて設定（1 回）と常駐の登録（1 回）。承認の確認は約 3 回。auto モード（権限の自動判定）では、ほとんど出ない見込み（推測。checklist の Q7）。自動判定で止められたら、出た文面を伝えて手で許可する。チャットでの「はい」（常駐の同意・`--yes` の前）は、auto モードでも必ず取る。詳細は `plugin/commands/setup.md` |
 | コマンド | `status` | 木と受信箱の読み取りだけの要約 |
@@ -51,11 +52,22 @@ touryou のリポジトリで開発する人へ: このリポジトリの中で 
 前提: `git`（Xcode の Command Line Tools）が要ります（daemon が、子の作業ツリーを `git worktree` で作るため。Xcode か Command Line Tools のどちらかがあればよい）。入っていなければ、Terminal で `xcode-select --install` を実行します（`/setup` は、最初に `xcode-select -p` で確かめ、なければ止まります）。
 
 1. daemon を起動する（`touryou-daemon --config <設定ファイル> [--port <1〜65535>]`）。窓口のポートは、`--port` → 設定の `port`（0 以外）→ stateDir の `port` のファイル（前回のポート。0600）→ 空いているポート（そのファイルに保存する）の順で決まり、再起動しても変わらない。保存したポートが使われていれば、別のポートには移らず、起動しない（理由と直し方を出す）。起動の記録（`started`）の `portSource` に、どこから決まったか（`option`・`config`・`saved`・`new`）が出る。OS が選ぶポートは一時的なポートの範囲なので、まれにほかの接続が使う。止まったら `--port` で範囲外の番号を指定する。ファイルが壊れている・権限が緩い・リンクのときは `portFileInvalid` で起動しない（権限を 0600 にするか、ファイルを消す）。新規のポートを保存できないとき、Desktop の子（`childRuntime: "desktop"`）では `portSaveFailed` で起動しない。同じ stateDir で、2 つの daemon を動かさない。
-2. 統合セッションを、この plugin つきで起動する（marketplace から入れるか、`claude --plugin-dir <plugin のパス>`）。MCP サーバー `node` は、plugin の `.mcp.json` が stdio で起動し、根のトークンは `touryou-mcp --stdio` が `$HOME/.touryou/config.json` の `stateDir` の `root-token` から読む（環境変数は使わない・要らない）。`stateDir` を標準の置き場以外にしたときも、`$HOME/.touryou/config.json` の `stateDir` をその場所にすれば読める。**トークンの値は、設定ファイルに書かない・チャットに貼らない**。
+2. 統合セッションを、この plugin つきで起動する（marketplace から入れるか、`claude --plugin-dir <plugin のパス>`）。MCP サーバー `node` は、plugin の `.mcp.json` が stdio で起動し、根のトークンは `touryou-mcp --stdio` が `$HOME/.touryou/config.json` の `stateDir` の `root-token` から読む（環境変数は使わない・要らない）。`stateDir` を標準の置き場以外にしたときは、`$HOME/.touryou/config.json` の `stateDir` をその場所にする。設定ファイル自体を別の場所に置くときは、環境変数 `TOURYOU_DAEMON_CONFIG` にそのパスを入れて統合セッションを起動する（`docs/config.md`）。**トークンの値は、設定ファイルに書かない・チャットに貼らない**。
 3. `/touryou:start` で接続を確かめ、`integrator` の skill に沿って作業する。
 4. 状態画面は `/touryou:ui` で開く（`touryou ui` を 1 回実行し、使い捨てのチケットで既定のブラウザに開く。トークンの貼り付けは要らない。モデルはトークンのファイルを読まず、チケットも見ない。再読み込みしたら、もう一度 `/touryou:ui`。Claude Code がクラウドで動いているなど、ブラウザを開けないときは、Mac のターミナルで `touryou ui` を実行する。`docs/ui.md`）。
 
 daemon は、CLI の子を起動しない。親のセッションが起動する（下の「親から子を起動する流れ」）。
+
+## 既存の作業ツリーを子として採用する
+
+手で作った作業ツリー（`git worktree add`）と、そこで動いているセッションを、あとから木の子にできる（#163。CLI の木だけ。統合ノードの MCP の `node_adopt`。人間の CLI には足していない）。手順書は `plugin/skills/adopt/SKILL.md`（`/touryou:adopt`）。
+
+1. 統合ノードが `node_adopt` を呼ぶ（`parentId`・`role`・`worktree`〔絶対パス〕・`branch`・`objective`・`acceptanceCriteria`・`scope`）。daemon は、作業ツリーを調べ（登録済み・主や親の作業ツリーでない・ブランチが付いている〔指定の `branch` と同じ・親と別・上流が親のブランチ〕・すでに別の子の作業ツリーでない）、範囲が親の範囲に収まることを確かめる。満たさなければ、何も変えずに、原因（`cause`）と次の操作（`nextActions`）を返す。
+2. 成功すると、`nodeId` と `instruction` が返る。作業ツリーに、子であることの印（git のディレクトリのファイル）と紐付けのコードが書かれる。
+3. 動いていたセッションで、`/mcp` から touryou を Reconnect し（これでこのセッションが子として動ける。印は MCP の起動のときにしか見ないため）、`child_bind` を引数なしで 1 回呼ぶ。
+4. 採用した子には、起動の知らせの自動の流れがないので、子が `inbox_fetch` を自分で読む。受理・統合は、普通の子と同じ。
+
+記録は、`node.created`（範囲）・`node.stateChanged`・`node.adopted`（作業ツリー・ブランチ）を 1 回で追記する。回収は、採用した作業ツリーとブランチを消さない（子の印と紐付けのコードを外すだけ）。`node.adopted` を含むログは、古い daemon では読み直せない。
 
 ## 親から子を起動する流れ
 
@@ -76,7 +88,7 @@ TouRyou は、**セッションを起動しません**。**Anthropic の認証�
 - **組織の管理の設定（managed settings）がある環境では、モデルの切り替えで失敗が出ることがある**（`--model` で、許されていないモデルを指定したときなど）。そのときは、出た文面を `parent_report` の `reason` に入れて報告する。
 - **auto でないモード（ふつうのモード）では、`claude` のコマンドごとに許可の確認が出る**。変数を含むコマンドは「A variable in this command can't be checked before it runs」の確認が出るので、TouRyou の依頼のコマンドは、変数のない形にしている（値は単一引用符で 1 語にする）。親の skill も、コマンドを書き換えない・変数を足さない・つなげない。確認を減らすには、`/touryou:setup` の「許可の一覧」を見る。
 - **子は `--settings '{"crossSessionInbound":"accept",…}'` で起動する**。bypassPermissions の受け手は、ほかのセッションからの知らせを保留するため（知らせが届かないと、子が受信箱を読まない）。
-- **子は `--permission-mode dontAsk` で動き、範囲（書き込みの場所・許可のコマンド）と TouRyou の道具・作業ツリーの中の読み取りだけを確認なしで使う。範囲の外の操作は、確認を出さずに断られる。要るときは、子が受信箱で範囲の拡張（`scope_extend`）を頼む**。コマンドの拡張の承認は、引数までその形にだけ効く（形が違うと、dontAsk で断られる）。`git add`・`git status`・`git ls-files` だけは、承認した形のうしろに、コマンドごとに許す旗（許す表にない旗、たとえば `git add` の `-e`・`-p`・`-i`・`-f`・`--pathspec-from-file` は断る）と、作業ツリーの中の相対パス（`..`・絶対パス・`~`・glob・空白・展開・リダイレクトは除く）を足しても通る（#130）。これらは、旗で任意のコードを動かす道を持たず、作業ツリーのファイルを変えないため。`git rm`・`git mv` は、作業ツリーのファイルを消す・動かすので、承認した形そのものだけ。許しの一覧（`permissions.allow`）は、TouRyou が子の範囲から作って `--settings` に入れる。書き込みの場所は `Edit(...)` の形で入れる（新しいファイルを作る Write も、`Edit(...)` の規則で照合される）。禁止の場所と `.git` は `permissions.deny` に `Edit(...)`・`Read(...)` で入れる。範囲の判定（フック）も別に効く。
+- **子は `--permission-mode dontAsk` で動き、範囲（書き込みの場所・許可のコマンド）と TouRyou の道具・作業ツリーの中の読み取りだけを確認なしで使う。範囲の外の操作は、確認を出さずに断られる。要るときは、子が受信箱で範囲の拡張（`scope_extend`）を頼む**。コマンドの拡張の承認は、引数までその形にだけ効く（形が違うと、dontAsk で断られる）。`git add`・`git status`・`git ls-files` だけは、承認した形のうしろに、コマンドごとに許す旗（許す表にない旗、たとえば `git add` の `-e`・`-p`・`-i`・`-f`・`--pathspec-from-file` は断る）と、作業ツリーの中の相対パス（`..`・絶対パス・`~`・glob・空白・展開・リダイレクトは除く）を足しても通る（#130）。これらは、旗で任意のコードを動かす道を持たず、作業ツリーのファイルを変えないため。`mkdir`・`touch`・`cp`・`git rm`・`git mv` は、作業ツリーのファイルを変えるので、うしろの引数のパスがすべて、書き込める場所（承認した `write` の場所を含む）の実パス（リンクをたどる。まだない道は、あるいちばん深い親をたどる）の中にあるときだけ通る（#135）。リンクで外へ出る形・外のパス・旗の並びが不正な形には許可を付けない。`cp`・`git mv` の宛先が既存のディレクトリなら、その中の名前も調べる。1 語の承認（`mkdir` など）は、親の範囲（根なら `rootScope`）の `allowedCommands` にその語があるときだけ承認できる。残る穴は、調べたあとの差し替え（TOCTOU）・ハードリンク・`cp` が作業ツリーの外から読むこと。glob・空白を含むパス・`cp -r`・`mv`・`ln` は対象外。許しの一覧（`permissions.allow`）は、TouRyou が子の範囲から作って `--settings` に入れる。書き込みの場所は `Edit(...)` の形で入れる（新しいファイルを作る Write も、`Edit(...)` の規則で照合される）。禁止の場所と `.git` は `permissions.deny` に `Edit(...)`・`Read(...)` で入れる。範囲の判定（フック）も別に効く。
 - 子の範囲のコマンド（`allowedCommands`）は、2 語以上で書く（`git status`・`git add`・`git commit`・`pnpm test` など）。`git`・`node` のような 1 語だけのものや、`;`・`>`・引用符などを含むものがあると、子の起動の依頼が `invalidScope` で失敗する（前方一致で何でも通ってしまうため）。`bash`・`node`・`npx`・`npm exec`・`pnpm dlx`・`git config`・`find -exec` など任意のコードを動かせる形と、スクリプトの名前のない `pnpm run` も同じく失敗する（`pnpm run build` のように書く）。`yarn <スクリプト>` は `run` がなくてもスクリプトを動かすので、`yarn` で 2 語のコマンドを許すときは、それがスクリプトの名前でないことを確かめる。子に `git add`・`git commit` をさせたいときは、根の範囲（`rootScope`）か子の範囲に入れておく（入れないと、子は確認なしで断られる）。
 - **根（統合）のセッションは、TouRyou のフックで絞らない（フックが働くのは、子の印のある作業ツリーだけ**。`cli/src/hook.ts`）。根の Bash・書き込みは、利用者の Claude Code の許可の設定のとおりに動く。`rootScope` は、子に渡す範囲の上限で、根自身の操作の制限ではない。
 - **親（統合）の、読むだけの道具の許可（任意）**: `whoami`・`inbox_fetch`・`tree_list`・`node_capabilities`・`decision_get`・`report_get`・`node_reclaimPreview` の 7 つだけは、確認なしにしてよい（記録を書かない。試験で確かめている）。例は `/touryou:setup` の「許可の一覧」（名前は `mcp__plugin_touryou_node__<道具>`。`/permissions` で実際の形を確かめる）。ものを変える道具と `parent_request`（起動のコマンドを返す入口）は足さない。一覧は core の `PARENT_READONLY_TOOL_NAMES`。
@@ -148,7 +160,7 @@ TouRyou は、**セッションを起動しません**。**Anthropic の認証�
 | `node` の道具がない。標準エラーに `[touryou mcp] 配布物の touryou-mcp がまだない…` | `/setup` をしていない（`$HOME/.touryou/current/bin/touryou-mcp` がない）。中継が待っている | `/touryou:setup` を実行して daemon を起動すれば、10 秒ほどで自動でつながる。つながらなければ `/mcp` で Reconnect |
 | failed。`[touryou mcp] 失敗 [daemon_unreachable]: daemon が動いていません…` | daemon が起動していない（`state/port` がない、または応答がない） | launchd（`docs/launchd.md`）か `touryou-daemon --config …` で起動してから、`/mcp` で Reconnect |
 | failed。`[touryou mcp] 失敗 [unauthenticated]: 根のトークン…` | `root-token` がない・リンク・自分のでない・権限が 0600 でない・ACL つき | daemon を起動して `root-token` を作らせる。権限は `chmod 600`、ACL は `chmod -N` で外す |
-| failed。`[touryou mcp] 失敗 [invalid_config]: …` | `$HOME/.touryou/config.json` がない・リンク・他の人が書ける、`stateDir` が絶対パスでない、置き場（`$HOME/.touryou`・`stateDir`・その親）がリンク・自分のでない・権限が `drwx------`／`drwxr-xr-x` でない・ACL つき | `/setup` をやり直す。置き場は `chmod 700` |
+| failed。`[touryou mcp] 失敗 [invalid_config]: …` | 設定ファイル（`$HOME/.touryou/config.json`。`TOURYOU_DAEMON_CONFIG` で別の場所を指しているときは、そのファイル）がない・リンク・他の人が書ける、`stateDir` が絶対パスでない、置き場（`$HOME/.touryou`・`stateDir`・その親）がリンク・自分のでない・権限が `drwx------`／`drwxr-xr-x` でない・ACL つき | `/setup` をやり直す。置き場は `chmod 700` |
 | `/mcp` の Reconnect で `Failed to reconnect to plugin:touryou:node: CONNECTION_CLOSED` だけが出る | `touryou-mcp --stdio` が起動時の確認で終わった（daemon が止まっている、または `/setup` の前）。理由の文（`[touryou mcp] …`）は `/mcp` には出ない | まず daemon が動いているか（launchd か手で起動したもの）と `$HOME/.touryou/current` があるかを確かめ、直してから Reconnect。理由の文は `claude --debug` で見る |
 | 統合セッションの途中で daemon を止めると、ツールが `daemon_unreachable`（`daemon に届かない（止まっているか、起動し直している途中。トークンは送っていない）`） | daemon が止まっている | daemon を起動する。起動し直せば Reconnect なしで戻る |
 | 全ツールが拒否される（`[touryou hook]` の片方だけ） | 統合セッションの環境に `TOURYOU_DAEMON_URL` がある | `unset TOURYOU_DAEMON_URL` して起動し直す |
@@ -190,6 +202,13 @@ TouRyou は、**セッションを起動しません**。**Anthropic の認証�
   - 印は childRuntime を問わず置く。**Desktop の子の作業ツリーでも、plugin の mcp は紐付け待ちで開く**。
   - 子のセッションは、作業ツリーの一番上（作業ツリーのフォルダそのもの）で起動する。下の階層で起動すると、紐付けが断られる。
   - 紐付けのあとで daemon がトークンを失効させた（401）ときは、紐付け待ちに戻る。出し直した紐付けの文面のコードで、もう一度 `child_bind` を呼べる。
+  - **`claude attach` のあと（#145）**: 子の画面を `claude attach` で開くと、Claude Code が mcp をつなぎ直し、メモリのトークンが消える（紐付け待ちに戻る）。このとき `child_bind` を引数なしで呼ぶと、コードのファイルがなくても（使用済み）、mcp が「ノードの ID（印）・`CLAUDE_CODE_SESSION_ID`・作業ディレクトリ」を daemon に送り、daemon が次のすべてに合うときだけ、トークンを出し直す。人が `node_bindCode` を頼む手間はいらない。
+    - 合う条件: 作業ディレクトリがそのノードの作業ツリーの一番上（実パス）／最初に**コードで**紐付けたときに記録した session_id と同じ／そのノードが終わっていない／今も有効な紐付けのトークンを持つ／子ロールでトークンを持てる状態。
+    - 通らないとき（どれか 1 つでも外れた）は、これまでの案内（親に `node_bindCode` で出し直してもらう）に落ちる。外れた理由は外に出さない（コードが無効なときと同じ 401）。
+    - **期限は延ばさない**: 紐付けのトークンの「使わなければ 1 時間・発行から 24 時間」の期限が、つなぎ直しの上限になる。切れた・失効した・止められたあとは、人がコードを出し直す。
+    - Desktop の子では使えない（コードなしの bind は必ず断る）。
+    - **守りが弱くなる所**: session_id は秘密ではない。同じ OS のユーザーの別のプロセスが、ノード ID・session_id・作業ツリーの 3 つを知っていれば、コードなしでその子のトークンを取れる（フックの `sessionIdOnly` と同じ程度の信頼）。取られた本物の子は前のトークンが無効になり、401 で紐付け待ちに戻るので気づける。失敗は、コードの場合と同じ全体のスロットルと接続元ごとの上限で数える。
+    - **未確認の前提**: attach のあとも `CLAUDE_CODE_SESSION_ID` が元のセッションと同じであること（[`manual-verification-checklist.md`](manual-verification-checklist.md) の A4-3）。違えば、つなぎ直しは通らず、案内に落ちる。コードでの紐付けのときに session_id がなかった子は、記録がないのでつなぎ直せない。
 - **統合セッションが、誤って紐付け待ちで開いたとき**（印が残った作業ツリーで、統合セッションを始めたなど）: 人が、その作業ツリーで次を実行して印を外し、Claude Code の `/mcp` で Reconnect する。道具の呼び方で根に切り替える道はない。
 
   ```sh
