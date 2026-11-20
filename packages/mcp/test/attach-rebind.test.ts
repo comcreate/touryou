@@ -97,7 +97,7 @@ describe("attach のあとのつなぎ直し（child_bind を引数なしで）"
   });
 
   it("セッション ID がなければ、つなぎ直しを試みず、案内に落ちる", async () => {
-    const r = await setup({ rebindStatus: 200, deps: { sessionId: undefined } });
+    const r = await setup({ rebindStatus: 200, deps: { sessionId: "" } });
     const res = await r.call("child_bind");
     expect(res.isError).toBe(true);
     expect(JSON.parse(res.content[0]?.text ?? "{}").code).toBe("bind_code_file_unavailable");
