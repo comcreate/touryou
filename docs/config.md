@@ -90,8 +90,8 @@ mkdir -p <状態の置き場> && chmod 700 <状態の置き場>
 | 変数 | 使う側 | 内容 |
 |:--|:--|:--|
 | `TOURYOU_DAEMON_URL` | フック・`touryou` | 窓口の URL（`--daemon-url` の代わり） |
-| `TOURYOU_DAEMON_CONFIG` | `touryou` | 設定ファイルのパス（`--config` の代わり） |
-| `TOURYOU_ROOT_TOKEN` | 使わない | 統合セッションの `touryou-mcp --stdio` は、`$HOME/.touryou/config.json` の `stateDir` の `root-token` だけから読む（環境変数に置くと、Claude Code の環境に残り、Bash などで見えうるため）。`TOURYOU_MCP_URL` も廃止 |
+| `TOURYOU_DAEMON_CONFIG` | `touryou`・フック・`touryou ui`・`touryou-mcp --stdio`（MCP） | 設定ファイルのパス（`--config` の代わり）。空は無視する。`touryou-mcp --stdio` では、優先順位は「`--config` の引数 → この環境変数 → `$HOME/.touryou/config.json`」。設定が `$HOME/.touryou` の外にあってもよい（設定ファイルの親ディレクトリが、リンクでない・自分の・`drwx------` か `drwxr-xr-x` であること） |
+| `TOURYOU_ROOT_TOKEN` | 使わない | 統合セッションの `touryou-mcp --stdio` は、設定（`TOURYOU_DAEMON_CONFIG`、なければ `$HOME/.touryou/config.json`）の `stateDir` の `root-token` だけから読む（環境変数に置くと、Claude Code の環境に残り、Bash などで見えうるため）。`TOURYOU_MCP_URL` も廃止 |
 | `TOURYOU_NODE_TOKEN` | フック | 手動の CLI の子のフック専用のトークン（`touryou hook-env`） |
 
 手順の全体と確かめ方は [`manual-verification-checklist.md`](manual-verification-checklist.md) の H にあります。

@@ -739,7 +739,7 @@ const deny = (reason: ScopeViolationReason, subject: string): Denied => ({
 const denyUnknown = (tool: string): ToolDecision => ({
   allow: false,
   unknownTool: tool,
-  reason: `ツール ${tool} は、このノードでは使えない。`,
+  reason: `ツール ${tool} は、このノードでは使えない。自分で原因を探したり、別の手を試したりしない。\n- touryou の道具（report_progress など）が使えるなら、この拒否の文を親に知らせて待つ。\n- 使えない（紐付けが外れている）なら、画面を見ている人に「親の統合セッションに、この子の紐付けの出し直し（node_bindCode）を頼んでください」と頼んで待つ。`,
 });
 
 /** scope の場所（writable・forbidden）を実パスにする。解決できない writable は落とし、forbidden は絶対パスのまま残す。 */

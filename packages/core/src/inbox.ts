@@ -39,6 +39,8 @@ export interface InboxItem {
   readonly msg?: InboxMessage;
   /** 解決済み（`inbox.resolved`）。解決した者・時刻・イベントの `seq`。項目そのものは消えない（記録）。 */
   readonly resolved?: { readonly seq: number; readonly at: string; readonly by: Actor };
+  /** 受け取り済み（`inbox.acknowledged`。#102）。受け取った者・時刻・イベントの `seq`。最初の 1 回だけを残す。 */
+  readonly acknowledged?: { readonly seq: number; readonly at: string; readonly by: Actor };
 }
 
 /** 解決済みでない項目だけ。`inbox.fetch` は、これで解決済みを除く。 */
