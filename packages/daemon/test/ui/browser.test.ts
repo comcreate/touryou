@@ -114,7 +114,11 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(await page.locator(".pip").count()).toBe(1);
     const pip = await page.evaluate(() => {
       const s = getComputedStyle(document.querySelector(".pip") as Element);
-      return { offsetPath: s.offsetPath, offsetRotate: s.offsetRotate, backgroundImage: s.backgroundImage };
+      return {
+        offsetPath: s.offsetPath,
+        offsetRotate: s.offsetRotate,
+        backgroundImage: s.backgroundImage,
+      };
     });
     expect(pip.offsetPath).toMatch(/^path\("M /);
     // 彗星: 道の接線に沿って向きが変わり、尾はグラデーションで薄れる
