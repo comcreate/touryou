@@ -129,6 +129,7 @@
 |:--|:--|:--|
 | A4-1 | 根のモードのセッションを `--resume`・fork・`/compact` したとき、`CLAUDE_CODE_SESSION_ID` が変わるか | 変わるなら、変わったあとの子の知らせは、親がもう一度親の操作（`node_bindCode` など）をするまで届かず、受信箱に残る |
 | A4-2 | 同じ repo で根のモードのセッションを 2 つ開き、片方で `node_bindCode` を呼んだ子の項目の知らせが、そのセッションにだけ届くか | そのセッションにだけ届き、送り手のノードの ID が文に入る |
+| A4-3 | CLI の子の画面を `claude attach` で開いたあと（MCP がつなぎ直されたあと）、子の `CLAUDE_CODE_SESSION_ID` が元のセッションと同じか。同じなら、子が `child_bind` を引数なしで呼ぶだけで、人が `node_bindCode` を頼まなくても紐付け直せるか（#145。値そのものは書き写さない） | 同じで、`child_bind` が通り、`report_progress` が届く。違うなら、`bind_code_file_unavailable` の案内（親に `node_bindCode` を頼む）に落ちる。どちらかを記録する（違えば、つなぎ直しの機能は効かない） |
 
 注意: agent view の入力欄に貼った文は、新しい裏のセッションになる。子に入力するときは `claude attach <名前>` でつなぐ。
 

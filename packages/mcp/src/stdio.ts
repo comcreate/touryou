@@ -26,7 +26,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { type Failure, failure, isSessionId, ok, type Result } from "@touryou/core";
 import { aclProblemOfMode, modeString, readSecureFile } from "@touryou/core/fs";
 import { type CodeFileOps, isCodeShape, readCodeFile, removeCodeFile } from "./bind-code-file.js";
-import { bindChild } from "./child-bind.js";
+import { bindChild, type ChildBindOptions, rebindChild } from "./child-bind.js";
 import { detectOpenMode, type MarkerOps } from "./child-marker.js";
 import { createIdentityVerifier, IDENTITY_FILE } from "./identity.js";
 import { createNodeCredentialStore, type NodeCredentialStore } from "./node-credential.js";
@@ -396,6 +396,13 @@ export function openPendingStdioSession(
   const log = (e: unknown) => io.stderr(`${JSON.stringify(e)}\n`);
   const make = relayMaker(deps, log);
   const store = deps.credentials ?? createNodeCredentialStore();
+  const childBindOptions = (): ChildBindOptions => ({
+    daemonUrl: endpoint.daemonUrl,
+    verifier: verifierOf(endpoint, deps, log),
+    ...(deps.fetch ? { fetch: deps.fetch } : {}),
+    ...(deps.cwd ? { cwd: deps.cwd } : {}),
+    ...(deps.sessionId ? { sessionId: deps.sessionId } : {}),
+  });
   const bind = async (argNodeId: unknown, argCode: unknown): Promise<Result<Relay>> => {
     // 引数なし: ノードの ID は印から、コードは作業ツリーの git のディレクトリのファイルから読む
     let nodeId = argNodeId;
@@ -403,6 +410,12 @@ export function openPendingStdioSession(
     let filePath: string | undefined;
     if (argNodeId === undefined && argCode === undefined) {
       const read = readCodeFile((deps.cwd ?? (() => process.cwd()))(), deps.codeFile ?? {});
+      // コードのファイルがない（使用済み）ときは、`claude attach` で mcp が入れ替わっただけかもしれない。セッションの ID・
+      // 作業ツリー・ノードの ID を送って、つなぎ直す（#145）。daemon が記録と合わないと言えば、下の案内に落とす。
+      if (!read.ok && read.reason === "missing" && deps.markerNodeId !== undefined) {
+        const re = await rebindChild(childBindOptions(), deps.markerNodeId);
+        if (re?.ok === true) return adopt(re.value);
+      }
       if (!read.ok || deps.markerNodeId === undefined) {
         if (read.ok === false && read.reason === "unsafe" && read.path !== undefined) {
           log({ event: "bindCodeFileUnsafe", at: new Date().toISOString() });
@@ -413,24 +426,14 @@ export function openPendingStdioSession(
             ? "紐付けのコードのファイルが安全でない（リンク・持ち主が違う・権限が 0600 でない）ので読まなかった"
             : "紐付けのコードのファイルがない（使用済み・期限切れ・daemon の再起動のあと）か、このセッションが作業ツリーの一番上で起動されていない",
           "作業を始めずに、会話で人（親）に「紐付けをやり直して」と頼む（親は node_bindCode でコードを出し直す）。出し直されたら、child_bind を引数なしでもう一度呼ぶ",
-          "人が claude attach で子の画面を開いたあとにこうなったなら、MCP がつなぎ直されて紐付けが外れている（#136）。同じく、親にコードの出し直しを頼む",
+          "人が claude attach で子の画面を開いたあとにこうなったなら、MCP がつなぎ直されて紐付けが外れている（#136）。自動のつなぎ直し（#145）は、セッションの ID・作業ツリーが記録と合わない・紐付けの期限が切れた・止められたなどで通らなかった。同じく、親にコードの出し直しを頼む",
         );
       }
       nodeId = deps.markerNodeId;
       code = read.code;
       filePath = read.path;
     }
-    const cred = await bindChild(
-      {
-        daemonUrl: endpoint.daemonUrl,
-        verifier: verifierOf(endpoint, deps, log),
-        ...(deps.fetch ? { fetch: deps.fetch } : {}),
-        ...(deps.cwd ? { cwd: deps.cwd } : {}),
-        ...(deps.sessionId ? { sessionId: deps.sessionId } : {}),
-      },
-      nodeId,
-      code,
-    );
+    const cred = await bindChild(childBindOptions(), nodeId, code);
     if (filePath !== undefined) {
       // 通ったら消す。通らなくても、形の正しくないコードは消す（読み直しても使えない）
       if (cred.ok || typeof code !== "string" || !isCodeShape(code)) removeCodeFile(filePath);
@@ -445,13 +448,17 @@ export function openPendingStdioSession(
       }
       return cred;
     }
+    return adopt(cred.value);
+  };
+  /** 受け取った資格情報を入れ物に入れ、子の relay にする。 */
+  const adopt = (cred: { readonly nodeId: string; readonly token: string }): Result<Relay> => {
     const made = make({
       daemonUrl: endpoint.daemonUrl,
       identityPath: endpoint.identityPath,
-      token: cred.value.token,
+      token: cred.token,
     });
     if (!made.ok) return made;
-    store.set(cred.value);
+    store.set(cred);
     const child = made.value;
     // 失効（daemon の 401）が分かったら、入れ物を空にする（購読を止める）
     const watch = <T>(r: Result<T>): Result<T> => {
@@ -459,7 +466,7 @@ export function openPendingStdioSession(
       return r;
     };
     return ok({
-      nodeId: cred.value.nodeId,
+      nodeId: cred.nodeId,
       whoami: async () => watch(await child.whoami()),
       request: async (op, params, o) => watch(await child.request(op, params, o)),
     });

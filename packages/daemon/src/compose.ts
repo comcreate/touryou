@@ -2049,7 +2049,12 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     bind,
     // CLI の子の紐付けは、そのノードの作業ツリーの中のセッションだけ（FR_006）
     ...(desktopAdapter === undefined
-      ? { bindWorktreeOk: createBindWorktreeCheck({ cwdOf: (id) => deps.worktree.cwdOf(id) }) }
+      ? {
+          bindWorktreeOk: createBindWorktreeCheck({ cwdOf: (id) => deps.worktree.cwdOf(id) }),
+          // attach で mcp が入れ替わった CLI の子の、コードなしのつなぎ直し（#145）。Desktop の木には渡さない
+          rebindOk: (nodeId: string, sessionId: string) =>
+            sessionBindings.matches(nodeId, sessionId),
+        }
       : {}),
     bindSessionOk: (nodeId, sessionId) => {
       if (!sessionBindings.conflicts(nodeId, sessionId)) return true;
