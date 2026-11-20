@@ -168,7 +168,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   const csp = () => page.evaluate(() => (window as Win).__csp ?? []);
   const animations = () =>
     page.evaluate(() =>
-      [...document.querySelectorAll("#graph path.line, #graph .pip")].map(
+      [...document.querySelectorAll("#graph path.line, #graph .comet-win")].map(
         (e) => getComputedStyle(e).animationName,
       ),
     );
