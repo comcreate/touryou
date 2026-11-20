@@ -14,7 +14,7 @@
  * - 件数には上限がある（`UI_LIMITS`）。切ったときは、`truncated` に種類を入れる。
  */
 
-import type { Actor, OrchState } from "./events.js";
+import type { Actor, NodeRuntime, OrchState } from "./events.js";
 import { ID_PATTERN } from "./ids.js";
 import { isResolvedByHuman } from "./inbox.js";
 import { isStallSummary, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
@@ -63,6 +63,11 @@ export interface UiNode {
    * `claude attach` のコマンドを出し、Desktop の子の文は、CLI の子でない停止の代行のノードにだけ出す。
    */
   readonly cli?: true;
+  /**
+   * 子の実行環境（`node.created` の `runtime`。#159）。記録のない古いノードは、CLI の子と分かるもの（`cli`）だけ `cli`、
+   * ほかは付けない（記録のないものを、画面で推し量らない）。画面は、実行環境の札と、開き方・安全面の注記を出す。
+   */
+  readonly runtime?: NodeRuntime;
   /** 題: 目的（objective）の先頭を整えて `UI_TITLE_MAX` で切ったもの。目的がなければ、なし。 */
   readonly title?: string;
   /** そのノードの最後の動き（報告・受信箱の項目・指示と受け取り・判断と拡張の要求）の時刻。記録がなければ、なし。 */
@@ -325,6 +330,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
     const title = titleOf(n.objective);
     const needsHuman = human.get(n.id) ?? 0;
     const at = last.get(n.id);
+    const runtime = n.runtime ?? (cliChildren.has(n.id) ? "cli" : undefined);
     return {
       id: idOf(n.id),
       role: n.role,
@@ -335,6 +341,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       discarded: n.discarded !== undefined,
       ...(options.stopDelegated?.(n.id) === true ? { stopDelegated: true as const } : {}),
       ...(cliChildren.has(n.id) ? { cli: true as const } : {}),
+      ...(runtime === undefined ? {} : { runtime }),
       ...(title === "" ? {} : { title }),
       ...(at === undefined ? {} : { lastActivityAt: uiText(at) }),
       needsHuman,

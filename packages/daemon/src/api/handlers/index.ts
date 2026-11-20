@@ -75,7 +75,7 @@ export function createHandlersWithScheduler(
   reclaim?: ReclaimPorts,
   spawn?: Pick<
     SpawnHandlerDeps,
-    "ports" | "credentials" | "rootScope" | "onFailure" | "startLimits"
+    "ports" | "credentials" | "rootScope" | "onFailure" | "startLimits" | "runtime"
   > & {
     /** 渡すと、既存の作業ツリーの採用（node.adopt。#163）も有効になる。 */
     adopt?: AdoptPorts;

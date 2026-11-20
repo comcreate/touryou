@@ -999,6 +999,13 @@ export const UI_JS = `'use strict';
       row.appendChild(copyButton(cmd));
       card.appendChild(row);
     }
+    // 子の実行環境（記録のあるものだけ）の開き方と安全面の注記（#159）。たたむ
+    if (n.runtime === 'cli' || n.runtime === 'desktop') {
+      var rt = fold('runtime-' + n.id, t(n.runtime === 'cli' ? 'runtime.cli' : 'runtime.desktop'));
+      rt.appendChild(el('div', 'confirm-line', n.runtime === 'cli' ? t('runtime.openCli', { id: n.id }) : t('runtime.openDesktop')));
+      rt.appendChild(el('div', 'confirm-line', t(n.runtime === 'cli' ? 'runtime.safetyCli' : 'runtime.safetyDesktop')));
+      card.appendChild(rt);
+    }
     // 受信箱の項目は、たたむ（新しい順）
     if (list.length) {
       var sorted = list.slice().sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; });

@@ -220,6 +220,7 @@ describe("画面の資産（走査）", () => {
       "spellcheck",
       "autocomplete",
       "ariaLabel",
+      "runtime",
       "scrollIntoView",
       "tagName",
       "confirmations",

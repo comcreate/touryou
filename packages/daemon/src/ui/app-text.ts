@@ -596,6 +596,24 @@ export const APP_TEXT = {
     en: "Kept in the record. Decisions, violations, incomplete stops and failures cannot be marked as done here",
   },
   "resolve.title": { ja: "項目を片付ける", en: "Mark items as done" },
+  "runtime.cli": { ja: "CLI の子", en: "CLI child" },
+  "runtime.desktop": { ja: "Desktop の子", en: "Desktop child" },
+  "runtime.openCli": {
+    ja: "開き方: 端末でリポジトリのディレクトリに移り、claude attach {id} を打つと、この子の画面を開けます。",
+    en: "How to open: in a terminal, go to the repository directory and run claude attach {id} to open this child's screen.",
+  },
+  "runtime.openDesktop": {
+    ja: "開き方: Claude のデスクトップアプリで、この題の子のタスクを開きます。",
+    en: "How to open: in the Claude desktop app, open the task of the child with this title.",
+  },
+  "runtime.safetyCli": {
+    ja: "安全面: 作業範囲の外の操作は、フックが拒みます（FR_014）。",
+    en: "Safety: actions outside the work scope are refused by hooks (FR_014).",
+  },
+  "runtime.safetyDesktop": {
+    ja: "安全面: Desktop の子には、作業範囲の外の拒否（FR_014）が効かず、daemon のトークンのファイルを読めます。",
+    en: "Safety: for a Desktop child, refusing actions outside the work scope (FR_014) does not apply, and it can read the daemon's token files.",
+  },
   "sep.list": { ja: "、", en: ", " },
   "sep.sentence": { ja: "。", en: ". " },
   "settings.a11y": { ja: "アクセシビリティ", en: "Accessibility" },

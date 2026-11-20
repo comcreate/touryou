@@ -1824,6 +1824,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     {
       ports: spawn,
       credentials,
+      // 子の `node.created` に記録する実行環境（設定 childRuntime と同じ値。記録だけで、振り分けには使わない。#159）
+      runtime: config.childRuntime === "desktop" ? "desktop" : "cli",
       ...(adopt === undefined ? {} : { adopt }),
       rootScope: config.rootScope,
       onFailure,

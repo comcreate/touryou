@@ -3,6 +3,7 @@ import {
   type Failure,
   failure,
   type NodeEvent,
+  type NodeRuntime,
   ok,
   type Result,
   type Scope,
@@ -45,7 +46,7 @@ const ROOT_SCOPE: Scope = {
   forbiddenLocations: [".git"],
   allowedCommands: ["pnpm test"],
 };
-const rig = (opts: { rootScope?: Scope | null } = {}) => {
+const rig = (opts: { rootScope?: Scope | null; runtime?: NodeRuntime } = {}) => {
   const opened = EventLog.open(createMemoryStore().open(), { clock });
   if (!opened.ok) throw new Error(opened.error.code);
   const log = opened.value;
@@ -177,6 +178,7 @@ const rig = (opts: { rootScope?: Scope | null } = {}) => {
     log,
     clock,
     adapterFor: () => adapter,
+    ...(opts.runtime === undefined ? {} : { runtime: opts.runtime }),
     ports,
     credentials,
     ...(opts.rootScope === null ? {} : { rootScope: opts.rootScope ?? ROOT_SCOPE }),
@@ -235,6 +237,18 @@ describe("node.spawn（子の生成と起動）", () => {
     expect(r.calls.started[0]?.instruction).toContain("UI を直す");
     expect(r.calls.started[0]?.instruction).toContain("テストが通る");
     expect(r.calls.started[0]?.mcp).toEqual({ token: `tok-${id}` });
+  });
+
+  it("設定の実行環境（runtime）を、子の node.created に記録する。渡さなければ記録しない（#159）", async () => {
+    for (const runtime of ["cli", "desktop"] as const) {
+      const r = rig({ runtime });
+      const res = await r.call("node.spawn", { parentId: "m1", ...brief() });
+      expect(res.ok).toBe(true);
+      expect(r.s().nodes.find((x) => x.id === res.value.nodeId)?.runtime).toBe(runtime);
+    }
+    const r = rig();
+    const res = await r.call("node.spawn", { parentId: "m1", ...brief() });
+    expect(r.s().nodes.find((x) => x.id === res.value.nodeId)).not.toHaveProperty("runtime");
   });
 
   it("親の範囲に収まらない子の範囲は、何も記録せず、作った作業ツリーを片付けて失敗する", async () => {

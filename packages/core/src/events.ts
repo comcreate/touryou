@@ -65,6 +65,8 @@ export type EventBody =
         readonly objective?: string;
         readonly acceptanceCriteria?: readonly string[];
         readonly scope?: Scope;
+        /** 子の実行環境（#159）。子の生成で、daemon の設定 `childRuntime` と同じ値を記録する。根や以前の記録では省略。 */
+        readonly runtime?: NodeRuntime;
       };
     }
   | {
@@ -442,6 +444,10 @@ export const isAgentState = (x: unknown): x is string =>
 export const isSessionId = (x: unknown): x is string =>
   typeof x === "string" && SESSION_ID_SHAPE.test(x);
 
+/** 子の実行環境。`cli`: 親が `claude --bg` で起動する子、`desktop`: Claude のデスクトップアプリの子。 */
+export const NODE_RUNTIMES = ["cli", "desktop"] as const;
+export type NodeRuntime = (typeof NODE_RUNTIMES)[number];
+
 export interface NodeRecord {
   readonly id: string;
   readonly role: NodeRole;
@@ -452,6 +458,8 @@ export interface NodeRecord {
   readonly objective?: string;
   readonly acceptanceCriteria?: readonly string[];
   readonly scope?: Scope;
+  /** 子の実行環境（`node.created` の `runtime`。記録だけで、振り分けには使わない）。根や以前の記録にはない。 */
+  readonly runtime?: NodeRuntime;
   /** 破棄の判断（停止したノードだけ。再開すると消える）。回収の再判定の入力 `facts.discarded` の情報源。 */
   readonly discarded?: {
     readonly seq: number;
@@ -1357,6 +1365,10 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
         const problem = briefProblem({ objective, acceptanceCriteria, scope, dependsOn });
         if (problem !== undefined) return invalid(seq, `node.created のブリーフ（${problem}）`);
       }
+      const { runtime } = p;
+      if (runtime !== undefined && !NODE_RUNTIMES.includes(runtime as NodeRuntime)) {
+        return invalid(seq, "node.created の runtime");
+      }
       const ancestors = ancestorIds(d, parentId);
       for (const dep of dependsOn) {
         if (dep === nodeId || !d.nodeIdx.has(dep)) {
@@ -1385,6 +1397,7 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
           dependsOn: [...dependsOn],
           state: "pending",
           ...(hasBrief ? briefRecord(objective, acceptanceCriteria, scope) : {}),
+          ...(runtime === undefined ? {} : { runtime: runtime as NodeRuntime }),
         }),
       );
       if (parentId !== null)
