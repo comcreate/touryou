@@ -142,6 +142,8 @@ export type EventBody =
         readonly text: string;
         /** 完了報告の、受け入れ基準ごとの根拠（FR_022）。完了（`done`）のときだけ。 */
         readonly evidence?: readonly ReportEvidence[];
+        /** daemon が書いた報告の文の鍵と値（#149）。画面が言語を選んで文にする。ないとき（古い記録・子や統合が書いた文）は `text`。 */
+        readonly msg?: InboxMessage;
       };
     }
   | {
@@ -593,6 +595,8 @@ export interface ReportRecord {
   readonly kind: ReportKind;
   readonly text: string;
   readonly evidence?: readonly ReportEvidence[];
+  /** daemon が書いた報告の文の鍵と値（#149）。ないときは `text`。 */
+  readonly msg?: InboxMessage;
   readonly actor: Actor;
 }
 
@@ -1646,7 +1650,7 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
     }
 
     case "report.added": {
-      const { reportId, nodeId, kind, text, evidence } = p;
+      const { reportId, nodeId, kind, text, evidence, msg } = p;
       if (
         !isId(reportId) ||
         !isId(nodeId) ||
@@ -1655,6 +1659,7 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
       ) {
         return invalid(seq, "report.added の payload");
       }
+      if (msg !== undefined && !isInboxMessage(msg)) return invalid(seq, "report.added の msg");
       let evidenceList: ReportEvidence[] | undefined;
       if (evidence !== undefined) {
         // 根拠は完了報告（FR_022）だけが持つ。
@@ -1707,6 +1712,7 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
         kind,
         text,
         ...(evidenceList === undefined ? {} : { evidence: Object.freeze(evidenceList) }),
+        ...(msg === undefined ? {} : { msg: msg as InboxMessage }),
         actor,
       });
       d.reportIdx.set(reportId, record);

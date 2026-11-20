@@ -336,6 +336,11 @@ export const UI_JS = `'use strict';
     var s = msgText(i.msg);
     return s !== null ? s : typeof i.summary === 'string' ? i.summary : '';
   }
+  // やり取りの本文（#149）。daemon が書いた報告（msg つき）は、選んだ言語の文。msg のない記録（古い記録・子や統合が書いた文）は text のまま
+  function flowText(f) {
+    var s = msgText(f.msg);
+    return s !== null ? s : typeof f.text === 'string' ? f.text : '';
+  }
   // ページに書いてある文字（data-t の鍵）と、html の lang（属性は使わず、プロパティで入れる）
   function applyLang() {
     document.documentElement.lang = lang;
@@ -1014,7 +1019,7 @@ export const UI_JS = `'use strict';
     var line = el('div', 'fl');
     line.appendChild(el('span', 'ar ' + (isAwaiting(f) ? 'h' : up ? 'u' : 'd'), up ? '↑' : '↓'));
     var sum = t('flow.sum', { dir: f.from === selfId ? '→' : '←', who: who, kind: name(FLOW_KIND_NAMES, f.kind) });
-    var text = typeof f.text === 'string' ? cleanText(f.text, 400) : '';
+    var text = cleanText(flowText(f), 400);
     if (text && Array.from(text).length > FLOW_INLINE_MAX) {
       var d = el('details', 'fbody');
       d.appendChild(el('summary', '', sum));

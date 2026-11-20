@@ -64,6 +64,20 @@ const A = { role: "child", nodeId: "a" } as const;
 const M1 = { role: "integrator", nodeId: "m1" } as const;
 const ROOT = { role: "integrator", nodeId: "root" } as const;
 
+describe("report.done の報告の文（#149）", () => {
+  it("報告にも、受信箱と同じ鍵と値（msg）を載せる。text は日本語の文のまま", async () => {
+    const r = rig();
+    const res = await r.call("report.done", r.req("report.done", { evidence: EVIDENCE }, A));
+    expect(res.ok).toBe(true);
+    const report = r.state().reports.find((x) => x.nodeId === "a" && x.kind === "done");
+    expect(report?.text).toBe("完了報告（根拠 1 件）");
+    expect(report?.msg).toEqual({ key: "doneReport", args: { count: 1 } });
+    const item = r.state().inbox.find((i) => i.nodeId === "a" && i.kind === "done");
+    expect(item?.msg).toEqual(report?.msg);
+    expect(item?.summary).toBe(report?.text);
+  });
+});
+
 describe("tree.list（状態から決定的に生成した木の一覧表。呼び出し側の部分木だけ）", () => {
   it("部分木のノードを、作成順に、役割・状態・親・依存つきの表にする", async () => {
     const r = rig();

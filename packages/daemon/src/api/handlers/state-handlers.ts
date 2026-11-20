@@ -350,6 +350,8 @@ export function createStateHandlers(deps: StateHandlerDeps) {
 
       const reportId = deriveId("report", caller, req.requestId, "report");
       const evidence = req.params.evidence.map((e) => ({ ...e }));
+      // 報告の文と受信箱の知らせは同じ文。画面は msg から言語を選び、msg のない古い記録は text を出す。
+      const done = notice("doneReport", { count: evidence.length });
       const bodies: EventBody[] = [
         {
           type: "report.added",
@@ -357,7 +359,8 @@ export function createStateHandlers(deps: StateHandlerDeps) {
             reportId,
             nodeId: caller,
             kind: "done",
-            text: `完了報告（根拠 ${evidence.length} 件）`,
+            text: done.summary,
+            msg: done.msg,
             ...(evidence.length > 0 ? { evidence } : {}),
           },
         },
@@ -368,7 +371,7 @@ export function createStateHandlers(deps: StateHandlerDeps) {
             id: deriveId("inbox", caller, req.requestId, "inbox"),
             kind: "done",
             nodeId: caller,
-            ...notice("doneReport", { count: evidence.length }),
+            ...done,
             ref: reportId,
           },
         },

@@ -186,6 +186,8 @@ export interface UiFlow {
   readonly doneInferred?: true;
   /** 短い本文（報告・判断の問い・範囲の頼みの理由だけ。`UI_FLOW_TEXT_MAX` で切る）。空なら、なし。 */
   readonly text?: string;
+  /** daemon が書いた報告の文の鍵と値（#149）。画面は、言語を選んで文にし、ないとき（古い記録）は `text` を出す。 */
+  readonly msg?: InboxMessage;
 }
 
 export interface UiView {
@@ -530,6 +532,7 @@ export function flowsOf(state: OrchState): UiFlow[] {
         ...(waiting || doneAt === undefined ? {} : { doneAt: t(doneAt) }),
         deliveryUnknown: true,
         ...body(r.text),
+        ...(r.msg === undefined ? {} : { msg: copyInboxMessage(r.msg) }),
       },
       r.seq,
     );

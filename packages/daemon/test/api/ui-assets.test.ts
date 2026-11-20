@@ -423,6 +423,37 @@ describe("画面の資産（走査）", () => {
     expect(UI_JS).toContain("Object.hasOwn(TAGS, tag)");
   });
 
+  describe("やり取りの本文（#149）", () => {
+    const fn = (name: string): string => {
+      const at = UI_JS.indexOf(`function ${name}(`);
+      expect(at, name).toBeGreaterThan(0);
+      return UI_JS.slice(at, UI_JS.indexOf("\n  }\n", at) + 4);
+    };
+    const flowTextIn = (lang: "ja" | "en") =>
+      runInNewContext(
+        `var MESSAGES = ${INBOX_MESSAGES_JSON}; var SEPS = ${LIST_SEPS_JSON}; var MESSAGE_DEPTH_MAX = 3;
+var PLACEHOLDER = /[{]([a-z][A-Za-z0-9]*)[}]/g; var lang = '${lang}';
+${fn("msgText")}\n${fn("flowText")}\nflowText`,
+      ) as (f: unknown) => string;
+    const done = {
+      text: "完了報告（根拠 3 件）",
+      msg: { key: "doneReport", args: { count: 3 } },
+    };
+
+    it("msg つきの完了報告は、選んだ言語の文で出す（英語の画面に日本語を出さない）", () => {
+      expect(flowTextIn("en")(done)).toBe("Done report (3 pieces of evidence)");
+      expect(flowTextIn("ja")(done)).toBe("完了報告（根拠 3 件）");
+      expect(flowTextIn("en")(done)).not.toMatch(/完了報告/);
+    });
+    it("msg のない古い記録・知らない鍵の記録は、書かれた text のまま出す", () => {
+      expect(flowTextIn("en")({ text: "完了報告（根拠 3 件）" })).toBe("完了報告（根拠 3 件）");
+      expect(flowTextIn("en")({ text: "古い文", msg: { key: "noSuchKey", args: {} } })).toBe(
+        "古い文",
+      );
+      expect(flowTextIn("en")({})).toBe("");
+    });
+  });
+
   it("HTML に、インラインの script・style・イベント属性・javascript: を置かない（script は src だけ）", () => {
     const scripts = [...UI_HTML.matchAll(/<script\b[^>]*>/g)].map((m) => m[0]);
     expect(scripts.length).toBeGreaterThan(0);
