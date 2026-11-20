@@ -29,6 +29,7 @@ import {
   isPathUnder,
   isScopeSubset,
   type NodeRecord,
+  type NodeRuntime,
   normalizePath,
   type OperationMap,
   type OrchState,
@@ -77,6 +78,8 @@ export interface SpawnHandlerDeps {
   readonly clock: () => string;
   /** 新しい子のランタイム（アダプタ）。親のものを使う。 */
   readonly adapterFor: (nodeId: string) => RuntimeAdapter | undefined;
+  /** 新しい子の `node.created` に記録する実行環境（設定 `childRuntime` と同じ値。記録だけで、振り分けには使わない。#159）。 */
+  readonly runtime?: NodeRuntime;
   readonly ports: SpawnPorts;
   readonly credentials: Pick<CredentialStore, "issueNodeToken" | "revokeNode">;
   /** `node.split` の keep が stop のときに、元のノードを止める（`node.stop` のハンドラ）。 */
@@ -359,6 +362,7 @@ export function createSpawner(deps: SpawnHandlerDeps) {
         objective: brief.objective,
         acceptanceCriteria: [...brief.acceptanceCriteria],
         scope: brief.scope,
+        ...(deps.runtime === undefined ? {} : { runtime: deps.runtime }),
       },
     };
 

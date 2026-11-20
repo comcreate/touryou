@@ -72,7 +72,7 @@ export function createHandlersWithScheduler(
   reclaim?: ReclaimPorts,
   spawn?: Pick<
     SpawnHandlerDeps,
-    "ports" | "credentials" | "rootScope" | "onFailure" | "startLimits"
+    "ports" | "credentials" | "rootScope" | "onFailure" | "startLimits" | "runtime"
   >,
   /** 渡すと（ログが `purgeTree` を持つとき）、最終削除の操作（node.purge・node.purgePreview）も有効になる。 */
   purge?: Omit<PurgeHandlerDeps, "log">,

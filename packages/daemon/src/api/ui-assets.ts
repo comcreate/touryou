@@ -969,6 +969,7 @@ export const UI_JS = `'use strict';
     var head = el('div', '');
     head.appendChild(el('span', 'chip ' + STATUS_CHIP[status], st ? cleanText(st.text, 40) : name(STATE_NAMES, n.state)));
     if (n.needsHuman > 0) head.appendChild(el('span', 'chip turn', t('card.needsHuman', { n: n.needsHuman })));
+    if (n.runtime === 'cli' || n.runtime === 'desktop') head.appendChild(el('span', 'chip', t('runtime.' + n.runtime)));
     card.appendChild(head);
     card.appendChild(el('h3', '', nodeLabel(n, 200)));
     var meta = el('div', 'meta');
@@ -993,6 +994,13 @@ export const UI_JS = `'use strict';
       row.appendChild(el('code', '', cmd));
       row.appendChild(copyButton(cmd));
       card.appendChild(row);
+    }
+    // 子の実行環境（記録のあるものだけ）の開き方と安全面の注記（#159）。たたむ
+    if (n.runtime === 'cli' || n.runtime === 'desktop') {
+      var rt = fold('runtime-' + n.id, t('runtime.' + n.runtime));
+      rt.appendChild(el('div', 'confirm-line', n.runtime === 'cli' ? t('runtime.openCli', { id: n.id }) : t('runtime.openDesktop')));
+      rt.appendChild(el('div', 'confirm-line', t(n.runtime === 'cli' ? 'runtime.safetyCli' : 'runtime.safetyDesktop')));
+      card.appendChild(rt);
     }
     // 受信箱の項目は、たたむ（新しい順）
     if (list.length) {

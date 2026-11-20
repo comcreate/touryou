@@ -80,6 +80,57 @@ describe("uiViewOf の cli（#136）", () => {
   });
 });
 
+describe("node.created の runtime と uiViewOf の runtime（#159）", () => {
+  const rootEvents = (): OrchEvent[] => {
+    n = 0;
+    return [
+      created("root", "integrator", null),
+      ev({ type: "node.stateChanged", payload: { nodeId: "root", event: { type: "start" } } }),
+    ];
+  };
+
+  it("cli・desktop を NodeRecord に記録し、表示モデルに載せる", () => {
+    const s = must([
+      ...rootEvents(),
+      created("a", "implement", "root", { runtime: "cli" }),
+      created("b", "implement", "root", { runtime: "desktop" }),
+    ]);
+    expect(s.nodes.find((x) => x.id === "a")?.runtime).toBe("cli");
+    expect(s.nodes.find((x) => x.id === "b")?.runtime).toBe("desktop");
+    const v = uiViewOf(s);
+    expect(v.nodes.find((x) => x.id === "a")?.runtime).toBe("cli");
+    expect(v.nodes.find((x) => x.id === "b")?.runtime).toBe("desktop");
+  });
+
+  it("runtime のない古い記録は、そのまま畳み込め、記録にも表示にも runtime を付けない", () => {
+    const s = must(base());
+    expect(s.nodes.find((x) => x.id === "a")).not.toHaveProperty("runtime");
+    for (const x of uiViewOf(s).nodes) expect(x).not.toHaveProperty("runtime");
+  });
+
+  it("runtime のない古いノードでも、CLI の子と分かるもの（cli）は runtime を cli にする", () => {
+    const s = must([
+      ...base(),
+      ev({
+        type: "node.parentRequested",
+        payload: { nodeId: "a", requestRef: "r1", kind: "launch", worktree: "/w/a" },
+      } as never),
+      ev({
+        type: "node.parentReported",
+        payload: { nodeId: "a", requestRef: "r1", outcome: "done" },
+      } as never),
+    ]);
+    expect(s.nodes.find((x) => x.id === "a")).not.toHaveProperty("runtime");
+    expect(uiViewOf(s).nodes.find((x) => x.id === "a")?.runtime).toBe("cli");
+  });
+
+  it("cli・desktop 以外の runtime は invalidPayload で拒否する", () => {
+    const r = foldEvents([...rootEvents(), created("a", "implement", "root", { runtime: "web" })]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("invalidPayload");
+  });
+});
+
 describe("uiViewOf（画面の表示モデル）", () => {
   it("ノード・未解決の項目（優先度の降順）・件数を返す。解決済みの項目は含めない", () => {
     const s = must([
