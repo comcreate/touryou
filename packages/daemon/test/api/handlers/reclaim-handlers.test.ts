@@ -1001,7 +1001,11 @@ describe("未整備の操作（reclaimInstruct・purge・purgePreview）", () =>
 });
 
 describe("回収で、古い停止未完了・失敗の項目を解決にする（settle）", () => {
-  const seedItem = (r: ReturnType<typeof rig>, nodeId: string, kind: "failure" | "stopIncomplete") => {
+  const seedItem = (
+    r: ReturnType<typeof rig>,
+    nodeId: string,
+    kind: "failure" | "stopIncomplete",
+  ) => {
     const id = `${kind}-${nodeId}`;
     const appended = r.log.append({
       requestId: `stale-seed-${id}`,
