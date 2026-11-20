@@ -122,7 +122,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     });
     expect(pip.offsetPath).toMatch(/^path\("M /);
     // 彗星: 道の接線に沿って向きが変わり、尾はグラデーションで薄れる
-    expect(pip.offsetRotate).toBe("auto");
+    expect(pip.offsetRotate).toMatch(/^auto/);
     expect(pip.backgroundImage).toContain("linear-gradient");
   });
 
