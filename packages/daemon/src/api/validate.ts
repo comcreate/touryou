@@ -177,9 +177,7 @@ const itemIds = (p: unknown): string[] => {
     !v.every((x) => isSafeId(x)) ||
     new Set(v).size !== v.length
   ) {
-    fail(
-      `itemIds が不正（受信箱の項目の ID の配列。重複なし、1〜${LIMITS.inboxResolveItems} 件）`,
-    );
+    fail(`itemIds が不正（受信箱の項目の ID の配列。重複なし、1〜${LIMITS.inboxResolveItems} 件）`);
   }
   return [...(v as string[])];
 };

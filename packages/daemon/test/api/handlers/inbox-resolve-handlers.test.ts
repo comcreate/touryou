@@ -27,6 +27,7 @@ const rig = () => {
     type: "node.created",
     payload: { nodeId: "root", role: "integrator", parentId: null, dependsOn: [] },
   });
+  add({ type: "node.stateChanged", payload: { nodeId: "root", event: { type: "start" } } });
   add({
     type: "node.created",
     payload: { nodeId: "a", role: "implement", parentId: "root", dependsOn: [] },

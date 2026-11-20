@@ -130,6 +130,11 @@ describe("画面の資産（走査）", () => {
       // 要素・文字列・集合・配列・Promise の、安全な操作
       // 移った先のカードへ focus を移すため（tabIndex = -1。カードを Tab の並びには入れない）
       "tabIndex",
+      // 受信箱の項目を人が片付ける・戻す（#99）: inbox.resolve・inbox.reopen の結果の鍵
+      "resolved",
+      "alreadyResolved",
+      "resolvedAt",
+      "reopened",
       // 画面の言語（#140）: ブラウザの言語・知らせの鍵と値・ページの文字の鍵（data-t・data-t-aria・data-t-title）
       "language",
       "args",

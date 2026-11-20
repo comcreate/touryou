@@ -421,7 +421,16 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
 
   const flows = cap("flows", flowsOf(state), UI_LIMITS.flows);
 
-  return { lastSeq: state.lastSeq, nodes, inbox, resolved, decisions, extensions, flows, truncated };
+  return {
+    lastSeq: state.lastSeq,
+    nodes,
+    inbox,
+    resolved,
+    decisions,
+    extensions,
+    flows,
+    truncated,
+  };
 }
 
 /** 題: 改行・タブ・続く空白を空白 1 つにまとめ、前後の空白を除いて 1 行にしてから、`UI_TITLE_MAX` で切る。 */

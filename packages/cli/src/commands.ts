@@ -993,9 +993,13 @@ async function runInbox(
   };
 }
 
-const isResolveResult = (v: unknown): v is { resolved: readonly string[]; alreadyResolved: readonly string[] } =>
+const isResolveResult = (
+  v: unknown,
+): v is { resolved: readonly string[]; alreadyResolved: readonly string[] } =>
   isRecord(v) && isStringArray(v.resolved) && isStringArray(v.alreadyResolved);
-const isReopenResult = (v: unknown): v is { reopened: readonly string[]; alreadyOpen: readonly string[] } =>
+const isReopenResult = (
+  v: unknown,
+): v is { reopened: readonly string[]; alreadyOpen: readonly string[] } =>
   isRecord(v) && isStringArray(v.reopened) && isStringArray(v.alreadyOpen);
 
 /** `touryou inbox resolve <項目 ID>…`（片付ける）・`touryou inbox reopen <項目 ID>…`（片付けた項目を戻す）。#99 */
