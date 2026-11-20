@@ -580,8 +580,8 @@ export const APP_TEXT = {
   },
   "settings.still": { ja: "動きを止める", en: "Stop motion" },
   "settings.stillNote": {
-    ja: "新しい項目の入る動き・線を流れる玉・光る縁などを止めます。OS の「視差効果を減らす」を入れているときは、ここを切っていても止まります。",
-    en: 'Stops motion such as new items sliding in, dots moving along lines and glowing borders. If "Reduce motion" is on in the OS, motion stops even when this is off.',
+    ja: "新しい項目の入る動き・線を流れる彗星・光る縁などを止めます。OS の「視差効果を減らす」を入れているときは、ここを切っていても止まります。",
+    en: 'Stops motion such as new items sliding in, comets moving along lines and glowing borders. If "Reduce motion" is on in the OS, motion stops even when this is off.',
   },
   "settings.theme": { ja: "明暗", en: "Light or dark" },
   "settings.themeAuto": { ja: "OS に合わせる", en: "Match the OS" },

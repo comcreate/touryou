@@ -55,19 +55,29 @@ describe("図の自前のコード（走査）", () => {
     expect([...all.matchAll(/createElementNS/g)]).toHaveLength(1);
     expect([...all.matchAll(/setAttributeNS/g)]).toHaveLength(1);
     expect(src("svg-el.ts")).toMatch(/document\.createElementNS\(NS, tag\)/);
-    expect(src("svg-el.ts")).toContain('new Set(["svg", "g", "path", "rect", "text", "title"])');
+    const tags = ["svg", "g", "path", "rect", "text", "title"];
+    for (const tag of [...tags, "defs", "mask", "linearGradient", "stop"])
+      expect(src("svg-el.ts")).toContain(`"${tag}",`);
     expect(src("svg-el.ts")).toContain('new Set(["x", "y", "width", "height", "rx"])');
   });
 
-  it("offsetPath を設定するのは graph-path.ts の setRunnerPath の 1 か所だけ。.style の使い方はそこだけ", () => {
-    expect([...all.matchAll(/offsetPath/g)]).toHaveLength(1);
-    expect([...all.matchAll(/\.style\b/g)]).toHaveLength(1);
-    const fn = src("graph-path.ts").slice(
-      src("graph-path.ts").indexOf("export function setRunnerPath"),
-    );
-    expect(fn).toMatch(
-      /if \(!PATH_PATTERN\.test\(d\)\) throw[^\n]*\n\s*dot\.style\.offsetPath = `path\('\$\{d\}'\)`/,
-    );
+  it("要素の style・offsetPath には触らない（彗星は SVG の mask と CSS のクラスだけで動く）", () => {
+    expect([...all.matchAll(/offsetPath/g)]).toHaveLength(0);
+    expect([...all.matchAll(/\.style\b/g)]).toHaveLength(0);
+  });
+
+  it("彗星の線は、g-sent の線と同じ d の重ね線で、mask・id は comet-mask-N・comet-fade-N の形だけ", () => {
+    const entry = src("graph-entry.ts");
+    // 重ね線は、線の `d` をそのまま使い、mask で切る（尾は線から外れない）
+    expect(entry).toContain('svgEl("path", { class: "comet", d, mask: `url(#${mask})` })');
+    expect(entry).toContain('look.endsWith("g-sent")) svg.append(...cometOf(s.d, w, h))');
+    expect(entry).toContain("const fade = `comet-fade-${seq}`;");
+    expect(entry).toContain("const mask = `comet-mask-${seq}`;");
+    // mask の範囲は図の座標（水平線の外接箱は高さ 0 で、既定の範囲では描かれない）
+    expect(entry).toContain('maskUnits: "userSpaceOnUse"');
+    const el = src("svg-el.ts");
+    expect(el).toContain("/^comet-(?:mask|fade)-\\d+$/");
+    expect(el).toContain("/^url\\(#(comet-(?:mask|fade)-\\d+)\\)$/");
   });
 
   it("合図の受け手は addEventListener だけで付け、どれも destroy で外れる形（signal）。文字列の受け手は使わない", () => {
@@ -89,7 +99,19 @@ describe("図の自前のコード（走査）", () => {
     expect(tags.length).toBeGreaterThan(2);
     for (const t of tags) expect(["div", "span"]).toContain(t);
     const svgTags = [...all.matchAll(/\bsvgEl\(\s*"([^"]*)"/g)].map((m) => m[1]);
-    for (const t of svgTags) expect(["svg", "g", "path", "rect", "text", "title"]).toContain(t);
+    for (const t of svgTags)
+      expect([
+        "svg",
+        "g",
+        "path",
+        "rect",
+        "text",
+        "title",
+        "defs",
+        "mask",
+        "linearGradient",
+        "stop",
+      ]).toContain(t);
   });
 
   it("許可リスト: `.` の後ろのプロパティ名（DOM に触れるもの）は、安全な集合にあるものだけ", () => {
@@ -102,8 +124,6 @@ describe("図の自前のコード（走査）", () => {
       "onPick",
       "dataset",
       "id",
-      "style",
-      "offsetPath",
       "append",
       "replaceChildren",
       "createElement",

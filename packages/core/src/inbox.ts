@@ -16,6 +16,7 @@
 import type { Actor, OrchState } from "./events.js";
 import { type InboxKind, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
 import type { InboxMessage } from "./inbox-messages.js";
+import type { NodeState } from "./index.js";
 
 export interface InboxItem {
   /** daemon が採番する単調増加の番号。差分取得の cursor に使う。 */
@@ -38,6 +39,8 @@ export interface InboxItem {
   readonly msg?: InboxMessage;
   /** 解決済み（`inbox.resolved`）。解決した者・時刻・イベントの `seq`。項目そのものは消えない（記録）。 */
   readonly resolved?: { readonly seq: number; readonly at: string; readonly by: Actor };
+  /** 受け取り済み（`inbox.acknowledged`。#102）。受け取った者・時刻・イベントの `seq`。最初の 1 回だけを残す。 */
+  readonly acknowledged?: { readonly seq: number; readonly at: string; readonly by: Actor };
 }
 
 /** 解決済みでない項目だけ。`inbox.fetch` は、これで解決済みを除く。 */
@@ -45,7 +48,11 @@ export const unresolvedInbox = (items: readonly InboxItem[]): InboxItem[] =>
   items.filter((i) => i.resolved === undefined);
 
 /** 受理・回収・archive のあとは、もう対処のいらない、停止の未完了と失敗の記録を残さない（`staleInboxItems`）。 */
-export const SETTLED_STATES: ReadonlySet<string> = new Set(["verified", "reclaimable", "archived"]);
+export const SETTLED_STATES: ReadonlySet<NodeState> = new Set<NodeState>([
+  "verified",
+  "reclaimable",
+  "archived",
+]);
 const STALE_KINDS: ReadonlySet<InboxKind> = new Set(["stopIncomplete", "failure"]);
 /** 受理した子のセッション削除を親が拒まれた知らせ（人が判断するので、自動では解決にしない）。 */
 const HUMAN_JUDGED_KEYS: ReadonlySet<string> = new Set(["removeRefused", "removeRefusedNoReason"]);

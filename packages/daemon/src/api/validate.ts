@@ -231,12 +231,21 @@ const VALIDATORS: Validators = {
     return o.note === undefined ? { nodeId } : { nodeId, note: text(o, "note", LIMITS.summary) };
   },
   "inbox.fetch": (p) => {
-    const o = strict(p, ["sinceSeq"]);
+    const o = strict(p, ["sinceSeq", "ackItemIds"]);
     const s = o.sinceSeq;
-    if (s === undefined) return {};
-    if (typeof s !== "number" || !Number.isInteger(s) || s < 0)
+    if (s !== undefined && (typeof s !== "number" || !Number.isInteger(s) || s < 0))
       fail("sinceSeq が 0 以上の整数でない");
-    return { sinceSeq: s as number };
+    const a = o.ackItemIds;
+    if (
+      a !== undefined &&
+      (!Array.isArray(a) || a.length > 100 || !a.every((x) => typeof x === "string" && isSafeId(x)))
+    ) {
+      fail("ackItemIds は、項目の ID の配列（100 件まで）");
+    }
+    return {
+      ...(s === undefined ? {} : { sinceSeq: s as number }),
+      ...(a === undefined ? {} : { ackItemIds: a as string[] }),
+    };
   },
   "tree.list": (p) => {
     strict(p, []);
