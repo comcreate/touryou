@@ -1361,9 +1361,9 @@ describe("画面の使い勝手（#13）", () => {
     );
     // 図の上を動く彗星は、動きを減らす設定と「動きを止める」のとき隠す（線と箱は残る）
     expect(UI_CSS).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)\{[^@]*\.pip\{display:none\}\}/,
+      /@media \(prefers-reduced-motion: reduce\)\{[^@]*\.comet\{display:none\}\}/,
     );
-    expect(UI_CSS).toContain(".still .pip{display:none}");
+    expect(UI_CSS).toContain(".still .comet{display:none}");
     expect(UI_JS).toContain("root.classList.toggle('still', x.still)"); // 設定の窓の「動きを止める」（#139）
     expect(UI_JS).not.toMatch(/\.animate\(|requestAnimationFrame/);
   });
