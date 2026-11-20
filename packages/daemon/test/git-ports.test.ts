@@ -133,6 +133,31 @@ describe("gitignore の対象（再生成できるものだけ許す）", () => 
     expect(existsSync(join(p, ".env"))).toBe(true);
   });
 
+  it("gitignore の対象が、シンボリックリンクだけなら、きれいとみなし、失われるものに数えない（Issue #160）。通常のファイルは、きれいでない", async () => {
+    const s = setup();
+    withIgnore(s, ".envrc", ".env");
+    writeFileSync(join(s.repoRoot, ".envrc"), "export A=1\n");
+    const p = await provision(s, "c1");
+    symlinkSync(join(s.repoRoot, ".envrc"), join(p, ".envrc"));
+    expect(git(p, "status", "--short")).toBe(""); // 変更 0 件
+    expect((await s.ports.factsFor("c1"))?.clean).toBe(true);
+    expect((await s.ports.lossFor("c1"))?.untracked).toBe(0);
+    writeFileSync(join(p, ".env"), "TOKEN=1\n"); // 通常の gitignore の対象は、今までどおり
+    expect((await s.ports.factsFor("c1"))?.clean).toBe(false);
+    expect((await s.ports.lossFor("c1"))?.untracked).toBe(1);
+  });
+
+  it("リンクだけの作業ツリーは、強制なしで回収でき、リンク先は残る（Issue #160）", async () => {
+    const s = setup();
+    withIgnore(s, ".envrc");
+    writeFileSync(join(s.repoRoot, ".envrc"), "export A=1\n");
+    const p = await provision(s, "c1");
+    symlinkSync(join(s.repoRoot, ".envrc"), join(p, ".envrc"));
+    const removed = await s.ports.removeWorktree("c1", { expectedPath: p });
+    expect(removed.ok).toBe(true);
+    expect(existsSync(join(s.repoRoot, ".envrc"))).toBe(true);
+  });
+
   it("許可リストは指定できる。入れ子の同名（src/dist）は許可されない", async () => {
     const s0 = setup();
     withIgnore(s0, "build", "dist");
