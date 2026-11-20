@@ -178,7 +178,11 @@ export function resolveDaemonEndpoint(
   const dirProblem = (dir: string): Result<never> | undefined => {
     const why = ops.checkDir(dir);
     if (why !== undefined)
-      return fail("invalid_config", `置き場のディレクトリが使えない: ${why}`, SETUP);
+      return fail(
+        "invalid_config",
+        `設定ファイルの置き場のディレクトリが使えない（${dir}）: ${why}`,
+        SETUP,
+      );
     const m = ops.modeString(dir);
     if (m === undefined || !DIR_MODES.has(m)) {
       return fail(
