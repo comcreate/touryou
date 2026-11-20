@@ -2,6 +2,7 @@
 
 import { createReadHandlers } from "../read-handlers.js";
 import type { Handlers } from "../server.js";
+import { type AdoptPorts, createAdoptHandlers } from "./adopt-handlers.js";
 import { createChildInboxHandlers } from "./child-inbox-handlers.js";
 import { createInstructionDelivery } from "./instruction-delivery.js";
 import { createParentRequestHandlers } from "./parent-request-handlers.js";
@@ -20,6 +21,7 @@ import { createScopeHandlers } from "./scope-handlers.js";
 import { createSpawner, type SpawnHandlerDeps } from "./spawn-handlers.js";
 import { createStateHandlers, type StateHandlerDeps } from "./state-handlers.js";
 
+export type { AdoptPorts } from "./adopt-handlers.js";
 export type { LogPort } from "./context.js";
 export { createPauseHandlers, type PauseHandlerDeps } from "./pause-handlers.js";
 export {
@@ -73,7 +75,10 @@ export function createHandlersWithScheduler(
   spawn?: Pick<
     SpawnHandlerDeps,
     "ports" | "credentials" | "rootScope" | "onFailure" | "startLimits"
-  >,
+  > & {
+    /** 渡すと、既存の作業ツリーの採用（node.adopt。#163）も有効になる。 */
+    adopt?: AdoptPorts;
+  },
   /** 渡すと（ログが `purgeTree` を持つとき）、最終削除の操作（node.purge・node.purgePreview）も有効になる。 */
   purge?: Omit<PurgeHandlerDeps, "log">,
 ): { handlers: Handlers; tick: () => Promise<void>; close: () => Promise<void> } {
@@ -169,6 +174,14 @@ export function createHandlersWithScheduler(
       ? {}
       : {
           ...spawner?.handlers,
+          ...(spawn.adopt === undefined
+            ? {}
+            : createAdoptHandlers({
+                ...deps,
+                ports: spawn.adopt,
+                ...(spawn.rootScope === undefined ? {} : { rootScope: spawn.rootScope }),
+                ...onFailure,
+              }).handlers),
           ...createPauseHandlers({
             ...deps,
             present: state["decision.present"],

@@ -130,7 +130,9 @@ describe("つなぎ直し（POST /v1/bind。コードなし）", () => {
     expect(token).not.toBe(old);
     expect((await r.report(token)).status).toBe(200);
     expect((await r.report(old)).status).toBe(401);
-    expect(r.logs).toContainEqual(expect.objectContaining({ event: "bindSucceeded", route: "rebind" }));
+    expect(r.logs).toContainEqual(
+      expect.objectContaining({ event: "bindSucceeded", route: "rebind" }),
+    );
   });
 
   it("つなぎ直したあとも、もう一度つなぎ直せる（記録の session_id は変わらない）", async () => {
@@ -184,7 +186,9 @@ describe("つなぎ直し（POST /v1/bind。コードなし）", () => {
     const r = await rig();
     await r.first();
     await r.rebind({ sessionId: "s-other" });
-    expect(r.logs).toContainEqual(expect.objectContaining({ event: "bindFailed", reason: "rejected" }));
+    expect(r.logs).toContainEqual(
+      expect.objectContaining({ event: "bindFailed", reason: "rejected" }),
+    );
     expect(r.invalid()).toBe(0);
   });
 

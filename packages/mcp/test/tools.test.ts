@@ -8,6 +8,7 @@ const names = (role: McpRole) => toolsFor(role).map((t) => t.name);
 const EXPECTED: Record<McpRole, readonly string[]> = {
   integrator: [
     "node_spawn",
+    "node_adopt",
     "node_send",
     "node_stop",
     "node_confirmStopped",

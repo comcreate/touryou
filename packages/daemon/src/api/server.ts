@@ -194,6 +194,11 @@ export interface ApiDeps {
    */
   readonly attachDir?: string;
   /**
+   * `GET /v1/whoami` で、統合ノードにだけ返す daemon の場所（#164）。`daemonId` は `identity` の起動ごとの識別子
+   * （`docs/daemon-identity.md`）。省略すると、`daemon` は返さない。子には、どちらでも返さない。
+   */
+  readonly daemonInfo?: { readonly rootCwd: string; readonly repoRoot: string };
+  /**
    * 画面の表示モデルに出す、取り消せない操作の確認待ち（`confirmation-gate.ts`）。コードは含まない。`confirmationsVersion` は、
    * 確認待ちが変わるたびに増える数で、表示モデルのキャッシュの鍵と、SSE の変化の通知に足す（記録の seq は変わらないため）。
    */
@@ -977,12 +982,18 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       return;
     }
     // ノードのトークン（統合・子）には、自分の nodeId も返す（mcp の `whoami` ツール）。人間には、nodeId がない。
+    // 統合ノードにだけ、daemon の場所（rootCwd・repoRoot）と daemonId も返す（#164。子には出さない）。
+    const daemonId = deps.identity?.()?.daemonId;
+    const daemon =
+      principal.role === "integrator" && deps.daemonInfo !== undefined && daemonId !== undefined
+        ? { daemon: { ...deps.daemonInfo, daemonId } }
+        : {};
     send(res, 200, {
       ok: true,
       value:
         principal.role === "human"
           ? { role: principal.role }
-          : { role: principal.role, nodeId: principal.nodeId },
+          : { role: principal.role, nodeId: principal.nodeId, ...daemon },
     });
   }
 

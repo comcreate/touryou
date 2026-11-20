@@ -300,6 +300,20 @@ export type EventBody =
       };
     }
   | {
+      /**
+       * 既存の作業ツリーを子ノードとして採用した記録（#163）。採用した者は封筒の `actor`、範囲（scope）は同じトランザクションの
+       * `node.created` が持つ。作業ツリーとブランチは動かさず、ノードの導出（`nameOf`）を上書きする値として持つ。
+       * `sessionRef` は、既存セッションの参照（停止の依頼に使う。任意）。
+       */
+      readonly type: "node.adopted";
+      readonly payload: {
+        readonly nodeId: string;
+        readonly worktree: string;
+        readonly branch: string;
+        readonly sessionRef?: string;
+      };
+    }
+  | {
       /** 手動の CLI セッション用の、フック専用のトークンを発行した記録。発行した者は封筒の `actor`（人間）。トークンは書かない。記録のみ。 */
       readonly type: "node.hookTokenIssued";
       readonly payload: { readonly nodeId: string };
@@ -439,6 +453,15 @@ export interface NodeRecord {
     readonly expectTip?: string;
     /** 判断のときに、先端がなかった（ブランチがなかった）。今の先端が取れるなら、回収のときに拒否する。 */
     readonly noTip?: true;
+  };
+  /** 採用した既存の作業ツリー（`node.adopted`）。ある間、作業ツリー・ブランチは導出でなくこの値。回収では作業ツリー・ブランチを消さない。 */
+  readonly adopted?: {
+    readonly seq: number;
+    readonly at: string;
+    readonly by: Actor;
+    readonly worktree: string;
+    readonly branch: string;
+    readonly sessionRef?: string;
   };
   /** 自動の最終削除の保留（`node.purgeHeld`）。`until` がなければ無期限。 */
   readonly purgeHold?: {
@@ -2200,6 +2223,41 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
           ...(reason === undefined ? {} : { reason }),
           ...(agentState === undefined ? {} : { agentState }),
           actor,
+        }),
+      });
+      return commit();
+    }
+
+    case "node.adopted": {
+      const { nodeId, worktree, branch, sessionRef } = p;
+      if (
+        !isId(nodeId) ||
+        !isBoundedText(worktree, PARENT_WORKTREE_MAX) ||
+        !worktree.startsWith("/") ||
+        !isBoundedText(branch, LIMITS.reason) ||
+        branch === "" ||
+        (sessionRef !== undefined && !isSessionRef(sessionRef))
+      )
+        return invalid(seq, "node.adopted の payload");
+      const node = nodeAt(d, nodeId);
+      if (node === undefined) return unknownNode(seq, nodeId);
+      if (node.adopted !== undefined) {
+        return reject(
+          seq,
+          "invalidState",
+          `ノード ${nodeId} は、もう採用済み`,
+          "別のノードとして採用するか、採用済みの作業ツリーを使う",
+        );
+      }
+      d.nodes[d.nodeIdx.get(nodeId) as number] = freezeRecord({
+        ...node,
+        adopted: freezeRecord({
+          seq,
+          at: raw.at,
+          by: actor,
+          worktree,
+          branch,
+          ...(sessionRef === undefined ? {} : { sessionRef }),
         }),
       });
       return commit();
