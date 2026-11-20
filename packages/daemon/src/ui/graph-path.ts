@@ -1,6 +1,6 @@
 /**
  * 関係図の線（#89。設計の下書き 7 節）。`d` は数だけで組む（命令 M・L・Q・Z）。
- * 動く彗星の `offset-path` を設定するのも、この 1 か所（`setRunnerPath`）だけ。
+ * 彗星は、線と同じ `d` の path に mask をかけて描く（`cometSpanOf` は、その走る範囲を `d` から読む）。
  */
 import { BOX_H, BOX_W, type Layout, type LayoutPos, MARGIN, ROW_H } from "./graph-layout.js";
 import { PATH_PATTERN } from "./svg-el.js";
@@ -135,8 +135,16 @@ export function roleIconOf(integrator: boolean): string {
       ]);
 }
 
-/** 動く彗星に道を設定する。中身は `d` と同じ検査を通したものだけ。 */
-export function setRunnerPath(dot: HTMLElement, d: string): void {
-  if (!PATH_PATTERN.test(d)) throw new Error("path: shape");
-  dot.style.offsetPath = `path('${d}')`;
+/** 彗星の尾の長さ（x 方向）。 */
+export const COMET_TAIL = 140;
+
+/**
+ * 彗星が走る道の、始点と終点の x。`d` の最初と最後の点（命令 M・L・Q・C の引数は、すべて x y の組）。
+ * 終点が始点より左なら、彗星は左へ走る。曲線は端の点だけを見る（尾は、線と同じ `d` の mask で切るので、線から外れない）。
+ */
+export function cometSpanOf(d: string): { readonly from: number; readonly to: number } {
+  const nums = (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+  if (!PATH_PATTERN.test(d) || /A/.test(d) || nums.length < 2 || nums.length % 2 !== 0)
+    throw new Error("path: comet");
+  return { from: nums[0] as number, to: nums[nums.length - 2] as number };
 }

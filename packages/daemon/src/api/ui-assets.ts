@@ -229,12 +229,14 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .legend{display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 0 0;font-size:12.5px;color:var(--muted)}.lg{display:inline-flex;align-items:center;gap:4px}
 .sw{display:inline-block;width:22px;height:0;border-top:2.5px dashed var(--ai)}.sw.down{border-top-color:var(--ai-2)}.sw.a1{border-top-width:3px}.sw.a3{opacity:.65}.sw.a4{opacity:.45}.sw.wait{border-top:3.5px dashed var(--kaki)}
 .edge{display:inline-block;width:4px;height:14px;border-radius:2px;background:var(--ai)}.edge.turn{background:var(--kaki)}.edge.stall{background:var(--kiiro)}.edge.fail{background:var(--shu)}.edge.over{background:var(--line)}
-.pip{position:absolute;left:0;top:0;width:56px;height:4px;margin:0;border-radius:999px;background:var(--ai);background:linear-gradient(90deg,transparent 0%,color-mix(in srgb,var(--ai) 80%,transparent) 70%,var(--ai) 95%,transparent 100%);offset-rotate:auto;offset-anchor:100% 50%;opacity:0;animation:gtravel 1.6s linear infinite}
+.comet{fill:none;stroke:var(--ai);stroke-width:5;stroke-linecap:round;filter:drop-shadow(0 0 4px var(--ai))}
+.comet-win{transform-box:fill-box;animation:gcomet 1.6s linear infinite}.comet-win-left{animation-name:gcomet-left}
+.comet-clear{stop-color:#fff;stop-opacity:0}.comet-mid{stop-color:#fff;stop-opacity:.8}.comet-lit{stop-color:#fff;stop-opacity:1}
 @keyframes galive{0%,100%{opacity:1}50%{opacity:.45}}
-@keyframes gflow{to{stroke-dashoffset:-14}}@keyframes gtravel{0%{offset-distance:56px;opacity:0}15%{opacity:1}85%{opacity:1}100%{offset-distance:100%;opacity:0}}
+@keyframes gflow{to{stroke-dashoffset:-14}}@keyframes gcomet{from{transform:translateX(0)}to{transform:translateX(100%)}}@keyframes gcomet-left{from{transform:translateX(0)}to{transform:translateX(-100%)}}
 .still *,.still *::before{animation:none!important;transition:none!important}
-.still .pip{display:none}
-@media (prefers-reduced-motion: reduce){*,*::before{animation:none!important;transition:none!important}.pip{display:none}}
+.still .comet{display:none}
+@media (prefers-reduced-motion: reduce){*,*::before{animation:none!important;transition:none!important}.comet{display:none}}
 @media (max-width:640px){.now .count{font-size:44px}.now h2{font-size:18px}.top .tools{margin-left:0}button.sm,button.copy,button.gear{min-height:44px}.zoom{top:4px}.zoom button{min-width:44px;min-height:44px}.seg button{min-width:44px}}
 `;
 
