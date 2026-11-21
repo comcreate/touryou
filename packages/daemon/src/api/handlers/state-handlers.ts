@@ -27,8 +27,8 @@ import { unquote } from "./child-inbox-handlers.js";
 import {
   alreadyApplied,
   appendAtomically,
-  deriveId,
   derivedRequestId,
+  deriveId,
   fail,
   type LogPort,
   notice,

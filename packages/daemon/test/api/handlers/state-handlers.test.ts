@@ -128,7 +128,10 @@ describe("判断の取り下げ（#196）", () => {
     const r = rig();
     const first = await ask(r);
     const w = r.req("decision.withdraw", { decisionId: first }, A, "w-resend");
-    expect((await r.call("decision.withdraw", w)).value).toEqual({ withdrawn: true, resumed: true });
+    expect((await r.call("decision.withdraw", w)).value).toEqual({
+      withdrawn: true,
+      resumed: true,
+    });
     // そのあと別の判断を出して、また waiting になっても、再送の結果は変わらない
     await ask(r);
     expect(stateOf(r.state(), "a")).toBe("waiting");
@@ -159,7 +162,10 @@ describe("判断の取り下げ（#196）", () => {
     const done = await r.call("report.done", r.req("report.done", { evidence: EVIDENCE }, A));
     expect(done.ok).toBe(false);
     // 再送も resumed は false のまま。残りの判断も取り下げると、running に戻る
-    expect((await r.call("decision.withdraw", w)).value).toEqual({ withdrawn: true, resumed: false });
+    expect((await r.call("decision.withdraw", w)).value).toEqual({
+      withdrawn: true,
+      resumed: false,
+    });
     const last = await r.call(
       "decision.withdraw",
       r.req("decision.withdraw", { decisionId: second }, A, "w-two-b"),
