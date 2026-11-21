@@ -81,13 +81,20 @@ describe("bind コード（一度きり・短い有効期限・ノードに結�
     const { codes } = rig();
     const c = codes.issue("a");
     expect(codes.redeem("a", c)).toEqual({ ok: true, nodeId: "a" });
-    expect(codes.redeem("a", c)).toEqual({ ok: false, reason: "invalid" });
+    expect(codes.redeem("a", c)).toEqual({ ok: false, reason: "used" });
+  });
+
+  it("使用済みは、使ったノードの名前のときだけ区別する（別のノードの名前では、未知と同じ）", () => {
+    const { codes } = rig();
+    const c = codes.issue("a");
+    expect(codes.redeem("a", c)).toEqual({ ok: true, nodeId: "a" });
+    expect(codes.redeem("b", c)).toEqual({ ok: false, reason: "unknownCode" });
   });
 
   it("別のノードの名前では使えない（失敗として数え、コードは残る）", () => {
     const { codes } = rig();
     const c = codes.issue("a");
-    expect(codes.redeem("b", c)).toEqual({ ok: false, reason: "invalid" });
+    expect(codes.redeem("b", c)).toEqual({ ok: false, reason: "unknownCode" });
     expect(codes.redeem("a", c)).toEqual({ ok: true, nodeId: "a" });
   });
 
@@ -100,7 +107,7 @@ describe("bind コード（一度きり・短い有効期限・ノードに結�
     expect(codes.redeem("a", c, accept)).toEqual({ ok: false, reason: "rejected" });
     allowed = true;
     expect(codes.redeem("a", c, accept)).toEqual({ ok: true, nodeId: "a" });
-    expect(codes.redeem("a", c, accept)).toEqual({ ok: false, reason: "invalid" });
+    expect(codes.redeem("a", c, accept)).toEqual({ ok: false, reason: "used" });
   });
 
   it("accept が例外を投げたら rejected（フェイルクローズ。消費しない）。間違ったコードでは accept を呼ばない", () => {
@@ -127,11 +134,28 @@ describe("bind コード（一度きり・短い有効期限・ノードに結�
     expect(r.codes.redeem("a", c1)).toEqual({ ok: true, nodeId: "a" });
     const c2 = r.codes.issue("a");
     r.advance(10 * 60_000);
-    expect(r.codes.redeem("a", c2)).toEqual({ ok: false, reason: "invalid" });
+    expect(r.codes.redeem("a", c2)).toEqual({ ok: false, reason: "expired" });
     const r2 = rig({ ttlMs: 1000 });
     const c3 = r2.codes.issue("b");
     r2.advance(1001);
-    expect(r2.codes.redeem("b", c3)).toEqual({ ok: false, reason: "invalid" });
+    expect(r2.codes.redeem("b", c3)).toEqual({ ok: false, reason: "expired" });
+    // 期限切れと分かったあとの 2 回目も、期限切れ
+    expect(r2.codes.redeem("b", c3)).toEqual({ ok: false, reason: "expired" });
+  });
+
+  it("期限切れは、そのコードを持つノードの名前のときだけ区別する（別のノードの名前では、未知と同じ）", () => {
+    const r = rig({ ttlMs: 1000 });
+    const c = r.codes.issue("a");
+    r.advance(1001);
+    expect(r.codes.redeem("b", c)).toEqual({ ok: false, reason: "unknownCode" });
+  });
+
+  it("控える使用済み・期限切れの数に上限がある（超えたら古いものから捨て、未知に戻る）", () => {
+    const { codes } = rig({ maxSpent: 2 });
+    const cs = ["a", "b", "c"].map((n) => codes.issue(n));
+    for (const [i, n] of ["a", "b", "c"].entries()) codes.redeem(n, cs[i]);
+    expect(codes.redeem("a", cs[0])).toEqual({ ok: false, reason: "unknownCode" });
+    expect(codes.redeem("c", cs[2])).toEqual({ ok: false, reason: "used" });
   });
 
   it("同じノードに再発行すると、古いコードは無効になる。コードは毎回異なる", () => {
@@ -139,7 +163,7 @@ describe("bind コード（一度きり・短い有効期限・ノードに結�
     const c1 = codes.issue("a");
     const c2 = codes.issue("a");
     expect(c1).not.toBe(c2);
-    expect(codes.redeem("a", c1)).toEqual({ ok: false, reason: "invalid" });
+    expect(codes.redeem("a", c1)).toEqual({ ok: false, reason: "unknownCode" });
     expect(codes.redeem("a", c2)).toEqual({ ok: true, nodeId: "a" });
   });
 
@@ -148,7 +172,7 @@ describe("bind コード（一度きり・短い有効期限・ノードに結�
     const c = codes.issue("a");
     codes.revoke("a");
     codes.revoke("zzz");
-    expect(codes.redeem("a", c)).toEqual({ ok: false, reason: "invalid" });
+    expect(codes.redeem("a", c)).toEqual({ ok: false, reason: "unknownCode" });
     const c2 = codes.issue("b");
     expect(JSON.stringify(codes)).not.toContain(c2);
   });
@@ -160,17 +184,17 @@ describe("bind コード（一度きり・短い有効期限・ノードに結�
     for (const bad of ["", "x", "unknown-code-unknown-code", null, undefined, 5, {}]) {
       expect(codes.redeem("a", bad as never), JSON.stringify(bad)).toEqual({
         ok: false,
-        reason: "invalid",
+        reason: "unknownCode",
       });
     }
-    expect(codes.redeem("../x" as never, wrong(1))).toEqual({ ok: false, reason: "invalid" });
-    expect(codes.redeem(5 as never, wrong(1))).toEqual({ ok: false, reason: "invalid" });
+    expect(codes.redeem("../x" as never, wrong(1))).toEqual({ ok: false, reason: "unknownCode" });
+    expect(codes.redeem(5 as never, wrong(1))).toEqual({ ok: false, reason: "unknownCode" });
   });
 
   it("未使用のコードの数に上限がある（超えたら、最も古いものから捨てる）", () => {
     const { codes } = rig({ maxOutstanding: 3 });
     const cs = ["a", "b", "c", "d"].map((n) => codes.issue(n));
-    expect(codes.redeem("a", cs[0] as string)).toEqual({ ok: false, reason: "invalid" });
+    expect(codes.redeem("a", cs[0] as string)).toEqual({ ok: false, reason: "unknownCode" });
     expect(codes.redeem("d", cs[3] as string)).toEqual({ ok: true, nodeId: "d" });
   });
 });
@@ -180,7 +204,7 @@ describe("失敗はロックしない（記録だけ）", () => {
     const r = rig();
     const good = r.codes.issue("a");
     for (let i = 0; i < 200; i++) {
-      expect(r.codes.redeem("a", wrong(i))).toEqual({ ok: false, reason: "invalid" });
+      expect(r.codes.redeem("a", wrong(i))).toEqual({ ok: false, reason: "unknownCode" });
     }
     expect(r.codes.redeem("a", good)).toEqual({ ok: true, nodeId: "a" });
   });
@@ -190,7 +214,7 @@ describe("失敗はロックしない（記録だけ）", () => {
     for (let i = 0; i < 2000; i++) r.codes.redeem(`n${i}`, wrong(i));
     expect("trackedNodes" in r.codes).toBe(false);
     const res = r.codes.redeem("n1", wrong(1));
-    expect(res).toEqual({ ok: false, reason: "invalid" });
+    expect(res).toEqual({ ok: false, reason: "unknownCode" });
   });
 });
 
@@ -230,8 +254,8 @@ describe("兄弟のコード", () => {
     const b = createBindCodes();
     const codeA = b.issue("a");
     const codeB = b.issue("b");
-    expect(b.redeem("a", codeB)).toEqual({ ok: false, reason: "invalid" });
-    expect(b.redeem("b", codeA)).toEqual({ ok: false, reason: "invalid" });
+    expect(b.redeem("a", codeB)).toEqual({ ok: false, reason: "unknownCode" });
+    expect(b.redeem("b", codeA)).toEqual({ ok: false, reason: "unknownCode" });
     expect(b.redeem("b", codeB)).toEqual({ ok: true, nodeId: "b" });
     expect(b.redeem("a", codeA)).toEqual({ ok: true, nodeId: "a" });
   });

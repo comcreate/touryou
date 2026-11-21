@@ -39,7 +39,12 @@ export const formatBindCodeForDisplay = (code: string): string =>
 
 export type RedeemResult =
   | { readonly ok: true; readonly nodeId: string }
-  | { readonly ok: false; readonly reason: "invalid" }
+  /**
+   * コードが合わない。`unknownCode`: 未知（誤り・daemon の再起動・再発行で無効になったもの・別のノードのもの）。
+   * `expired`・`used`: 発行したコードそのものが、期限切れ・使用済み（提示されたコードが、控えた SHA-256 と一致したときだけ分かる。
+   * コードを知らない相手には、`unknownCode` と同じ）。
+   */
+  | { readonly ok: false; readonly reason: "unknownCode" | "expired" | "used" }
   /** コードは正しいが、ノードの状態が許さない（`accept` が偽）。コードは消費せず、失敗にも数えない。 */
   | { readonly ok: false; readonly reason: "rejected" };
 
@@ -65,6 +70,8 @@ export interface BindCodesOptions {
   readonly ttlMs?: number;
   /** 未使用のコードの上限。既定 1000。 */
   readonly maxOutstanding?: number;
+  /** 使用済み・期限切れのコードの SHA-256 を、失敗の理由を区別するために控える数の上限。既定 1000（古いものから捨てる）。 */
+  readonly maxSpent?: number;
   readonly randomBytes?: (size: number) => Buffer;
 }
 
@@ -78,6 +85,15 @@ export function createBindCodes(options: BindCodesOptions = {}): BindCodes {
 
   /** nodeId → { コードのハッシュ, 期限 }。挿入順（古い順）を保つ。 */
   const entries = new Map<string, { hash: Buffer; expiresAt: number }>();
+  /** 使われた・期限が切れたコードの SHA-256（16 進）→ 理由。コードそのものは持たない。失敗の理由を区別するためだけに使う。 */
+  const spent = new Map<string, { why: "used" | "expired"; nodeId: string }>();
+  const maxSpent = options.maxSpent ?? 1000;
+  const markSpent = (hash: Buffer, why: "used" | "expired", nodeId: string): void => {
+    const key = hash.toString("hex");
+    spent.delete(key);
+    spent.set(key, { why, nodeId });
+    while (spent.size > maxSpent) spent.delete(spent.keys().next().value as string);
+  };
 
   /** 偏りなく選ぶ（32 種なので、バイトの下位 5 ビットがちょうど一様）。 */
   const generate = (): string => {
@@ -123,11 +139,22 @@ export function createBindCodes(options: BindCodesOptions = {}): BindCodes {
         }
         if (!allowed) return { ok: false, reason: "rejected" };
         entries.delete(matched);
+        markSpent(e.hash, "used", matched);
         return { ok: true, nodeId: matched };
       }
-      if (e !== undefined && matched !== undefined && now >= e.expiresAt) entries.delete(matched); // 期限切れは掃除する
+      // 合ったが、期限切れ。掃除して、期限切れとして控える（同じコードの 2 回目も、期限切れと分かるように）
+      if (e !== undefined && matched !== undefined && now >= e.expiresAt) {
+        entries.delete(matched);
+        markSpent(e.hash, "expired", matched);
+        return { ok: false, reason: matched === node ? "expired" : "unknownCode" };
+      }
+      // 控えたコードと一致するなら、使用済み・期限切れ（別のノードのコードなら、未知と同じ。ノードの ID も合っているときだけ区別する）
+      if (matched === undefined && shapeOk && node !== undefined) {
+        const s = spent.get(probe.toString("hex"));
+        if (s !== undefined && s.nodeId === node) return { ok: false, reason: s.why };
+      }
 
-      return { ok: false, reason: "invalid" };
+      return { ok: false, reason: "unknownCode" };
     },
     revoke(nodeId) {
       entries.delete(nodeId);

@@ -221,7 +221,7 @@ describe("つなぎ直し（POST /v1/bind。コードなし）", () => {
     await r.first();
     await r.rebind({ sessionId: "s-other" });
     expect(r.logs).toContainEqual(
-      expect.objectContaining({ event: "bindFailed", reason: "rejected" }),
+      expect.objectContaining({ event: "bindFailed", reason: "rebindRejected" }),
     );
     expect(r.invalid()).toBe(0);
   });

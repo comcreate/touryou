@@ -20,6 +20,8 @@
 
 ### 直したこと
 
+- **子の紐付けが、どの daemon のコードかを持たず、接続先違いが「plugin が無い」と誤診された**（#167）: 3 つを直した。(1) daemon が書く `touryou-bind-code` に、2 行目として書いた daemon の公開 ID（`daemon=<daemonId>`）を足した。子の mcp は、身元を確かめた接続先の daemon の ID と突き合わせ、食い違えばコードを送らずに `bind_daemon_mismatch`（別の daemon のコード）で失敗する。1 行目がコードのままなので、古い形（コードだけ）のファイルも今までどおり読め、そのときは突き合わせずに送る。(2) daemon の bind の失敗理由を、記録（`bindFailed` の `reason`: `malformed`・`unknownCode`・`expired`・`used`・`nodeRejected`・`cwdMismatch`・`sessionConflict`・`rebindRejected`）と子への戻りで区別する。子への戻りで区別するのは、期限切れ（`bindCodeExpired`）・使用済み（`bindCodeUsed`。どちらも、そのコードを持つノードの名前で呼んだときだけ）・作業ツリー違い（`bindWorktreeMismatch`。コードと無関係）で、いずれも 401。未知のコード・別のノードのコードは、これまでどおり区別しない（コードの当たりを探られないため。コードそのものは、記録にも応答にも出さない）。mcp の失敗は `bind_code_expired`・`bind_code_used`・`bind_worktree_mismatch`。(3) 「子が紐付けていない」の知らせを、原因の候補を 3 つ（接続先違い・plugin の欠落・コードの期限切れ）出す文にした（日本語・英語）。
+
 - **英語の状態画面で、カードの「最近のやり取り」の完了報告の文だけが日本語のまま出た**（#149）: daemon が書く完了報告（`report.added`）にも、受信箱の知らせと同じ文の鍵と値（`msg`・`doneReport`）を載せ、画面が選んだ言語の文にする（英語は「Done report (N pieces of evidence)」）。日本語の画面の文はこれまでと同じで、`msg` のない古い記録・子や統合が書いた報告は、書かれたままの言葉（`text`）で出す。関係図の線の札は、もともと本文を使わず、種類の言葉だけを出す。
 - **plugin の MCP（`touryou-mcp --stdio`）が、環境変数 `TOURYOU_DAEMON_CONFIG` を読まなかった**（#162）: 設定の決め方を、`touryou` と同じ「`--config` の引数 → 環境変数 `TOURYOU_DAEMON_CONFIG`（空は無視）→ `$HOME/.touryou/config.json`」にした。設定が `$HOME/.touryou` の外（例 `~/.touryou-renga/config.json`）にあるときも、権限の検査の対象を設定ファイルの親ディレクトリにして、通るようにした。
 - **状態画面の関係図で、線の上を走る丸い玉を、彗星のようなグラデーションの光に変えた**: 線そのものにグラデーションをかけて走らせる（頭が最も明るく、尾が線の形に沿って薄れる。折れ線・曲線でも尾が線から外れない。出る線は、これまでの玉と同じ「送った」段の線だけ。線の破線・点線・実線は変えていない）。

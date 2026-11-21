@@ -202,6 +202,8 @@ TouRyou は、**セッションを起動しません**。**Anthropic の認証�
   - 印は childRuntime を問わず置く。**Desktop の子の作業ツリーでも、plugin の mcp は紐付け待ちで開く**。
   - 子のセッションは、作業ツリーの一番上（作業ツリーのフォルダそのもの）で起動する。下の階層で起動すると、紐付けが断られる。
   - 紐付けのあとで daemon がトークンを失効させた（401）ときは、紐付け待ちに戻る。出し直した紐付けの文面のコードで、もう一度 `child_bind` を呼べる。
+  - **コードのファイルと接続先（#167）**: `touryou-bind-code` は、1 行目がコード、2 行目が書いた daemon の公開 ID（`daemon=<daemonId>`。`daemon-identity.md` の識別子）。`child_bind` を引数なしで呼ぶと、mcp は身元を確かめた接続先の daemon の ID とこの ID を突き合わせ、食い違えば**コードを送らず**に `bind_daemon_mismatch`（別の daemon のコード）で失敗する。直し方は、plugin の接続先（`--config`・`TOURYOU_DAEMON_CONFIG`・`$HOME/.touryou/config.json`）を、子を作った daemon に合わせて `/mcp` で Reconnect する。2 行目のない古い形（コードだけ）は、突き合わせずに送る。
+  - **bind の失敗の理由（#167）**: `POST /v1/bind` の失敗は 401 のまま、`bindCodeExpired`（期限切れ）・`bindCodeUsed`（使用済み）・`bindWorktreeMismatch`（作業ツリー違い）を区別する。期限切れ・使用済みは、そのコードを持つノードの名前で呼んだときだけ区別し、未知のコード・別のノードのコードは `unauthenticated` のまま（コードの当たりを探れない）。mcp の失敗は `bind_code_expired`・`bind_code_used`・`bind_worktree_mismatch`・`bind_failed`。
   - **`claude attach` のあと（#145）**: 子の画面を `claude attach` で開くと、Claude Code が mcp をつなぎ直し、メモリのトークンが消える（紐付け待ちに戻る）。このとき `child_bind` を引数なしで呼ぶと、コードのファイルがなくても（使用済み）、mcp が「ノードの ID（印）・`CLAUDE_CODE_SESSION_ID`・作業ディレクトリ」を daemon に送り、daemon が次のすべてに合うときだけ、トークンを出し直す。人が `node_bindCode` を頼む手間はいらない。
     - 合う条件: 作業ディレクトリがそのノードの作業ツリーの一番上（実パス）／最初に**コードで**紐付けたときに記録した session_id と同じ／そのノードが終わっていない／今も有効な紐付けのトークンを持つ／子ロールでトークンを持てる状態。
     - 通らないとき（どれか 1 つでも外れた）は、これまでの案内（親に `node_bindCode` で出し直してもらう）に落ちる。外れた理由は外に出さない（コードが無効なときと同じ 401）。
