@@ -15,7 +15,7 @@
  */
 
 import type { EventBody, OrchState } from "@touryou/core";
-import { isStallSummary } from "@touryou/core";
+import { awaitingHuman, intentionallyIdle, isStallSummary, lastActivityMs } from "@touryou/core";
 import { appendAtomically, deriveId, type LogPort, notice } from "./api/handlers/context.js";
 
 export interface WatchSpec {
@@ -50,27 +50,14 @@ export interface WatchFindings {
 }
 
 /**
- * 子の最後の動きの時刻（ミリ秒）。起動の報告・報告・範囲違反・道具の拒否・指示の受け取り・親の依頼の報告・判断の答え・
- * 範囲の頼みの判定・フックの呼び出しのうち、いちばん新しいもの。daemon の起動の時刻は含めない（呼び出し側で足す）。
+ * 子の最後の動きの時刻（ミリ秒）。数え方は core の `lastActivityMs`（画面と同じ。#195）に、フックの呼び出しの時刻（メモリだけ）を足す。
+ * daemon の起動の時刻は含めない（呼び出し側で足す）。
  */
-function activityMs(
+const activityMs = (
   state: OrchState,
   nodeId: string,
   lastHookMs: (nodeId: string) => number | undefined,
-): number {
-  return Math.max(
-    0,
-    ...state.reports.filter((x) => x.nodeId === nodeId).map((x) => ms(x.at)),
-    ...state.violations.filter((x) => x.nodeId === nodeId).map((x) => ms(x.at)),
-    ...state.toolDenials.filter((x) => x.nodeId === nodeId).map((x) => ms(x.at)),
-    ...state.instructions.filter((x) => x.nodeId === nodeId).map((x) => ms(x.deliveredAt)),
-    ...state.parentRequests.filter((x) => x.nodeId === nodeId).map((x) => ms(x.report?.at)),
-    // 人（親）が判断に答えた・範囲の頼みを判定した時刻（答えた直後に、止まっているかもを出さない。#115）
-    ...state.decisions.filter((x) => x.nodeId === nodeId).map((x) => ms(x.answeredAt)),
-    ...state.extensions.filter((x) => x.nodeId === nodeId).map((x) => ms(x.decidedAt)),
-    lastHookMs(nodeId) ?? 0,
-  );
-}
+): number => lastActivityMs(state, nodeId, lastHookMs(nodeId) ?? 0);
 
 /**
  * 記録から見て、子が紐付けたか（`node.sessionBound` の記録があるか）。報告（`report.added`）は、子でなくても記録される
@@ -82,10 +69,8 @@ export const boundInState = (state: OrchState, nodeId: string): boolean =>
 
 const ms = (iso: string | undefined): number => (iso === undefined ? 0 : Date.parse(iso) || 0);
 
-/** 判断の答え・範囲の頼みの判定を待っている子か（止まっているのではない。cli-watch と Notification のフックで同じ決め方・#115・#131）。 */
-export const awaitingHuman = (state: OrchState, nodeId: string): boolean =>
-  state.decisions.some((d) => d.nodeId === nodeId && d.status === "open") ||
-  state.extensions.some((x) => x.nodeId === nodeId && x.status === "open");
+// 判断の答え・範囲の頼みの判定を待っている子か（cli-watch と Notification のフックで同じ決め方）は core。既存の import を保つ
+export { awaitingHuman };
 
 export function watchFindings(
   state: OrchState,
@@ -112,9 +97,8 @@ export function watchFindings(
       !isBound(n.id)
     )
       unbound.push({ nodeId: n.id });
-    // 判断の答え・範囲の頼みの判定を待っているだけの子は、止まっているのではないので知らせない（#115）
-    const awaiting = awaitingHuman(state, n.id);
-    if (n.state === "running" && !awaiting) {
+    // 待つことが決まっている子（waiting・判断の答えや範囲の頼みの判定を待っている子）は、止まっているのではないので知らせない（#115・#195）
+    if (!intentionallyIdle(state, n.id)) {
       const lastMs = Math.max(activityMs(state, n.id, lastHookMs), spec.sinceMs ?? 0);
       if (nowMs - lastMs > spec.stallMs) stalled.push({ nodeId: n.id, lastMs });
     }
@@ -128,16 +112,10 @@ export function watchFindings(
   // 「止まっているかも」の知らせの片付け（#136）: 子が動いていない（running でない）か、知らせのあとに子の動きがあれば解決済みにする
   const resolvedStalls = state.inbox
     .filter((i) => i.resolved === undefined && i.kind === "info" && isStallSummary(i.summary))
-    .filter((i) => {
-      const n = state.nodes.find((x) => x.id === i.nodeId);
-      return (
-        n === undefined ||
-        n.state !== "running" ||
-        // 判断の答え・範囲の頼みの判定を待っている子（state は running のまま。#115）
-        awaitingHuman(state, i.nodeId) ||
-        activityMs(state, i.nodeId, lastHookMs) > ms(i.at)
-      );
-    })
+    // 動いていない・待つことが決まっている子、または知らせのあとに子の動き（送った指示を含む。#195）があれば、片付ける
+    .filter(
+      (i) => intentionallyIdle(state, i.nodeId) || activityMs(state, i.nodeId, lastHookMs) > ms(i.at),
+    )
     .map((i) => i.id);
   return { stalled, unread, unbound, resolvedStalls };
 }

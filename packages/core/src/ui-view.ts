@@ -15,6 +15,7 @@
  * - 件数には上限がある（`UI_LIMITS`）。切ったときは、`truncated` に種類を入れる。
  */
 
+import { lastActivityAt } from "./activity.js";
 import { type Actor, isSessionRef, type NodeRuntime, type OrchState } from "./events.js";
 import { ID_PATTERN } from "./ids.js";
 import { isResolvedByHuman } from "./inbox.js";
@@ -493,22 +494,13 @@ export function humanCounts(state: OrchState): Map<string, number> {
   return m;
 }
 
-/** ノードごとの最後の動きの時刻。ISO 8601 UTC の文字列は、辞書順で時刻順になる。 */
+/** ノードごとの最後の動きの時刻（ISO 8601）。数え方は、見張りと同じ `lastActivityMs`（#195）。動きの記録がないノードは載せない。 */
 function lastActivity(state: OrchState): Map<string, string> {
   const m = new Map<string, string>();
-  const see = (id: string, at: string | undefined): void => {
-    if (typeof at !== "string" || at === "") return;
-    const cur = m.get(id);
-    if (cur === undefined || at > cur) m.set(id, at);
-  };
-  for (const r of state.reports) see(r.nodeId, r.at);
-  for (const i of state.inbox) see(i.nodeId, i.at);
-  for (const i of state.instructions) {
-    see(i.nodeId, i.at);
-    see(i.nodeId, i.deliveredAt);
+  for (const n of state.nodes) {
+    const at = lastActivityAt(state, n.id);
+    if (at !== undefined) m.set(n.id, at);
   }
-  for (const d of state.decisions) see(d.nodeId, d.requestedAt);
-  for (const x of state.extensions) see(x.nodeId, x.requestedAt);
   return m;
 }
 
