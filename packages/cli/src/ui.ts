@@ -30,8 +30,11 @@ export interface UiDeps {
   readonly verifierFor?: (daemonUrl: string, identityPath: string) => IdentityVerifier;
   /** ブラウザで開く。開けたら true。既定は macOS の `open`（ほかの OS では false）。 */
   readonly openUrl?: (url: string) => boolean;
-  /** 実行したディレクトリ。複数の daemon があるとき、repoRoot がこの中にある daemon を既定にする。 */
-  readonly cwd?: string;
+  /**
+   * 実行したディレクトリ（関数なら、候補の選びで必要になったときだけ呼ぶ。投げたら、取れなかったとして扱う）。
+   * 複数の daemon があるとき、repoRoot がこの中にある daemon を既定にする。
+   */
+  readonly cwd?: string | (() => string);
   /** ディレクトリの一覧（試験用）。 */
   readonly readDir?: (path: string) => string[];
 }
@@ -202,9 +205,21 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
     };
   }
   // 選び方: --config > TOURYOU_DAEMON_CONFIG > 実行したディレクトリが repoRoot・worktreeRoot の中にある候補（いちばん深いもの） > 既定の設定
-  const cwd = deps.cwd;
+  // cwd は、--config・TOURYOU_DAEMON_CONFIG で決まるとき、候補が 1 つ以下のときは読まない（消えた cwd でも開ける）
+  let cwd: string | undefined;
+  if (needCandidates && candidates.length >= 2 && deps.cwd !== undefined) {
+    try {
+      cwd = typeof deps.cwd === "function" ? deps.cwd() : deps.cwd;
+    } catch {
+      return fail(
+        "実行したディレクトリ（cwd）を取得できない（削除された・入れない）ため、複数の daemon のどれを開くか決められない",
+        "存在するディレクトリへ移ってから、もう一度 ui を実行する",
+        "または --config <設定ファイルの絶対パス> で開く daemon を指す（候補は ui --list で確かめる）",
+      );
+    }
+  }
   const fromCwd =
-    cwd === undefined || candidates.length < 2
+    cwd === undefined
       ? undefined
       : candidates
           .map((c) => ({ c, depth: depthOf(cwd, c) }))

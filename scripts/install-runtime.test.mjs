@@ -48,6 +48,7 @@ const makeTarball = (
     failApply = false,
     failInit = false,
     failUninstall = false,
+    failStop = false,
     daemonOk = true,
     configBad = false,
   } = {},
@@ -61,7 +62,7 @@ const makeTarball = (
   );
   writeFileSync(
     join(bin, "touryou"),
-    `#!/bin/sh\necho "v${ver} $*" >> "$HOME/calls.log"\n[ "$1 $2" = "launchd stop" ] && [ -n "\${STUB_FAIL_STOP:-}" ] && exit 1\n[ "$1 $2" = "launchd apply" ] && [ -n "\${STUB_FAIL_APPLY_ALL:-}" ] && exit 1\n[ "$1 $2" = "launchd apply" ] && exit ${failApply ? 1 : 0}\n[ "$1 $2" = "launchd init" ] && exit ${failInit ? 1 : 0}\n[ "$1 $2" = "launchd uninstall" ] && exit ${failUninstall ? 1 : 0}\nexit 0\n`,
+    `#!/bin/sh\necho "v${ver} $*" >> "$HOME/calls.log"\n[ "$1 $2" = "launchd stop" ] && [ -n "\${STUB_FAIL_STOP:-}" ] && exit 1\n[ "$1 $2" = "launchd stop" ] && exit ${failStop ? 1 : 0}\n[ "$1 $2" = "launchd apply" ] && [ -n "\${STUB_FAIL_APPLY_ALL:-}" ] && exit 1\n[ "$1 $2" = "launchd apply" ] && exit ${failApply ? 1 : 0}\n[ "$1 $2" = "launchd init" ] && exit ${failInit ? 1 : 0}\n[ "$1 $2" = "launchd uninstall" ] && exit ${failUninstall ? 1 : 0}\nexit 0\n`,
   );
   chmodSync(join(bin, "touryou-daemon"), 0o755);
   chmodSync(join(bin, "touryou"), 0o755);
@@ -722,6 +723,56 @@ test("常駐の版上げ・init の違いで止まる: daemon は止めていな
   assert.equal(r.status, 1, out(r));
   assert.equal(cur(h), OLD(h));
   assert.match(r.stdout, /daemon は止めていない（v0\.9\.0 のまま動いている）/);
+});
+
+// 別名の daemon（#165）がある常駐。新しい版で読み込み済みの別名は、前の版の apply --others が「そのまま」と扱うので、巻き戻しの前に止める
+const managedHomeWithAlias = () => {
+  const h = managedHome();
+  const cfg = join(h, "alias-config.json");
+  writeFileSync(cfg, "{}");
+  writeFileSync(
+    join(h, "Library", "LaunchAgents", "touryou.daemon-0123abcd.plist"),
+    `<array>\n<string>--config</string>\n<string>${cfg}</string>\n</array>\n`,
+  );
+  return h;
+};
+
+test("常駐の版上げ（別名あり）・新しい版の apply が失敗: 巻き戻しの前に、新しい版の stop --others で別名を止め、前の版の init/apply --others で読み直す", () => {
+  const h = managedHomeWithAlias();
+  const tb = makeTarball("1.0.0", { failApply: true });
+  const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"]);
+  assert.equal(r.status, 1, out(r));
+  assert.equal(cur(h), OLD(h));
+  assert.deepEqual(lines(join(h, "calls.log")), [
+    "v0.9.0 launchd init",
+    "v0.9.0 launchd init --others",
+    "v0.9.0 launchd stop",
+    "v0.9.0 launchd stop --others",
+    "v1.0.0 launchd init",
+    "v1.0.0 launchd init --others",
+    "v1.0.0 launchd apply --yes",
+    "v1.0.0 launchd uninstall --yes",
+    "v1.0.0 launchd stop --others",
+    "v0.9.0 launchd init",
+    "v0.9.0 launchd apply --yes",
+    "v0.9.0 launchd init --others",
+    "v0.9.0 launchd apply --yes --others",
+  ]);
+  assert.match(r.stdout, /v0\.9\.0 で動いている/);
+});
+
+test("常駐の版上げ（別名あり）・巻き戻しで別名を止められない: 前の版で読み直さず、前の版で動いているとは言わない", () => {
+  const h = managedHomeWithAlias();
+  const tb = makeTarball("1.0.0", { failApply: true, failStop: true });
+  const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"]);
+  assert.equal(r.status, 1, out(r));
+  assert.match(r.stdout, /RESULT: failed/);
+  assert.equal(cur(h), OLD(h));
+  const calls = lines(join(h, "calls.log"));
+  assert.equal(calls.at(-1), "v1.0.0 launchd stop --others");
+  assert.ok(!calls.includes("v0.9.0 launchd apply --yes --others"));
+  assert.match(r.stdout, /別名の daemon を止められず/);
+  assert.doesNotMatch(r.stdout, /常駐の daemon は v0\.9\.0 で動いている/);
 });
 
 test("特殊なファイル（FIFO・ハードリンク）・名前に制御文字を含むもの: 止まり、v<版> を作らない", () => {

@@ -456,6 +456,52 @@ describe("touryou ui（複数の daemon）", () => {
     expect(listReads).toContain(SRC);
   });
 
+  // cwd が削除済みだと process.cwd() は ENOENT を投げる。必要になる選びまで呼ばない
+  const brokenCwd = (): string => {
+    throw new Error("ENOENT: no such file or directory, uv_cwd");
+  };
+  const goBroken = async (args: string[], env: Record<string, string> = {}) => {
+    const { f } = ticketFetch();
+    const opened: string[] = [];
+    const r = await runBin(["ui", ...args], {
+      env: { HOME: "/home/u", ...env },
+      cwd: brokenCwd,
+      isTTY: TTY,
+      fetch: f,
+      ui: {
+        readFile: multi(),
+        readDir: () => [PLIST],
+        verifierFor: verifier(),
+        openUrl: (u) => {
+          opened.push(u);
+          return true;
+        },
+      },
+    });
+    return { r, opened };
+  };
+
+  it("cwd が消えていても、--config・TOURYOU_DAEMON_CONFIG で決まるなら開ける", async () => {
+    const byArg = await goBroken(["--config", OTHER]);
+    expect(byArg.r.exitCode).toBe(0);
+    expect(byArg.opened).toEqual([`http://127.0.0.1:43211/ui#ticket=${TICKET}`]);
+    const byEnv = await goBroken([], { TOURYOU_DAEMON_CONFIG: OTHER });
+    expect(byEnv.r.exitCode).toBe(0);
+    expect(byEnv.opened).toEqual([`http://127.0.0.1:43211/ui#ticket=${TICKET}`]);
+    // --list も cwd を使わない
+    expect((await goBroken(["--list"])).r.exitCode).toBe(0);
+  });
+
+  it("cwd が消えていて、選びに cwd が要るときは、例外でなく原因と次の操作を出して止まる", async () => {
+    const r = await goBroken([]);
+    expect(r.r.exitCode).toBe(1);
+    expect(r.opened).toEqual([]);
+    expect(r.r.stderr).toContain("cwd");
+    expect(r.r.stderr).toContain("次の操作");
+    expect(r.r.stderr).toContain("--config");
+    expect(r.r.stderr).not.toContain("ENOENT");
+  });
+
   it("--config に相対パスは渡せない", async () => {
     const r = await go(["--config", "rel.json"], {}, "/work/a");
     expect(r.r.exitCode).toBe(2);

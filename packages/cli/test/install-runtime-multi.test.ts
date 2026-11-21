@@ -418,9 +418,24 @@ describe("restore_old（別名の daemon の分岐）", () => {
       "v0.9.0 launchd init --others",
       "v0.9.0 launchd stop --others",
       "v1.0.0 launchd init --others",
+      "v1.0.0 launchd stop --others",
       "v0.9.0 launchd init --others",
       "v0.9.0 launchd apply --yes --others",
     ]);
+  });
+  it("巻き戻しの前に、新しい版の stop --others で別名を止める。止められなければ、前の版で読み直さず、前の版で動いているとは言わない", () => {
+    const h = homeWith({ [PLIST_ALIAS]: "/cfg/a.json" });
+    const r = upgrade(h, {
+      FAIL_ON: "v1.0.0 launchd apply --yes --others;v1.0.0 launchd stop --others",
+    });
+    expect(r.status, out(r)).toBe(1);
+    expect(r.stdout).toMatch(/RESULT: failed/);
+    expect(r.stdout).toMatch(/別名の daemon を止められず、v0\.9\.0 で読み込み直せなかった/);
+    expect(r.stdout).not.toMatch(/常駐の daemon は v0\.9\.0 で動いている/);
+    expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
+    const calls = lines(join(h, "calls.log"));
+    expect(calls.at(-1)).toBe("v1.0.0 launchd stop --others");
+    expect(calls).not.toContain("v0.9.0 launchd apply --yes --others");
   });
   it("巻き戻しで、前の版の init --others が止まる（作り直せない plist など）: uninstall を挟まず、別名の daemon は止まっていると出す", () => {
     const h = homeWith({ [PLIST_ALIAS]: "/cfg/a.json" });
@@ -438,6 +453,7 @@ describe("restore_old（別名の daemon の分岐）", () => {
       "v0.9.0 launchd init --others",
       "v0.9.0 launchd stop --others",
       "v1.0.0 launchd init --others",
+      "v1.0.0 launchd stop --others",
       "v0.9.0 launchd init --others",
     ]);
     // 前の版の init --others・apply --others は LaunchAgents の plist を対象にするので、別名では uninstall を挟まない
@@ -466,6 +482,7 @@ describe("restore_old（別名の daemon の分岐）", () => {
       "v0.9.0 launchd stop --others",
       "v1.0.0 launchd init --others",
       "v1.0.0 launchd apply --yes --others",
+      "v1.0.0 launchd stop --others",
       "v0.9.0 launchd init --others",
       "v0.9.0 launchd apply --yes --others",
     ]);

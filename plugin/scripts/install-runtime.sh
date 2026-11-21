@@ -199,6 +199,13 @@ restore_old() {
   fi
   if [ -n "${prev}" ] && { [ "$(readlink "${BASE}/current" 2>/dev/null)" = "${prev}" ] || swap_link "${prev}" "${BASE}/current"; }; then
     say "${why}。current を v${old} に戻して、v${old} で起動し直します"
+    # 別名の daemon は、新しい版の apply --others で読み込み済みのことがある（migrated=1）。前の版の apply --others は、
+    # 読み込み済みのものを「そのまま」と扱い、新しい版のプロセスが残る。先に、新しい版の stop --others で止める（plist は消さない）。
+    # 止められなければ、前の版で動いていると言わずに、失敗として止まる
+    if [ "${hasext:-0}" = 1 ] && [ "${migrated:-0}" = 1 ] && ! run_masked "${VDIR}/${DIST_DIR}/bin/touryou" launchd stop --others; then
+      state="current は v${old} に戻したが、別名の daemon は止められず、v${ver} のまま動いているものが残りうる（v${old} で読み込み直していない）"
+      die "${why}（別名の daemon を止められず、v${old} で読み込み直せなかった）" "/touryou:service status で確かめる。touryou launchd stop --others で止めてから、touryou launchd apply --yes --others で起動し直す" "${state}"
+    fi
     if { [ "${hasdef:-0}" != 1 ] || [ "${migrated:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd init; } &&
       { [ "${hasdef:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd apply --yes; } &&
       { [ "${hasext:-0}" != 1 ] || [ "${migrated:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd init --others; } &&
