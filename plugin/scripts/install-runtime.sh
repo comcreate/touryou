@@ -105,7 +105,7 @@ die() {
 run_masked() {
   # コマンドの出力（標準出力・標準エラー）を、HOME を伏せて出す。終了コードを返す。
   local out rc=0
-  # 子の標準入力は /dev/null にする（while read の heredoc の中から呼ばれても、子が入力を奪わない）
+  # 子の標準入力は空にする（while read の heredoc の中から呼ばれても、子が入力を奪わない）
   out="$("$@" 2>&1 </dev/null)" || rc=$?
   if [ -n "${out}" ]; then
     while IFS= read -r l; do mask "  | ${l}"; done <<EOF
