@@ -378,6 +378,7 @@ export const APP_TEXT = {
   "line.reason": { ja: "理由", en: "Reason" },
   "line.record": { ja: "記録", en: "Record" },
   "line.target": { ja: "対象", en: "Target" },
+  "line.todo": { ja: "取れる手", en: "What you can do" },
   "line.unknown": { ja: "（不明）", en: "(unknown)" },
   "line.unmet": { ja: "満たしていない条件", en: "Unmet condition" },
   "line.verdict": { ja: "判定", en: "Decision" },
@@ -461,6 +462,11 @@ export const APP_TEXT = {
   },
   "ops.idTitle": { ja: "この子の ID", en: "This child's ID" },
   "ops.reclaim": { ja: "破棄して回収を指示…", en: "Discard and instruct reclaim…" },
+  "ops.reclaimCheck": { ja: "回収できるか確かめる…", en: "Check whether it can be reclaimed…" },
+  "ops.reclaimCheckNote": {
+    ja: "読み取りだけで、何も変えません。回収できないときは、その理由と取れる手を出します。",
+    en: "Read-only; nothing is changed. If it cannot be reclaimed, shows why and what you can do.",
+  },
   "ops.reclaimNote": {
     ja: "取り消せません。止めた子の作業ツリーとブランチを消すよう、統合に指示します。",
     en: "This cannot be undone. Instructs the integrator to delete the stopped child's worktree and branch.",
@@ -563,6 +569,27 @@ export const APP_TEXT = {
     ja: "ノードが多すぎて、先端の照合ができません（{n} 件。{max} 件まで）。",
     en: "Too many nodes to check the branch tips ({n}; up to {max}). ",
   },
+  "reclaimCheck.blocked": {
+    ja: "この確認は読み取りだけで、ここから回収は指示できません。理由を取り除いてから、もう一度確かめてください。",
+    en: "This check is read-only and cannot instruct a reclaim. Remove the reasons, then check again.",
+  },
+  "reclaimCheck.dirty": {
+    ja: "作業ツリーに、保存されていない変更か、未追跡のファイルがあります（gitignore の対象のリンクだけなら、数えません）。残すものがあれば取り出してから、不要な変更を片付けてください。",
+    en: "The worktree has uncommitted changes or untracked files (links that are only gitignored are not counted). Take out anything you want to keep, then clean up the rest.",
+  },
+  "reclaimCheck.ok": {
+    ja: "回収できます（{id}）。回収は統合ノードが行い、作業ツリーとブランチを消します。",
+    en: "It can be reclaimed ({id}). The integrator does the reclaim and deletes the worktree and branch.",
+  },
+  "reclaimCheck.processesRunning": {
+    ja: "作業ツリーでプロセスが動いています。原因の pid のプロセスを終わらせてから、もう一度確かめてください。",
+    en: "A process is running in the worktree. End the process shown as the cause, then check again.",
+  },
+  "reclaimCheck.processesUnknown": {
+    ja: "daemon が、作業ツリーのプロセスを調べられませんでした（lsof が使えない・時間切れ、など）。作業ツリーでプロセスが動いていないかを自分で確かめ、もう一度確かめてください。",
+    en: "The daemon could not check the processes in the worktree (lsof is unavailable or timed out, or similar). Check yourself that nothing is running in the worktree, then check again.",
+  },
+  "reclaimCheck.title": { ja: "回収できるかの確認", en: "Can it be reclaimed? (check only)" },
   "release.button": { ja: "保留を解除…", en: "Release the hold…" },
   "release.content": {
     ja: "保留を解除する（解除後は、保持期間と予告の条件を、改めて満たすまで消えない）",
