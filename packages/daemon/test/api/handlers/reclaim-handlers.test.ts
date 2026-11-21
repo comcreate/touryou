@@ -341,6 +341,25 @@ describe("node.reclaimPreview（回収の事前確認。何も変えない）", 
     );
   });
 
+  it("プロセスの調査は、ノードごとに、そのノードの作業ツリーだけで行う（置き場全体を調べない。Issue #160）", async () => {
+    const r = rig();
+    await r.call("node.reclaimPreview", { nodeId: "a" });
+    expect(r.probed).toEqual([`${WT}/a`]);
+    expect(r.probed).not.toContain(WT);
+  });
+
+  it("プロセスの一覧が取れないとき（processesUnknown）は、回収を止め、人が取れる手を次の操作に出す。dirty には引きずられない（Issue #160）", async () => {
+    const r = rig({ processes: null });
+    const pre = await r.call("node.reclaimPreview", { nodeId: "a" });
+    expect(pre.value).toMatchObject({ reclaimable: false, unmet: ["processesUnknown"] });
+    const res = await r.call("node.reclaim", { nodeId: "a" });
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe("notReclaimable");
+    expect(res.error?.cause).toContain("作業ツリーのプロセスを調べられない");
+    expect(res.error?.nextActions.join(" ")).toContain("lsof");
+    expect(r.removed).toEqual([]);
+  });
+
   it("停止したノードは、破棄の判断（node.reclaimInstruct）の記録なしには回収できない（discardRequired）。記録すれば回収できる", async () => {
     const r = rig();
     r.log.append({
@@ -679,10 +698,10 @@ describe("node.reclaim（回収の実行。実行時に再判定し、配下か�
     r.ev("m2", { type: "accept" });
     const original = r.state.processes;
     let calls = 0;
-    // 最初の一括判定のあと、c の記録の直前の取り直しで、c の作業ツリーにプロセスが現れる
+    // 最初の一括判定（b・c・m2 を、ノードごとに調べる＝3 回）のあと、c の記録の直前の取り直しで、c の作業ツリーにプロセスが現れる
     r.state.facts.c = { merged: true, clean: true, worktreePath: `${WT}/c` };
     Object.defineProperty(r.state, "processes", {
-      get: () => (++calls > 2 ? [{ pid: 9, cwd: `${WT}/c`, hasOpenFiles: false }] : original),
+      get: () => (++calls > 3 ? [{ pid: 9, cwd: `${WT}/c`, hasOpenFiles: false }] : original),
     });
     const res = await r.call("node.reclaim", { nodeId: "m2" }, "root");
     expect(res.ok).toBe(false);
