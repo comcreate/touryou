@@ -29,7 +29,7 @@ const setup = (
       bindIdleMs: 60 * MIN,
     },
     idleWarnMs: 10 * MIN,
-    onIdleSoon: (i) => {
+    onIdleSoon: (i: { nodeId: string; remainingMs: number; lastUsedMs: number }) => {
       soon.push(i);
       return true;
     },

@@ -24,8 +24,10 @@ export const TOKEN_SWEEP_MS = 5 * 60_000;
  * 窓は見回りの間隔より長くする。使わなければ切れる期限が、見回りの間隔の 4 倍より短いと、窓が期限の半分を超えて、使った直後から
  * 「もうすぐ切れる」になってしまうので、知らせない（`undefined`）。
  */
-export const idleWarnMsOf = (bindIdleMs: number, sweepMs: number = TOKEN_SWEEP_MS): number | undefined =>
-  bindIdleMs >= 4 * sweepMs ? 2 * sweepMs : undefined;
+export const idleWarnMsOf = (
+  bindIdleMs: number,
+  sweepMs: number = TOKEN_SWEEP_MS,
+): number | undefined => (bindIdleMs >= 4 * sweepMs ? 2 * sweepMs : undefined);
 
 /** 紐付けの期限にまつわる知らせの鍵。結び直されたら、どれも解決にする。 */
 export const BIND_NOTICE_KEYS: ReadonlySet<string> = new Set<InboxMessageKey>([
@@ -47,10 +49,7 @@ export const openBindNotices = (
 ): InboxItem[] =>
   state.inbox.filter(
     (i) =>
-      i.nodeId === nodeId &&
-      i.resolved === undefined &&
-      i.msg !== undefined &&
-      keys.has(i.msg.key),
+      i.nodeId === nodeId && i.resolved === undefined && i.msg !== undefined && keys.has(i.msg.key),
   );
 
 /** 解決にする `inbox.resolved` の本体（対象がなければ空）。 */

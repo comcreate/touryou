@@ -48,7 +48,9 @@ describe("画面の文字の表（#140）", () => {
   it("紐付けが切れた子のカードの文（#189）: 日英とも、利用者に idle という語を見せず、親の次の操作を CLI・Desktop・不明で分ける", () => {
     expect(uiString("ja", "card.bindExpiredIdle")).toBe("紐付けが切れた（しばらく使われなかった）");
     expect(uiString("en", "card.bindExpiredIdle")).toBe("Binding expired (unused for too long)");
-    expect(uiString("ja", "card.bindExpiredAbsolute")).toBe("紐付けが切れた（発行から時間がたった）");
+    expect(uiString("ja", "card.bindExpiredAbsolute")).toBe(
+      "紐付けが切れた（発行から時間がたった）",
+    );
     expect(uiString("en", "card.bindExpiredAbsolute")).toBe(
       "Binding expired (too long since it was issued)",
     );

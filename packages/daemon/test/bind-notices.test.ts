@@ -103,7 +103,11 @@ describe("resolveBindNotices", () => {
 });
 
 describe("createIdleSoonNotifier", () => {
-  const info = (nodeId: string, lastUsedMs = 1) => ({ nodeId, lastUsedMs, remainingMs: 9 * 60_000 });
+  const info = (nodeId: string, lastUsedMs = 1) => ({
+    nodeId,
+    lastUsedMs,
+    remainingMs: 9 * 60_000,
+  });
 
   it("running の子には、親の info と子への追加指示を 1 回ずつ。同じ時刻への再試行は増えない", () => {
     const { d } = seeded();
