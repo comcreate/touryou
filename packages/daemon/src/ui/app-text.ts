@@ -53,12 +53,12 @@ export const APP_TEXT = {
     en: "Next: ask the integrator Claude to issue the binding again (it issues a new one with node_bindCode, and the child binds again)",
   },
   "card.bindLost": {
-    ja: "紐付けが外れているかも（通知の受け取りが途切れている）",
-    en: "Binding may be lost (not receiving notices)",
+    ja: "紐付けの接続が途切れているかも（知らせを受け取れていない）",
+    en: "Connection to the binding may be down (not receiving notices)",
   },
   "card.bindLostNext": {
-    ja: "次の操作: 統合の Claude に、子へ「touryou の child_bind を引数なしで呼んで」と送ってもらう（node_send。トークンが切れていたら先に node_bindCode）",
-    en: 'Next: ask the integrator Claude to send the child "call touryou\'s child_bind with no arguments" (node_send; if the token has expired, node_bindCode first)',
+    ja: "次の操作: 統合の Claude に、子へ「touryou の child_bind を引数なしで呼んで」と送ってもらう（node_send）",
+    en: 'Next: ask the integrator Claude to send the child "call touryou\'s child_bind with no arguments" (node_send)',
   },
   "approval.code": { ja: "確認コード", en: "Confirmation code" },
   "approval.done": { ja: "確認して実行しました（{label}）", en: "Confirmed and ran ({label})" },

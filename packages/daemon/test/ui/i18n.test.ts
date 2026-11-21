@@ -84,13 +84,18 @@ describe("画面の文字の表（#140）", () => {
   });
 
   it("紐付けが外れているかもしれない子のカードの文: 日英とも、切れた札と別の文で、親が子へ child_bind を呼ばせる手順を言う", () => {
-    expect(uiString("ja", "card.bindLost")).not.toBe(uiString("ja", "card.bindExpiredIdle"));
-    expect(uiString("en", "card.bindLost")).not.toBe(uiString("en", "card.bindExpiredIdle"));
     for (const lang of ["ja", "en"] as const) {
+      // 札の頭（先頭の 6 文字）が、切れた札（idle・absolute）と違う（一目で見分けられる）
+      const head = (key: string): string => [...uiString(lang, key)].slice(0, 6).join("");
+      expect(head("card.bindLost"), lang).not.toBe(head("card.bindExpiredIdle"));
+      expect(head("card.bindLost"), lang).not.toBe(head("card.bindExpiredAbsolute"));
       expect(uiString(lang, "card.bindLostNext"), lang).toContain("child_bind");
       expect(uiString(lang, "card.bindLostNext"), lang).toContain("node_send");
-      expect(uiString(lang, "card.bindLostNext"), lang).toContain("node_bindCode");
+      // 切れた札のカードには出ない（重ならない）ので、トークンが切れたときの案内は入れない
+      expect(uiString(lang, "card.bindLostNext"), lang).not.toContain("node_bindCode");
     }
+    // 用語: 受信箱の文は「知らせ」（「通知」と言わない）
+    expect(uiString("ja", "card.bindLost")).not.toContain("通知");
   });
 
   it("inboxItemText：daemon が書いた知らせは、選んだ言語の文。msg のない・知らない鍵の知らせは、summary のまま（利用者の決め）", () => {

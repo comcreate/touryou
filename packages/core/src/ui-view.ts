@@ -85,7 +85,8 @@ export interface UiNode {
   /**
    * 紐付けが外れているかもしれない子。トークンは有効なまま、知らせを受け取る接続が長く途切れている（未解決の `bindLostSuspect` の鍵から導く）。
    * `bindExpired`（#189。トークンが切れた）とは別の状態で、次の操作も違う（親が子へ child_bind を引数なしで呼ぶよう送る）。
-   * 子が結び直す・接続が戻る・トークンが切れると daemon が知らせを解決にするので、付かなくなる。`needsHuman`・`band` には数えない。
+   * 子が結び直す・接続が戻る・トークンが切れると daemon が知らせを解決にするので、付かなくなる。`needsHuman` には数えない。
+   * ただし、知らせの種類が `failure`（親を起こすため）なので、未解決の間は `band` が `turn` になる（`unbound` の知らせと同じ。`failing`）。
    */
   readonly bindLost?: true;
   /** 題: 目的（objective）の先頭を整えて `UI_TITLE_MAX` で切ったもの。目的がなければ、なし。 */

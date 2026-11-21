@@ -29,6 +29,79 @@ const base = (): OrchEvent[] => {
 };
 const nodeOf = (v: ReturnType<typeof viewOf>, id: string) => v.nodes.find((x) => x.id === id);
 
+const lostNotice = (id: string, nodeId: string) =>
+  ev({
+    type: "inbox.added",
+    payload: {
+      id,
+      kind: "failure",
+      nodeId,
+      summary: "x",
+      msg: { key: "bindLostSuspect", args: { node: nodeId, minutes: 15 } },
+    },
+  } as never);
+
+describe("uiViewOf の bindLost（紐付けが外れているかも）", () => {
+  it("(a) 未解決の bindLostSuspect で bindLost: true を付ける。ほかの子には付けない", () => {
+    const v = viewOf([...base(), lostNotice("i1", "a")]);
+    expect(nodeOf(v, "a")?.bindLost).toBe(true);
+    expect(nodeOf(v, "b")).not.toHaveProperty("bindLost");
+  });
+
+  it("(b) 切れた札（bindExpired）がある子には付けない（重ならない）", () => {
+    const v = viewOf([
+      ...base(),
+      lostNotice("i1", "a"),
+      expiredNotice("i2", "a", "tokenExpiredIdleBind"),
+    ]);
+    expect(nodeOf(v, "a")?.bindExpired).toBe("idle");
+    expect(nodeOf(v, "a")).not.toHaveProperty("bindLost");
+  });
+
+  it("(c) 役目の終わった子には付けない。動いている・待っている子には付ける", () => {
+    const r = foldEvents([...base(), lostNotice("i1", "a")]);
+    if (!r.ok) throw new Error(r.error.cause);
+    const withState = (state: string) =>
+      uiViewOf({
+        ...r.value,
+        nodes: r.value.nodes.map((x) => (x.id === "a" ? { ...x, state } : x)),
+      } as never);
+    for (const s of ["verified", "archived", "stopped", "reclaimable"]) {
+      expect(nodeOf(withState(s), "a"), s).not.toHaveProperty("bindLost");
+    }
+    for (const s of ["running", "waiting"]) {
+      expect(nodeOf(withState(s), "a")?.bindLost, s).toBe(true);
+    }
+  });
+
+  it("(d) 解決済みの知らせでは付かない", () => {
+    const v = viewOf([
+      ...base(),
+      lostNotice("i1", "a"),
+      ev({ type: "inbox.resolved", payload: { itemId: "i1" } } as never),
+    ]);
+    expect(nodeOf(v, "a")).not.toHaveProperty("bindLost");
+  });
+
+  it("鍵のない知らせ（文だけ似ているもの）からは導かない", () => {
+    const v = viewOf([
+      ...base(),
+      ev({
+        type: "inbox.added",
+        payload: { id: "i1", kind: "failure", nodeId: "a", summary: "紐付けが外れているかも" },
+      } as never),
+    ]);
+    expect(nodeOf(v, "a")).not.toHaveProperty("bindLost");
+  });
+
+  it("needsHuman には数えない。知らせの種類が failure なので、動いている子の band は turn になる（unbound の知らせと同じ）", () => {
+    const v = viewOf([...base(), lostNotice("i1", "a")]);
+    expect(nodeOf(v, "a")?.needsHuman).toBe(0);
+    expect(nodeOf(v, "a")?.band).toBe("turn");
+    expect(nodeOf(v, "b")?.band).not.toBe("turn");
+  });
+});
+
 describe("uiViewOf の bindExpired（#189）", () => {
   it("未解決の tokenExpiredIdleBind・tokenExpiredAbsoluteBind から導く。ほかの子・知らせのない子には付けない", () => {
     const v = viewOf([...base(), expiredNotice("i1", "a", "tokenExpiredIdleBind")]);
