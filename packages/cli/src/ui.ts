@@ -49,8 +49,9 @@ const PLIST_CONFIG = /<string>--config<\/string>\s*<string>([^<]*)<\/string>/;
 
 interface Candidate {
   readonly configPath: string;
-  /** その設定の repoRoot（読めなければ undefined）。 */
+  /** その設定の repoRoot・worktreeRoot（読めなければ undefined）。子の作業ツリーは worktreeRoot の下にある。 */
   readonly repoRoot?: string;
+  readonly worktreeRoot?: string;
 }
 
 /** `<home>/.touryou/launchd` の別名の daemon の plist から、設定のパスを集める（絶対パスのものだけ）。 */
@@ -80,16 +81,45 @@ function otherConfigs(
   return out;
 }
 
-const repoRootOf = (path: string, read: (p: string, f: number) => string): string | undefined => {
+const rootsOf = (
+  path: string,
+  read: (p: string, f: number) => string,
+): Pick<Candidate, "repoRoot" | "worktreeRoot"> => {
   try {
-    const j = JSON.parse(read(path, 0o022)) as { repoRoot?: unknown } | null;
-    return typeof j?.repoRoot === "string" ? j.repoRoot.replace(/\/+$/, "") : undefined;
+    const j = JSON.parse(read(path, 0o022)) as {
+      repoRoot?: unknown;
+      worktreeRoot?: unknown;
+    } | null;
+    const root = (v: unknown): string | undefined =>
+      typeof v === "string" && v !== "" ? v.replace(/\/+$/, "") : undefined;
+    const repoRoot = root(j?.repoRoot);
+    const worktreeRoot = root(j?.worktreeRoot);
+    return {
+      ...(repoRoot === undefined ? {} : { repoRoot }),
+      ...(worktreeRoot === undefined ? {} : { worktreeRoot }),
+    };
   } catch {
-    return undefined;
+    return {};
   }
 };
 
 const within = (cwd: string, root: string): boolean => cwd === root || cwd.startsWith(`${root}/`);
+
+/** cwd が、その設定の repoRoot か worktreeRoot の中にあれば、中にある root の長さ（長いほど深い）。外なら undefined。 */
+const depthOf = (cwd: string, c: Candidate): number | undefined => {
+  const hits = [c.repoRoot, c.worktreeRoot]
+    .filter((r): r is string => r !== undefined && within(cwd, r))
+    .map((r) => r.length);
+  return hits.length === 0 ? undefined : Math.max(...hits);
+};
+
+const describeCandidate = (c: Candidate): string => {
+  const roots = [
+    ...(c.repoRoot === undefined ? [] : [`repoRoot: ${c.repoRoot}`]),
+    ...(c.worktreeRoot === undefined ? [] : [`worktreeRoot: ${c.worktreeRoot}`]),
+  ];
+  return `${c.configPath}${roots.length === 0 ? "" : `（${roots.join("・")}）`}`;
+};
 
 export async function runUi(argv: readonly string[], deps: UiDeps): Promise<CommandResult> {
   let configArg: string | undefined;
@@ -124,33 +154,39 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
   const home = deps.env.HOME ?? "";
   const defaultConfig =
     home === "" ? undefined : `${home.replace(/\/+$/, "")}/.touryou/config.json`;
-  // 複数の daemon（設定ごと）があるときの候補。既定の設定と、`touryou launchd init --config` で作った別名の設定
-  const candidates: Candidate[] = [];
+  const envConfig =
+    deps.env.TOURYOU_DAEMON_CONFIG !== undefined && deps.env.TOURYOU_DAEMON_CONFIG !== ""
+      ? deps.env.TOURYOU_DAEMON_CONFIG
+      : undefined;
+  // 複数の daemon（設定ごと）があるときの候補。既定の設定・`touryou launchd init --config` で作った別名の設定・
+  // 環境変数 TOURYOU_DAEMON_CONFIG の設定（init していない daemon も、これで指せる）
+  const paths: string[] = [];
   if (defaultConfig !== undefined) {
-    for (const c of [defaultConfig, ...otherConfigs(home.replace(/\/+$/, ""), deps, read)]) {
-      const repoRoot = repoRootOf(c, read);
-      candidates.push({ configPath: c, ...(repoRoot === undefined ? {} : { repoRoot }) });
-    }
+    paths.push(defaultConfig, ...otherConfigs(home.replace(/\/+$/, ""), deps, read));
   }
+  if (envConfig !== undefined && !paths.includes(envConfig)) paths.push(envConfig);
+  const candidates: Candidate[] = paths.map((c) => ({ configPath: c, ...rootsOf(c, read) }));
   if (list) {
+    // HOME が空で、環境変数の設定もないときは、探す場所がない。空の一覧で成功にせず、理由を出す
+    if (candidates.length === 0) {
+      return fail("daemon の設定ファイルが分からない（HOME がなく、TOURYOU_DAEMON_CONFIG もない）");
+    }
     return {
       exitCode: 0,
-      stdout: `${candidates.map((c) => `${c.configPath}${c.repoRoot === undefined ? "" : `（repoRoot: ${c.repoRoot}）`}`).join("\n")}\n`,
+      stdout: `${candidates.map(describeCandidate).join("\n")}\n`,
       stderr: "",
     };
   }
-  // 選び方: --config > TOURYOU_DAEMON_CONFIG > 実行したディレクトリが repoRoot の中にある候補（いちばん深いもの） > 既定の設定
+  // 選び方: --config > TOURYOU_DAEMON_CONFIG > 実行したディレクトリが repoRoot・worktreeRoot の中にある候補（いちばん深いもの） > 既定の設定
+  const cwd = deps.cwd;
   const fromCwd =
-    deps.cwd === undefined || candidates.length < 2
+    cwd === undefined || candidates.length < 2
       ? undefined
       : candidates
-          .filter((c) => c.repoRoot !== undefined && within(deps.cwd as string, c.repoRoot))
-          .sort((a, b) => (b.repoRoot?.length ?? 0) - (a.repoRoot?.length ?? 0))[0]?.configPath;
-  const configPath =
-    configArg ??
-    (deps.env.TOURYOU_DAEMON_CONFIG !== undefined && deps.env.TOURYOU_DAEMON_CONFIG !== ""
-      ? deps.env.TOURYOU_DAEMON_CONFIG
-      : (fromCwd ?? defaultConfig));
+          .map((c) => ({ c, depth: depthOf(cwd, c) }))
+          .filter((x): x is { c: Candidate; depth: number } => x.depth !== undefined)
+          .sort((a, b) => b.depth - a.depth)[0]?.c.configPath;
+  const configPath = configArg ?? envConfig ?? fromCwd ?? defaultConfig;
   if (configPath === undefined) {
     return fail("daemon の設定ファイルが分からない（HOME がない）", "/touryou:setup で設定を作る");
   }
@@ -255,6 +291,7 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
   return {
     exitCode: 0,
     stdout:
+      `開いた設定: ${configPath}\n` +
       '状態画面を、既定のブラウザで開きました（60 秒のうちに開かないと、使えなくなります。そのときは、もう一度 "$HOME/.touryou/current/bin/touryou" ui を実行してください）。\n画面を再読み込みしたときも、"$HOME/.touryou/current/bin/touryou" ui で開き直してください。\n',
     stderr: "",
   };

@@ -152,7 +152,12 @@ describe("touryou ui（複数の daemon）", () => {
       ...over,
     });
 
-  const go = async (args: string[], env: Record<string, string>, cwd: string) => {
+  const go = async (
+    args: string[],
+    env: Record<string, string>,
+    cwd: string,
+    over: Record<string, string | undefined> = {},
+  ) => {
     const { f, seen } = ticketFetch();
     const opened: string[] = [];
     const r = await runBin(["ui", ...args], {
@@ -161,7 +166,7 @@ describe("touryou ui（複数の daemon）", () => {
       isTTY: TTY,
       fetch: f,
       ui: {
-        readFile: multi(),
+        readFile: multi(over),
         readDir: () => [PLIST, "touryou.daemon.plist", "other.txt"],
         verifierFor: verifier(),
         openUrl: (u) => {
@@ -201,6 +206,60 @@ describe("touryou ui（複数の daemon）", () => {
     expect(r.r.stdout).not.toContain(TOKEN);
     expect(r.opened).toEqual([]);
     expect(r.seen).toEqual([]);
+  });
+
+  it("子の作業ツリーがある worktreeRoot の中でも、その設定の daemon を選ぶ", async () => {
+    const over = {
+      [OTHER]: JSON.stringify({
+        stateDir: "/state-b",
+        repoRoot: "/work/b",
+        worktreeRoot: "/wt/b",
+      }),
+    };
+    const r = await go([], {}, "/wt/b/node-1/packages/x", over);
+    expect(r.opened).toEqual([`http://127.0.0.1:43211/ui#ticket=${TICKET}`]);
+    // root の名前の前半だけが同じ別のフォルダは、中ではない
+    const near = await go([], {}, "/wt/b-other", over);
+    expect(near.opened).toEqual([`http://127.0.0.1:43210/ui#ticket=${TICKET}`]);
+    // --list にも、worktreeRoot を出す
+    const l = await go(["--list"], {}, "/work/a", over);
+    expect(l.r.stdout).toContain(`${OTHER}（repoRoot: /work/b・worktreeRoot: /wt/b）`);
+  });
+
+  it("どの設定を開いたかを、出力に出す（環境変数・--config が優先されたときも）", async () => {
+    const byCwd = await go([], {}, "/work/b");
+    expect(byCwd.r.stdout).toContain(`開いた設定: ${OTHER}`);
+    const byEnv = await go([], { TOURYOU_DAEMON_CONFIG: OTHER }, "/work/a");
+    expect(byEnv.r.stdout).toContain(`開いた設定: ${OTHER}`);
+    const byArg = await go(["--config", OTHER], {}, "/work/a");
+    expect(byArg.r.stdout).toContain(`開いた設定: ${OTHER}`);
+    const byDefault = await go([], {}, "/elsewhere");
+    expect(byDefault.r.stdout).toContain("開いた設定: /home/u/.touryou/config.json");
+    expect(byDefault.r.stdout).not.toContain(TOKEN);
+    expect(byDefault.r.stdout).not.toContain(TICKET);
+  });
+
+  it("--list は、init していない設定（TOURYOU_DAEMON_CONFIG）も出す", async () => {
+    const manual = "/work/c/config.json";
+    const r = await go(["--list"], { TOURYOU_DAEMON_CONFIG: manual }, "/work/a");
+    expect(r.r.exitCode).toBe(0);
+    expect(r.r.stdout).toContain(manual);
+    // 既に候補にある設定は、重ねて出さない
+    const dup = await go(["--list"], { TOURYOU_DAEMON_CONFIG: OTHER }, "/work/a");
+    expect(dup.r.stdout.split(OTHER).length - 1).toBe(1);
+  });
+
+  it("HOME が空のとき: --list は、環境変数の設定があればそれだけを出し、なければ理由を出して失敗する", async () => {
+    const none = await go(["--list"], { HOME: "" }, "/work/a");
+    expect(none.r.exitCode).toBe(1);
+    expect(none.r.stderr).toContain("HOME がなく");
+    const withEnv = await go(["--list"], { HOME: "", TOURYOU_DAEMON_CONFIG: OTHER }, "/work/a");
+    expect(withEnv.r.exitCode).toBe(0);
+    expect(withEnv.r.stdout).toBe(`${OTHER}（repoRoot: /work/b）\n`);
+    // 開くときも、環境変数の設定があれば開ける
+    const open = await go([], { HOME: "", TOURYOU_DAEMON_CONFIG: OTHER }, "/work/a");
+    expect(open.r.exitCode).toBe(0);
+    expect(open.r.stdout).toContain(`開いた設定: ${OTHER}`);
   });
 
   it("--config に相対パスは渡せない", async () => {
