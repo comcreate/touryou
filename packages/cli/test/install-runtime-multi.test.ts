@@ -46,10 +46,12 @@ describe("install-runtime.sh の版上げ（複数の daemon。#165）", () => {
     expect(script).toContain("launchd apply --yes --others");
   });
   it("止める前に、別名の daemon の設定も、新しい版の --check-config で検査する", () => {
-    const check = script.indexOf("plist_config_of \"${extra_plist}\"");
-    const stop = script.indexOf('launchd stop --others');
+    const check = script.indexOf('plist_config_of "${extra_plist}"');
+    const stop = script.indexOf("launchd stop --others");
     expect(check).toBeGreaterThan(-1);
-    expect(script).toContain('"${VDIR}/${DIST_DIR}/bin/touryou-daemon" --check-config --config "${extra_cfg}"');
+    expect(script).toContain(
+      '"${VDIR}/${DIST_DIR}/bin/touryou-daemon" --check-config --config "${extra_cfg}"',
+    );
     expect(stop).toBeGreaterThan(check);
     // 検査は、LaunchAgents に置いた plist（init --others・stop --others の対象と同じ集合）だけを見る
     expect(script).toContain("extra_daemon_plists");

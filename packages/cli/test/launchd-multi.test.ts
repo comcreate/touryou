@@ -439,7 +439,10 @@ describe("複数の daemon（--config）", () => {
     const w = makeWorld();
     await bin(w, ["init", "--config", w.otherConfig]);
     expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
-    writeFileSync(join(w.base, "launchd", "touryou.daemon-deadbeef.plist"), "<plist>壊れた</plist>");
+    writeFileSync(
+      join(w.base, "launchd", "touryou.daemon-deadbeef.plist"),
+      "<plist>壊れた</plist>",
+    );
     for (const args of [["status"], ["restart"], ["apply", "--yes"], ["stop"]]) {
       const r = await bin(w, [...args, "--others"]);
       expect(r.stderr, args.join(" ")).not.toContain("警告");

@@ -792,7 +792,9 @@ export async function runLaunchdService(
     // 対象は、LaunchAgents に置いた（常駐にした）ものと、uninstall では init しただけのもの。元の plist（.touryou/launchd）が
     // 消えていても、LaunchAgents に残っていれば、そちらを読んで対象にする（stop・uninstall できるように）
     const installed = otherPlistNames(agentsDir);
-    const names = [...new Set([...installed, ...(sub === "uninstall" ? otherPlistNames(plistDir) : [])])].sort();
+    const names = [
+      ...new Set([...installed, ...(sub === "uninstall" ? otherPlistNames(plistDir) : [])]),
+    ].sort();
     for (const n of names) {
       const m = OTHER_PLIST.exec(n);
       if (m === null) continue;
