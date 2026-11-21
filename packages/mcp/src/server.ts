@@ -179,10 +179,11 @@ async function whoamiTool(deps: { role: McpRole; relay: Relay; bound?: boolean }
 
 export function createToolServer(init: ToolServerDeps): Server {
   // 紐付け（child_bind）で、ロールと relay が子のものに切り替わる（このプロセスの中だけ）。
-  const deps: { role: McpRole; relay: Relay; bound: boolean } = {
+  const deps: { role: McpRole; relay: Relay; bound: boolean; lost: boolean } = {
     role: init.role,
     relay: init.relay,
     bound: false,
+    lost: false,
   };
   const server = new Server(
     { name: "touryou-mcp", version: touryouVersion() },
@@ -196,6 +197,7 @@ export function createToolServer(init: ToolServerDeps): Server {
     deps.role = init.role;
     deps.relay = init.relay;
     deps.bound = false;
+    deps.lost = true;
     server.sendToolListChanged().catch(() => undefined);
   });
   const bindTool = async (args: unknown) => {
@@ -229,6 +231,7 @@ export function createToolServer(init: ToolServerDeps): Server {
     deps.role = "child";
     deps.relay = r.value;
     deps.bound = true;
+    deps.lost = false;
     await server.sendToolListChanged().catch(() => undefined);
     // 引数なしの紐付けでは、ノードの ID は mcp が印から読んだもの（relay に添えて返る）
     const boundId = (r.value as { readonly nodeId?: unknown }).nodeId ?? a.nodeId;
@@ -274,8 +277,19 @@ export function createToolServer(init: ToolServerDeps): Server {
   }));
   server.setRequestHandler(CallToolRequestSchema, async (req) => {
     try {
-      if (req.params.name === WHOAMI_TOOL) return await whoamiTool(deps, req.params.arguments);
       if (req.params.name === CHILD_BIND_TOOL) return await bindTool(req.params.arguments);
+      // 紐付いていたのが外れた（daemon が資格情報を拒み、結び直しも通らなかった）。MCP の接続の問題ではない
+      if (init.pending === true && !deps.bound && deps.lost) {
+        return asError(
+          failure(
+            "binding_lost",
+            "touryou との紐付けが外れた（MCP の接続は切れていない。/mcp の Reconnect は要らない）。daemon が、このセッションの資格情報を拒んだ（daemon の再起動のあとなど）。コードなしの結び直しも通らなかった",
+            "child_bind を引数なしで呼ぶ（記録と合えば、自動でつなぎ直される）",
+            "通らなければ、作業を始めずに、会話で人（親）に「紐付けをやり直して」と頼む（親は node_bindCode でコードを出し直す）。出し直されたら、child_bind を引数なしでもう一度呼ぶ",
+          ),
+        );
+      }
+      if (req.params.name === WHOAMI_TOOL) return await whoamiTool(deps, req.params.arguments);
       if (init.pending === true && !deps.bound) {
         return asError(
           failure(

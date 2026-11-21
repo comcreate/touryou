@@ -378,6 +378,9 @@ export async function openStdioSession(
   return session;
 }
 
+/** 401 のあとの結び直しを、続けて試さない間隔（ミリ秒）。 */
+const REBIND_RETRY_MS = 60_000;
+
 /** 紐付けの前の relay（どの操作も、紐付けを促す失敗にする。トークンは持たない）。 */
 const unboundRelay: Relay = {
   whoami: async () => notBound(),
@@ -469,19 +472,59 @@ export function openPendingStdioSession(
       token: cred.token,
     });
     if (!made.ok) return made;
+    inner = made.value;
     store.set(cred);
-    const child = made.value;
-    // 失効（daemon の 401）が分かったら、入れ物を空にする（購読を止める）
-    const watch = <T>(r: Result<T>): Result<T> => {
-      if (!r.ok && r.error.code === "unauthenticated") store.clear();
-      return r;
+    // daemon の 401 は、先に、コードなしの結び直しを試す（`store.reject`）。通れば、新しい資格情報で 1 回だけ呼び直す
+    // （401 は処理の前に断られるので、呼び直しても二重にならない）。通らなければ、入れ物が空になる（購読を止める）。
+    const watch = async <T>(call: (r: Relay) => Promise<Result<T>>): Promise<Result<T>> => {
+      const used = store.get()?.token;
+      const r = await call(inner);
+      if (r.ok || r.error.code !== "unauthenticated" || used === undefined) return r;
+      return (await store.reject(used)) ? call(inner) : r;
     };
     return ok({
       nodeId: cred.nodeId,
-      whoami: async () => watch(await child.whoami()),
-      request: async (op, params, o) => watch(await child.request(op, params, o)),
+      whoami: () => watch((r) => r.whoami()),
+      request: (op, params, o) => watch((r) => r.request(op, params, o)),
     });
   };
+  /** いま使っている子の relay（結び直しで、トークンごと差し替える）。 */
+  let inner: Relay = unboundRelay;
+  // 結び直し（#185）: 紐付けの印があるときだけ。同時に 1 回だけ走らせ、失敗したら REBIND_RETRY_MS は試さない（再起動の直後に
+  // 401 の連打で daemon を叩かない）。通ったら、新しいトークンに差し替える（購読は、入れ物の変更で張り直される）。
+  let rebinding: Promise<boolean> | undefined;
+  let lastRebindAt: number | undefined;
+  store.setRecover(async () => {
+    if (deps.markerNodeId === undefined) return false;
+    if (rebinding !== undefined) return rebinding;
+    if (lastRebindAt !== undefined && Date.now() - lastRebindAt < REBIND_RETRY_MS) return false;
+    lastRebindAt = Date.now();
+    const nodeId = deps.markerNodeId;
+    rebinding = (async () => {
+      const re = await rebindChild(childBindOptions(), nodeId);
+      if (re?.ok !== true) {
+        log({
+          event: "childRebindFailed",
+          ...(re?.ok === false ? { code: re.error.code } : {}),
+          at: new Date().toISOString(),
+        });
+        return false;
+      }
+      const made = make({
+        daemonUrl: endpoint.daemonUrl,
+        identityPath: endpoint.identityPath,
+        token: re.value.token,
+      });
+      if (!made.ok) return false;
+      inner = made.value;
+      store.set(re.value);
+      log({ event: "childRebound", at: new Date().toISOString() });
+      return true;
+    })().finally(() => {
+      rebinding = undefined;
+    });
+    return rebinding;
+  });
   return createToolServer({
     role: "child",
     relay: unboundRelay,
@@ -716,7 +759,7 @@ export function startNotifications(
       undefined,
       // 購読の口で 401 を受けたら、道具の口と同じく入れ物を空にする（以後の道具は紐付け待ちになる）。
       () => {
-        if (credentials.get()?.token === c.token) credentials.clear();
+        credentials.reject(c.token).catch(() => undefined);
       },
     );
   };
