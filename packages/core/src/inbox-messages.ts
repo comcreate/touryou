@@ -118,21 +118,21 @@ export const INBOX_MESSAGES = {
     en: "Child {node}'s watch (hook) was removed ({detail}). The settings were restored and the child's token was revoked. Decide whether to stop the child or issue node.bindCode again",
   },
   tokenExpiredAbsoluteBind: {
-    ja: "子 {node} のトークンの期限が切れた（発行から時間がたった）。node_bindCode で紐付けのコードを出し直し、子が結び直す。期限は設定 tokenExpiryMinutes.bindAbsolute（分。既定 1440）で変えられる",
-    en: "Child {node}'s token expired (too long since it was issued). Issue a new binding code with node_bindCode and have the child bind again. The limit can be changed with the setting tokenExpiryMinutes.bindAbsolute (minutes; default 1440)",
+    ja: "子 {node} のトークンの期限が切れた（発行から時間がたった）。node_bindCode で紐付けのコードを出し直し、子が結び直す。期限は設定 tokenExpiryMinutes.bindAbsolute（分。既定 1440。docs/config.md）で変えられる",
+    en: "Child {node}'s token expired (too long since it was issued). Issue a new binding code with node_bindCode and have the child bind again. The limit can be changed with the setting tokenExpiryMinutes.bindAbsolute (minutes; default 1440; see docs/config.md)",
   },
   tokenExpiredIdleBind: {
-    ja: "子 {node} のトークンの期限が切れた（使わなかった時間が長い）。node_bindCode で紐付けのコードを出し直し、子が結び直す。使わなければ切れる期限は設定 tokenExpiryMinutes.bindIdle（分。既定 60）で変えられる",
-    en: "Child {node}'s token expired (unused for too long). Issue a new binding code with node_bindCode and have the child bind again. The unused-time limit can be changed with the setting tokenExpiryMinutes.bindIdle (minutes; default 60)",
+    ja: "子 {node} のトークンの期限が切れた（使わなかった時間が長い）。node_bindCode で紐付けのコードを出し直し、子が結び直す。使わなければ切れる期限は設定 tokenExpiryMinutes.bindIdle（分。既定 60。docs/config.md）で変えられる",
+    en: "Child {node}'s token expired (unused for too long). Issue a new binding code with node_bindCode and have the child bind again. The unused-time limit can be changed with the setting tokenExpiryMinutes.bindIdle (minutes; default 60; see docs/config.md)",
   },
   tokenIdleSoonBind: {
-    ja: "子 {node} のトークンが、使われないまま、もうすぐ（約 {minutes} 分後）切れる。子が touryou の道具を 1 つ呼べば延びる。切れたら node_bindCode で紐付けを出し直す。使わなければ切れる期限は設定 tokenExpiryMinutes.bindIdle（分。既定 60）で変えられる",
-    en: "Child {node}'s token will expire in about {minutes} min if it stays unused. It is extended when the child calls any touryou tool. If it expires, issue a new binding with node_bindCode. The unused-time limit can be changed with the setting tokenExpiryMinutes.bindIdle (minutes; default 60)",
+    ja: "子 {node} のトークンが、使われないまま、もうすぐ（約 {minutes} 分後）切れる。子が、この知らせを読んだあとに touryou の道具を 1 つ（inbox_fetch など）呼べば延びる（この知らせを読む呼び出しそのものは、数えない）。切れたら node_bindCode で紐付けを出し直す。使わなければ切れる期限は設定 tokenExpiryMinutes.bindIdle（分。既定 60。docs/config.md）で変えられる",
+    en: "Child {node}'s token will expire in about {minutes} min if it stays unused. It is extended when the child calls any touryou tool (such as inbox_fetch) after reading this notice (the call that reads the notice does not count). If it expires, issue a new binding with node_bindCode. The unused-time limit can be changed with the setting tokenExpiryMinutes.bindIdle (minutes; default 60; see docs/config.md)",
   },
   // 子への追加指示の文（画面には出さない。子が読む）。日本語・英語を並べて渡す（daemon の `idleSoonInstruction`）
   tokenIdleSoonChild: {
-    ja: "紐付けの期限が、使われないまま約 {minutes} 分で切れる。touryou の道具を 1 つ（inbox_fetch など）呼べば延びる。",
-    en: "Your binding expires in about {minutes} min if it stays unused. Call any touryou tool (such as inbox_fetch) to extend it.",
+    ja: "紐付けの期限が、使われないまま約 {minutes} 分で切れる。この知らせを読んだあとに、touryou の道具を 1 つ（inbox_fetch など）呼べば延びる（この知らせを読む呼び出しそのものは、数えない）。",
+    en: "Your binding expires in about {minutes} min if it stays unused. Call any touryou tool (such as inbox_fetch) after reading this notice to extend it (the call that reads this notice does not count).",
   },
   tokenExpiredAbsolute: {
     ja: "子 {node} のトークンの期限が切れた（発行から時間がたった）。子を再開するか、作り直す",

@@ -28,7 +28,7 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 | `maxTurns` | `100` | 子ごとのターン数の上限 |
 | `maxBudgetUsd` | `5` | 子ごとの費用の上限（USD） |
 | `startLimits` | `perParent: 4`・`total: 4` | スケジューラが同時に起動する数の上限（1〜64） |
-| `tokenExpiryMinutes` | `sdkIdle: 360`・`sdkAbsolute: 10080`・`bindAbsolute: 1440`・`bindIdle: 60`・`hookAbsolute: 1440` | トークンの期限（分）。`bindIdle` は、紐付けのトークンが使われなければ切れる期限で、切れる前（既定 10 分前）に知らせが出る。`docs/plugin.md` の「トークンの期限」 |
+| `tokenExpiryMinutes` | `sdkIdle: 360`・`sdkAbsolute: 10080`・`bindAbsolute: 1440`・`bindIdle: 60`・`hookAbsolute: 1440` | トークンの期限（分）。`bindIdle` は、紐付けのトークンが使われなければ切れる期限で、切れる前（既定 10 分前）に知らせが出る。`bindAbsolute` は、発行からの期限。切れたときの知らせと状態画面のカードは、この 2 つの変え方を案内する。`docs/plugin.md` の「トークンの期限」 |
 | `retentionDays` | `90` | 最終削除の保持期間（日） |
 | `purgeTombstone` | `true` | `node.purge` で墓標を残すか |
 | `autoPurge` | 無効 | 自動の最終削除（[`auto-purge.md`](auto-purge.md)）。有効にするなら `retentionDays` は 7 以上 |

@@ -3,7 +3,7 @@
  * - 失効の前（前置き）に入ると、親の受信箱の info と、子への追加指示が 1 回ずつ記録される
  * - 子が結び直すのに成功する（トークンの発行ではなく、成功のあと）と、失効の知らせ・前置きの知らせが解決になる。失敗では解決にならない
  * - 使われて切れなくなる・失効する と、前置きの知らせが解決になる
- * - 前置きを読むだけの呼び出し（child.inbox・購読）は、使わなければ切れる時計を延ばさず、作業の呼び出しは延ばす
+ * - 前置きの知らせだけを読む child.inbox は、使わなければ切れる時計を延ばさない。そのあとの child.inbox・購読の接続・作業の呼び出しは延ばす
  * ことを確かめる。
  */
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
@@ -141,6 +141,7 @@ const boot = async () => {
     });
   return {
     daemon,
+    request,
     spawnAndBind,
     bindAgain,
     bindWrong,
@@ -221,18 +222,22 @@ describe("紐付けの期限の知らせの結線（#189）", () => {
     expect(openOf(r.daemon, nodeId, "tokenExpiredIdleBind")).toHaveLength(0);
   });
 
-  it("前置きの知らせを読むだけの呼び出し（child.inbox・購読の接続）は、使わなければ切れる時計を延ばさない", async () => {
+  it("前置きの知らせだけを読む child.inbox（読み出し・受け取りの ack）は、使わなければ切れる時計を延ばさない", async () => {
     const r = await boot();
     const { nodeId, token } = await r.spawnAndBind();
     r.advance(52 * MIN);
     r.daemon.sweepTokens();
     expect(openOf(r.daemon, nodeId, "tokenIdleSoonBind")).toHaveLength(1);
-    // 前置きを読む（受信箱の読み出し・購読の張り直し）。何度読んでも、時計は延びない
+    // 前置きを読む（まだ受け取りにならないので、何度読んでも前置きだけ）。受け取りの ack を送っても、時計は延びない
+    let seq = -1;
     for (let i = 0; i < 3; i++) {
       const inbox = await r.asChild(token, "child.inbox", {});
       expect(inbox.json.ok, JSON.stringify(inbox.json)).toBe(true);
-      expect(await r.subscribe(token, nodeId)).toBe(200);
+      expect(inbox.json.value.instructions, JSON.stringify(inbox.json)).toHaveLength(1);
+      seq = inbox.json.value.instructions[0].seq;
     }
+    const acked = await r.asChild(token, "child.inbox", { ackThrough: seq });
+    expect(acked.json.ok, JSON.stringify(acked.json)).toBe(true);
     r.daemon.sweepTokens();
     // 復帰とは扱われず（解決にならず）、前置きは残ったまま
     expect(openOf(r.daemon, nodeId, "tokenIdleSoonBind")).toHaveLength(1);
@@ -241,6 +246,58 @@ describe("紐付けの期限の知らせの結線（#189）", () => {
     r.daemon.sweepTokens();
     expect(openOf(r.daemon, nodeId, "tokenExpiredIdleBind")).toHaveLength(1);
     expect((await r.whoami(token)).status).toBe(401);
+  });
+
+  it("案内文のとおり、前置きを読んだあとの inbox_fetch（child.inbox）は、時計を延ばす", async () => {
+    const r = await boot();
+    const { nodeId, token } = await r.spawnAndBind();
+    r.advance(52 * MIN);
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenIdleSoonBind")).toHaveLength(1);
+    // 前置きを読んで、受け取りにする（ここまでは延びない）
+    const first = await r.asChild(token, "child.inbox", {});
+    expect(first.json.ok, JSON.stringify(first.json)).toBe(true);
+    const seq: number = first.json.value.instructions[0].seq;
+    expect((await r.asChild(token, "child.inbox", { ackThrough: seq })).json.ok).toBe(true);
+    // 案内文のとおり、もう一度 inbox_fetch を呼ぶ（前置きはもうない）: 延びる
+    const again = await r.asChild(token, "child.inbox", {});
+    expect(again.json.ok, JSON.stringify(again.json)).toBe(true);
+    expect(again.json.value.instructions).toHaveLength(0);
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenIdleSoonBind")).toHaveLength(0); // 復帰して解決になる
+    r.advance(9 * MIN); // 最初の idle の期限（60 分）を過ぎても、延びているので切れない
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenExpiredIdleBind")).toHaveLength(0);
+    expect((await r.whoami(token)).status).toBe(200);
+  });
+
+  it("ふつうの指示も一緒に読む child.inbox は、時計を延ばす（前置きだけのときだけが例外）", async () => {
+    const r = await boot();
+    const { nodeId, token } = await r.spawnAndBind();
+    r.advance(52 * MIN);
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenIdleSoonBind")).toHaveLength(1);
+    const sent = await r.request("node.send", { nodeId, text: "ふつうの指示" });
+    expect(sent.json.ok, JSON.stringify(sent.json)).toBe(true);
+    const inbox = await r.asChild(token, "child.inbox", {});
+    expect(inbox.json.value.instructions.length, JSON.stringify(inbox.json)).toBe(2);
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenIdleSoonBind")).toHaveLength(0);
+  });
+
+  it("購読の接続は、時計を延ばす（購読して待つ生きた子が切れないように）", async () => {
+    const r = await boot();
+    const { nodeId, token } = await r.spawnAndBind();
+    r.advance(52 * MIN);
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenIdleSoonBind")).toHaveLength(1);
+    expect(await r.subscribe(token, nodeId)).toBe(200);
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenIdleSoonBind")).toHaveLength(0); // 復帰して解決になる
+    r.advance(9 * MIN);
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenExpiredIdleBind")).toHaveLength(0);
+    expect((await r.whoami(token)).status).toBe(200);
   });
 
   it("実際の作業の呼び出し（report.progress）は、時計を延ばす", async () => {

@@ -41,6 +41,7 @@ import {
   uiViewOf,
 } from "@touryou/core";
 import { authorizeRole, authorizeScope, checkPrincipal } from "./authorize.js";
+import { readsOnlyPrefaces } from "./handlers/child-inbox-handlers.js";
 import { type BindCodes, createThrottle, type Throttle } from "./bind.js";
 import { type CredentialStore, type Principal, parseBearer } from "./credentials.js";
 import { fingerprintOf } from "./dedupe.js";
@@ -389,11 +390,6 @@ const UI_ASSETS: Readonly<Record<string, UiAsset>> = {
 /** 本文を読まずに返す応答には、接続を閉じさせる（読んでいない本文が、次の要求と混ざらない。遅い本文で接続を占有されない）。 */
 const CLOSE = { connection: "close" } as const;
 const DEFAULT_MAX_BODY = 1024 * 1024;
-/**
- * ノードのトークンを「使った」と数えない操作（知らせを読むだけのもの）。前置きの知らせ（#189）は、受信箱の読み出しで子に届くので、
- * 読み出しが時計を延ばすと、使われないトークンが切れなくなる。
- */
-const PASSIVE_OPERATIONS: ReadonlySet<DaemonOperation> = new Set<DaemonOperation>(["child.inbox"]);
 /** `POST /v1/hook` の、主体ごとの bucket の重み（ほかの要求は 1）。 */
 const HOOK_WEIGHT = 0.5;
 /** bind の本文は { nodeId, bindCode } だけなので小さく。 */
@@ -712,7 +708,8 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       });
     }
     const token = parseBearer(req.headers.authorization);
-    // ノードのトークンの「使った」印は、操作がわかってから付ける（`processBody`。知らせを読むだけの `child.inbox` は付けない。#189）
+    // ノードのトークンの「使った」印は、操作と引数がわかってから付ける（`processBody`。前置きの知らせだけを読む `child.inbox` の
+    // 呼び出しだけは付けない。#189）。ほかの呼び出しは、これまでどおり使ったものとして数える
     const principal = authenticate(token, true, false);
     if (principal === undefined) {
       return authFailed(req, res, failReason(token));
@@ -755,6 +752,17 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     }
   }
 
+  /** 子の `child.inbox` で、読む・受け取りにする指示が、前置きの指示だけか（時計を延ばさない例外の判定。ハンドラと同じ選び方）。 */
+  const isPrefaceOnlyInboxRead = (
+    principal: Principal,
+    operation: DaemonOperation,
+    params: unknown,
+  ): boolean => {
+    if (operation !== "child.inbox" || principal.role !== "child") return false;
+    const mine = deps.getState().instructions.filter((i) => i.nodeId === principal.nodeId);
+    return readsOnlyPrefaces(mine, params as { all?: boolean; ackThrough?: number });
+  };
+
   /** 本文を読んでから、ハンドラまで。同時数の枠は、呼び出し側が、これが終わったときに返す（重複と分かったときは、すぐに返す）。 */
   async function processBody(
     req: IncomingMessage,
@@ -794,12 +802,6 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       ...(env.value.claimedCaller === undefined ? {} : { claimedCaller: env.value.claimedCaller }),
     });
     if (!role.ok) return reject(res, role.error);
-    // ノードのトークンを、使ったものとして数える（使わなければ切れる時計を延ばす）。ただし、受信箱を読むだけの `child.inbox` は数えない:
-    // 前置き（「もうすぐ切れる」の追加指示）は、これで子に届くので、読むたびに延びると、無人のセッションが切れなくなる（#189）。
-    // 実際の作業の呼び出し（report.*・scope.extend など）は、これまでどおり延ばす。
-    if (principal.role !== "human" && !PASSIVE_OPERATIONS.has(operation)) {
-      deps.credentials.touchNode?.(principal.nodeId);
-    }
     // 同じ主体・同じ requestId の要求が処理中なら、実行せず、最初の結果を待って、同じ結果を返す（relay の再送で、操作が重なって
     // 実行されないように）。重い操作の追加の重みより前に判定する（重複が、重みを重ねて使わない）。枠も、判明した時点で返す。
     const dupKey = `${key}\u0000${requestId}`;
@@ -868,6 +870,14 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     if (!params.ok) return reject(res, params.error);
     const scope = authorizeScope(principal, operation, params.value, deps.getState());
     if (!scope.ok) return reject(res, scope.error);
+    // ノードのトークンを、使ったものとして数える（使わなければ切れる時計を延ばす）。受信箱の読み出し（`child.inbox`）も、購読の接続・
+    // heartbeat も、ふつうは延ばす（購読して待つ生きた子が、切れないように）。例外は 1 つだけ: この呼び出しが読む・受け取りにする
+    // 指示が、前置き（「もうすぐ切れる」の追加指示。#189）だけのとき。前置きは、これで子に届くので、前置きを読むだけで延びると、
+    // 無人のセッションが切れなくなる。前置きの次の呼び出し（ack のあとの空の読み出しなど）からは、ふつうに延ばす。
+    // 引数の検証のあとで判定する（本文の引数を信じない）。
+    if (principal.role !== "human" && !isPrefaceOnlyInboxRead(principal, operation, params.value)) {
+      deps.credentials.touchNode?.(principal.nodeId);
+    }
 
     const handler = Object.hasOwn(deps.handlers, operation)
       ? (deps.handlers[operation] as ((r: HandlerRequest) => unknown) | undefined)
@@ -1551,8 +1561,8 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     nodeFeed: (nodeId, afterSeq) => nodeFeedOf(deps.getState(), nodeId, afterSeq),
     // 購読中の失効: heartbeat ごとに、接続のときと同じ確かめ（失効・ノードの停止・役割）と、ノードの一致を見る。
     isNodeTokenValid: (token, nodeId) => {
-      // 確かめるだけで、時計は延ばさない（heartbeat は子が動いていなくても続く。前置きを読むだけで切れなくならないように。#189）
-      const p = verifyNodeToken(deps, `Bearer ${token}`, false);
+      // 購読している生きた子が切れないよう、確かめは時計を延ばす（前置きを読むだけの呼び出しだけが例外。`processBody`）
+      const p = verifyNodeToken(deps, `Bearer ${token}`);
       return p !== undefined && p.role !== "human" && p.nodeId === nodeId;
     },
     isTokenRetired: (token) => deps.credentials.wasRetired?.(token) === true,
@@ -1613,8 +1623,8 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       );
       return;
     }
-    // 購読の接続は、使ったものとして数えない（張り直しの連打で、無人のセッションが切れなくならないように。#189）
-    const principal = verifyNodeToken(deps, req.headers.authorization, false);
+    // 購読の接続は、使ったものとして数える（購読して待つ生きた子が、切れないように）
+    const principal = verifyNodeToken(deps, req.headers.authorization);
     if (principal === undefined || token === undefined) {
       authFailed(req, res, failReason(token));
       return;

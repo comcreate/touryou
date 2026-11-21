@@ -64,7 +64,21 @@ describe("画面の文字の表（#140）", () => {
       expect(uiString("ja", key), key).not.toMatch(/idle/i);
       expect(uiString("en", key), key).not.toMatch(/idle/i);
     }
+    // 画面を見ている人のすること（統合の Claude に頼む）を先に言い、ツール名は括弧の中に置く
+    for (const key of [
+      "card.bindExpiredNextCli",
+      "card.bindExpiredNextDesktop",
+      "card.bindExpiredNextUnknown",
+    ] as const) {
+      expect(uiString("ja", key), key).toMatch(
+        /^次の操作: 統合の Claude に、紐付けの出し直しを頼む（.*node_bindCode.*）$/,
+      );
+      expect(uiString("en", key), key).toMatch(
+        /^Next: ask the integrator Claude to issue the binding again \(.*node_bindCode.*\)$/,
+      );
+    }
     expect(uiString("ja", "card.bindExpiredNextCli")).toContain("child_bind");
+    expect(uiString("en", "card.bindExpiredNextCli")).toContain("child_bind");
     expect(uiString("en", "card.bindExpiredNextDesktop")).toContain("node_bindCode");
     expect(uiString("en", "card.bindExpiredNextUnknown")).toContain("node_bindCode");
   });
