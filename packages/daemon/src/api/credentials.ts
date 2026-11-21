@@ -285,7 +285,8 @@ export function createCredentialStore(options: {
     const warn = options.idleWarnMs;
     const m = meta.get(nodeId);
     if (warn === undefined || options.onIdleSoon === undefined || m === undefined) return;
-    if (m.kind !== "bind" || nodeId === options.exemptNodeId || m.warnedFor === m.lastUsedMs) return;
+    if (m.kind !== "bind" || nodeId === options.exemptNodeId || m.warnedFor === m.lastUsedMs)
+      return;
     const idleAt = m.lastUsedMs + expiry.bindIdleMs;
     // 発行からの絶対の期限が先（同時）に来るなら、延ばせないので知らせない（切れたあとの知らせが出る）
     if (m.issuedMs + expiry.bindAbsoluteMs <= idleAt) return;
