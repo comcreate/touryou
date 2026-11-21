@@ -432,11 +432,23 @@ export const UI_JS = `'use strict';
   // claude attach・claude agents は、打った場所で絞られるので、repoRoot（表示モデルの attachDir）に移ってから打つ形にする（#136）
   var attachDir = '';
   function shellQuote(s) { return "'" + s.replace(/'/g, "'\\\\''") + "'"; }
-  function attachCommand(n) {
-    if (!n || n.cli !== true || typeof n.id !== 'string' || !ID_RE.test(n.id)) return '';
-    var attach = 'claude attach ' + n.id;
+  function attachWith(target) {
+    var attach = 'claude attach ' + target;
     // 制御文字（改行など）を含む場所は、貼ったときに行が分かれるので、移る部分を付けない
     return attachDir && !/[\\u0000-\\u001f\\u007f]/.test(attachDir) ? 'cd ' + shellQuote(attachDir) + ' && ' + attach : attach;
+  }
+  function attachCommand(n) {
+    if (!n || n.cli !== true || typeof n.id !== 'string' || !ID_RE.test(n.id)) return '';
+    return attachWith(n.id);
+  }
+  // 子のプロセスが止まっていると、名前では開けないので、セッション番号の形も出す（#150）。番号が分からなければ ''
+  function attachCommandByRef(n) {
+    if (!n || n.cli !== true || typeof n.sessionRef !== 'string' || !/^[A-Za-z0-9][-A-Za-z0-9_.]{0,127}$/.test(n.sessionRef)) return '';
+    return attachWith(n.sessionRef);
+  }
+  // 画面の案内の 1 行ずつ（名前の形・番号の形）
+  function attachCommands(n) {
+    return [attachCommand(n), attachCommandByRef(n)].filter(function (c) { return c !== ''; });
   }
   // ノードの呼び名（題がなければ ID）。
   function nodeLabel(n, max) { return n && typeof n.title === 'string' && n.title !== '' ? cleanText(n.title, max) : n ? n.id : ''; }
@@ -838,13 +850,16 @@ export const UI_JS = `'use strict';
         var card = taskCard('task stall', 'i-' + i.id, t('stall.chip'), 'stall', node, i.nodeId);
         card.appendChild(el('div', 'ask', t('stall.ask')));
         if (i.at) card.appendChild(el('div', 'when', t('stall.when', { when: timeText(i.at, Date.now()) })));
-        var cmd = attachCommand(node);
-        if (cmd) {
-          var row = el('div', 'cmd');
-          row.appendChild(el('span', '', t('stall.paste')));
-          row.appendChild(el('code', '', cmd));
-          row.appendChild(copyButton(cmd));
-          card.appendChild(row);
+        var cmds = attachCommands(node);
+        if (cmds.length) {
+          cmds.forEach(function (cmd, idx) {
+            var row = el('div', 'cmd');
+            row.appendChild(el('span', '', t(idx === 0 ? 'stall.paste' : 'stall.pasteByRef')));
+            row.appendChild(el('code', '', cmd));
+            row.appendChild(copyButton(cmd));
+            card.appendChild(row);
+          });
+          if (!attachCommandByRef(node)) card.appendChild(el('p', 'desc', t('stall.noRef')));
           card.appendChild(el('p', 'desc', t('stall.rebind')));
         } else if (node && node.cli === true) {
           card.appendChild(el('p', 'desc', t('stall.cli')));
@@ -997,13 +1012,13 @@ export const UI_JS = `'use strict';
       card.appendChild(fl);
     }
     // 止まっているかもしれない CLI の子は、開くコマンドを出す
-    var cmd = stall ? attachCommand(n) : '';
-    if (cmd) {
+    (stall ? attachCommands(n) : []).forEach(function (cmd) {
       var row = el('div', 'cmd');
       row.appendChild(el('code', '', cmd));
       row.appendChild(copyButton(cmd));
       card.appendChild(row);
-    }
+    });
+    if (stall && attachCommand(n) && !attachCommandByRef(n)) card.appendChild(el('p', 'desc', t('stall.noRef')));
     // 子の実行環境（記録のあるものだけ）の開き方と安全面の注記（#159）。たたむ
     if (n.runtime === 'cli' || n.runtime === 'desktop') {
       var rt = fold('runtime-' + n.id, t(n.runtime === 'cli' ? 'runtime.cli' : 'runtime.desktop'));

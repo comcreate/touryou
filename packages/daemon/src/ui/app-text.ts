@@ -649,6 +649,14 @@ export const APP_TEXT = {
     ja: "端末に貼って、子の画面を開きます:",
     en: "Paste this in a terminal to open the child's screen:",
   },
+  "stall.pasteByRef": {
+    ja: "上で開けないとき（子のプロセスが止まっているとき）は、番号の形で開きます:",
+    en: "If the above does not open it (the child's process has stopped), open it by session number:",
+  },
+  "stall.noRef": {
+    ja: "上で開けないとき（子のプロセスが止まっているとき）は、claude agents で子の番号を見て、claude attach <番号> を打ってください。",
+    en: "If the above does not open it (the child's process has stopped), look up the child's number with claude agents and run claude attach <number>.",
+  },
   "stall.rebind": {
     ja: "開くと、子の紐付けが外れることがあります。子が「紐付けをやり直して」と言ったら、統合の会話で、この子の紐付けのコードの出し直し（node_bindCode）を頼んでください。",
     en: "Opening it may unbind the child. If the child asks to be bound again, ask in the integrator's conversation for a new binding code for this child (node_bindCode).",

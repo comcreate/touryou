@@ -20,6 +20,7 @@
 
 ### 直したこと
 
+- **子のプロセスが止まっているとき、状態画面の「止まっているかも」の `claude attach <ノード ID>` で子の画面が開けなかった**（#150）: 起動の報告に子のセッション番号（`sessionRef`）があるときは、画面の応答（`/v1/ui/state`）にだけその番号を載せ（`nodes[].sessionRef`。記録・イベント・ログには残さない）、名前の形と番号の形（`claude attach <番号>`）の両方のコマンドを出す。番号が分からないときは、「`claude agents` で番号を見て `claude attach <番号>` を打つ」と案内する。
 - **探すコマンド（ls・find など）が `commandNotAllowed` で拒否されたとき、どの判定で落ちたかが記録に残らなかった**（#179）: Bash の範囲の拒否の `scope.violation` に、任意の項目 `diagnosis` を足した。`cwdInside`（フックに渡った cwd が作業ツリーの中か。真偽だけ）、`stage`（探すコマンドの判定で落ちた段。`cwdOutside`・`protectedOverlap`・`unquotedExpansion`・`unparsable`・`separator`・`cdRejected`・`filterRejected`・`notSearchCommand`・`optionNotAllowed`・`pathOutside`・`noSearchCommand`）、`runtime`（`cli` | `desktop`）の 3 つで、パス・コマンドの語・秘密は持たない（禁じる場所の実パスは、記録にも拒否の文面にも出さない）。拒否・許可の判定と受信箱の文面は変えていない。`diagnosis` のない古い記録もそのまま読める。形の違う `diagnosis`（知らない段・余計な項目）の `scope.violation` は、記録の不正として弾く。禁じる場所の判定（`checkProtected`）が先に拒んだ操作には、この診断は付かない。
 - **英語の状態画面で、カードの「最近のやり取り」の完了報告の文だけが日本語のまま出た**（#149）: daemon が書く完了報告（`report.added`）にも、受信箱の知らせと同じ文の鍵と値（`msg`・`doneReport`）を載せ、画面が選んだ言語の文にする（英語は「Done report (N pieces of evidence)」）。日本語の画面の文はこれまでと同じで、`msg` のない古い記録・子や統合が書いた報告は、書かれたままの言葉（`text`）で出す。関係図の線の札は、もともと本文を使わず、種類の言葉だけを出す。
 - **plugin の MCP（`touryou-mcp --stdio`）が、環境変数 `TOURYOU_DAEMON_CONFIG` を読まなかった**（#162）: 設定の決め方を、`touryou` と同じ「`--config` の引数 → 環境変数 `TOURYOU_DAEMON_CONFIG`（空は無視）→ `$HOME/.touryou/config.json`」にした。設定が `$HOME/.touryou` の外（例 `~/.touryou-renga/config.json`）にあるときも、権限の検査の対象を設定ファイルの親ディレクトリにして、通るようにした。
