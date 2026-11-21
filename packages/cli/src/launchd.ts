@@ -124,7 +124,7 @@ daemon を、launchd で常駐させるための plist を生成する（同梱�
   --path-prefix    plist の PATH の先頭に足す、絶対パスのディレクトリ（git の場所。例: Homebrew の bin）。省略可
   --config         別の daemon の設定ファイル（絶対パス）。省略すると $HOME/.touryou/config.json（今までどおり）。指定すると、設定ごとに
                    別の Label（touryou.daemon-<8 文字>）・plist・ログ（logs/daemon-<8 文字>.log）・stateDir になる（docs/launchd.md の「複数の daemon」）
-  --others         （単独で使う）init 済みの別名の設定（--config で作ったもの）すべてを、同じ --org・--path-prefix・--config で init し直す（版上げが使う）
+  --others         （単独で使う。ほかの引数は受けない）LaunchAgents に置いた別名の daemon（--config で作ったもの）すべての plist を、その plist の設定・組織（Label）・PATH のままで、現在の版の形に作り直す（版上げが使う）
   -h, --help       この使い方を表示する
 
 常駐の操作（launchctl を実行する。docs/launchd.md）。どれも --config <設定> で対象の daemon を選ぶ（省略すると既定の設定）:
@@ -208,7 +208,8 @@ export const daemonNameOf = (base: string, configPath: string): string => {
  */
 export const canonicalPath = (p: string): string => {
   try {
-    return realpathSync(p);
+    // native（realpath(3)）は、大文字小文字を区別しない macOS で、実体の綴りに直す（JS 実装の realpathSync は、渡した綴りのまま返す）
+    return realpathSync.native(p);
   } catch {
     const parent = dirname(p);
     return parent === p ? p : join(canonicalPath(parent), basename(p));
@@ -412,17 +413,27 @@ export const describeSharing = (s: StateDirSharing): string =>
 export function stateDirSharedWith(
   base: string,
   plistDir: string,
+  agentsDir: string,
   configPath: string,
   stateDir: string,
   selfLabel: string,
 ): StateDirSharing | undefined {
   const others: StateDirSharing[] = [{ configPath: join(base, "config.json") }];
-  for (const n of daemonPlistNames(plistDir)) {
-    try {
-      const cfg = plistConfigOf(readFileSync(join(plistDir, n), "utf8"));
-      if (cfg !== undefined) others.push({ configPath: cfg, label: n.replace(/\.plist$/, "") });
-    } catch {
-      // 読めない plist は、飛ばす（その 1 つのために、検出全体をやめない）
+  // 元の plist（.touryou/launchd）が消えて、LaunchAgents にだけ残る daemon も、検査の対象にする（--others・ui と同じ）。
+  // 両方にあれば、元の plist を読む
+  const names = [
+    ...new Set([...daemonPlistNames(plistDir), ...daemonPlistNames(agentsDir)]),
+  ].sort();
+  for (const n of names) {
+    for (const dir of [plistDir, agentsDir]) {
+      try {
+        const text = readSecureFile(join(dir, n), { forbid: 0o022, maxBytes: 1024 * 1024 });
+        const cfg = plistConfigOf(text);
+        if (cfg !== undefined) others.push({ configPath: cfg, label: n.replace(/\.plist$/, "") });
+        break;
+      } catch {
+        // 読めない plist は、飛ばす（その 1 つのために、検出全体をやめない。元の plist が読めなければ LaunchAgents のものを読む）
+      }
     }
   }
   const self = canonicalPath(configPath);
@@ -631,7 +642,14 @@ function planInit(args: readonly string[], deps: LaunchdDeps): InitPlan | Comman
   // 同じ stateDir（port・トークン・DB の置き場）を、別の設定の daemon が使うと、同じ state を取り合って壊れる。
   // 同じ設定を別の --org で init したもの（Label が違う plist）も、別の daemon として数える
   const daemonLabel = labelOf(org, daemonName);
-  const sharing = stateDirSharedWith(base, plistDir, configPath, stateDir, daemonLabel);
+  const sharing = stateDirSharedWith(
+    base,
+    plistDir,
+    agentsDirOf(home),
+    configPath,
+    stateDir,
+    daemonLabel,
+  );
   if (sharing !== undefined) {
     return fail(
       `stateDir が、別の設定（${describeSharing(sharing)}）の daemon と同じ。同じ state を 2 つの daemon が使うと壊れるので、何も書かずに止めた。設定ごとに、別の stateDir にする（同じ設定を別の --org で作り直すときは、先に uninstall --yes で外す）`,

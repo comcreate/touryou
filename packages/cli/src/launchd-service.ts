@@ -425,7 +425,14 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
     const sharing =
       u.stateDir === undefined
         ? undefined
-        : stateDirSharedWith(ctx.base, ctx.plistDir, u.configPath, u.stateDir, u.label);
+        : stateDirSharedWith(
+            ctx.base,
+            ctx.plistDir,
+            ctx.agentsDir,
+            u.configPath,
+            u.stateDir,
+            u.label,
+          );
     if (sharing !== undefined) {
       return fail(
         `${u.label} の stateDir が、別の設定（${describeSharing(sharing)}）の daemon と同じ。同じ state を 2 つの daemon が使うと壊れるので、何も置かずに止めた。設定ごとに、別の stateDir にする`,
@@ -644,11 +651,14 @@ function uninstall(ctx: Ctx): CommandResult {
   const { failed, err } = stopUnits(ctx, out);
   const kept: string[] = [];
   if (err !== undefined) {
-    // 止められなかった unit は、動いたまま plist がなくならないように、何も消さない。止められた unit は、後始末を進める
+    // 止められなかった unit は、動いたまま plist がなくならないように、何も消さない（LaunchAgents の plist も、元の plist も。
+    // 元の plist が残るので、同じコマンドを再実行すれば、その unit を同じ手順で止めて外せる）。止められた unit は、後始末を進める
     kept.push(
       ...err.split("\n"),
-      ...[...failed].map(
-        (u) => `${u.plistDest}（${u.label} を止められなかったので、消さずに残した）`,
+      ...[...failed].flatMap((u) =>
+        [u.plistDest, u.plistSrc]
+          .filter((p) => lstatOr(p) !== undefined)
+          .map((p) => `${p}（${u.label} を止められなかったので、消さずに残した）`),
       ),
     );
   }

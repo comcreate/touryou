@@ -13,7 +13,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runBin } from "../src/bin.js";
-import { daemonNameOf, LSREGISTER, legacyScriptPath, runDaemonScript } from "../src/launchd.js";
+import {
+  canonicalPath,
+  daemonNameOf,
+  LSREGISTER,
+  legacyScriptPath,
+  runDaemonScript,
+} from "../src/launchd.js";
 import type { RunResult } from "../src/launchd-service.js";
 
 // 設定ごとに別の daemon（#165）。launchctl と窓口は偽物に差し替える。
@@ -794,5 +800,88 @@ describe("複数の daemon（--config）", () => {
     expect(existsSync(join(w.base, "launchd", `${second}.plist`))).toBe(false);
     // 残った plist があるので、TouRyou.app の登録は解かない
     expect(w.ls.filter((x) => x.startsWith("-u"))).toEqual([]);
+    // 残したものは、LaunchAgents の plist も元の plist も、出力に示す
+    expect(r.stdout).toContain(`${join(w.agents, `${first}.plist`)}（${first} を止められなかった`);
+    expect(r.stdout).toContain(
+      `${join(w.base, "launchd", `${first}.plist`)}（${first} を止められなかった`,
+    );
+
+    // 止められるようになってから再実行すると、残していた daemon を、元の plist から同じ手順で止めて、外せる
+    fails.clear();
+    const again = await through(["uninstall", "--yes", "--others"]);
+    expect(again.exitCode, again.stdout + again.stderr).toBe(0);
+    expect(w.loaded.has(first)).toBe(false);
+    expect(existsSync(join(w.agents, `${first}.plist`))).toBe(false);
+    expect(existsSync(join(w.base, "launchd", `${first}.plist`))).toBe(false);
   });
+
+  it("元の plist が消えて LaunchAgents にだけ残る別名の daemon と同じ stateDir の設定は、init で止まる", async () => {
+    const w = makeWorld();
+    expect((await bin(w, ["init", "--config", w.otherConfig])).exitCode).toBe(0);
+    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+    rmSync(join(w.base, "launchd", `${w.otherLabel}.plist`));
+    expect(readdirSync(join(w.base, "launchd"))).toEqual([]);
+    const dup = join(w.base, "dup", "config.json");
+    mkdirSync(join(w.base, "dup"), { recursive: true });
+    writeFileSync(dup, JSON.stringify({ stateDir: w.states[w.otherLabel] }), { mode: 0o600 });
+    const r = await bin(w, ["init", "--config", dup]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("stateDir が、別の設定");
+    expect(r.stderr).toContain(`Label ${w.otherLabel}`);
+    expect(readdirSync(join(w.base, "launchd"))).toEqual([]);
+    // 別の stateDir なら、通る
+    const ok = join(w.base, "ok", "config.json");
+    const okState = join(w.base, "ok", "state");
+    mkdirSync(okState, { recursive: true });
+    writeFileSync(ok, JSON.stringify({ stateDir: okState }), { mode: 0o600 });
+    expect((await bin(w, ["init", "--config", ok])).exitCode).toBe(0);
+  });
+
+  it("元の plist がなく LaunchAgents にだけ残る別名の daemon と同じ stateDir の設定は、apply でも止まる", async () => {
+    const w = makeWorld();
+    expect((await bin(w, ["init", "--config", w.otherConfig])).exitCode).toBe(0);
+    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+    rmSync(join(w.base, "launchd", `${w.otherLabel}.plist`));
+    expect((await bin(w, ["init"])).exitCode).toBe(0);
+    // init のあとで、既定の設定の stateDir を、LaunchAgents にだけ残る別名の daemon と同じに書き換える
+    writeFileSync(w.defaultConfig, JSON.stringify({ stateDir: w.states[w.otherLabel] }), {
+      mode: 0o600,
+    });
+    w.calls.length = 0;
+    const r = await bin(w, ["apply", "--yes"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("stateDir が、別の設定");
+    expect(w.calls).toEqual([]);
+  });
+
+  // 大文字小文字を区別しない macOS（APFS の既定）でだけ、綴りの違いが実体として同じになる。区別する環境では確かめられない
+  const caseInsensitive = (() => {
+    const d = realpathSync(mkdtempSync(join(tmpdir(), "touryou-case-")));
+    dirs.push(d);
+    return existsSync(d.toUpperCase()) && existsSync(d.toLowerCase());
+  })();
+
+  it.skipIf(!caseInsensitive)(
+    "綴りの大文字小文字だけが違う同じ設定は、同じ実体・同じ Label になり、同じ stateDir として init で止まる",
+    async () => {
+      const w = makeWorld();
+      const upper = join(w.base, "OTHER", "config.json");
+      expect(upper).not.toBe(w.otherConfig);
+      expect(canonicalPath(upper)).toBe(canonicalPath(w.otherConfig));
+      expect(daemonNameOf(w.base, upper)).toBe(daemonNameOf(w.base, w.otherConfig));
+      expect((await bin(w, ["init", "--config", w.otherConfig])).exitCode).toBe(0);
+      // 同じ設定を、綴りだけ変えて init し直しても、同じ Label・plist（別の daemon にならない）
+      expect((await bin(w, ["init", "--config", upper])).exitCode).toBe(0);
+      expect(readdirSync(join(w.base, "launchd"))).toEqual([`${w.otherLabel}.plist`]);
+      // stateDir の綴りだけが違う別の設定は、同じ stateDir として止まる
+      const dup = join(w.base, "dup", "config.json");
+      mkdirSync(join(w.base, "dup"), { recursive: true });
+      writeFileSync(dup, JSON.stringify({ stateDir: join(w.base, "OTHER", "state") }), {
+        mode: 0o600,
+      });
+      const r = await bin(w, ["init", "--config", dup]);
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr).toContain("stateDir が、別の設定");
+    },
+  );
 });
