@@ -27,9 +27,10 @@ import {
   ownMcpToolOf,
   type Scope,
   type ScopeViolationReason,
+  type SearchStage,
 } from "@touryou/core";
 import { commandEntryProblem } from "./child-permissions.js";
-import { isReadOnlySearch } from "./read-only-search.js";
+import { diagnoseReadOnlySearch } from "./read-only-search.js";
 
 /** パスの実パス化（書き込み先の判定用）。解決できなければ reject する。 */
 export type ResolvePath = (absPath: string) => Promise<string>;
@@ -38,6 +39,8 @@ export interface ToolViolation {
   readonly reason: ScopeViolationReason;
   /** 違反した場所またはコマンド（記録用）。 */
   readonly subject: string;
+  /** 拒否の原因の診断（Bash の拒否だけ。子の種別は、記録する側が足す）。 */
+  readonly diagnosis?: { readonly cwdInside: boolean; readonly stage: SearchStage };
 }
 
 export type ToolDecision =
@@ -839,18 +842,26 @@ export async function decideToolUse(
     if (input.dangerouslyDisableSandbox === true)
       return deny("commandNotAllowed", `${command}（dangerouslyDisableSandbox）`);
     // 作業ツリーの中を探す読み取りだけのコマンド（ls・find・grep・git ls-files・git grep）は、範囲によらず許す（#92）
-    if (
-      await isReadOnlySearch(
-        command,
-        toolCwd,
-        cwd,
-        resolve,
-        protectedPaths?.roots.map((r) => r.path),
-      )
-    )
-      return ALLOW;
+    const stage = await diagnoseReadOnlySearch(
+      command,
+      toolCwd,
+      cwd,
+      resolve,
+      protectedPaths?.roots.map((r) => r.path),
+    );
+    if (stage === undefined) return ALLOW;
     const d = evaluateScope(scope, cwd, { kind: "command", command });
-    return d.allowed ? ALLOW : deny(d.reason, d.subject);
+    if (d.allowed) return ALLOW;
+    // 落ちた段と、cwd が作業ツリーの中だったか（cwd の判定が先頭なので、ほかの段で落ちたなら中）を、記録に残す（パスは出さない）
+    const denied = deny(d.reason, d.subject);
+    return {
+      ...denied,
+      violation: {
+        reason: d.reason,
+        subject: d.subject,
+        diagnosis: { cwdInside: stage !== "cwdOutside", stage },
+      },
+    };
   }
 
   // 自分の mcp の道具は、子のロールの道具だけを、2 つの名前の形（直に入れた形・plugin から入れた形）で許す。ほかのロールの道具は拒む
