@@ -420,6 +420,8 @@ export function openPendingStdioSession(
     let nodeId = argNodeId;
     let code = argCode;
     let filePath: string | undefined;
+    /** コードを書いた daemon の公開 ID（ファイルの 2 行目。古い形のファイルは、なし）。 */
+    let codeDaemonId: string | undefined;
     if (argNodeId === undefined && argCode === undefined) {
       const read = readCodeFile((deps.cwd ?? (() => process.cwd()))(), deps.codeFile ?? {});
       // コードのファイルがない（使用済み）ときは、`claude attach` で mcp が入れ替わっただけかもしれない。セッションの ID・
@@ -438,16 +440,22 @@ export function openPendingStdioSession(
           "bind_code_file_unavailable",
           read.ok === false && read.reason === "unsafe"
             ? "紐付けのコードのファイルが安全でない（リンク・持ち主が違う・権限が 0600 でない）ので読まなかった"
-            : "紐付けのコードのファイルがない（使用済み・期限切れ・daemon の再起動のあと）か、このセッションが作業ツリーの一番上で起動されていない",
+            : "紐付けのコードのファイルがない（使用済み・期限切れ・daemon の再起動のあと）か、このセッションが作業ツリーの一番上で起動されていない。ほかに、子を作った daemon と、この mcp の接続先の daemon が別の可能性もある（plugin が入っていないのとは限らない）",
           "作業を始めずに、会話で人（親）に「紐付けをやり直して」と頼む（親は node_bindCode でコードを出し直す）。出し直されたら、child_bind を引数なしでもう一度呼ぶ",
+          "出し直しても同じなら、親に、この子を作った daemon と、plugin（mcp）の接続先（--config・TOURYOU_DAEMON_CONFIG・$HOME/.touryou/config.json）が同じかを確かめてもらう",
           "人が claude attach で子の画面を開いたあとにこうなったなら、MCP がつなぎ直されて紐付けが外れている（#136）。自動のつなぎ直し（#145）は、セッションの ID・作業ツリーが記録と合わない・紐付けの期限が切れた・止められたなどで通らなかった。同じく、親にコードの出し直しを頼む",
         );
       }
       nodeId = deps.markerNodeId;
       code = read.code;
       filePath = read.path;
+      codeDaemonId = read.daemonId;
     }
-    const cred = await bindChild(childBindOptions(), nodeId, code);
+    const cred = await bindChild(
+      { ...childBindOptions(), ...(codeDaemonId === undefined ? {} : { codeDaemonId }) },
+      nodeId,
+      code,
+    );
     if (filePath !== undefined) {
       // 通ったら消す。通らなくても、形の正しくないコードは消す（読み直しても使えない）
       if (cred.ok || typeof code !== "string" || !isCodeShape(code)) removeCodeFile(filePath);

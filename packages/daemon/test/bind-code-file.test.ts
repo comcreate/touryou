@@ -49,6 +49,16 @@ describe("紐付けのコードのファイル（daemon）", () => {
     expect(removeBindCodeFile(t.wt)).toBe(false);
   });
 
+  it("daemonId を渡すと、2 行目に書いた daemon の公開 ID を書く（渡さなければ、古い形のコードだけ）", () => {
+    const t = tree();
+    const id = "c".repeat(32);
+    const path = writeBindCodeFile(t.wt, "ABC", { daemonId: id });
+    expect(readFileSync(path, "utf8")).toBe(`ABC\ndaemon=${id}\n`);
+    expect(lstatSync(path).mode & 0o777).toBe(0o600);
+    writeBindCodeFile(t.wt, "DEF");
+    expect(readFileSync(path, "utf8")).toBe("DEF\n");
+  });
+
   it("ファイルの名前がリンクなら書かない（リンクの先を書き換えない）", () => {
     const t = tree();
     const victim = join(t.base, "victim");

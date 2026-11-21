@@ -131,6 +131,8 @@ describe("画面の資産（走査）", () => {
       // 要素・文字列・集合・配列・Promise の、安全な操作
       // 移った先のカードへ focus を移すため（tabIndex = -1。カードを Tab の並びには入れない）
       "tabIndex",
+      // 止まった子を、セッション番号で開くコマンドを組むため（表示モデルの nodes[].sessionRef。#150）
+      "sessionRef",
       // 受信箱の項目を人が片付ける・戻す（#99）: inbox.resolve・inbox.reopen の結果の鍵
       "resolved",
       "alreadyResolved",
@@ -1241,10 +1243,13 @@ describe("画面の使い勝手（#13）", () => {
       fnOf("timeText"),
       fnOf("agoText"),
       fnOf("stageText"),
+      fnOf("attachWith"),
       fnOf("attachCommand"),
+      fnOf("attachCommandByRef"),
+      fnOf("attachCommands"),
       fnOf("cleanText"),
       lineOf("function nodeLabel("),
-      "({ inboxBand: inboxBand, fetchFailureText: fetchFailureText, UNREACHABLE_TEXT: unreachableText(), timeText: timeText, agoText: agoText, stageText: stageText, attachCommand: attachCommand, nodeLabel: nodeLabel })",
+      "({ inboxBand: inboxBand, fetchFailureText: fetchFailureText, UNREACHABLE_TEXT: unreachableText(), timeText: timeText, agoText: agoText, stageText: stageText, attachCommand: attachCommand, attachCommandByRef: attachCommandByRef, attachCommands: attachCommands, nodeLabel: nodeLabel })",
     ].join("\n"),
     uiContext,
   ) as {
@@ -1255,6 +1260,8 @@ describe("画面の使い勝手（#13）", () => {
     agoText(ms: number): string;
     stageText(f: Record<string, unknown>): string;
     attachCommand(n: unknown): string;
+    attachCommandByRef(n: unknown): string;
+    attachCommands(n: unknown): string[];
     nodeLabel(n: unknown, max: number): string;
   };
 
@@ -1377,6 +1384,24 @@ describe("画面の使い勝手（#13）", () => {
     expect(UI_JS).toContain(
       "attachDir = typeof view.attachDir === 'string' ? view.attachDir : '';",
     );
+  });
+
+  it("(#150) 子のプロセスが止まっていても開けるよう、セッション番号があるときは、名前の形と番号の形の両方を出す", () => {
+    uiContext.attachDir = "/r";
+    const child = { id: "n-a1", cli: true, sessionRef: "bg-1234" };
+    expect(api.attachCommandByRef(child)).toBe("cd '/r' && claude attach bg-1234");
+    expect(api.attachCommands(child)).toEqual([
+      "cd '/r' && claude attach n-a1",
+      "cd '/r' && claude attach bg-1234",
+    ]);
+    // 番号がない・形が不正・CLI の子でないものには、番号の形を出さない（名前の形だけ）
+    expect(api.attachCommands({ id: "n-a1", cli: true })).toEqual([
+      "cd '/r' && claude attach n-a1",
+    ]);
+    expect(api.attachCommandByRef({ id: "n-a1", cli: true, sessionRef: "a b; rm -rf" })).toBe("");
+    expect(api.attachCommandByRef({ id: "n-a1", sessionRef: "bg-1234" })).toBe("");
+    expect(api.attachCommands(undefined)).toEqual([]);
+    uiContext.attachDir = "";
   });
 
   it("(#89) 「止まっているかも」は、daemon の知らせ（stall）があるときだけ出す（時刻から推し量らない）", () => {
