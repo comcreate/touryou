@@ -86,7 +86,7 @@ describe("画面の文字の表（#140）", () => {
   it("紐付けが外れているかもしれない子のカードの文: 日英とも、切れた札と別の文で、親が子へ child_bind を呼ばせる手順を言う", () => {
     for (const lang of ["ja", "en"] as const) {
       // 札の頭（先頭の 6 文字）が、切れた札（idle・absolute）と違う（一目で見分けられる）
-      const head = (key: string): string => [...uiString(lang, key)].slice(0, 6).join("");
+      const head = (key: UiTextKey): string => [...uiString(lang, key)].slice(0, 6).join("");
       expect(head("card.bindLost"), lang).not.toBe(head("card.bindExpiredIdle"));
       expect(head("card.bindLost"), lang).not.toBe(head("card.bindExpiredAbsolute"));
       expect(uiString(lang, "card.bindLostNext"), lang).toContain("child_bind");
