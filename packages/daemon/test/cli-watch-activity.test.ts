@@ -1,5 +1,11 @@
 // #195: 見張り（watchFindings）の「止まっているかも」が、画面と同じ数え方（core の lastActivityMs）を使うこと。
-import { type EventBody, foldEvents, type OrchEvent, type OrchState, stallSummary } from "@touryou/core";
+import {
+  type EventBody,
+  foldEvents,
+  type OrchEvent,
+  type OrchState,
+  stallSummary,
+} from "@touryou/core";
 import { describe, expect, it } from "vitest";
 import { watchFindings } from "../src/cli-watch.js";
 
@@ -21,12 +27,39 @@ const SPEC = { stallMs: 30 * MIN, unreadMs: 30 * MIN };
 const base = (): OrchEvent[] => {
   n = 0;
   return [
-    ev({ type: "node.created", payload: { nodeId: "root", role: "integrator", parentId: null, dependsOn: [] } }, iso(T0)),
-    ev({ type: "node.stateChanged", payload: { nodeId: "root", event: { type: "start" } } }, iso(T0)),
-    ev({ type: "node.created", payload: { nodeId: "a", role: "implement", parentId: "root", dependsOn: [] } }, iso(T0)),
+    ev(
+      {
+        type: "node.created",
+        payload: { nodeId: "root", role: "integrator", parentId: null, dependsOn: [] },
+      },
+      iso(T0),
+    ),
+    ev(
+      { type: "node.stateChanged", payload: { nodeId: "root", event: { type: "start" } } },
+      iso(T0),
+    ),
+    ev(
+      {
+        type: "node.created",
+        payload: { nodeId: "a", role: "implement", parentId: "root", dependsOn: [] },
+      },
+      iso(T0),
+    ),
     ev({ type: "node.stateChanged", payload: { nodeId: "a", event: { type: "start" } } }, iso(T0)),
-    ev({ type: "node.parentRequested", payload: { nodeId: "a", requestRef: "q1", kind: "launch", worktree: "/w/a" } } as never, iso(T0)),
-    ev({ type: "node.parentReported", payload: { nodeId: "a", requestRef: "q1", outcome: "done" } } as never, iso(T0)),
+    ev(
+      {
+        type: "node.parentRequested",
+        payload: { nodeId: "a", requestRef: "q1", kind: "launch", worktree: "/w/a" },
+      } as never,
+      iso(T0),
+    ),
+    ev(
+      {
+        type: "node.parentReported",
+        payload: { nodeId: "a", requestRef: "q1", outcome: "done" },
+      } as never,
+      iso(T0),
+    ),
   ];
 };
 
@@ -37,21 +70,33 @@ describe("watchFindings の止まっているかも（#195）", () => {
   });
 
   it("指示を送った時刻も動きに数える（受け取る前でも、送った直後は出さない）", () => {
-    const s = must([...base(), ev({ type: "node.instructed", payload: { nodeId: "a", text: "x" } }, iso(T0 + 35 * MIN))]);
+    const s = must([
+      ...base(),
+      ev({ type: "node.instructed", payload: { nodeId: "a", text: "x" } }, iso(T0 + 35 * MIN)),
+    ]);
     expect(watchFindings(s, T0 + 40 * MIN, SPEC).stalled).toEqual([]);
   });
 
   it("判断の答えを待っている子（waiting）は出さない", () => {
     const s = must([
       ...base(),
-      ev({ type: "decision.requested", payload: { decisionId: "d1", nodeId: "a", question: "q", options: ["x"] } }, iso(T0)),
+      ev(
+        {
+          type: "decision.requested",
+          payload: { decisionId: "d1", nodeId: "a", question: "q", options: ["x"] },
+        },
+        iso(T0),
+      ),
     ]);
     expect(watchFindings(s, T0 + 90 * MIN, SPEC).stalled).toEqual([]);
   });
 
   it("送った指示のあとに、残っていた「止まっているかも」の知らせを片付ける", () => {
     const stalled = ev(
-      { type: "inbox.added", payload: { id: "i1", kind: "info", nodeId: "a", summary: stallSummary("a", 30) } } as never,
+      {
+        type: "inbox.added",
+        payload: { id: "i1", kind: "info", nodeId: "a", summary: stallSummary("a", 30) },
+      } as never,
       iso(T0 + 31 * MIN),
     );
     const before = must([...base(), stalled]);

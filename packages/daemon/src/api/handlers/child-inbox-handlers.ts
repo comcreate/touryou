@@ -15,6 +15,8 @@ import {
   type ChildInstructionView,
   effectiveScope,
   type Failure,
+  type InstructionRecord,
+  isPrefaceInstruction,
   type OperationMap,
   type Result,
 } from "@touryou/core";
@@ -47,6 +49,43 @@ export const unquote = (text: string): string =>
     .map((l) => l.replace(/^>[ \t]*/, ""))
     .join("\n");
 
+/**
+ * この呼び出しが読む（`ackThrough` なし）・受け取りにする（`ackThrough` あり）指示。ハンドラと、時計を延ばすかの判定
+ * （`readsOnlyPrefaces`）が、同じ選び方を使う。
+ */
+export function selectInboxInstructions(
+  mine: readonly InstructionRecord[],
+  params: { readonly all?: boolean | undefined; readonly ackThrough?: number | undefined },
+): {
+  readonly picked: readonly InstructionRecord[];
+  readonly toMark: readonly InstructionRecord[];
+} {
+  const ack = params.ackThrough;
+  return {
+    picked:
+      ack !== undefined
+        ? []
+        : mine.filter((i) => params.all === true || i.deliveredSeq === undefined),
+    toMark:
+      ack === undefined ? [] : mine.filter((i) => i.seq <= ack && i.deliveredSeq === undefined),
+  };
+}
+
+/**
+ * この呼び出しが読む・受け取りにする指示が、前置きの指示（`tokenIdleSoon`。#189）だけか。1 件もないとき（空の受信箱の読み出し）は、
+ * 偽（ふつうの呼び出しとして、使わなければ切れる時計を延ばす）。前置きを読むだけでは、時計を延ばさない。
+ * `all: true`（配信済みを含めて読む）は、配信済みの前置きを選び直せてしまうので、前置きだけとは判定せず、常に偽（延ばす）。
+ */
+export function readsOnlyPrefaces(
+  mine: readonly InstructionRecord[],
+  params: { readonly all?: boolean | undefined; readonly ackThrough?: number | undefined },
+): boolean {
+  if (params.all === true) return false;
+  const { picked, toMark } = selectInboxInstructions(mine, params);
+  const read = picked.length > 0 ? picked : toMark;
+  return read.length > 0 && read.every(isPrefaceInstruction);
+}
+
 export function createChildInboxHandlers(deps: ChildInboxHandlerDeps) {
   return {
     "child.inbox": (req: HandlerRequest<"child.inbox">): R<"child.inbox"> => {
@@ -58,19 +97,14 @@ export function createChildInboxHandlers(deps: ChildInboxHandlerDeps) {
       const node = state.nodes.find((n) => n.id === nodeId);
       const scope = effectiveScope(state, nodeId);
       if (node === undefined) return fail("notFound", "ノードが見つからない", "whoami で確かめる");
-      const all = req.params.all === true;
-      const ack = req.params.ackThrough;
       const mine = state.instructions.filter((i) => i.nodeId === nodeId);
-      const picked =
-        ack !== undefined ? [] : mine.filter((i) => all || i.deliveredSeq === undefined);
+      const { picked, toMark } = selectInboxInstructions(mine, req.params);
       const instructions: ChildInstructionView[] = picked.map((i) => ({
         seq: i.seq,
         at: i.at,
         quotedText: quote(i.text),
         received: i.deliveredSeq !== undefined,
       }));
-      const toMark =
-        ack === undefined ? [] : mine.filter((i) => i.seq <= ack && i.deliveredSeq === undefined);
       for (const i of toMark) {
         const r = appendAtomically(
           deps.log,

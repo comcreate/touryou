@@ -51,7 +51,13 @@ export type ExpiryReason = "absolute" | "idle" | "retired";
 export type TokenKind = "sdk" | "bind";
 
 export interface CredentialStore {
-  authenticate(token: unknown): Principal | undefined;
+  /**
+   * トークンを確かめる。`touch` が真（既定）なら、使ったものとして数える（使わなければ切れる時計を延ばす）。
+   * 偽なら、確かめるだけで時計を延ばさない（期限切れ・役目の終わりの失効は、どちらでも行う）。窓口は、子の呼び出し
+   * （購読の接続・heartbeat・`child.inbox` を含む）では、ふつう真にする。例外は、前置きの知らせ（#189）だけを読む `child.inbox`
+   * の呼び出し（窓口の `processBody` が、操作と引数がわかってから、数えない印を立てる。数えるのは窓口が、処理の最後に `touchNode` で行う）。
+   */
+  authenticate(token: unknown, touch?: boolean): Principal | undefined;
   /** 直近に期限切れ・役目の終わりで失効させたトークンか（応答の失敗の記号を tokenExpired にするため。メモリだけ）。 */
   wasExpired?(token: unknown): boolean;
   /**
@@ -67,7 +73,7 @@ export interface CredentialStore {
    */
   expireNode?(nodeId: string): boolean;
   /** そのノードのトークンを使ったものとして数える（フックの呼び出し・道具の使用）。 */
-  touchNode?(nodeId: string): void;
+  touchNode(nodeId: string): void;
   /** ノード専用のトークンを発行する（そのノードの既存のトークンは無効になる）。`kind` の既定は `sdk`。 */
   issueNodeToken(nodeId: string, role: NodeRoleForToken, kind?: TokenKind): string;
   revokeNode(nodeId: string): void;
@@ -140,6 +146,33 @@ export function createCredentialStore(options: {
     kind: TokenKind,
     issuedAt: string,
   ) => void;
+  /**
+   * 紐付け（`bind`）のトークンが、使われないまま `idleWarnMs` 以内に切れるとき、見回りで 1 回だけ呼ぶ（#189。失効の前の知らせ）。
+   * 同じ idle 期間（最後に使った時刻を秒に丸めた値が同じ間）には 1 回だけ（使われて時計が進めば、また出せる）。`issuedAt`・`lastUsedMs` は、
+   * その止まりを見分ける印（呼び出し側が、冪等キーに使う）。
+   * 判断待ち・done・役目の終わりの子と、発行からの絶対の期限が先に来るトークンには呼ばない。
+   * 戻り値は、知らせを記録できたか。`true` のときだけ「出した」印を立てる（記録できなかった・出さなかったときは `false` か例外で、
+   * 次の見回りで、もう一度呼ぶ）。
+   */
+  readonly onIdleSoon?: (info: {
+    readonly nodeId: string;
+    readonly issuedAt: string;
+    readonly lastUsedMs: number;
+    readonly remainingMs: number;
+  }) => boolean;
+  /** `onIdleSoon` を呼ぶ、切れるまでの残り時間（ミリ秒）。省略すると呼ばない。 */
+  readonly idleWarnMs?: number;
+  /**
+   * 「もうすぐ切れる」を出したあと、そのトークンが使われて（または判断待ち・done で時計が止まって）切れなくなったとき、
+   * 見回りで呼ぶ（#189。出した知らせを解決にする）。認証の経路では呼ばない（記録の書き込みを、認証に持ち込まない）。
+   * 戻り値は、解決にできたか。`true` のときだけ「出した」印を外す（できなかった・例外のときは、次の見回りで、もう一度呼ぶ）。
+   */
+  readonly onIdleRecovered?: (nodeId: string) => boolean;
+  /**
+   * そのノードに、未解決の「もうすぐ切れる」の知らせがあるか（記録から引く）。印はメモリだけなので、daemon を起動し直したあとも、
+   * 再起動の前に出した知らせを、復帰で解決にし、同じ知らせを二重に出さないために使う。省略すると、メモリの印だけで決める。
+   */
+  readonly hasOpenIdleSoon?: (nodeId: string) => boolean;
 }): CredentialStore {
   if (typeof options.humanToken !== "string" || options.humanToken.length < MIN_HUMAN_TOKEN) {
     throw new RangeError(`人間のトークンは ${MIN_HUMAN_TOKEN} 文字以上が必要`);
@@ -160,6 +193,11 @@ export function createCredentialStore(options: {
       issuedMs: number;
       lastUsedMs: number;
       writtenMs: number;
+      /**
+       * 失効の前の知らせを出した、その idle 期間の印（`lastUsedMs` を秒に丸めた値。メモリだけ。使われて時計が進めば、また出せる）。
+       * ミリ秒の小数のままだと、同じ期間なのに値がずれうるので、知らせの冪等キー（`idleSoonKeyOf`）と同じく秒に丸める。
+       */
+      warnedFor?: number | undefined;
     }
   >();
   /**
@@ -265,6 +303,57 @@ export function createCredentialStore(options: {
     options.onNodeTokenChanged?.(nodeId);
     options.onExpired?.(nodeId, reason, m.kind, m.issuedAt);
   };
+  /** 失効していない bind のトークンが、使われないまま `idleWarnMs` 以内に切れるなら、1 回だけ知らせる（#189）。 */
+  const warnIdleSoon = (nodeId: string, now: number): void => {
+    const warn = options.idleWarnMs;
+    const m = meta.get(nodeId);
+    if (warn === undefined || options.onIdleSoon === undefined || m === undefined) return;
+    if (m.kind !== "bind" || nodeId === options.exemptNodeId) return;
+    const idleAt = m.lastUsedMs + expiry.bindIdleMs;
+    const remainingMs = idleAt - now;
+    // 使えば延びると言えるのは、発行からの絶対の期限が、idle の期限より前の窓（`warn`）を過ぎても来ないとき。
+    // 絶対の期限が先（同時・窓の中）に来るなら、使っても延びないので知らせない（切れたあとの知らせが出る）
+    const inWindow = m.issuedMs + expiry.bindAbsoluteMs > idleAt + warn && remainingMs <= warn;
+    const hasOpen = (): boolean => options.hasOpenIdleSoon?.(nodeId) === true;
+    // 出したあとに時計が進んだ（使われた・判断待ちで止まった）・窓の外になった: もう切れないので、出した知らせを解決にする。
+    // 印はメモリだけなので、再起動の前に出した知らせも、記録から引いて解決にする。解決できたときだけ印を外す（失敗は次の見回りで）
+    const recover = (): boolean => {
+      try {
+        // 結び先がない（解決する先がない）ときは、印だけ外す。`false` は解決にできなかった
+        if (options.onIdleRecovered?.(nodeId) === false) return false;
+      } catch {
+        // 解決の失敗で、見回り・失効を止めない
+        return false;
+      }
+      m.warnedFor = undefined;
+      return true;
+    };
+    if (!inWindow) {
+      if (m.warnedFor !== undefined || hasOpen()) recover();
+      return;
+    }
+    const period = Math.floor(m.lastUsedMs / 1000);
+    if (m.warnedFor === period) return;
+    // 前の止まりで出した知らせが残っているなら、先に解決にする（失敗したら、二重に出さず次の見回りで）
+    if (m.warnedFor !== undefined && !recover()) return;
+    // 再起動の前に出した知らせが、まだ未解決で残っている: 同じ止まりの知らせなので、二重に出さない（印だけ立てる）
+    if (hasOpen()) {
+      m.warnedFor = period;
+      return;
+    }
+    try {
+      // 記録できたときだけ印を立てる（できなかったら、次の見回りで、もう一度出す）
+      const sent = options.onIdleSoon({
+        nodeId,
+        issuedAt: m.issuedAt,
+        lastUsedMs: m.lastUsedMs,
+        remainingMs,
+      });
+      if (sent === true) m.warnedFor = period;
+    } catch {
+      // 知らせの失敗で、見回り・失効を止めない
+    }
+  };
   /** 最後に使った時刻を更新し、保存先へは 1 ノードにつき LAST_USED_WRITE_MS に 1 回まで書く。 */
   const touch = (nodeId: string, h: string, now: number): void => {
     const m = meta.get(nodeId);
@@ -287,7 +376,7 @@ export function createCredentialStore(options: {
   };
 
   const store: CredentialStore = {
-    authenticate(token) {
+    authenticate(token, touchClock = true) {
       if (typeof token !== "string" || token === "") return undefined;
       const h = sha256(token);
       if (timingSafeEqual(h, humanHash)) return { role: "human" };
@@ -300,7 +389,7 @@ export function createCredentialStore(options: {
         expire(p.nodeId, reason);
         return undefined;
       }
-      touch(p.nodeId, hex, now);
+      if (touchClock) touch(p.nodeId, hex, now);
       return p;
     },
     wasExpired(token) {
@@ -337,7 +426,10 @@ export function createCredentialStore(options: {
       const out: string[] = [];
       for (const nodeId of [...byNode.keys()]) {
         const reason = expiredReason(nodeId, now);
-        if (reason === undefined) continue;
+        if (reason === undefined) {
+          warnIdleSoon(nodeId, now);
+          continue;
+        }
         expire(nodeId, reason);
         out.push(nodeId);
       }

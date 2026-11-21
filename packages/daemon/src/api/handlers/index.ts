@@ -79,6 +79,8 @@ export function createHandlersWithScheduler(
   > & {
     /** 渡すと、既存の作業ツリーの採用（node.adopt。#163）も有効になる。 */
     adopt?: AdoptPorts;
+    /** 判断待ちの子の再開が成功した（起動して、再開の記録まで済んだ）あとに呼ぶ。期限にまつわる知らせを解決にするのに使う（#189）。 */
+    onResumed?: (nodeId: string) => void;
   },
   /** 渡すと（ログが `purgeTree` を持つとき）、最終削除の操作（node.purge・node.purgePreview）も有効になる。 */
   purge?: Omit<PurgeHandlerDeps, "log">,
@@ -199,6 +201,7 @@ export function createHandlersWithScheduler(
             adapterFor: runtime.adapterFor,
             ports: spawn.ports,
             credentials: spawn.credentials,
+            ...(spawn.onResumed === undefined ? {} : { onResumed: spawn.onResumed }),
             ...onFailure,
           }),
           ...createScopeHandlers({

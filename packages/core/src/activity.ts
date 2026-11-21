@@ -9,7 +9,7 @@
  *   フックの呼び出しの時刻はメモリだけなので、呼び出し側が `extraMs` で足す。
  */
 
-import type { OrchState } from "./events.js";
+import { isPrefaceInstruction, type OrchState } from "./events.js";
 
 const ms = (iso: string | undefined): number => (iso === undefined ? 0 : Date.parse(iso) || 0);
 
@@ -22,7 +22,10 @@ function activityTimes(state: OrchState, nodeId: string): (string | undefined)[]
     ...of(state.violations).map((x) => x.at),
     ...of(state.toolDenials).map((x) => x.at),
     // 指示は、送った時刻も数える（子が動いていて、まだ受け取っていない間に「止まっているかも」を出さない）
-    ...of(state.instructions).flatMap((x) => [x.at, x.deliveredAt]),
+    // daemon の前置き（#189）は、記録した時刻では動かさず、子が受け取った時刻だけを数える
+    ...of(state.instructions).flatMap((x) =>
+      isPrefaceInstruction(x) ? [x.deliveredAt] : [x.at, x.deliveredAt],
+    ),
     ...of(state.parentRequests).map((x) => x.report?.at),
     ...of(state.decisions).flatMap((x) => [x.requestedAt, x.answeredAt]),
     ...of(state.extensions).flatMap((x) => [x.requestedAt, x.decidedAt]),

@@ -76,6 +76,7 @@ const rig = (
     issued: [] as string[],
     revoked: [] as string[],
     failures: [] as string[],
+    resumed: [] as string[],
   };
   const flags = { startFails: false, revokeThrows: false, unsupported: false };
   const adapter = {
@@ -131,6 +132,9 @@ const rig = (
       },
     },
     onFailure: (_id, cause) => calls.failures.push(cause),
+    onResumed: (id) => {
+      calls.resumed.push(id);
+    },
   });
   const present = async (params: Record<string, unknown>, requestId = `q-${++n}`) => {
     const req = {
@@ -210,6 +214,24 @@ describe("decision.answer（回答で、止めた子を必ず再開する）", (
       mcp: { token: "tok-a" },
     });
     expect(r.calls.started[0]?.instruction).toContain("B");
+  });
+
+  it("再開に成功したときだけ onResumed を呼ぶ（起動の失敗・トークンの失効では呼ばない。#189）", async () => {
+    const r = rig();
+    const id = await paused(r);
+    r.flags.startFails = true;
+    const failed = await r.answer(id, "B", "ans-fail");
+    expect(failed.ok).toBe(false);
+    // トークンを発行したが、起動に失敗して失効させた: 期限にまつわる知らせは、解決にしない
+    expect(r.calls.issued).toEqual(["a"]);
+    expect(r.calls.revoked).toEqual(["a"]);
+    expect(r.calls.resumed).toEqual([]);
+    // 直したあとの再送で再開できたら、はじめて呼ぶ（1 回だけ）
+    r.flags.startFails = false;
+    const retry = await r.answer(id, "B", "ans-retry");
+    expect(retry.ok).toBe(true);
+    expect(stateOf(r.s(), "a")).toBe("running");
+    expect(r.calls.resumed).toEqual(["a"]);
   });
 
   it("停止の途中なら、回答は記録して resumePending で失敗する。停止が済んだあとの同じ回答の再送で再開する（二重に起動しない）", async () => {

@@ -15,7 +15,15 @@
  */
 
 import type { EventBody, OrchState } from "@touryou/core";
-import { awaitingHuman, intentionallyIdle, isStallSummary, lastActivityMs } from "@touryou/core";
+
+import {
+  awaitingHuman,
+  intentionallyIdle,
+  isPrefaceInstruction,
+  isStallSummary,
+  lastActivityMs,
+} from "@touryou/core";
+
 import { appendAtomically, deriveId, type LogPort, notice } from "./api/handlers/context.js";
 
 export interface WatchSpec {
@@ -104,7 +112,13 @@ export function watchFindings(
     }
     if (n.state === "running" || n.state === "waiting") {
       for (const i of state.instructions) {
-        if (i.nodeId === n.id && i.deliveredSeq === undefined && nowMs - ms(i.at) > spec.unreadMs)
+        // daemon の前置き（`tokenIdleSoon`。#189）は、子が読まなくても構わない知らせなので、読まれていない指示にしない
+        if (
+          i.nodeId === n.id &&
+          !isPrefaceInstruction(i) &&
+          i.deliveredSeq === undefined &&
+          nowMs - ms(i.at) > spec.unreadMs
+        )
           unread.push({ nodeId: n.id, seq: i.seq });
       }
     }
@@ -114,7 +128,8 @@ export function watchFindings(
     .filter((i) => i.resolved === undefined && i.kind === "info" && isStallSummary(i.summary))
     // 動いていない・待つことが決まっている子、または知らせのあとに子の動き（送った指示を含む。#195）があれば、片付ける
     .filter(
-      (i) => intentionallyIdle(state, i.nodeId) || activityMs(state, i.nodeId, lastHookMs) > ms(i.at),
+      (i) =>
+        intentionallyIdle(state, i.nodeId) || activityMs(state, i.nodeId, lastHookMs) > ms(i.at),
     )
     .map((i) => i.id);
   return { stalled, unread, unbound, resolvedStalls };
