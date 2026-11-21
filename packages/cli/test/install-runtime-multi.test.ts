@@ -31,7 +31,8 @@ describe("install-runtime.sh の版上げ（複数の daemon。#165）", () => {
     expect(bare).toEqual([]);
   });
   it("付け替えのあとに、別名の daemon の plist を新しい版で作り直してから、起動し直す", () => {
-    const init = script.indexOf('"${BASE}/current/bin/touryou" launchd init --others');
+    // restore_old の中にも init --others がある。付け替えのあとの最後の 1 つを見る
+    const init = script.lastIndexOf('"${BASE}/current/bin/touryou" launchd init --others');
     const swap = script.indexOf('swap_link "${VDIR}/${DIST_DIR}" "${BASE}/current"');
     // restore_old の中にも apply --others がある。付け替えのあとの最後の 1 つを見る
     const apply = script.lastIndexOf('"${BASE}/current/bin/touryou" launchd apply --yes --others');
@@ -43,6 +44,30 @@ describe("install-runtime.sh の版上げ（複数の daemon。#165）", () => {
   it("別名の daemon を止めて、付け替えのあとに起動し直す", () => {
     expect(script).toContain("launchd stop --others");
     expect(script).toContain("launchd apply --yes --others");
+  });
+  it("止める前に、別名の daemon の設定も、新しい版の --check-config で検査する", () => {
+    const check = script.indexOf("plist_config_of \"${extra_plist}\"");
+    const stop = script.indexOf('launchd stop --others');
+    expect(check).toBeGreaterThan(-1);
+    expect(script).toContain('"${VDIR}/${DIST_DIR}/bin/touryou-daemon" --check-config --config "${extra_cfg}"');
+    expect(stop).toBeGreaterThan(check);
+    // 検査は、LaunchAgents に置いた plist（init --others・stop --others の対象と同じ集合）だけを見る
+    expect(script).toContain("extra_daemon_plists");
+  });
+  it("巻き戻しは、別名の daemon も旧版の launchd init --others で plist を旧版の形に戻してから、apply --others する", () => {
+    const fn = script.slice(script.indexOf("restore_old() {"), script.indexOf("check_kinds() {"));
+    const init = fn.indexOf('"${BASE}/current/bin/touryou" launchd init --others');
+    const apply = fn.indexOf('"${BASE}/current/bin/touryou" launchd apply --yes --others');
+    expect(init).toBeGreaterThan(-1);
+    expect(apply).toBeGreaterThan(init);
+  });
+  it("init --others・has_extra_daemons・stop --others は、同じ LaunchAgents の集合を対象にする（壊れた未使用の plist で巻き戻さない）", () => {
+    const fn = script.slice(
+      script.indexOf("has_extra_daemons() {"),
+      script.indexOf("cleanup_lists() {"),
+    );
+    expect(fn).toContain("extra_daemon_plists");
+    expect(fn).not.toContain('"${HOME}/.touryou/launchd/"');
   });
   it("別名の daemon があることを LAUNCHD_OTHERS で知らせる", () => {
     expect(script).toContain("LAUNCHD_OTHERS: present");

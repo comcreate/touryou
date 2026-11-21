@@ -70,11 +70,19 @@ has_extra_daemons() {
   # 設定ごとの別名の daemon（#165）の plist が、LaunchAgents に置いて（常駐にして）あるか。--others（stop・apply・restart）の対象と同じにする
   # （launchd init の出力先 ${HOME}/.touryou/launchd にあるだけの、まだ常駐にしていないものは数えない）。
   # 名前は [<org>.]touryou.daemon-<8 文字の 16 進>.plist
+  [ -n "$(extra_daemon_plists)" ]
+}
+extra_daemon_plists() {
+  # 別名の daemon の plist（LaunchAgents に置いたもの）を 1 行に 1 つ出す
   local f
   for f in "${HOME}/Library/LaunchAgents/"touryou.daemon-????????.plist "${HOME}/Library/LaunchAgents/"*.touryou.daemon-????????.plist; do
-    [ -f "${f}" ] && return 0
+    [ -f "${f}" ] && printf '%s\n' "${f}"
   done
-  return 1
+  return 0
+}
+plist_config_of() {
+  # $1: plist。ProgramArguments の --config の値（次の行の <string>）。なければ空
+  awk 'f { s = $0; sub(/^[[:space:]]*<string>/, "", s); sub(/<\/string>.*$/, "", s); print s; exit } index($0, "<string>--config</string>") { f = 1 }' "$1"
 }
 cleanup_lists() {
   # 中身の一覧の一時ディレクトリを消す（work に残さない）。消すのは、置き場の中の .lists. で始まるものだけ
@@ -175,6 +183,7 @@ restore_old() {
     say "${why}。current を v${old} に戻して、v${old} で起動し直します"
     if { [ "${hasdef:-0}" != 1 ] || [ "${migrated:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd init; } &&
       { [ "${hasdef:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd apply --yes; } &&
+      { [ "${hasext:-0}" != 1 ] || [ "${migrated:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd init --others; } &&
       { [ "${hasext:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd apply --yes --others; }; then
       state="current は v${old} に戻し、常駐の daemon は v${old} で動いている。v${ver} は \$HOME/.touryou/v${ver} に置いたまま"
       die "${why}（v${old} に戻した）" "出力を確かめ、${CONTACT} に相談する" "${state}"
@@ -436,6 +445,19 @@ main() {
     # 別名の daemon（--config）の設定は、起動し直す apply が、同じ検査をする（通らなければ、restore_old で前の版に戻す）
     if [ "${hasdef}" = 1 ] && ! run_masked "${VDIR}/${DIST_DIR}/bin/touryou-daemon" --check-config --config "${BASE}/config.json"; then
       die "config.json が、v${ver} の daemon の設定の検査を通らない（repoRoot・rootCwd・worktreeRoot が、ない・実パスでない・git のリポジトリでない、など。上の「失敗」の行）" "config.json の値を、今ある git のリポジトリ・フォルダの実パスに直してから（または設定をやり直してから）、もう一度 /touryou:setup" "daemon は止めていない（v${old} のまま）。v${ver} は \$HOME/.touryou/v${ver} に置いたが、current は v${old} のまま"
+    fi
+    # 別名の daemon（--config）の設定も、止める前に、新しい版の daemon で検査する（止めたあとで通らないと、巻き戻しになる）
+    if [ "${hasext}" = 1 ]; then
+      local extra_plist extra_cfg
+      while IFS= read -r extra_plist; do
+        [ -n "${extra_plist}" ] || continue
+        extra_cfg="$(plist_config_of "${extra_plist}")"
+        if [ -z "${extra_cfg}" ] || ! run_masked "${VDIR}/${DIST_DIR}/bin/touryou-daemon" --check-config --config "${extra_cfg}"; then
+          die "別名の daemon（${extra_plist}）の設定が、v${ver} の daemon の設定の検査を通らない（設定を読めない、または repoRoot・rootCwd・worktreeRoot などの誤り。上の「失敗」の行）" "その設定を直すか、touryou launchd uninstall --yes --config <設定> で外してから、もう一度 /touryou:setup" "daemon は止めていない（v${old} のまま）。v${ver} は \$HOME/.touryou/v${ver} に置いたが、current は v${old} のまま"
+        fi
+      done <<EOF
+$(extra_daemon_plists)
+EOF
     fi
     say "常駐の daemon（v${old}）を止めます"
     if [ "${hasdef}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd init; then

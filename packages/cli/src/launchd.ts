@@ -22,7 +22,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { readSecureFile } from "@touryou/core/fs";
 import type { CommandResult } from "./commands.js";
 
@@ -202,12 +202,16 @@ export const daemonNameOf = (base: string, configPath: string): string => {
     : `daemon-${createHash("sha256").update(canonical).digest("hex").slice(0, 8)}`;
 };
 
-/** 実パス（リンクを解決したもの）。実在しない・解決できないなら、そのまま返す。 */
+/**
+ * 実パス（リンクを解決したもの）。実在しないときは、存在する親ディレクトリまでの実パスに、存在しない末尾を結合する
+ * （設定を消したあとでも、init のときと同じ名前・Label になるように）。
+ */
 export const canonicalPath = (p: string): string => {
   try {
     return realpathSync(p);
   } catch {
-    return p;
+    const parent = dirname(p);
+    return parent === p ? p : join(canonicalPath(parent), basename(p));
   }
 };
 
@@ -406,11 +410,14 @@ function initOthers(args: readonly string[], deps: LaunchdDeps): CommandResult {
     return fail("HOME が、絶対パスでない・空・使えない文字を含む");
   }
   const plistDir = join(home, ".touryou", "launchd");
-  const names = otherPlistNames(plistDir);
+  // 対象は、LaunchAgents に置いた（常駐にした）ものだけ（has_extra_daemons・stop/apply --others と同じ集合）。
+  // init しただけで使っていない plist は、壊れていても見ない
+  const agentsDir = join(home, "Library", "LaunchAgents");
+  const names = otherPlistNames(agentsDir);
   if (names.length === 0) {
     return {
       exitCode: 0,
-      stdout: "別名の設定（--config）の daemon は、登録されていない（何もしていない）\n",
+      stdout: "別名の設定（--config）の daemon は、常駐にしたものがない（何もしていない）\n",
       stderr: "",
     };
   }
@@ -418,7 +425,9 @@ function initOthers(args: readonly string[], deps: LaunchdDeps): CommandResult {
   const plans: InitPlan[] = [];
   const failures: string[] = [];
   for (const n of names) {
-    const file = join(plistDir, n);
+    // 元の plist（.touryou/launchd）が消えていれば、LaunchAgents のものから設定・PATH を読み戻す
+    const src = join(plistDir, n);
+    const file = lstatOrUndefined(src)?.isFile() === true ? src : join(agentsDir, n);
     const text = lstatOrUndefined(file)?.isFile() === true ? readFileSync(file, "utf8") : undefined;
     const cfg = text === undefined ? undefined : plistConfigOf(text);
     const pathValue = text?.match(/<key>PATH<\/key><string>([^<]*)<\/string>/)?.[1];

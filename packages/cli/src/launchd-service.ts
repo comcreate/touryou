@@ -650,12 +650,17 @@ function uninstall(ctx: Ctx): CommandResult {
     const src = readOr(u.plistSrc);
     const srcOk =
       src !== undefined && (isGeneratedPlist(ctx, u, src) || isLegacyPlist(ctx, u, src));
+    // 別名の daemon（--others）は、元の plist（.touryou/launchd）が消えていても外せるように、LaunchAgents の plist が
+    // init の生成するものとバイト単位で同じかだけを見る。既定の daemon は、従来どおり、元の plist がなければ残す
+    const byDest = src === undefined && !u.isDefault;
     const destKept = !remove(
       u.plistDest,
       (t) =>
-        srcOk &&
-        (t === src || (isLegacyPlist(ctx, u, t) && pathValueOf(t) === pathValueOf(src ?? ""))),
-      src === undefined
+        byDest
+          ? isGeneratedPlist(ctx, u, t)
+          : srcOk &&
+            (t === src || (isLegacyPlist(ctx, u, t) && pathValueOf(t) === pathValueOf(src ?? ""))),
+      src === undefined && !byDest
         ? `"$HOME/.touryou/current/bin/touryou" launchd init の生成物〔${u.plistSrc}〕がないので、apply が置いたものか確かめられない`
         : undefined,
     );
@@ -768,18 +773,33 @@ export async function runLaunchdService(
   let units: Unit[] = [];
   // 読めない plist 1 つのために、全体を止めない。その unit だけ警告して飛ばす
   const warnings: string[] = [];
-  const withWarnings = (r: CommandResult): CommandResult =>
-    warnings.length === 0
-      ? r
-      : { ...r, stderr: `${warnings.map((w) => `警告: ${w}`).join("\n")}\n${r.stderr}` };
+  // 飛ばした unit があるのに成功と言わない: uninstall 以外は非 0 で終わる（版上げの script が成功と見なさない）。
+  // uninstall は後始末なので、終了コードは変えず、飛ばしたものを出力（標準出力）にも明示する
+  const withWarnings = (r: CommandResult): CommandResult => {
+    if (warnings.length === 0) return r;
+    const stderr = `${warnings.map((w) => `警告: ${w}`).join("\n")}\n${r.stderr}`;
+    if (sub === "uninstall") {
+      return {
+        ...r,
+        stdout: `${r.stdout}\n飛ばした daemon（${warnings.length} 件。外していない）:\n${warnings.map((w) => `  ${w}`).join("\n")}\n`,
+        stderr,
+      };
+    }
+    return { ...r, exitCode: r.exitCode === 0 ? 1 : r.exitCode, stderr };
+  };
   if (others) {
     // init が生成した別名の daemon（--config で作ったもの）すべて。plist の ProgramArguments の設定から、対象を決める
-    for (const n of otherPlistNames(plistDir)) {
+    // 対象は、LaunchAgents に置いた（常駐にした）ものと、uninstall では init しただけのもの。元の plist（.touryou/launchd）が
+    // 消えていても、LaunchAgents に残っていれば、そちらを読んで対象にする（stop・uninstall できるように）
+    const installed = otherPlistNames(agentsDir);
+    const names = [...new Set([...installed, ...(sub === "uninstall" ? otherPlistNames(plistDir) : [])])].sort();
+    for (const n of names) {
       const m = OTHER_PLIST.exec(n);
       if (m === null) continue;
       // --org があれば、その組織の Label のものだけ（なければ、すべての組織のもの）
       if (org !== undefined && m[1] !== labelOf(org, `daemon-${m[2] as string}`)) continue;
-      const file = join(plistDir, n);
+      const srcFile = join(plistDir, n);
+      const file = readOr(srcFile) !== undefined ? srcFile : join(agentsDir, n);
       const text = readOr(file);
       const cfg = text === undefined ? undefined : plistConfigOf(text);
       if (cfg === undefined || !usableConfigPath(cfg)) {

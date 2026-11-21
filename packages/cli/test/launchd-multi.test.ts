@@ -340,6 +340,8 @@ describe("複数の daemon（--config）", () => {
   it("init --others は、登録済みの別名の daemon を、plist の設定で作り直す（手で直した plist は上書きしない）", async () => {
     const w = makeWorld();
     await bin(w, ["init", "--config", w.otherConfig]);
+    // 対象は、LaunchAgents に置いたものだけ（先に apply する）
+    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
     const plist = join(w.base, "launchd", `${w.otherLabel}.plist`);
     const before = readFileSync(plist, "utf8");
     const r = await bin(w, ["init", "--others"]);
@@ -352,7 +354,12 @@ describe("複数の daemon（--config）", () => {
     expect(edited.exitCode).toBe(1);
     expect(edited.stderr).toContain("黙って上書きしない");
     expect(readFileSync(plist, "utf8")).toContain("手で足した");
-    // 別名の daemon がなければ、何もしない
+    // 元の plist が消えていても、LaunchAgents のものから作り直す
+    rmSync(plist);
+    expect((await bin(w, ["init", "--others"])).exitCode).toBe(0);
+    expect(readFileSync(plist, "utf8")).toBe(before);
+    // LaunchAgents に置いたものがなければ、何もしない
+    rmSync(join(w.agents, `${w.otherLabel}.plist`));
     rmSync(plist);
     expect((await bin(w, ["init", "--others"])).exitCode).toBe(0);
     expect(existsSync(plist)).toBe(false);
@@ -391,24 +398,85 @@ describe("複数の daemon（--config）", () => {
   });
 
   // 指摘 2: 読めない plist 1 つで、--others の全体を止めない
-  it("--others は、設定を読めない plist を警告して飛ばし、ほかの daemon の操作は続ける", async () => {
+  it("--others は、設定を読めない daemon を警告して飛ばし、ほかの daemon の操作は続けるが、終了コードは非 0", async () => {
     const w = makeWorld();
     await bin(w, ["init", "--config", w.otherConfig]);
     expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
-    // 設定を読めない別名の plist（ProgramArguments に --config がない）を 1 つ足す
-    const broken = join(w.base, "launchd", "touryou.daemon-deadbeef.plist");
+    // 設定を読めない別名の plist（ProgramArguments に --config がない）を、LaunchAgents に 1 つ足す
+    const broken = join(w.agents, "touryou.daemon-deadbeef.plist");
     writeFileSync(broken, "<plist>壊れた</plist>");
     const r = await bin(w, ["restart", "--others"]);
-    expect(r.exitCode).toBe(0);
+    expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("警告");
     expect(r.stderr).toContain("touryou.daemon-deadbeef.plist");
     expect(w.calls.some((c) => c[1] === "kickstart" && c.at(-1)?.endsWith(w.otherLabel))).toBe(
       true,
     );
-    // status・stop も、同じく止めない
-    expect((await bin(w, ["status", "--others"])).stderr).toContain("警告");
-    expect((await bin(w, ["stop", "--others"])).exitCode).toBe(0);
+    // status・apply・stop も、飛ばしたものがあれば非 0（止める操作は、ほかの daemon については続ける）
+    const st = await bin(w, ["status", "--others"]);
+    expect(st.stderr).toContain("警告");
+    expect(st.exitCode).toBe(1);
+    expect((await bin(w, ["apply", "--yes", "--others"])).exitCode).toBe(1);
+    expect((await bin(w, ["stop", "--others"])).exitCode).toBe(1);
     expect(w.loaded.size).toBe(0);
+  });
+
+  it("--others の uninstall は、読めない daemon を飛ばしても後始末を続け（終了コード 0）、飛ばしたものを標準出力に明示する", async () => {
+    const w = makeWorld();
+    await bin(w, ["init", "--config", w.otherConfig]);
+    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+    const broken = join(w.agents, "touryou.daemon-deadbeef.plist");
+    writeFileSync(broken, "<plist>壊れた</plist>");
+    const u = await bin(w, ["uninstall", "--yes", "--others"]);
+    expect(u.exitCode, u.stdout + u.stderr).toBe(0);
+    expect(u.stdout).toContain("飛ばした daemon");
+    expect(u.stdout).toContain("touryou.daemon-deadbeef.plist");
+    expect(existsSync(join(w.agents, `${w.otherLabel}.plist`))).toBe(false);
+    expect(existsSync(broken)).toBe(true);
+  });
+
+  it("init しただけの壊れた plist は、stop・apply・restart・status の --others に、警告も非 0 も出さない", async () => {
+    const w = makeWorld();
+    await bin(w, ["init", "--config", w.otherConfig]);
+    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+    writeFileSync(join(w.base, "launchd", "touryou.daemon-deadbeef.plist"), "<plist>壊れた</plist>");
+    for (const args of [["status"], ["restart"], ["apply", "--yes"], ["stop"]]) {
+      const r = await bin(w, [...args, "--others"]);
+      expect(r.stderr, args.join(" ")).not.toContain("警告");
+    }
+    expect((await bin(w, ["restart", "--others"])).exitCode).toBe(1); // stop 済みなので読み込まれていない
+  });
+
+  it("LaunchAgents に plist が残り、元の plist が消えていても、--others で stop・uninstall できる", async () => {
+    const w = makeWorld();
+    await bin(w, ["init", "--config", w.otherConfig]);
+    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+    rmSync(join(w.base, "launchd", `${w.otherLabel}.plist`));
+    const s = await bin(w, ["stop", "--others"]);
+    expect(s.stderr).toBe("");
+    expect(s.exitCode).toBe(0);
+    expect(w.loaded.size).toBe(0);
+    const u = await bin(w, ["uninstall", "--yes", "--others"]);
+    expect(u.exitCode, u.stdout + u.stderr).toBe(0);
+    expect(existsSync(join(w.agents, `${w.otherLabel}.plist`))).toBe(false);
+  });
+
+  it("設定の親ディレクトリがリンク経由でも、設定を消したあとの uninstall --config は、init と同じ Label を指す", async () => {
+    const w = makeWorld();
+    const link = join(w.base, "link-dir");
+    symlinkSync(join(w.base, "other"), link);
+    const viaLink = join(link, "config.json");
+    const before = daemonNameOf(w.base, viaLink);
+    expect(before).toBe(daemonNameOf(w.base, w.otherConfig));
+    await bin(w, ["init", "--config", viaLink]);
+    expect((await bin(w, ["apply", "--yes", "--config", viaLink])).exitCode).toBe(0);
+    rmSync(w.otherConfig);
+    expect(daemonNameOf(w.base, viaLink)).toBe(before);
+    expect(daemonNameOf(w.base, join(w.base, "other", "config.json"))).toBe(before);
+    const u = await bin(w, ["uninstall", "--yes", "--config", viaLink]);
+    expect(u.exitCode, u.stdout + u.stderr).toBe(0);
+    expect(existsSync(join(w.agents, `${w.otherLabel}.plist`))).toBe(false);
+    expect(existsSync(join(w.base, "launchd", `${w.otherLabel}.plist`))).toBe(false);
   });
 
   it("--others の apply・restart は、stateDir を読めない設定の daemon だけを警告して飛ばす", async () => {
@@ -418,7 +486,7 @@ describe("複数の daemon（--config）", () => {
     // 設定を消す（plist は残る）
     rmSync(w.otherConfig);
     const r = await bin(w, ["restart", "--others"]);
-    expect(r.exitCode).toBe(0);
+    expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("stateDir を読めない");
     expect(r.stdout).toContain("常駐にしたものがない");
   });
@@ -458,6 +526,12 @@ describe("複数の daemon（--config）", () => {
     writeFileSync(third, JSON.stringify({ stateDir: thirdState }), { mode: 0o600 });
     expect((await bin(w, ["init", "--config", third])).exitCode).toBe(0);
     const thirdLabel = `touryou.${daemonNameOf(w.base, third)}`;
+    w.states[thirdLabel] = thirdState;
+    w.ports[thirdLabel] = "4323";
+    // 対象は、LaunchAgents に置いたものだけ
+    for (const c of [w.otherConfig, third]) {
+      expect((await bin(w, ["apply", "--yes", "--config", c])).exitCode).toBe(0);
+    }
     const otherPlist = join(w.base, "launchd", `${w.otherLabel}.plist`);
     const thirdPlist = join(w.base, "launchd", `${thirdLabel}.plist`);
     const otherBefore = readFileSync(otherPlist, "utf8");
@@ -477,11 +551,22 @@ describe("複数の daemon（--config）", () => {
   it("init --others は、読めない plist も、失敗した設定として示す（ほかの設定の検査は続ける）", async () => {
     const w = makeWorld();
     await bin(w, ["init", "--config", w.otherConfig]);
-    writeFileSync(join(w.base, "launchd", "touryou.daemon-deadbeef.plist"), "<plist/>");
+    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+    writeFileSync(join(w.agents, "touryou.daemon-deadbeef.plist"), "<plist/>");
     const r = await bin(w, ["init", "--others"]);
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("touryou.daemon-deadbeef.plist");
     expect(r.stderr).toContain("何も書かずに止めた");
+  });
+
+  it("init --others は、LaunchAgents に置いていない（init しただけの）壊れた plist では失敗しない", async () => {
+    const w = makeWorld();
+    await bin(w, ["init", "--config", w.otherConfig]);
+    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+    writeFileSync(join(w.base, "launchd", "touryou.daemon-deadbeef.plist"), "<plist/>");
+    const r = await bin(w, ["init", "--others"]);
+    expect(r.stderr).toBe("");
+    expect(r.exitCode).toBe(0);
   });
 
   // 指摘 6: stateDir の共有は、apply でも検出する
