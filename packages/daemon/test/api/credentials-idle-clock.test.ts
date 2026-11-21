@@ -14,6 +14,8 @@ const MIN = 60_000;
 const HEARTBEAT_MS = 15_000;
 const HUMAN = "h".repeat(40);
 const BIND_IDLE_MS = 60 * MIN;
+/** 切れる前の知らせの窓（既定。`idleWarnMsOf(BIND_IDLE_MS)` と同じ。型を `number` に保つため、ここで固定する）。 */
+const WARN_MS = 2 * TOKEN_SWEEP_MS;
 
 const setup = () => {
   let now = Date.UTC(2026, 9, 20, 0, 0, 0);
@@ -28,7 +30,7 @@ const setup = () => {
       bindAbsoluteMs: 24 * 60 * MIN,
       bindIdleMs: BIND_IDLE_MS,
     },
-    idleWarnMs: idleWarnMsOf(BIND_IDLE_MS),
+    idleWarnMs: WARN_MS,
     onIdleSoon: (info) => {
       const atMin = (now - start) / MIN;
       soon.push({ nodeId: info.nodeId, remainingMs: info.remainingMs, atMin });
@@ -65,7 +67,8 @@ describe("bind のトークンの idle の時計（偽の時計）", () => {
   it("確かめが来ない（道具も購読もない）と、50 分で前の知らせが 1 回、60 分で idle の失効になる", () => {
     const { store, token, soon, expired, run } = setup();
     run(70);
-    expect(soon).toEqual([{ nodeId: "a", remainingMs: idleWarnMsOf(BIND_IDLE_MS), atMin: 50 }]);
+    expect(idleWarnMsOf(BIND_IDLE_MS)).toBe(WARN_MS);
+    expect(soon).toEqual([{ nodeId: "a", remainingMs: WARN_MS, atMin: 50 }]);
     expect(expired).toEqual([{ nodeId: "a", reason: "idle", atMin: 60 }]);
     expect(store.authenticate(token)).toBeUndefined();
     expect(store.wasExpired?.(token)).toBe(true);
@@ -92,7 +95,7 @@ describe("bind のトークンの idle の時計（偽の時計）", () => {
     expect(expired).toEqual([]);
     // 30 分で最後に使った。その 50 分あと（開始から 80 分）に前の知らせ、60 分あと（90 分）に失効
     run(70);
-    expect(soon).toEqual([{ nodeId: "a", remainingMs: idleWarnMsOf(BIND_IDLE_MS), atMin: 80 }]);
+    expect(soon).toEqual([{ nodeId: "a", remainingMs: WARN_MS, atMin: 80 }]);
     expect(expired).toEqual([{ nodeId: "a", reason: "idle", atMin: 90 }]);
     expect(store.authenticate(token)).toBeUndefined();
   });
