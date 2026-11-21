@@ -33,8 +33,8 @@ export const APP_TEXT = {
   },
   "approval.cancel": { ja: "取り消す", en: "Cancel" },
   "card.bindExpiredIdle": {
-    ja: "紐付けが切れた（idle: 使わない時間が長かった）",
-    en: "Binding expired (idle: unused for too long)",
+    ja: "紐付けが切れた（しばらく使われなかった）",
+    en: "Binding expired (unused for too long)",
   },
   "card.bindExpiredAbsolute": {
     ja: "紐付けが切れた（発行から時間がたった）",
