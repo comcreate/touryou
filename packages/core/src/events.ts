@@ -366,6 +366,11 @@ export type EventBody =
   | {
       readonly type: "decision.answered";
       readonly payload: { readonly decisionId: string; readonly answer: string };
+    }
+  | {
+      /** 判断を出した子が、要らなくなった判断を取り下げた（#196）。open の判断だけ。判断は `closed`（理由 `withdrawn`）になる。 */
+      readonly type: "decision.withdrawn";
+      readonly payload: { readonly decisionId: string };
     };
 
 /** 最終削除の墓標（1 行の要約）。 */
@@ -511,6 +516,9 @@ export interface NodeRecord {
   readonly runStartedSeq?: number;
 }
 
+/** 判断を閉じた理由。 */
+export type DecisionClosedReason = "discarded" | "withdrawn";
+
 export interface DecisionRecord {
   readonly decisionId: string;
   readonly nodeId: string;
@@ -521,8 +529,8 @@ export interface DecisionRecord {
    * `decision.answer` は closed に答えさせない（`decisionClosed`）。記録に届いた回答は、却下として積むだけ。
    */
   readonly status: "open" | "answered" | "closed";
-  /** 閉じた理由（`status` が `closed` のとき）。いまは `discarded`（人が破棄を決めた）だけ。 */
-  readonly closedReason?: "discarded";
+  /** 閉じた理由（`status` が `closed` のとき）。`discarded`: 人が破棄を決めた。`withdrawn`: 出した子が取り下げた。 */
+  readonly closedReason?: DecisionClosedReason;
   /** 閉じた時刻（ISO 8601 UTC。`status` が `closed` のとき）。 */
   readonly closedAt?: string;
   /** 要求を記録したイベントの `seq`。古いスナップショットにはない（0 とみなし、上限の数には入れない）。 */
@@ -749,6 +757,7 @@ export type FoldFailureCode =
   | "duplicateInboxId"
   | "duplicateDecision"
   | "unknownDecision"
+  | "decisionNotOpen"
   | "unknownStopRequest"
   | "observationAlreadyRecorded"
   | "duplicateReport"
@@ -1227,10 +1236,17 @@ const unknownNode = (seq: number, id: string): Result<boolean, FoldFailure> =>
  * 止まった（stopped）だけの子は閉じない: 判断待ちで止まった子は、回答で再開する道があり（`pause-handlers`。回答は追加指示
  * として届く）、閉じると、その再開の道をふさいでしまうため。止まった子の未回答は、回収のときに破棄を決めた時点で閉じる。
  */
-function closeOpenDecisions(d: Draft, nodeId: string, reason: "discarded", at: string): void {
+function closeOpenDecisions(
+  d: Draft,
+  nodeId: string,
+  reason: DecisionClosedReason,
+  at: string,
+  onlyDecisionId?: string,
+): void {
   const runStartedSeq = nodeAt(d, nodeId)?.runStartedSeq ?? 0;
   d.decisions.forEach((cur, i) => {
     if (cur.nodeId !== nodeId || cur.status !== "open") return;
+    if (onlyDecisionId !== undefined && cur.decisionId !== onlyDecisionId) return;
     if ((cur.requestedSeq ?? 0) > runStartedSeq) runCountsOf(d, nodeId).decisions -= 1;
     d.decisions[i] = freezeRecord({
       ...cur,
@@ -1901,6 +1917,32 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
             }
           : { ...cur, rejected: Object.freeze([...cur.rejected, { seq, answer, actor }]) },
       );
+      return commit();
+    }
+
+    case "decision.withdrawn": {
+      const { decisionId } = p;
+      if (!isId(decisionId)) return invalid(seq, "decision.withdrawn の decisionId");
+      const i = d.decisionIdx.get(decisionId);
+      const cur = i === undefined ? undefined : d.decisions[i];
+      if (cur === undefined) {
+        return reject(
+          seq,
+          "unknownDecision",
+          `判断要求 ${decisionId} は存在しない`,
+          "判断要求の一覧を確認する",
+        );
+      }
+      // 取り下げられるのは、まだ答えのない判断だけ（答え済み・閉じた判断は、状態を変えない）。
+      if (cur.status !== "open") {
+        return reject(
+          seq,
+          "decisionNotOpen",
+          `判断要求 ${decisionId} は未回答でない（${cur.status}）ので、取り下げられない`,
+          "判断の状態を確認する（decision.get）",
+        );
+      }
+      closeOpenDecisions(d, cur.nodeId, "withdrawn", raw.at as string, decisionId);
       return commit();
     }
 

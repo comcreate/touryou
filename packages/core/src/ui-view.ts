@@ -410,9 +410,12 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
   });
 
   // open のほか、閉じた判断（止まった子・破棄を決めた子の未回答）も載せ、理由を示す。
+  // 出した子が取り下げた判断（`withdrawn`。#196）は、もう要らないので載せない。
   const decisions = cap(
     "decisions",
-    state.decisions.filter((d) => d.status === "open" || d.status === "closed"),
+    state.decisions.filter(
+      (d) => d.status === "open" || (d.status === "closed" && d.closedReason !== "withdrawn"),
+    ),
     UI_LIMITS.decisions,
   ).map((d): UiDecision => {
     const question = uiText(d.question, UI_QUESTION_MAX);
@@ -423,7 +426,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       ...(question === "" ? {} : { question }),
       options: options.slice(0, UI_LIMITS.options).map((o) => uiOption(o)),
       optionsCut: options.length > UI_LIMITS.options,
-      ...(d.status === "closed" && d.closedReason !== undefined
+      ...(d.status === "closed" && d.closedReason === "discarded"
         ? { closedReason: d.closedReason }
         : {}),
     };

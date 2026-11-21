@@ -72,6 +72,8 @@ const DESCRIPTIONS: Readonly<Record<McpOperation, string>> = {
     "親への依頼を実行した結果を報告する。requestRef は parent_request の結果のもの。成功は outcome: done と、子のセッションの参照（sessionRef。claude --bg の出力か claude agents --json の id）。失敗は outcome: failed と reason。claude agents --json で読んだ子の状態（need_input など）があれば agentState に入れる（止まっていそうなら受信箱に出る）",
   "report.progress": `進捗を親へ報告する。親は起きない（受信箱に載るだけ）。親の判断・指示を待つなら report_decision。進捗・範囲外の報告は 1 ノードにつき ${LIMITS.reportsPerNode} 件まで（再開後の報告を数える。超えると tooManyReports。完了報告は数えない）`,
   "report.decision": `判断要求を親へ出す。人間へは親を経由する。未回答の判断要求は 1 ノードにつき ${LIMITS.openDecisionsPerNode} 件まで（再開後の要求を数える。超えると tooManyOpenDecisions）`,
+  "decision.withdraw":
+    "自分が出した、未回答の判断要求を取り下げる（要らなくなったとき。waiting で完了報告できないときの道）。decisionId は report_decision の結果のもの。取り下げた判断は閉じ、受信箱から消え、判断で待っていたなら running に戻る。結果は { withdrawn, resumed }。回答済みの判断は取り下げられない",
   "report.outOfScope": `作業範囲外の課題を親へ申告する。進捗・範囲外の報告は 1 ノードにつき ${LIMITS.reportsPerNode} 件まで（再開後の報告を数える。超えると tooManyReports）`,
   "report.done": "完了を親へ報告する。受け入れ基準ごとの根拠を付ける",
   "child.inbox":

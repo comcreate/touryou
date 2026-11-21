@@ -151,6 +151,16 @@ export function transition(state: NodeState, event: NodeEvent): TransitionResult
 }
 
 function invalid(state: NodeState, event: NodeEvent): TransitionResult {
+  if (state === "waiting" && event.type === "reportDone") {
+    // 判断への回答待ちで完了を報告した子（#196）。回答は人間だけが書くので、要らなくなったときの道を示す。
+    return fail(
+      "invalidTransition",
+      "判断への回答待ちなので、人の回答を待つ。要らなくなったなら、判断を取り下げるか、親に知らせる",
+      "判断が要らなくなったなら、decision_withdraw で取り下げて作業に戻る",
+      "取り下げずに待つなら、人の回答を待つ",
+      "親に report_progress で知らせる",
+    );
+  }
   return fail(
     "invalidTransition",
     `状態 ${state} では ${event.type} を受け付けない`,

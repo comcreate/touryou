@@ -183,6 +183,7 @@ const SCHEMAS: Readonly<Record<McpOperation, z.ZodType>> = {
   }),
   "report.progress": z.strictObject({ text: text(LIMITS.reportText) }),
   "report.decision": z.strictObject({ question: text(LIMITS.question), options }),
+  "decision.withdraw": z.strictObject({ decisionId: id }),
   "report.outOfScope": z.strictObject({ text: text(LIMITS.reportText) }),
   "report.done": z.strictObject({
     evidence: z

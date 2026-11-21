@@ -96,6 +96,17 @@ describe("遷移表（表駆動）", () => {
     }
   });
 
+  it("waiting での reportDone は、人の回答待ちと、要らなくなったときの道を文に出して断る（#196）", () => {
+    const r = transition("waiting", { type: "reportDone" });
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.error.code).toBe("invalidTransition");
+      expect(r.error.cause).toContain("判断への回答待ち");
+      expect(r.error.cause).toContain("取り下げる");
+      expect(r.error.nextActions.join("\n")).toContain("decision_withdraw");
+    }
+  });
+
   it("停止した子を回収可能にするには破棄の判断が必要", () => {
     const r = transition("stopped", { type: "markReclaimable", discarded: false });
     expect(r.ok).toBe(false);

@@ -315,8 +315,8 @@ export interface OperationMap {
       decisionId: string;
       nodeId: string;
       status: "open" | "answered" | "closed";
-      /** 閉じた理由（`status` が `closed` のとき）。 */
-      closedReason?: "discarded";
+      /** 閉じた理由（`status` が `closed` のとき）。`discarded`: 人が破棄を決めた。`withdrawn`: 出した子が取り下げた。 */
+      closedReason?: "discarded" | "withdrawn";
       /** 閉じた時刻（ISO 8601 UTC。`status` が `closed` のとき）。 */
       closedAt?: string;
       question?: string;
@@ -340,6 +340,15 @@ export interface OperationMap {
   "report.decision": {
     params: { question: string; options: readonly string[] };
     result: { decisionId: string };
+  };
+  /**
+   * 自分が出した、未回答の判断要求を取り下げる（子のロールだけ。#196）。判断は閉じ（`closedReason: "withdrawn"`）、受信箱の項目は
+   * 解決済みになる。取り下げた判断で waiting だった子は、ほかに未回答の判断がなければ running に戻る（`resumed`）。
+   * 答え済み・閉じた判断、ほかのノードの判断は取り下げられない。親には知らせの項目（info）が 1 件届く。
+   */
+  "decision.withdraw": {
+    params: { decisionId: string };
+    result: { withdrawn: true; resumed: boolean };
   };
   "report.outOfScope": { params: { text: string }; result: { accepted: true } };
   "report.done": {
@@ -615,6 +624,7 @@ export const ROLE_OPERATIONS = {
   child: [
     "report.progress",
     "report.decision",
+    "decision.withdraw",
     "report.outOfScope",
     "report.done",
     "scope.extend",

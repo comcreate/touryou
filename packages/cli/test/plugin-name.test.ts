@@ -25,6 +25,7 @@ describe("plugin の名前", () => {
         "inbox_fetch",
         "report_progress",
         "report_decision",
+        "decision_withdraw",
         "report_outOfScope",
         "report_done",
         "scope_extend",

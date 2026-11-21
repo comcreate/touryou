@@ -279,7 +279,7 @@ describe("touryou child report", () => {
     return d;
   };
 
-  it("報告の種類は、子のロールの操作だけ（5 つ）", () => {
+  it("報告の種類は、子のロールの操作だけ（6 つ）", () => {
     // 子の受信箱（child.inbox）は報告ではないので、touryou child report には入れない
     expect(Object.values(REPORT_OPERATIONS).sort()).toEqual(
       ROLE_OPERATIONS.child.filter((op) => op !== "child.inbox").sort(),

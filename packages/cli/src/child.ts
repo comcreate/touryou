@@ -7,7 +7,7 @@
  * - `bind --dir <引き出し> --url <窓口>`: 子が Write の道具で書いた `code` を確かめて読み、送る前に消す。`node`（daemon が書いた
  *   ノード ID）と一緒に `POST /v1/bind` へ送り、受け取ったトークンを `token` に、窓口の URL を `url` に置く（一時ファイルに
  *   O_EXCL・O_NOFOLLOW・0600 で書いて rename）。標準出力は結果の記号 1 行だけ。
- * - `report --dir <引き出し> --url <窓口> <操作>`: 子のロールの 5 つの操作だけ。本文は、子が Write で書いた引き出しの `report`（touryou が読んで、送る前に消す）。`--url` が `url` のファイルと
+ * - `report --dir <引き出し> --url <窓口> <操作>`: 子のロールの 6 つの操作だけ。本文は、子が Write で書いた引き出しの `report`（touryou が読んで、送る前に消す）。`--url` が `url` のファイルと
  *   違えば送らない（別の daemon にトークンを送らない）。期限切れ（`tokenExpired`）なら `token` を消して、結び直しを案内する。
  *
  * ファイルは、lstat で持ち主・種類・権限・リンクの数を確かめてから O_NOFOLLOW で開き、fstat で同じものかを確かめて読む。
@@ -60,6 +60,7 @@ export const REPORT_OPERATIONS = {
   progress: "report.progress",
   "out-of-scope": "report.outOfScope",
   decision: "report.decision",
+  "decision-withdraw": "decision.withdraw",
   done: "report.done",
   "scope-extend": "scope.extend",
 } as const;

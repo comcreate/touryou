@@ -47,6 +47,7 @@ export const RESULT_KEYS: ResultKeys = {
   "report.get": ["reportId", "nodeId", "kind", "text", "evidence"],
   "report.progress": ["accepted"],
   "report.decision": ["decisionId"],
+  "decision.withdraw": ["withdrawn", "resumed"],
   "report.outOfScope": ["accepted"],
   "report.done": ["accepted"],
   "scope.extend": ["extensionId"],

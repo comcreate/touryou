@@ -64,6 +64,85 @@ const A = { role: "child", nodeId: "a" } as const;
 const M1 = { role: "integrator", nodeId: "m1" } as const;
 const ROOT = { role: "integrator", nodeId: "root" } as const;
 
+describe("判断の取り下げ（#196）", () => {
+  const ask = async (r: ReturnType<typeof rig>): Promise<string> => {
+    const res = await r.call(
+      "report.decision",
+      r.req("report.decision", { question: "どちらにするか", options: ["X", "Y"] }, A),
+    );
+    expect(res.ok).toBe(true);
+    return res.value.decisionId as string;
+  };
+
+  it("waiting で report.done すると、人の回答待ちと、要らなくなったときの道を文に出して断る", async () => {
+    const r = rig();
+    await ask(r);
+    expect(stateOf(r.state(), "a")).toBe("waiting");
+    const res = await r.call("report.done", r.req("report.done", { evidence: EVIDENCE }, A));
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe("invalidTransition");
+    expect(res.error?.cause).toContain("判断への回答待ち");
+    expect(res.error?.cause).toContain("取り下げる");
+  });
+
+  it("取り下げると、判断が閉じ、受信箱の判断の項目が消え、running に戻り、親に知らせが届く。そのあと完了を報告できる", async () => {
+    const r = rig();
+    const decisionId = await ask(r);
+    const res = await r.call(
+      "decision.withdraw",
+      r.req("decision.withdraw", { decisionId }, A, "w-1"),
+    );
+    expect(res.ok).toBe(true);
+    expect(res.value).toEqual({ withdrawn: true, resumed: true });
+    expect(stateOf(r.state(), "a")).toBe("running");
+    const d = r.state().decisions.find((x) => x.decisionId === decisionId);
+    expect(d?.status).toBe("closed");
+    expect(d?.closedReason).toBe("withdrawn");
+    const decisionItem = r.state().inbox.find((i) => i.kind === "decision" && i.ref === decisionId);
+    expect(decisionItem?.resolved).toBeDefined();
+    expect(r.state().inbox.some((i) => i.kind === "info" && i.nodeId === "a")).toBe(true);
+    // 再送は成功のまま（もう一度は書かない）
+    const again = await r.call(
+      "decision.withdraw",
+      r.req("decision.withdraw", { decisionId }, A, "w-1"),
+    );
+    expect(again.ok).toBe(true);
+    const done = await r.call("report.done", r.req("report.done", { evidence: EVIDENCE }, A));
+    expect(done.ok).toBe(true);
+    expect(stateOf(r.state(), "a")).toBe("done");
+  });
+
+  it("取り下げた判断に人が答えても、decisionClosed で断る", async () => {
+    const r = rig();
+    const decisionId = await ask(r);
+    await r.call("decision.withdraw", r.req("decision.withdraw", { decisionId }, A));
+    const ans = await r.call(
+      "decision.answer",
+      r.req("decision.answer", { decisionId, choice: "X" }, "human"),
+    );
+    expect(ans.ok).toBe(false);
+    expect(ans.error?.code).toBe("decisionClosed");
+  });
+
+  it("ほかのノードの判断・回答済みの判断は取り下げられない", async () => {
+    const r = rig();
+    const decisionId = await ask(r);
+    const other = await r.call(
+      "decision.withdraw",
+      r.req("decision.withdraw", { decisionId }, { role: "child", nodeId: "b" }),
+    );
+    expect(other.ok).toBe(false);
+    expect(other.error?.code).toBe("notFound");
+    await r.call(
+      "decision.answer",
+      r.req("decision.answer", { decisionId, choice: "X" }, "human"),
+    );
+    const late = await r.call("decision.withdraw", r.req("decision.withdraw", { decisionId }, A));
+    expect(late.ok).toBe(false);
+    expect(late.error?.code).toBe("decisionNotOpen");
+  });
+});
+
 describe("report.done の報告の文（#149）", () => {
   it("報告にも、受信箱と同じ鍵と値（msg）を載せる。text は日本語の文のまま", async () => {
     const r = rig();

@@ -58,6 +58,7 @@ const VALID: Record<string, unknown> = {
   report_progress: { text: "進捗" },
   inbox_fetch_child: { all: true },
   report_decision: { question: "q", options: ["a"] },
+  decision_withdraw: { decisionId: "d1" },
   report_outOfScope: { text: "範囲外" },
   report_done: { evidence: [{ criterion: "基準", evidence: "根拠" }] },
   scope_extend: { target: { kind: "write", value: "docs" }, reason: "必要" },

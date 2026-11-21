@@ -101,7 +101,7 @@ export function planPurge(
 /**
  * 木のノードを主語とするイベントの `seq`（昇順）。主語が payload の `nodeId` でないイベントは、前のイベントの記録から導く:
  * `scope.extensionDecided`（要求の `nodeId`）・`inbox.resolved`・`inbox.reopened`・`inbox.acknowledged`（項目の `nodeId`）・`node.instructionDelivered`
- * （指示の `nodeId`）・`decision.answered`（判断の `nodeId`）。導けないものは含めない（削除しない側に倒す）。
+ * （指示の `nodeId`）・`decision.answered`・`decision.withdrawn`（判断の `nodeId`）。導けないものは含めない（削除しない側に倒す）。
  */
 export function purgeEventSeqs(
   events: readonly OrchEvent[],
@@ -167,6 +167,7 @@ export function purgeEventSeqs(
         subject = instructed.get(e.payload.instructedSeq);
         break;
       case "decision.answered":
+      case "decision.withdrawn":
         subject = decision.get(e.payload.decisionId);
         break;
       default:

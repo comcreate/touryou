@@ -358,6 +358,10 @@ const VALIDATORS: Validators = {
     const o = strict(p, ["question", "options"]);
     return { question: text(o, "question", LIMITS.question), options: options(o, "options") };
   },
+  "decision.withdraw": (p) => {
+    const o = strict(p, ["decisionId"]);
+    return { decisionId: id(o, "decisionId") };
+  },
   "report.outOfScope": (p) => {
     const o = strict(p, ["text"]);
     return { text: text(o, "text", LIMITS.reportText) };

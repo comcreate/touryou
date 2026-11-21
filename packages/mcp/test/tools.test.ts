@@ -32,6 +32,7 @@ const EXPECTED: Record<McpRole, readonly string[]> = {
   child: [
     "report_progress",
     "report_decision",
+    "decision_withdraw",
     "report_outOfScope",
     "report_done",
     "scope_extend",
