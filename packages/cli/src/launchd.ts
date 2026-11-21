@@ -8,17 +8,21 @@
  * - 常駐は daemon だけ（子用の HTTP の touryou-mcp の常駐は外した）。
  * - 既存のファイルを黙って上書きしない（同じ内容なら何もしない。違えば、何も書かずに止まる。古い形の生成物と同じものだけは、置き換える）。
  */
+
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { readSecureFile } from "@touryou/core/fs";
 import type { CommandResult } from "./commands.js";
 
@@ -64,11 +68,12 @@ export function configProblem(
   home: string,
   path: string,
   check: ConfigChecker,
+  configPath?: string,
 ): string | undefined {
   const base = join(home, ".touryou");
   const daemon = join(base, "current", "bin", "touryou-daemon");
   // plist と同じ HOME・PATH（git は、この PATH で探す）
-  const r = check(daemon, ["--check-config", "--config", join(base, "config.json")], {
+  const r = check(daemon, ["--check-config", "--config", configPath ?? join(base, "config.json")], {
     HOME: home,
     PATH: path,
   });
@@ -111,21 +116,26 @@ export const DEFAULT_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
 export const labelOf = (org: string | undefined, name: string): string =>
   org === undefined ? `touryou.${name}` : `${org}.touryou.${name}`;
 
-const HELP = `touryou launchd init [--org <組織の逆ドメイン>] [--path-prefix <ディレクトリ[:ディレクトリ…]>]
+const HELP = `touryou launchd init [--org <組織の逆ドメイン>] [--path-prefix <ディレクトリ[:ディレクトリ…]>] [--config <設定ファイルの絶対パス>]
 
 daemon を、launchd で常駐させるための plist を生成する（同梱の node で daemon を直に起こす。起動スクリプトは作らない）。\`launchctl\` は実行しない。秘密は扱わない。
 
   --org            plist の Label に使う、組織の逆ドメイン（省略すると Label は touryou.daemon。例: com.example → com.example.touryou.daemon。小文字の英数字とハイフン、ドットで 2 つ以上）
   --path-prefix    plist の PATH の先頭に足す、絶対パスのディレクトリ（git の場所。例: Homebrew の bin）。省略可
+  --config         別の daemon の設定ファイル（絶対パス）。省略すると $HOME/.touryou/config.json（今までどおり）。指定すると、設定ごとに
+                   別の Label（touryou.daemon-<8 文字>）・plist・ログ（logs/daemon-<8 文字>.log）・stateDir になる（docs/launchd.md の「複数の daemon」）
+  --others         （単独で使う。ほかの引数は受けない）LaunchAgents に置いた別名の daemon（--config で作ったもの）すべての plist を、その plist の設定・組織（Label）・PATH のままで、現在の版の形に作り直す（版上げが使う）
   -h, --help       この使い方を表示する
 
-常駐の操作（launchctl を実行する。docs/launchd.md）:
-  touryou launchd apply --yes [--org …]      plist を LaunchAgents に置き、daemon を読み込む（ログイン時に自動で動くようになる）
-  touryou launchd status [--org …]           読み込みの状態・終了コードと、窓口の応答（whoami が 401）を表示する
-  touryou launchd restart [--org …]          daemon を起動し直す（版を上げたあと）
-  touryou launchd stop [--org …]             daemon を止める（plist は残るので、次のログインでまた動く）
-  touryou launchd uninstall --yes [--org …]
+常駐の操作（launchctl を実行する。docs/launchd.md）。どれも --config <設定> で対象の daemon を選ぶ（省略すると既定の設定）:
+  touryou launchd apply --yes [--org …] [--config …]   plist を LaunchAgents に置き、daemon を読み込む（ログイン時に自動で動くようになる）
+  touryou launchd status [--org …] [--config …]        読み込みの状態・終了コードと、窓口の応答（whoami が 401）を表示する
+  touryou launchd restart [--org …] [--config …]       daemon を起動し直す（版を上げたあと）
+  touryou launchd stop [--org …] [--config …]          daemon を止める（plist は残るので、次のログインでまた動く）
+  touryou launchd uninstall --yes [--org …] [--config …]
                                          止めて、touryou が生成した plist（古い形の run-daemon.sh も）を消す（logs・state は残す）
+  --config の代わりに --others を付けると、init が生成した別名の daemon（--config で作ったもの）が対象（apply・status・restart・stop・uninstall。版上げが使う）。
+  apply・status・restart・stop では、LaunchAgents に置いた（常駐にした）ものだけ。uninstall では、init しただけのものも含む。--org を付けると、その組織の Label のものだけ
 
 出力先: <HOME>/.touryou/launchd（plist 0644）・<HOME>/.touryou/logs（0700）。
 古い形（v0.1.0 まで。<HOME>/.touryou/bin/run-daemon.sh を起こす plist）は、生成したものと同じときだけ、新しい形に置き換える。
@@ -170,12 +180,100 @@ export const appBundlePath = (base: string): string => join(base, "current", "To
  * plist の ProgramArguments（#73）。shell を通さず、TouRyou.app の中の node（実行ファイルの名前が TouRyou）で daemon の JS を直に起こす。
  * ログイン項目には「TouRyou」の 1 項目が出る（node の名前ではなく）。current のリンクを通すので、版を上げても変わらない。
  */
-export const daemonProgramArguments = (base: string): readonly string[] => [
+export const daemonProgramArguments = (
+  base: string,
+  configPath: string = join(base, "config.json"),
+): readonly string[] => [
   join(appBundlePath(base), "Contents", "MacOS", "TouRyou"),
   join(base, "current", "lib", "dist", "bin.js"),
   "--config",
-  join(base, "config.json"),
+  configPath,
 ];
+
+/**
+ * 既定でない設定（`--config`）の daemon の名前（Label・ログ・plist のファイル名に使う）。設定のパスの sha256 の先頭 8 文字で、
+ * 設定ごとに別になる（#165）。既定の設定（`<base>/config.json`）は、今までどおり `daemon`。
+ */
+export const daemonNameOf = (base: string, configPath: string): string => {
+  // リンク経由でも、同じ設定は同じ daemon になるように、実パスで比べる・名前にする
+  const canonical = canonicalPath(configPath);
+  return canonical === canonicalPath(join(base, "config.json"))
+    ? "daemon"
+    : `daemon-${createHash("sha256").update(canonical).digest("hex").slice(0, 8)}`;
+};
+
+/**
+ * 実パス（リンクを解決したもの）。実在しないときは、存在する親ディレクトリまでの実パスに、存在しない末尾を結合する
+ * （設定を消したあとでも、init のときと同じ名前・Label になるように）。
+ */
+export const canonicalPath = (p: string): string => {
+  try {
+    // native（realpath(3)）は、大文字小文字を区別しない macOS で、実体の綴りに直す（JS 実装の realpathSync は、渡した綴りのまま返す）
+    return realpathSync.native(p);
+  } catch {
+    const parent = dirname(p);
+    return parent === p ? p : join(canonicalPath(parent), basename(p));
+  }
+};
+
+/**
+ * plist に書く設定のパス。`--config` を明示したときだけ、実パス（リンクを解決したもの）にする。
+ * 省略（既定の設定）は、従来どおり `<base>/config.json` のまま（HOME がリンクでも、plist の内容を変えない）。
+ * 明示した設定が既定の設定と同じ実体なら、既定のパスにそろえる。
+ */
+export const configPathOf = (base: string, configArg: string | undefined): string => {
+  const def = join(base, "config.json");
+  if (configArg === undefined) return def;
+  const canonical = canonicalPath(configArg);
+  return canonical === canonicalPath(def) ? def : canonical;
+};
+
+/** init が生成する、別名の設定（--config）の daemon の plist のファイル名。`[<org>.]touryou.daemon-<8 文字>.plist`。 */
+export const OTHER_PLIST = /^((?:[a-z0-9-]+\.)*touryou\.daemon-([0-9a-f]{8}))\.plist$/;
+
+/** 既定・別名のどちらも含む、touryou の daemon の plist のファイル名。 */
+export const DAEMON_PLIST = /^(?:[a-z0-9-]+\.)*touryou\.daemon(?:-[0-9a-f]{8})?\.plist$/;
+
+/** init の出力先（`<home>/.touryou/launchd`）。 */
+export const plistDirOf = (home: string): string => join(home, ".touryou", "launchd");
+
+/** 常駐にした plist の置き場（`<home>/Library/LaunchAgents`）。`--others`・版上げの対象は、ここに置いたもの。 */
+export const agentsDirOf = (home: string): string => join(home, "Library", "LaunchAgents");
+
+/** plist の置き場にある、既定・別名どちらも含む daemon の plist のファイル名（並べ替え済み）。置き場がない・読めなければ空。 */
+export const daemonPlistNames = (
+  plistDir: string,
+  readDir: (path: string) => string[] = (p) => readdirSync(p),
+): string[] => {
+  try {
+    return readDir(plistDir)
+      .filter((n) => DAEMON_PLIST.test(n))
+      .sort();
+  } catch {
+    return [];
+  }
+};
+
+/** plist の置き場にある、別名の設定の daemon の plist のファイル名（並べ替え済み）。置き場がない・読めなければ空。 */
+export const otherPlistNames = (
+  plistDir: string,
+  readDir: (path: string) => string[] = (p) => readdirSync(p),
+): string[] => {
+  try {
+    return readDir(plistDir)
+      .filter((n) => OTHER_PLIST.test(n))
+      .sort();
+  } catch {
+    return [];
+  }
+};
+
+/** plist の ProgramArguments の `--config` の値。 */
+export const plistConfigOf = (text: string): string | undefined =>
+  text.match(/<string>--config<\/string>\s*<string>([^<]*)<\/string>/)?.[1];
+
+/** `--config` に渡せる設定のパス（絶対パスで、使える文字だけ）。 */
+export const usableConfigPath = (p: string): boolean => isAbsolute(p) && plainPath(p);
 
 /** 前の形（v0.1.1。#64）の ProgramArguments。同梱の node（`current/bin/node`）を直に起こす。引っ越し・外すときの確かめだけに使う。 */
 export const v011ProgramArguments = (base: string): readonly string[] => [
@@ -293,6 +391,143 @@ export function stateDirOf(configPath: string): string | undefined {
   }
 }
 
+/** 同じ stateDir を使う、ほかの daemon。`label` は、その plist の Label（既定の設定の、plist がまだない分は無し）。 */
+export interface StateDirSharing {
+  readonly configPath: string;
+  readonly label?: string;
+}
+
+/** 案内に出す、同じ stateDir を使う相手の説明。同じ設定を別の Label で init したものは、Label も示す。 */
+export const describeSharing = (s: StateDirSharing): string =>
+  s.label === undefined
+    ? s.configPath
+    : `${s.configPath}。Label ${s.label} の plist が、同じ設定を使っている`;
+
+/**
+ * 同じ stateDir（実パスで比べる）を使う、ほかの daemon。既定の設定（`<base>/config.json`）と、init 済みの plist
+ * （既定・別名のどちらも。`--org` 違いの Label も）を見る。
+ * 自分の plist（`selfLabel`）だけは、同じ daemon なので飛ばす（同じ --org の init のやり直しを止めない）。
+ * 同じ設定でも Label が違う plist（別の --org で 2 回 init した）は、別の daemon として検査し、見つけたら止める。
+ * 見つかったら、その設定のパス（と Label）。なければ undefined。
+ */
+export function stateDirSharedWith(
+  base: string,
+  plistDir: string,
+  agentsDir: string,
+  configPath: string,
+  stateDir: string,
+  selfLabel: string,
+): StateDirSharing | undefined {
+  const others: StateDirSharing[] = [{ configPath: join(base, "config.json") }];
+  // 元の plist（.touryou/launchd）が消えて、LaunchAgents にだけ残る daemon も、検査の対象にする（--others・ui と同じ）。
+  // 両方にあれば、元の plist を読む
+  const names = [
+    ...new Set([...daemonPlistNames(plistDir), ...daemonPlistNames(agentsDir)]),
+  ].sort();
+  for (const n of names) {
+    for (const dir of [plistDir, agentsDir]) {
+      try {
+        const text = readSecureFile(join(dir, n), { forbid: 0o022, maxBytes: 1024 * 1024 });
+        const cfg = plistConfigOf(text);
+        if (cfg !== undefined) others.push({ configPath: cfg, label: n.replace(/\.plist$/, "") });
+        break;
+      } catch {
+        // 読めない plist は、飛ばす（その 1 つのために、検出全体をやめない。元の plist が読めなければ LaunchAgents のものを読む）
+      }
+    }
+  }
+  const self = canonicalPath(configPath);
+  const mine = canonicalPath(stateDir);
+  const selfIsDefault = self === canonicalPath(join(base, "config.json"));
+  for (const c of others) {
+    // 自分の plist（同じ Label）は、同じ daemon なので飛ばす。
+    // 既定の設定は、--org を変えて並べられる（既存の動き。plist だけが別名になる）ので、同じ設定どうしは飛ばす。
+    // 別名の設定（--config）は、Label（--org）が違っても同じ設定なら、同じ stateDir の別の daemon として止める
+    if (c.label === selfLabel) continue;
+    if (selfIsDefault && canonicalPath(c.configPath) === self) continue;
+    const sd = stateDirOf(c.configPath);
+    if (sd !== undefined && canonicalPath(sd) === mine) return c;
+  }
+  return undefined;
+}
+
+/**
+ * `init --others`: init 済みの別名の設定（--config で作ったもの）すべてを、同じ --org・--path-prefix・--config で init し直す
+ * （版上げのあと、新しい版の形にそろえる。既存と同じなら何もしない）。--org・--path-prefix は、plist の Label・PATH から読み戻す。
+ */
+function initOthers(args: readonly string[], deps: LaunchdDeps): CommandResult {
+  if (args.length !== 1) return fail("--others は、ほかの引数と一緒に指定できない");
+  const home = deps.env.HOME;
+  if (home === undefined || home === "" || !isAbsolute(home) || !plainPath(home)) {
+    return fail("HOME が、絶対パスでない・空・使えない文字を含む");
+  }
+  const plistDir = plistDirOf(home);
+  // 対象は、LaunchAgents に置いた（常駐にした）ものだけ（has_extra_daemons・stop/apply --others と同じ集合）。
+  // init しただけで使っていない plist は、壊れていても見ない
+  const agentsDir = agentsDirOf(home);
+  const names = otherPlistNames(agentsDir);
+  if (names.length === 0) {
+    return {
+      exitCode: 0,
+      stdout: "別名の設定（--config）の daemon は、常駐にしたものがない（何もしていない）\n",
+      stderr: "",
+    };
+  }
+  // 先に、全部の設定を検査する（1 つでも通らなければ、何も書かない。新旧の plist が混ざらないように）
+  const plans: InitPlan[] = [];
+  const failures: string[] = [];
+  for (const n of names) {
+    // 元の plist（.touryou/launchd）が消えていれば、LaunchAgents のものから設定・PATH を読み戻す
+    const src = join(plistDir, n);
+    const file = lstatOrUndefined(src)?.isFile() === true ? src : join(agentsDir, n);
+    const text = lstatOrUndefined(file)?.isFile() === true ? readFileSync(file, "utf8") : undefined;
+    const cfg = text === undefined ? undefined : plistConfigOf(text);
+    const pathValue = text?.match(/<key>PATH<\/key><string>([^<]*)<\/string>/)?.[1];
+    const suffix = `:${DEFAULT_PATH}`;
+    const prefix =
+      pathValue === DEFAULT_PATH
+        ? []
+        : pathValue?.endsWith(suffix) === true
+          ? ["--path-prefix", pathValue.slice(0, -suffix.length)]
+          : undefined;
+    const label = n.replace(/\.plist$/, "");
+    const org = label.match(/^(.+)\.touryou\.daemon-[0-9a-f]{8}$/)?.[1];
+    if (cfg === undefined || prefix === undefined) {
+      failures.push(
+        `  ${file}: 設定（--config）または PATH を読めない。手で外すか、"$HOME/.touryou/current/bin/touryou" launchd init --config <設定> で作り直す`,
+      );
+      continue;
+    }
+    const planned = planInit(
+      ["--config", cfg, ...(org === undefined ? [] : ["--org", org]), ...prefix],
+      deps,
+    );
+    if ("exitCode" in planned) {
+      const reason = planned.stderr
+        .trim()
+        .split("\n")
+        .map((l) => `    ${l}`)
+        .join("\n");
+      failures.push(`  --config ${cfg}:\n${reason}`);
+    } else {
+      plans.push(planned);
+    }
+  }
+  if (failures.length > 0) {
+    return fail(
+      `init --others: 作り直せない設定が ${failures.length} 件ある。何も書かずに止めた（全部を検査してから書くので、新旧の plist は混ざらない）:\n${failures.join("\n")}\n直してから、もう一度実行する`,
+      1,
+    );
+  }
+  const results = plans.map(writeInit);
+  const failed = results.find((r) => r.exitCode !== 0);
+  return {
+    exitCode: failed?.exitCode ?? 0,
+    stdout: results.map((r) => r.stdout).join(""),
+    stderr: results.map((r) => r.stderr).join(""),
+  };
+}
+
 export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandResult {
   if (argv[0] !== "init") {
     return fail(
@@ -303,15 +538,39 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
   if (args.includes("--help") || args.includes("-h")) {
     return { exitCode: 0, stdout: HELP, stderr: "" };
   }
+  if (args.includes("--others")) return initOthers(args, deps);
+  const planned = planInit(args, deps);
+  return "exitCode" in planned ? planned : writeInit(planned);
+}
+
+/** init の検査が済んだ、書く内容。書く前に、全部の設定で作る（`init --others` が、検査と書き込みを分けるため）。 */
+interface InitPlan {
+  readonly home: string;
+  readonly base: string;
+  readonly logsDir: string;
+  readonly plistDir: string;
+  readonly daemonLabel: string;
+  readonly targets: readonly Target[];
+  readonly toWrite: readonly Target[];
+  readonly toReplace: readonly Target[];
+  readonly same: readonly string[];
+  readonly legacyScript: string;
+  readonly scriptIsLegacy: boolean;
+}
+
+/** init の引数と、書く先の状態を全部確かめる（何も書かない）。書けなければ、止める理由（CommandResult）を返す。 */
+function planInit(args: readonly string[], deps: LaunchdDeps): InitPlan | CommandResult {
   let org: string | undefined;
   let pathPrefix = "";
   let prefixGiven = false;
+  let configArg: string | undefined;
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i] as string;
     const v = args[i + 1];
-    if (a === "--org" || a === "--path-prefix") {
+    if (a === "--org" || a === "--path-prefix" || a === "--config") {
       if (v === undefined || v.startsWith("--")) return fail(`${a} には値を指定する`);
       if (a === "--org") org = v;
+      else if (a === "--config") configArg = v;
       else {
         pathPrefix = v;
         prefixGiven = true;
@@ -344,10 +603,26 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
     );
   }
   const base = join(home, ".touryou");
-  const configPath = join(base, "config.json");
+  if (configArg !== undefined && !usableConfigPath(configArg)) {
+    return fail(
+      "--config は、設定ファイルの絶対パスにする。英数字・. _ / @ + 空白 - だけが使える（.. の要素・// は使えない）",
+    );
+  }
+  // --config を明示したときだけ、plist に書く設定のパスを実パスにそろえる（リンク経由の指定でも、同じ設定は同じ plist・Label になる）。
+  // 省略（既定の設定）は <base>/config.json のまま（HOME がリンクでも、plist の内容を変えない）
+  const configPath = configPathOf(base, configArg);
+  if (!usableConfigPath(configPath)) {
+    return fail(
+      "--config の実パス（リンクを解決したもの）が、使えない文字を含む。英数字・. _ / @ + 空白 - だけが使える（.. の要素・// は使えない）",
+    );
+  }
+  const daemonName = daemonNameOf(base, configPath);
+  const isDefault = daemonName === "daemon";
   if (!existsSync(configPath) || !existsSync(join(base, "current"))) {
     return fail(
-      "/setup が済んでいない（HOME の .touryou に config.json と current がない）。先に /setup を実行する",
+      isDefault
+        ? "/setup が済んでいない（HOME の .touryou に config.json と current がない）。先に /setup を実行する"
+        : "--config の設定ファイルがない、または /setup が済んでいない（HOME の .touryou に current がない）",
       1,
     );
   }
@@ -358,12 +633,29 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
       1,
     );
   }
-  const problem = configProblem(home, pathValue, deps.checkConfig);
+  const problem = configProblem(home, pathValue, deps.checkConfig, configPath);
   if (problem !== undefined) return fail(problem, 1);
 
   const binDir = join(base, "bin");
   const logsDir = join(base, "logs");
   const plistDir = join(base, "launchd");
+  // 同じ stateDir（port・トークン・DB の置き場）を、別の設定の daemon が使うと、同じ state を取り合って壊れる。
+  // 同じ設定を別の --org で init したもの（Label が違う plist）も、別の daemon として数える
+  const daemonLabel = labelOf(org, daemonName);
+  const sharing = stateDirSharedWith(
+    base,
+    plistDir,
+    agentsDirOf(home),
+    configPath,
+    stateDir,
+    daemonLabel,
+  );
+  if (sharing !== undefined) {
+    return fail(
+      `stateDir が、別の設定（${describeSharing(sharing)}）の daemon と同じ。同じ state を 2 つの daemon が使うと壊れるので、何も書かずに止めた。設定ごとに、別の stateDir にする（同じ設定を別の --org で作り直すときは、先に uninstall --yes で外す）`,
+      1,
+    );
+  }
   // 生成先のディレクトリが、リンクだと、辿って別の場所へ書いてしまう。リンク・通常のディレクトリでないものは、書かずに止める
   const badDirs = [base, binDir, logsDir, plistDir].filter((d) => {
     const st = lstatOrUndefined(d);
@@ -377,31 +669,34 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
       1,
     );
   }
-  const daemonLabel = labelOf(org, "daemon");
   const plistPath = join(plistDir, `${daemonLabel}.plist`);
   const common = {
     label: daemonLabel,
     workingDirectory: base,
-    log: join(logsDir, "daemon.log"),
+    log: join(logsDir, `${daemonName}.log`),
     path: pathValue,
   };
   const targets: Target[] = [
     {
       path: plistPath,
-      content: plistText({ ...common, programArguments: daemonProgramArguments(base) }),
+      content: plistText({
+        ...common,
+        programArguments: daemonProgramArguments(base, configPath),
+      }),
       mode: 0o644,
     },
   ];
-  // 古い形（v0.1.0 まで）の生成物。同じ --org・--path-prefix の init が生成したものと、バイト単位で同じときだけ、置き換える（#64）
+  // 古い形（v0.1.0 まで）の生成物。同じ --org・--path-prefix の init が生成したものと、バイト単位で同じときだけ、置き換える（#64）。
+  // 別名の設定（--config）には、古い形がない（#165）ので、見ない
   const legacyScript = legacyScriptPath(base);
-  const legacyPlist = legacyPlistText({ ...common, script: legacyScript });
-  const v011Plist = v011PlistText({ ...common, base });
+  const legacyPlist = isDefault ? legacyPlistText({ ...common, script: legacyScript }) : undefined;
+  const v011Plist = isDefault ? v011PlistText({ ...common, base }) : undefined;
   const readRegular = (p: string): string | undefined => {
     const st = lstatOrUndefined(p);
     return st?.isFile() === true ? readFileSync(p, "utf8") : undefined;
   };
-  const scriptSt = lstatOrUndefined(legacyScript);
-  const scriptIsLegacy = readRegular(legacyScript) === runDaemonScript(base);
+  const scriptSt = isDefault ? lstatOrUndefined(legacyScript) : undefined;
+  const scriptIsLegacy = isDefault && readRegular(legacyScript) === runDaemonScript(base);
 
   // 先に全部を確かめる（1 つでも、違う内容の既存があれば、何も書かない）
   const toWrite: Target[] = [];
@@ -415,9 +710,13 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
       toWrite.push(t);
     } else if (text === t.content) {
       same.push(t.path);
-    } else if (text === legacyPlist && (scriptSt === undefined || scriptIsLegacy)) {
+    } else if (
+      legacyPlist !== undefined &&
+      text === legacyPlist &&
+      (scriptSt === undefined || scriptIsLegacy)
+    ) {
       toReplace.push(t);
-    } else if (text === v011Plist) {
+    } else if (v011Plist !== undefined && text === v011Plist) {
       // v0.1.1 の形（current/bin/node を直に起こす）。同じ --org・--path-prefix の v0.1.1 の init の生成物と同じときだけ（#73）
       toReplace.push(t);
     } else {
@@ -436,7 +735,36 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
       1,
     );
   }
+  return {
+    home,
+    base,
+    logsDir,
+    plistDir,
+    daemonLabel,
+    targets,
+    toWrite,
+    toReplace,
+    same,
+    legacyScript,
+    scriptIsLegacy,
+  };
+}
 
+/** planInit が確かめた内容を書く。 */
+function writeInit(plan: InitPlan): CommandResult {
+  const {
+    home,
+    base,
+    logsDir,
+    plistDir,
+    daemonLabel,
+    targets,
+    toWrite,
+    toReplace,
+    same,
+    legacyScript,
+    scriptIsLegacy,
+  } = plan;
   // ディレクトリ（自分が作るものだけ、権限を設定する。既存のものは、権限を確かめる）
   const dirNotes: string[] = [];
   for (const [dir, mode] of [

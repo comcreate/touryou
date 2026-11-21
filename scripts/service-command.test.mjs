@@ -87,7 +87,7 @@ test("uninstall-all: 「はい」のあと 1 回だけ uninstall --yes。plugin�
   );
   assert.match(
     u,
-    /\*\*1 回だけ\*\*実行する: `"\$HOME\/\.touryou\/current\/bin\/touryou" launchd uninstall --yes`/,
+    /実行するのは\*\*合計で最大 2 回\*\*: まず `"\$HOME\/\.touryou\/current\/bin\/touryou" launchd uninstall --yes`（1 回）/,
   );
   assert.ok(
     u.indexOf("定型文（まとめて外す）") < u.indexOf("launchd uninstall --yes"),
