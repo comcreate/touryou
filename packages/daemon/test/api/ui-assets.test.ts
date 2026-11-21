@@ -14,6 +14,7 @@ import {
 } from "../../src/api/ui-assets.js";
 import { UI_GRAPH_JS } from "../../src/api/ui-graph-js.js";
 import { EXTERNAL_CHECK_SUMMARY, externalCheckSummaries } from "../../src/external-check.js";
+import { UI_TEXT as UI_TEXT_TABLE } from "../../src/ui/i18n.js";
 
 /** 埋め込んだ文字の表の行（#140）。JSON のオブジェクトの値だけの行（行の終わりまで形を決める）。走査から除くのは、この行だけ。 */
 const TABLE_LINE = /^ {2}var (?:TEXT|MESSAGES|SEPS) = \{[^\n]*\};$/gm;
@@ -82,10 +83,12 @@ describe("画面の資産（走査）", () => {
       expect(UI_JS.match(/var SETTINGS_KEY = '([^']*)'/)?.[1]).toBe("touryou.ui.settings");
       expect(UI_JS.match(/localStorage\.(getItem|setItem|removeItem|clear)\(/g)?.length).toBe(2);
     });
-    it("書く値は still・theme・lang だけ（形を確かめた値）", () => {
+    it("書く値は still・theme・lang・hideFinished だけ（形を確かめた値）", () => {
       const save = fnOf("saveSettings");
       expect(save).toContain("var v = settingsOf(x);");
-      expect(save).toContain("JSON.stringify({ still: v.still, theme: v.theme, lang: v.lang })");
+      expect(save).toContain(
+        "JSON.stringify({ still: v.still, theme: v.theme, lang: v.lang, hideFinished: v.hideFinished })",
+      );
     });
     it("読み出した値は形を確かめ、知らない鍵・形の違う値は捨てる", () => {
       const src = fnOf("settingsOf");
@@ -97,17 +100,32 @@ describe("画面の資産（走査）", () => {
         ) as (o: unknown) => unknown;
       const settingsOf = of("ja-JP");
       // 言語は、選んだときだけ残す（選んでいなければ undefined で、JSON に書かれない。#140）
-      expect(settingsOf(null)).toEqual({ still: false, theme: "auto", lang: undefined });
-      expect(of("en-US")({ lang: "ja" })).toEqual({ still: false, theme: "auto", lang: "ja" });
-      expect(settingsOf({ still: "yes", theme: "neon", lang: "fr", token: "t" })).toEqual({
+      // 止めた・済んだ子を隠すのは、true を覚えているときだけ（既定は出す。#206）
+      expect(settingsOf(null)).toEqual({
         still: false,
         theme: "auto",
         lang: undefined,
+        hideFinished: false,
       });
-      expect(settingsOf({ still: true, theme: "dark", lang: "en" })).toEqual({
+      expect(of("en-US")({ lang: "ja" })).toEqual({
+        still: false,
+        theme: "auto",
+        lang: "ja",
+        hideFinished: false,
+      });
+      expect(
+        settingsOf({ still: "yes", theme: "neon", lang: "fr", hideFinished: "yes", token: "t" }),
+      ).toEqual({
+        still: false,
+        theme: "auto",
+        lang: undefined,
+        hideFinished: false,
+      });
+      expect(settingsOf({ still: true, theme: "dark", lang: "en", hideFinished: true })).toEqual({
         still: true,
         theme: "dark",
         lang: "en",
+        hideFinished: true,
       });
     });
     it("トークン・チケット・ノード ID を残さない（保存の関数に、その名前が出てこない）", () => {
@@ -151,6 +169,8 @@ describe("画面の資産（走査）", () => {
       "still",
       "theme",
       "lang",
+      // 関係図で、止めた・済んだ子を隠す（#206）。保存は同じ 2 つの関数の中
+      "hideFinished",
       "localStorage",
       "getItem",
       "setItem",
@@ -393,6 +413,12 @@ describe("画面の資産（走査）", () => {
       "attachDir",
       // 紐付けが切れた子（#189。表示モデルの値 'idle' | 'absolute'）
       "bindExpired",
+      // 相対時刻（「N 分前」）を、画面を描き直さずに計算し直す（#204）。基準の時刻・文の鍵・ほかの値を dataset に持たせ、interval で回す
+      "tkey",
+      "tvars",
+      "setInterval",
+      // 紐付けが外れているかもしれない子（表示モデルの値 true）
+      "bindLost",
     ]);
     // 埋め込んだ文字の表（#140。JSON の値で、コードでない）は、走査から除く
     const code = UI_JS.replace(TABLE_LINE, "")
@@ -1247,6 +1273,8 @@ describe("画面の使い勝手（#13）", () => {
       fnOf("fetchFailureText"),
       fnOf("timeText"),
       fnOf("agoText"),
+      fnOf("whenText"),
+      fnOf("refreshTimes"),
       fnOf("stageText"),
       fnOf("attachWith"),
       fnOf("attachCommand"),
@@ -1254,7 +1282,7 @@ describe("画面の使い勝手（#13）", () => {
       fnOf("attachCommands"),
       fnOf("cleanText"),
       lineOf("function nodeLabel("),
-      "({ inboxBand: inboxBand, fetchFailureText: fetchFailureText, UNREACHABLE_TEXT: unreachableText(), timeText: timeText, agoText: agoText, stageText: stageText, attachCommand: attachCommand, attachCommandByRef: attachCommandByRef, attachCommands: attachCommands, nodeLabel: nodeLabel })",
+      "({ inboxBand: inboxBand, fetchFailureText: fetchFailureText, UNREACHABLE_TEXT: unreachableText(), timeText: timeText, agoText: agoText, whenText: whenText, refreshTimes: refreshTimes, stageText: stageText, attachCommand: attachCommand, attachCommandByRef: attachCommandByRef, attachCommands: attachCommands, nodeLabel: nodeLabel })",
     ].join("\n"),
     uiContext,
   ) as {
@@ -1263,6 +1291,13 @@ describe("画面の使い勝手（#13）", () => {
     UNREACHABLE_TEXT: string;
     timeText(iso: unknown, nowMs: number): string;
     agoText(ms: number): string;
+    whenText(
+      iso: unknown,
+      key: string,
+      vars: Record<string, string> | undefined,
+      nowMs: number,
+    ): string;
+    refreshTimes(nowMs: number): void;
     stageText(f: Record<string, unknown>): string;
     attachCommand(n: unknown): string;
     attachCommandByRef(n: unknown): string;
@@ -1348,6 +1383,76 @@ describe("画面の使い勝手（#13）", () => {
     expect(api.timeText(undefined, now)).toBe("");
     expect(api.agoText(30_000)).toBe("いま");
     expect(api.agoText(2 * 3_600_000)).toBe("2 時間前");
+  });
+
+  it("(#204) 相対時刻は nowMs を渡して計算し直せる。言葉の境目は、これまでと同じ", () => {
+    const at = new Date(2026, 10, 17, 14, 0, 0);
+    const iso = at.toISOString();
+    const after = (ms: number) => at.getTime() + ms;
+    expect(api.whenText(iso, "", undefined, after(30_000))).toBe("14:00（いま）");
+    expect(api.whenText(iso, "", undefined, after(60_000))).toBe("14:00（1 分前）");
+    expect(api.whenText(iso, "", undefined, after(59 * 60_000))).toBe("14:00（59 分前）");
+    expect(api.whenText(iso, "", undefined, after(60 * 60_000))).toBe("14:00（1 時間前）");
+    // 文の鍵があれば、{when} に入れる（鍵のない値は、そのまま）
+    expect(api.whenText(iso, "card.last", undefined, after(5 * 60_000))).toBe(
+      api.whenText(iso, "card.last", {}, after(5 * 60_000)),
+    );
+    expect(api.whenText(iso, "card.last", undefined, after(5 * 60_000))).toContain("5 分前");
+    // 読めない値は、時刻の部分が空
+    expect(api.whenText("壊れた", "", undefined, after(0))).toBe("");
+  });
+
+  it("(#204) refreshTimes は、要素を作り直さず、変わった文字だけ書き直す", () => {
+    const at = new Date(2026, 10, 17, 14, 0, 0);
+    const iso = at.toISOString();
+    const makeEl = (dataset: Record<string, string>, textContent: string) => ({
+      dataset,
+      textContent,
+      writes: 0,
+    });
+    const plain = makeEl({ at: iso }, "14:00（いま）");
+    const keyed = makeEl({ at: iso, tkey: "card.last", tvars: "{}" }, "");
+    const broken = makeEl({ at: iso, tvars: "{壊れた" }, "");
+    // textContent への書き込みを数える（同じ文字なら、書かない）
+    for (const e of [plain, keyed, broken]) {
+      let value = e.textContent;
+      Object.defineProperty(e, "textContent", {
+        get: () => value,
+        set: (v: string) => {
+          e.writes += 1;
+          value = v;
+        },
+      });
+    }
+    uiContext.document = { querySelectorAll: () => [plain, keyed, broken] };
+    const t0 = at.getTime();
+    api.refreshTimes(t0 + 30_000);
+    expect(plain.textContent).toBe("14:00（いま）");
+    expect(plain.writes).toBe(0);
+    api.refreshTimes(t0 + 3 * 60_000);
+    expect(plain.textContent).toBe("14:00（3 分前）");
+    expect(plain.writes).toBe(1);
+    expect(keyed.textContent).toContain("3 分前");
+    // vars が壊れていても、止まらない
+    expect(broken.textContent).toBe("14:00（3 分前）");
+    // 変わらないなら、書かない
+    api.refreshTimes(t0 + 3 * 60_000 + 10_000);
+    expect(plain.writes).toBe(1);
+  });
+
+  it("(#204) 相対時刻の要素は、基準の時刻を持つ。interval・前面に戻った瞬間・focus で計算し直す", () => {
+    expect(UI_JS).toContain("e.dataset.at = ");
+    expect(UI_JS).toContain(
+      "window.setInterval(function () { refreshTimes(Date.now()); }, TIME_TICK_MS)",
+    );
+    const visible = UI_JS.slice(UI_JS.indexOf("document.addEventListener('visibilitychange'"));
+    expect(visible.slice(0, visible.indexOf("window.addEventListener('focus'"))).toContain(
+      "refreshTimes(Date.now())",
+    );
+    const focus = visible.slice(visible.indexOf("window.addEventListener('focus'"));
+    expect(focus.slice(0, focus.indexOf("});"))).toContain("refreshTimes(Date.now())");
+    // 呼び出しは、すべて whenEl 経由（描き直しのときだけ計算する書き方を残さない）
+    expect(UI_JS).not.toMatch(/el\([^\n]*timeText\(/);
   });
 
   it("(#89) やり取りの段の言葉。届いたかの記録がない・推定は、そう言う", () => {
@@ -1488,8 +1593,9 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
       "var pick = function (id) { if (typeof id === 'string' && ID_RE.test(id)) openCard(id); };",
     );
     // 描けないとき（reject も同期の例外も）は一覧に戻る。戻すのは、いちばん新しい描きのときだけ
+    // 止めた・済んだ子を隠すかどうか（#206）も、設定から draw に渡す
     expect(UI_JS).toContain(
-      "Promise.resolve(g.draw(box, view, { onPick: pick, lang: lang })).then(fit, fallback);",
+      "Promise.resolve(g.draw(box, view, { onPick: pick, lang: lang, hideFinished: settings.hideFinished })).then(fit, fallback);",
     );
     expect(UI_JS).toMatch(/\} catch \(e\) \{\s*fallback\(\);/);
     expect(UI_JS).toMatch(
@@ -1508,6 +1614,32 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
       /prefers-reduced-motion: reduce\)\{\*,\*::before\{animation:none!important/,
     );
     expect(UI_CSS).toContain(".line.g-sent{animation:gflow");
+  });
+  it("止めた・済んだ子を隠すトグル（#206）: 図のときだけ出る切り替えボタン。押すと設定に残し、図を描き直す。件数の札は図の中に出る", () => {
+    expect(UI_HTML).toContain(
+      '<button id="hide-finished" class="quiet sm" type="button" aria-pressed="false" data-t="view.hideFinished">止めた・済んだ子を隠す</button>',
+    );
+    // 切り替えのボタンの欄は、図のときだけ出す（一覧には効かないので、出さない）
+    expect(UI_HTML).toMatch(/<div id="graph-filter" class="seg" hidden>/);
+    expect(UI_JS).toContain("document.getElementById('graph-filter').hidden = !on;");
+    expect(UI_JS).toContain(
+      "document.getElementById('hide-finished').ariaPressed = settings.hideFinished ? 'true' : 'false';",
+    );
+    const at = UI_JS.indexOf("document.getElementById('hide-finished').addEventListener('click'");
+    expect(at).toBeGreaterThan(-1);
+    const body = UI_JS.slice(at, UI_JS.indexOf("\n  });\n", at));
+    expect(body).toContain("settings.hideFinished = !settings.hideFinished;");
+    expect(body).toContain("saveSettings(settings);");
+    expect(body).toContain("dropGraph();");
+    expect(UI_CSS).toContain(".ghidden{");
+  });
+  it("切り替えボタンと隠した件数の文は、日本語と英語の両方にある（#206）", () => {
+    for (const key of ["view.hideFinished", "graph.hidden"] as const) {
+      const text = UI_TEXT_TABLE[key];
+      expect(text.ja, key).not.toBe("");
+      expect(text.en, key).not.toBe("");
+      expect(text.en, key).not.toBe(text.ja);
+    }
   });
 });
 

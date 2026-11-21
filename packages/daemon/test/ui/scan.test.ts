@@ -129,6 +129,8 @@ describe("図の自前のコード（走査）", () => {
       "createElement",
       "createElementNS",
       "setAttributeNS",
+      // 「何分前」を計算し直す interval（#204。関数だけを渡す。文字列は渡さない）
+      "setInterval",
       // 図の言葉の差し込み（#140。graph-text.ts の文字列の replace。DOM には触れない）
       "replace",
     ]);

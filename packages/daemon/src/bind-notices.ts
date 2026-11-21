@@ -29,11 +29,16 @@ export const idleWarnMsOf = (
   sweepMs: number = TOKEN_SWEEP_MS,
 ): number | undefined => (bindIdleMs >= 4 * sweepMs ? 2 * sweepMs : undefined);
 
-/** 紐付けの期限にまつわる知らせの鍵。結び直されたら、どれも解決にする。 */
+/**
+ * 紐付けの期限・外れにまつわる知らせの鍵。結び直されたら、どれも解決にする。
+ * `bindLostSuspect`（紐付けが外れているかも。cli-watch が出す）は、トークンが有効なまま購読が途切れた疑いの知らせで、
+ * 子が child_bind を呼び直して結び直したときに解決にする（購読が戻る・トークンが切れる場合は、cli-watch が解決にする）。
+ */
 export const BIND_NOTICE_KEYS: ReadonlySet<string> = new Set<InboxMessageKey>([
   "tokenExpiredIdleBind",
   "tokenExpiredAbsoluteBind",
   "tokenIdleSoonBind",
+  "bindLostSuspect",
 ]);
 
 /** 失効の前の知らせの鍵だけ（失効・復帰で解決にする対象）。 */

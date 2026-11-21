@@ -58,7 +58,7 @@ export const UI_HTML = `<!doctype html>
 <section id="view" hidden>
 <section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h2 id="now-title" data-t="now.title">いまあなたがすること</h2><p id="now-lead" class="lead"></p></section>
 <div id="todo" class="todo"></div>
-<section class="sec"><h2 data-t="flows.title">やり取り</h2><p class="lead" data-t="flows.lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span><span data-t="legend.up">← 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">→ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
+<section class="sec"><h2 data-t="flows.title">やり取り</h2><p class="lead" data-t="flows.lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button></div><div id="graph-filter" class="seg" hidden><button id="hide-finished" class="quiet sm" type="button" aria-pressed="false" data-t="view.hideFinished">止めた・済んだ子を隠す</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span><span data-t="legend.up">← 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">→ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
 <section class="sec"><h2 data-t="cards.title">作業ごとのようす</h2><p class="lead" data-t="cards.lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
 <details id="finished" class="finished"><summary id="finished-summary" data-t="cards.finishedTitle">終わった作業</summary><div id="finished-cards" class="cards"></div></details></section>
 <details class="admin"><summary data-t="admin.title">管理（まれに使う操作）</summary><p class="warn" data-t="admin.warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
@@ -194,7 +194,8 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 @keyframes pickA{0%{box-shadow:0 0 0 0 var(--ai)}35%{box-shadow:0 0 0 8px var(--ai-3)}100%{box-shadow:0 0 0 0 transparent}}
 @keyframes pickB{0%{box-shadow:0 0 0 0 var(--ai)}35%{box-shadow:0 0 0 8px var(--ai-3)}100%{box-shadow:0 0 0 0 transparent}}
 @keyframes open{from{opacity:0;transform:translateY(-4px)}}
-.seg{display:inline-flex;gap:4px;margin:0 0 8px}.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.seg{display:inline-flex;gap:4px;margin:0 0 8px}.seg+.seg{margin-left:8px}.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.ghidden{position:absolute;left:12px;top:10px;z-index:1;pointer-events:none;font-size:12.5px;line-height:1.8;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:var(--sheet);color:var(--muted)}
 .board{position:relative;height:420px;min-height:180px;max-height:720px;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:var(--sheet);user-select:none;-webkit-user-select:none;touch-action:none}
 .gback{position:absolute;left:0;top:0;pointer-events:none}
 .gnode{box-sizing:border-box;position:relative;width:220px;height:80px;padding:8px 14px 8px 16px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);display:flex;flex-direction:column;justify-content:center;gap:3px;box-shadow:0 1px 2px rgba(0,0,0,.12)}
@@ -247,7 +248,7 @@ const EXTERNAL_CHECK_PREFIXES = JSON.stringify(externalCheckSummaries().map((x) 
 export const UI_JS = `'use strict';
 (function () {
   // 設定の窓（#139）。描く前に当てる（読み込みの一瞬だけ違う明暗で描かないように）。選んだものはブラウザに残す（残せないときも、その場では効く）。
-  // localStorage を使うのは、この 2 つの関数の中だけ（鍵は 1 つ。書くのは still・theme・lang だけ。トークン・チケット・ID は書かない）
+  // localStorage を使うのは、この 2 つの関数の中だけ（鍵は 1 つ。書くのは still・theme・lang・hideFinished だけ。トークン・チケット・ID は書かない）
   var SETTINGS_KEY = 'touryou.ui.settings';
   function browserLang() {
     var b = typeof navigator === 'object' && navigator ? navigator.language : undefined;
@@ -260,6 +261,8 @@ export const UI_JS = `'use strict';
       theme: v.theme === 'light' || v.theme === 'dark' ? v.theme : 'auto',
       // 言語は、言語の欄で選んだときだけ残す（選んでいなければ undefined。JSON に書かれず、そのつどブラウザの言語に合わせる）
       lang: v.lang === 'en' || v.lang === 'ja' ? v.lang : undefined,
+      // 関係図で、止めた・済んだ子を隠すか（#206。既定は出す）
+      hideFinished: v.hideFinished === true,
     };
   }
   function loadSettings() {
@@ -267,7 +270,7 @@ export const UI_JS = `'use strict';
   }
   function saveSettings(x) {
     var v = settingsOf(x);
-    try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ still: v.still, theme: v.theme, lang: v.lang })); } catch (e) { /* 残せなくても動く */ }
+    try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ still: v.still, theme: v.theme, lang: v.lang, hideFinished: v.hideFinished })); } catch (e) { /* 残せなくても動く */ }
   }
   function applySettings(x) {
     var root = document.documentElement;
@@ -368,6 +371,8 @@ export const UI_JS = `'use strict';
   var POLL_MS = 2000;
   var SAFETY_MS = 30000;
   var THROTTLE_MS = 1000;
+  // 相対時刻だけを計算し直す間隔（画面全体の描き直しとは別）
+  var TIME_TICK_MS = 15000;
   var BACKOFF_MIN = 1000;
   var BACKOFF_MAX = 300000;
   // 裏のタブ: 隠れてこの時間たったら購読を閉じ（ほかのタブに枠を空ける）、ポーリングも間を空ける。
@@ -419,6 +424,31 @@ export const UI_JS = `'use strict';
     if (m < 60) return t('time.minAgo', { n: m });
     if (m < 1440) return t('time.hourAgo', { n: Math.floor(m / 60) });
     return t('time.dayAgo', { n: Math.floor(m / 1440) });
+  }
+  // 相対時刻の文字（#204）。key があれば、その文の {when} に時刻を入れる（vars は、ほかの {…} の値）。nowMs を渡して計算する（試験できる形）
+  function whenText(iso, key, vars, nowMs) {
+    var when = timeText(iso, nowMs);
+    if (!key) return when;
+    var args = { when: when };
+    Object.keys(vars || {}).forEach(function (k) { args[k] = vars[k]; });
+    return t(key, args);
+  }
+  // 相対時刻を出す要素。基準の ISO 時刻・文の鍵・ほかの値を data に持たせ、refreshTimes が、画面を描き直さずに文字だけ計算し直す
+  function whenEl(tag, cls, iso, key, vars) {
+    var e = el(tag, cls, whenText(iso, key, vars, Date.now()));
+    e.dataset.at = typeof iso === 'string' ? iso : '';
+    if (key) { e.dataset.tkey = key; e.dataset.tvars = JSON.stringify(vars || {}); }
+    return e;
+  }
+  // 画面の中の相対時刻の文字を、nowMs から計算し直す。要素は作り直さない（入力中の欄・折りたたみ・スクロール位置に触らない）。
+  // 変わった文字だけ書く（読み上げに、同じ文を繰り返させない）
+  function refreshTimes(nowMs) {
+    document.querySelectorAll('[data-at]').forEach(function (e) {
+      var vars = {};
+      if (e.dataset.tvars) { try { vars = JSON.parse(e.dataset.tvars); } catch (err) { vars = {}; } }
+      var text = whenText(e.dataset.at, e.dataset.tkey || '', vars, nowMs);
+      if (e.textContent !== text) e.textContent = text;
+    });
   }
   // やり取りの段の言葉。届いたかの記録がない（deliveryUnknown）・推定（doneInferred）は、そう言う
   function stageText(f) {
@@ -796,7 +826,7 @@ export const UI_JS = `'use strict';
     var who = el('div', 'who');
     who.appendChild(el('span', 'chip ' + chip, label));
     who.appendChild(el('span', 'strong', n ? nodeLabel(n, 60) : nodeId));
-    if (n) who.appendChild(el('span', '', n.lastActivityAt ? t('who.roleLast', { role: name(ROLE_NAMES, n.role), when: timeText(n.lastActivityAt, Date.now()) }) : t('who.role', { role: name(ROLE_NAMES, n.role) })));
+    if (n) who.appendChild(n.lastActivityAt ? whenEl('span', '', n.lastActivityAt, 'who.roleLast', { role: name(ROLE_NAMES, n.role) }) : el('span', '', t('who.role', { role: name(ROLE_NAMES, n.role) })));
     card.appendChild(who);
     return card;
   }
@@ -850,7 +880,7 @@ export const UI_JS = `'use strict';
         n += 1;
         var card = taskCard('task stall', 'i-' + i.id, t('stall.chip'), 'stall', node, i.nodeId);
         card.appendChild(el('div', 'ask', t('stall.ask')));
-        if (i.at) card.appendChild(el('div', 'when', t('stall.when', { when: timeText(i.at, Date.now()) })));
+        if (i.at) card.appendChild(whenEl('div', 'when', i.at, 'stall.when'));
         var cmds = attachCommands(node);
         if (cmds.length) {
           cmds.forEach(function (cmd, idx) {
@@ -998,17 +1028,21 @@ export const UI_JS = `'use strict';
     // 紐付けのトークンが切れた子（#189）: くすんだ黄の札（止まっているかもと同じ系統）。切れた理由と親の次の操作は、題の下に出す
     var bindExpired = n.bindExpired === 'idle' || n.bindExpired === 'absolute';
     if (bindExpired) head.appendChild(el('span', 'chip stall', t(n.bindExpired === 'idle' ? 'card.bindExpiredIdle' : 'card.bindExpiredAbsolute')));
+    // 紐付けが外れているかもしれない子: トークンは有効なまま、通知の受け取りが長く途切れている。切れた札（上）とは別の札・別の次の操作
+    var bindLost = n.bindLost === true && !bindExpired;
+    if (bindLost) head.appendChild(el('span', 'chip stall', t('card.bindLost')));
     card.appendChild(head);
     card.appendChild(el('h3', '', nodeLabel(n, 200)));
     if (bindExpired) {
       card.appendChild(el('p', 'desc', t(n.runtime === 'cli' ? 'card.bindExpiredNextCli' : n.runtime === 'desktop' ? 'card.bindExpiredNextDesktop' : 'card.bindExpiredNextUnknown')));
     }
+    if (bindLost) card.appendChild(el('p', 'desc', t('card.bindLostNext')));
     var meta = el('div', 'meta');
     var parent = n.parentId === null ? null : byId.get(n.parentId);
     meta.appendChild(el('span', '', n.parentId === null ? t('card.roleTop', { role: name(ROLE_NAMES, n.role) }) : t('card.roleParent', { role: name(ROLE_NAMES, n.role), parent: parent ? nodeLabel(parent, 13) : n.parentId })));
     // 最後の動き。表示モデルに時刻がない（いちばん上の統合が、指示を出しただけ など）ときは、その子のいちばん新しいやり取りの時刻
     var last = n.lastActivityAt || latestFlowAt(n.id, flows);
-    if (last) meta.appendChild(el('span', 'when', t('card.last', { when: timeText(last, Date.now()) })));
+    if (last) meta.appendChild(whenEl('span', 'when', last, 'card.last'));
     card.appendChild(meta);
     card.appendChild(sparkOf(n.id, flows, Date.now()));
     // 最近のやり取り（新しい順に 3 件）
@@ -1096,7 +1130,7 @@ export const UI_JS = `'use strict';
     markNew(row, 'e-' + i.id);
     var head = el('div', '');
     head.appendChild(el('span', 'chip ' + (i.stall === true ? 'stall' : band.cls), i.stall === true ? t('stall.chip') : isStopRequest(i, delegated) ? band.label : name(KIND_NAMES, i.kind)));
-    head.appendChild(el('span', 'when', timeText(i.at, Date.now())));
+    head.appendChild(whenEl('span', 'when', i.at));
     row.appendChild(head);
     // daemon が書いた知らせ（msg つき）は、選んだ言語の文。msg のない知らせは、summary のまま（#140 の利用者の決め）
     var raw = itemText(i);
@@ -1136,7 +1170,7 @@ export const UI_JS = `'use strict';
     var row = el('div', 'entry');
     var head = el('div', '');
     head.appendChild(el('span', 'chip', name(KIND_NAMES, r.kind)));
-    head.appendChild(el('span', 'when', timeText(r.resolvedAt, Date.now())));
+    head.appendChild(whenEl('span', 'when', r.resolvedAt));
     row.appendChild(head);
     var text = itemText(r);
     if (text) row.appendChild(el('div', 'confirm-line', cleanText(text, 120)));
@@ -1210,7 +1244,7 @@ export const UI_JS = `'use strict';
   function flowCell(f, up, n) {
     if (!f) return el('span', 'when', t(n.parentId === null ? 'list.top' : 'list.noFlow'));
     var c = el('span', isAwaiting(f) ? 'await' : up ? 'up' : 'down', t('list.flow', { dir: up ? '↑' : '↓', kind: name(FLOW_KIND_NAMES, f.kind), stage: stageText(f) }));
-    c.appendChild(el('span', 'when', t('list.flowWhen', { when: timeText(f.sentAt, Date.now()) })));
+    c.appendChild(whenEl('span', 'when', f.sentAt, 'list.flowWhen'));
     return c;
   }
   // 関係図（#89）。/ui/graph.js が出す入口の draw・destroy だけを呼ぶ。読めないときは一覧だけ
@@ -1244,6 +1278,8 @@ export const UI_JS = `'use strict';
     document.getElementById('graph').hidden = !on;
     document.getElementById('graph-legend').hidden = !on;
     document.getElementById('graph-zoom').hidden = !on;
+    document.getElementById('graph-filter').hidden = !on;
+    document.getElementById('hide-finished').ariaPressed = settings.hideFinished ? 'true' : 'false';
     document.getElementById('list').hidden = on;
     document.getElementById('show-graph').ariaPressed = on ? 'true' : 'false';
     document.getElementById('show-list').ariaPressed = on ? 'false' : 'true';
@@ -1269,7 +1305,7 @@ export const UI_JS = `'use strict';
     try {
       // 箱を押したら、その子のカードへ移って光らせる（一覧の「詳しく」と同じ）。graph.js から返るのは ID だけ
       var pick = function (id) { if (typeof id === 'string' && ID_RE.test(id)) openCard(id); };
-      Promise.resolve(g.draw(box, view, { onPick: pick, lang: lang })).then(fit, fallback);
+      Promise.resolve(g.draw(box, view, { onPick: pick, lang: lang, hideFinished: settings.hideFinished })).then(fit, fallback);
     } catch (e) {
       fallback();
     }
@@ -2097,9 +2133,16 @@ export const UI_JS = `'use strict';
       return;
     }
     if (hideTimer !== null) { window.clearTimeout(hideTimer); hideTimer = null; }
+    // 前面に戻った瞬間に、相対時刻を現在時刻から計算し直す（背面の間は、ブラウザがタイマーを間引くため）
+    refreshTimes(Date.now());
     resumeEvents();
   });
-  window.addEventListener('focus', resumeEvents);
+  window.addEventListener('focus', function () {
+    refreshTimes(Date.now());
+    resumeEvents();
+  });
+  // 相対時刻（「N 分前」）は、画面を描き直さなくても、一定の間ごとに現在時刻から計算し直す（#204）
+  window.setInterval(function () { refreshTimes(Date.now()); }, TIME_TICK_MS);
 
   function start() {
     generation += 1;
@@ -2147,6 +2190,13 @@ export const UI_JS = `'use strict';
   document.getElementById('zoom-out').addEventListener('click', function () { zoomGraph('out'); });
   document.getElementById('zoom-fit').addEventListener('click', function () { zoomGraph('fit'); });
   document.getElementById('show-list').addEventListener('click', function () { showGraphMode('list'); });
+  // 止めた・済んだ子を隠す（#206）。選んだ状態はブラウザに残す。図の並びが変わるので、拡大・移動は初めの形に戻して描き直す
+  document.getElementById('hide-finished').addEventListener('click', function () {
+    settings.hideFinished = !settings.hideFinished;
+    saveSettings(settings);
+    dropGraph();
+    if (graphView && lastView) renderGraph(graphView, lastView.seq);
+  });
   var settingsBox = document.getElementById('settings');
   var openSettings = document.getElementById('open-settings');
   var stillBox = document.getElementById('set-still');

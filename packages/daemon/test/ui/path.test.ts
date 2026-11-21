@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 import { UI_JS } from "../../src/api/ui-assets.js";
@@ -6,7 +7,9 @@ import {
   ageClassOf,
   agoText,
   graphModelOf,
+  laneAgoText,
   RUN_TEXT,
+  roleAgoText,
   STATUS_TEXT,
   stageText,
 } from "../../src/ui/graph-model.js";
@@ -170,7 +173,7 @@ describe("graphModelOf（図に渡す値の作り直し）", () => {
         waiting: false,
       },
     ]);
-    expect(graphModelOf(null)).toEqual({ nodes: [], lanes: [] });
+    expect(graphModelOf(null)).toEqual({ nodes: [], lanes: [], hidden: 0 });
   });
 });
 
@@ -266,6 +269,31 @@ describe("箱の状態（見本の STATE・TIER。画面の言葉とそろえる
       "送った（届いたかは分からない）",
     );
     expect(stageText({ stage: "done", unknown: false, inferred: true })).toBe("済んだ（推定）");
+  });
+});
+
+describe("「何分前」の計算し直し（#204）", () => {
+  const at = Date.parse("2026-11-17T14:00:00.000Z");
+  it("箱・線の札の文字は、nowMs を渡して計算できる。同じ時刻でも、nowMs が進めば文字が変わる", () => {
+    expect(roleAgoText("調べ", at, at + 30_000)).toBe("調べ　いま");
+    expect(roleAgoText("調べ", at, at + 3 * 60_000)).toBe("調べ　3 分前");
+    expect(roleAgoText("調べ", at, at + 3 * 60_000, "en")).toBe("調べ · 3 min ago");
+    expect(roleAgoText("調べ", at, at + 2 * 3600_000)).toBe("調べ　2 時間前");
+    expect(laneAgoText("← ", "報告", at, at + 12 * 60_000)).toBe("← 報告　12 分前");
+    expect(laneAgoText("→ ", "答え", at, at + 12 * 60_000, "en")).toBe("→ 答え  12 min ago");
+    // 時計が戻っても、負の経過は出さない（「いま」）
+    expect(roleAgoText("調べ", at, at - 60_000)).toBe("調べ　いま");
+  });
+
+  it("画面ごと描き直さず、interval・前面に戻ったとき・focus で計算し直す（受け手は描きの `ac` につなぐ）", () => {
+    const src = readFileSync(new URL("../../src/ui/graph-entry.ts", import.meta.url), "utf8");
+    expect(src).toContain("agoTimer = window.setInterval(retick, AGO_TICK_MS)");
+    expect(src).toContain('window.addEventListener("focus", retick, opt)');
+    expect(src).toMatch(/"visibilitychange",\s*\(\) => \{\s*if \(!document\.hidden\) retick\(\);/);
+    expect(src).toContain("window.clearInterval(agoTimer)");
+    // 文字と濃さのクラスだけを書き換える（箱・線は作り直さない）
+    expect(src).toContain("if (gs.textContent !== text) gs.textContent = text;");
+    expect(src).toContain('e.classList.remove("a1", "a2", "a3", "a4")');
   });
 });
 

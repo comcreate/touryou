@@ -169,6 +169,11 @@ export interface DaemonConfig {
     readonly unreadMinutes?: number;
     /** 起動の報告から、紐付けのない子を知らせるまで（分）。1〜1440 の整数。既定 3。 */
     readonly unboundMinutes?: number;
+    /**
+     * 紐付けたことのある子で、bind のトークンが有効なのに、知らせの購読がない状態がこの時間（分）続いたら、「紐付けが外れている疑い」
+     * を知らせるまで。1〜1440 の整数。既定 15（期限の前の知らせの 10 分と、「止まっているかも」の 30 分の間）。
+     */
+    readonly unsubscribedMinutes?: number;
     readonly intervalSec?: number;
   };
   /** Desktop の子の見張りの設定を見回る間隔（秒）。1〜60 の整数。既定 2。 */
@@ -612,9 +617,17 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
     const v = raw.cliWatch as Record<string, unknown> | null;
     if (typeof v !== "object" || v === null || Array.isArray(v))
       return bad("cliWatch はオブジェクト");
-    const keys = ["stallMinutes", "unreadMinutes", "unboundMinutes", "intervalSec"] as const;
+    const keys = [
+      "stallMinutes",
+      "unreadMinutes",
+      "unboundMinutes",
+      "unsubscribedMinutes",
+      "intervalSec",
+    ] as const;
     if (Object.keys(v).some((k) => !(keys as readonly string[]).includes(k)))
-      return bad("cliWatch のキーは stallMinutes・unreadMinutes・unboundMinutes・intervalSec だけ");
+      return bad(
+        "cliWatch のキーは stallMinutes・unreadMinutes・unboundMinutes・unsubscribedMinutes・intervalSec だけ",
+      );
     const int = (k: string, lo: number, hi: number) =>
       v[k] === undefined ||
       (Number.isInteger(v[k]) && (v[k] as number) >= lo && (v[k] as number) <= hi);
@@ -622,15 +635,19 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
       !int("stallMinutes", 1, 1440) ||
       !int("unreadMinutes", 1, 1440) ||
       !int("unboundMinutes", 1, 1440) ||
+      !int("unsubscribedMinutes", 1, 1440) ||
       !int("intervalSec", 10, 3600)
     )
       return bad(
-        "cliWatch の値が範囲の外（stallMinutes・unreadMinutes・unboundMinutes は 1〜1440、intervalSec は 10〜3600 の整数）",
+        "cliWatch の値が範囲の外（stallMinutes・unreadMinutes・unboundMinutes・unsubscribedMinutes は 1〜1440、intervalSec は 10〜3600 の整数）",
       );
     cliWatch = {
       ...(v.stallMinutes === undefined ? {} : { stallMinutes: v.stallMinutes as number }),
       ...(v.unreadMinutes === undefined ? {} : { unreadMinutes: v.unreadMinutes as number }),
       ...(v.unboundMinutes === undefined ? {} : { unboundMinutes: v.unboundMinutes as number }),
+      ...(v.unsubscribedMinutes === undefined
+        ? {}
+        : { unsubscribedMinutes: v.unsubscribedMinutes as number }),
       ...(v.intervalSec === undefined ? {} : { intervalSec: v.intervalSec as number }),
     };
   }

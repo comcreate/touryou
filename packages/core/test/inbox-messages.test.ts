@@ -56,6 +56,19 @@ describe("知らせの文の表（#140）", () => {
     }
   });
 
+  it("紐付けが外れているかも: 実際の長さのノード ID でも、日本語の要約は上限に収まり、次にすることが残る", () => {
+    const m = inboxMessage("bindLostSuspect", {
+      node: `node-${"0".repeat(32)}`,
+      minutes: 1440,
+    });
+    expect([...m.summary].length).toBeLessThanOrEqual(INBOX_SUMMARY_MAX);
+    for (const word of ["いまの状態", "次にすること", "node_send", "child_bind", "node_bindCode"]) {
+      expect(m.summary).toContain(word);
+    }
+    const en = inboxMessageText("en", m.msg) ?? "";
+    for (const word of ["node_send", "child_bind", "node_bindCode"]) expect(en).toContain(word);
+  });
+
   it("英語の文には、ひらがな・カタカナ・漢字を入れない。日本語の文には、それを入れる", () => {
     const cjk = /[぀-ヿ㐀-鿿]/;
     for (const [key, t] of entries) {

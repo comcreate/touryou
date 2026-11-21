@@ -52,6 +52,14 @@ export const APP_TEXT = {
     ja: "次の操作: 統合の Claude に、紐付けの出し直しを頼む（統合が node_bindCode で出し直し、子が結び直す）",
     en: "Next: ask the integrator Claude to issue the binding again (it issues a new one with node_bindCode, and the child binds again)",
   },
+  "card.bindLost": {
+    ja: "紐付けの接続が途切れているかも（知らせを受け取れていない）",
+    en: "Connection to the binding may be down (not receiving notices)",
+  },
+  "card.bindLostNext": {
+    ja: "次の操作: 統合の Claude に、子へ「touryou の child_bind を引数なしで呼んで」と送ってもらう（node_send）",
+    en: 'Next: ask the integrator Claude to send the child "call touryou\'s child_bind with no arguments" (node_send)',
+  },
   "approval.code": { ja: "確認コード", en: "Confirmation code" },
   "approval.done": { ja: "確認して実行しました（{label}）", en: "Confirmed and ran ({label})" },
   "approval.expires": { ja: "期限", en: "Expires" },
@@ -786,6 +794,7 @@ export const APP_TEXT = {
     en: "its state is not eligible for reclaim",
   },
   "view.graph": { ja: "図", en: "Diagram" },
+  "view.hideFinished": { ja: "止めた・済んだ子を隠す", en: "Hide stopped and finished" },
   "view.how": { ja: "見せ方", en: "View" },
   "view.list": { ja: "一覧", en: "List" },
   "who.role": { ja: "（{role}）", en: " ({role})" },
