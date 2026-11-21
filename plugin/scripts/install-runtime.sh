@@ -66,9 +66,10 @@ finish() {
   exit "$1"
 }
 has_extra_daemons() {
-  # 設定ごとの別名の daemon（#165）の plist が、LaunchAgents にあるか。名前は [<org>.]touryou.daemon-<8 文字の 16 進>.plist
+  # 設定ごとの別名の daemon（#165）の plist が、あるか。--others が見る場所（launchd init の出力先 $HOME/.touryou/launchd）と同じにする。
+  # 名前は [<org>.]touryou.daemon-<8 文字の 16 進>.plist
   local f
-  for f in "${HOME}/Library/LaunchAgents/"touryou.daemon-????????.plist "${HOME}/Library/LaunchAgents/"*.touryou.daemon-????????.plist; do
+  for f in "${HOME}/.touryou/launchd/"touryou.daemon-????????.plist "${HOME}/.touryou/launchd/"*.touryou.daemon-????????.plist; do
     [ -f "${f}" ] && return 0
   done
   return 1
@@ -454,6 +455,10 @@ main() {
     migrated=1
     if [ "${hasdef}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd init; then
       restore_old "v${ver} の launchd init が通らなかった"
+    fi
+    # 別名の daemon の plist も、新しい版で作り直す（各 plist の設定・組織・PATH のまま）。置いていないものは、apply --others が常駐にしない
+    if [ "${hasext}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd init --others; then
+      restore_old "v${ver} の、設定ごとの別名の daemon の launchd init --others が通らなかった"
     fi
     say "常駐の daemon を、v${ver} で起動し直します"
     if [ "${hasdef}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd apply --yes; then
