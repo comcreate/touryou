@@ -84,6 +84,7 @@ TouRyou は、**セッションを起動しません**。**Anthropic の認証�
 ## 注意（CLI の子）
 
 - **CLI の子と plugin**: `--plugin-dir` で開いたのは、そのセッションだけ。`--plugin-dir` だけで開いた親の子（`claude --bg`）には plugin が付かず、子は `child_bind` を見つけられないまま止まり、TouRyou のフック（守り）も効かない。そこで TouRyou は、親の mcp の plugin の場所（`CLAUDE_PLUGIN_ROOT`）が確かめを通れば、子の起動の文に `--plugin-dir` を足す（marketplace から入れた plugin と重なっても 1 つにまとまる）。付けられなかったときは、受信箱に理由が出る。そのときは plugin を設定の置き場に入れる（marketplace から入れる）。daemon は、起動の報告のあと所定の時間（`cliWatch.unboundMinutes`。既定 3 分）紐付けのない子を、受信箱に 1 回だけ出す。
+- **紐付けが外れた子は、`child_bind` を引数なしで呼べば、親に知らせられる**（#186）: 紐付けの前（`/mcp` の再接続・`claude attach`・daemon の再起動・トークンの期限切れのあと）の子が使えるのは `child_bind`（`mcp__plugin_touryou_node__child_bind`）と `whoami` だけで、`report_progress` などは使えない。コードなしのつなぎ直し（#145）が通らなかったとき、daemon が、親の受信箱に「紐付けをやり直して」を出す（ノードごとに 1 回。作業ツリーの確認を通ったあとだけ。親は `node_bindCode` で出し直す）。子の自由文は受信箱に入れず、新しい道具も足さない。拒否の文にも、この名前を出す（画面を見ている人に頼む道は、`claude --bg` の子には行き止まりなので、やめた）。印がない子・`CLAUDE_CODE_SESSION_ID` が mcp に渡らない子・daemon に届かない子は、この道では知らせられない。起動の報告のあとの紐付けの見張り（`cliWatch.unboundMinutes`）が拾う。
 - **agent view の入力欄に貼った文は、新しい裏のセッションになる**。子に答えるつもりで agent view の入力欄に書くと、別の子が増える。子に入力するときは `claude attach <名前>` でつなぐ。
 - **組織の管理の設定（managed settings）がある環境では、モデルの切り替えで失敗が出ることがある**（`--model` で、許されていないモデルを指定したときなど）。そのときは、出た文面を `parent_report` の `reason` に入れて報告する。
 - **auto でないモード（ふつうのモード）では、`claude` のコマンドごとに許可の確認が出る**。変数を含むコマンドは「A variable in this command can't be checked before it runs」の確認が出るので、TouRyou の依頼のコマンドは、変数のない形にしている（値は単一引用符で 1 語にする）。親の skill も、コマンドを書き換えない・変数を足さない・つなげない。確認を減らすには、`/touryou:setup` の「許可の一覧」を見る。
@@ -201,7 +202,8 @@ TouRyou は、**セッションを起動しません**。**Anthropic の認証�
   - 印がなければ、いまのとおり根（統合）で開く。印があるのに読めないときや、`.git` のファイルが読めないときも、紐付け待ちに倒す。git は呼ばない（ファイルだけで決める）。
   - 印は childRuntime を問わず置く。**Desktop の子の作業ツリーでも、plugin の mcp は紐付け待ちで開く**。
   - 子のセッションは、作業ツリーの一番上（作業ツリーのフォルダそのもの）で起動する。下の階層で起動すると、紐付けが断られる。
-  - 紐付けのあとで daemon がトークンを失効させた（401）ときは、紐付け待ちに戻る。出し直した紐付けの文面のコードで、もう一度 `child_bind` を呼べる。
+  - 紐付けのあとで daemon が資格情報を拒んだ（401 `unauthenticated`）ときは、まず mcp が、下の #145 と同じ「コードなしの結び直し」を自分で 1 回試す（道具の呼び出し・知らせの購読のどちらの 401 でも。同時には 1 回だけ。失敗したら 60 秒は試さない）。通れば、新しいトークンに替えて、拒まれた呼び出しを 1 回だけやり直す（401 は処理の前に断られるので、二重にならない）。通らなければ紐付け待ちに戻り、道具は `binding_lost`（「紐付けが外れた。MCP の接続は切れていない」）を返す。出し直した紐付けの文面のコードで、もう一度 `child_bind` を呼べる。期限切れ（`tokenExpired`）は対象にしない。
+  - **daemon の再起動（#185・#187）**: 再起動しても、CLI の子のセッション（`claude --bg` のプロセス）は止まらない（daemon の子プロセスではないため。Desktop の子も同じ）。daemon 側のトークンは永続され、session_id の結び付けも記録から引けるので、再起動のあとも紐付けは有効なまま。再起動の途中は、mcp が待ってかけ直す。ただし、起動の依頼の記録がない・起動の失敗を報告した子で、動作中だったものは、起動時の整合で停止済み・停止未完了になり、トークンが失効する。
   - **コードのファイルと接続先（#167）**: `touryou-bind-code` は、1 行目がコード、2 行目が書いた daemon の公開 ID（`daemon=<daemonId>`。`daemon-identity.md` の識別子）。`child_bind` を引数なしで呼ぶと、mcp は身元を確かめた接続先の daemon の ID とこの ID を突き合わせ、食い違えば**コードを送らず**に `bind_daemon_mismatch`（別の daemon のコード）で失敗する。直し方は、plugin の接続先（`--config`・`TOURYOU_DAEMON_CONFIG`・`$HOME/.touryou/config.json`）を、子を作った daemon に合わせて `/mcp` で Reconnect する。2 行目のない古い形（コードだけ）は、突き合わせずに送る。
   - **bind の失敗の理由（#167）**: `POST /v1/bind` の失敗は 401 のまま、`bindCodeExpired`（期限切れ）・`bindCodeUsed`（使用済み）・`bindWorktreeMismatch`（作業ツリー違い）を区別する。期限切れ・使用済みは、そのコードを持つノードの名前で呼んだときだけ区別し、未知のコード・別のノードのコードは `unauthenticated` のまま（コードの当たりを探れない）。mcp の失敗は `bind_code_expired`・`bind_code_used`・`bind_worktree_mismatch`・`bind_failed`。
   - **`claude attach` のあと（#145）**: 子の画面を `claude attach` で開くと、Claude Code が mcp をつなぎ直し、メモリのトークンが消える（紐付け待ちに戻る）。このとき `child_bind` を引数なしで呼ぶと、コードのファイルがなくても（使用済み）、mcp が「ノードの ID（印）・`CLAUDE_CODE_SESSION_ID`・作業ディレクトリ」を daemon に送り、daemon が次のすべてに合うときだけ、トークンを出し直す。人が `node_bindCode` を頼む手間はいらない。

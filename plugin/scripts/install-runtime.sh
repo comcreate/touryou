@@ -361,7 +361,7 @@ main() {
     die "常駐（launchd）が、組織の名前つき（--org）で設定されている。この script は、それを起動し直さない" "docs/launchd.md の手作業の手順で版を上げる"
   fi
   if [ "${managed}" = 1 ] && [ "${consent}" = 0 ]; then
-    say "常駐（launchd）の daemon が設定されています（v${old}）。v${ver} に入れ替えるには、daemon を止めて起動し直します（動いている子のセッションは止まります）"
+    say "常駐（launchd）の daemon が設定されています（v${old}）。v${ver} に入れ替えるには、daemon を止めて起動し直します（動いている子のセッションは止まりません。daemon が戻るまでの間は、子の道具が届かないことがあります）"
     say "何も変えていません。利用者の「はい」を取ってから、--restart-daemon を付けて、もう一度実行してください"
     finish 3 need-restart-consent
   fi
