@@ -13,7 +13,8 @@
 #   7. 置き場の中の一時ディレクトリに展開し、シンボリックリンクが外を指さないこと・quarantine がないことを確かめる → ${HOME}/.touryou/v<版> に移す
 #   8. 新しい版の touryou-daemon --help が動くことを確かめる（current を付け替える前）
 #   9. 常駐（launchd の plist がある）で、版が変わるときだけ: 同意（--restart-daemon）があれば、止める → 付け替え → 新しい版で init → 起動し直す
-#      同意がなければ、付け替えずに終わる（終了コード 3）
+#      同意がなければ、付け替えずに終わる（終了コード 3）。常駐は、既定の設定の daemon と、設定ごとの別名の daemon
+#      （touryou launchd init --config で作ったもの。LaunchAgents の touryou.daemon-<8 文字>.plist）。登録されたすべてを、起動し直す（#165）
 #  10. current を付け替える（できるだけ原子的に）
 #
 # 終了コード: 0 成功、1 失敗、2 知らない引数、3 常駐の同意が要る（need-restart-consent）、4 plugin が本体より古い（plugin-older）。
@@ -58,9 +59,19 @@ finish() {
   if [ "$1" = 0 ]; then
     if [ -f "${HOME}/.touryou/config.json" ]; then echo "CONFIG: present"; else echo "CONFIG: absent"; fi
     if [ -f "${HOME}/Library/LaunchAgents/${LABEL_PLIST}" ]; then echo "LAUNCHD: present"; else echo "LAUNCHD: absent"; fi
+    # 設定ごとの別名の daemon（touryou launchd init --config で作ったもの）があるときだけ出す（#165）
+    if has_extra_daemons; then echo "LAUNCHD_OTHERS: present"; fi
   fi
   printf 'RESULT: %s\n' "$2"
   exit "$1"
+}
+has_extra_daemons() {
+  # 設定ごとの別名の daemon（#165）の plist が、LaunchAgents にあるか。名前は [<org>.]touryou.daemon-<8 文字の 16 進>.plist
+  local f
+  for f in "${HOME}/Library/LaunchAgents/"touryou.daemon-????????.plist "${HOME}/Library/LaunchAgents/"*.touryou.daemon-????????.plist; do
+    [ -f "${f}" ] && return 0
+  done
+  return 1
 }
 cleanup_lists() {
   # 中身の一覧の一時ディレクトリを消す（work に残さない）。消すのは、置き場の中の .lists. で始まるものだけ
@@ -154,13 +165,14 @@ restore_old() {
   # 新しい版の launchd init のあと（migrated=1）は、生成物が新しい形。前の版の apply では扱えないので、新しい版の uninstall で外し、
   # 前の版の init で前の形を作り直してから、前の版で apply する（#64）
   local why="$1" state
-  if [ "${migrated:-0}" = 1 ] && ! run_masked "${VDIR}/${DIST_DIR}/bin/touryou" launchd uninstall --yes; then
+  if [ "${migrated:-0}" = 1 ] && [ "${hasdef:-0}" = 1 ] && ! run_masked "${VDIR}/${DIST_DIR}/bin/touryou" launchd uninstall --yes; then
     die "${why}（v${ver} の生成物を外せず、v${old} に戻せなかった）" "/touryou:service status で確かめ、docs/launchd.md の手作業の手順で戻す。${CONTACT} に相談する" "current は v${ver} のまま、常駐の daemon は止まっている"
   fi
   if [ -n "${prev}" ] && { [ "$(readlink "${BASE}/current" 2>/dev/null)" = "${prev}" ] || swap_link "${prev}" "${BASE}/current"; }; then
     say "${why}。current を v${old} に戻して、v${old} で起動し直します"
-    if { [ "${migrated:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd init; } &&
-      run_masked "${BASE}/current/bin/touryou" launchd apply --yes; then
+    if { [ "${hasdef:-0}" != 1 ] || [ "${migrated:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd init; } &&
+      { [ "${hasdef:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd apply --yes; } &&
+      { [ "${hasext:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd apply --yes --others; }; then
       state="current は v${old} に戻し、常駐の daemon は v${old} で動いている。v${ver} は \$HOME/.touryou/v${ver} に置いたまま"
       die "${why}（v${old} に戻した）" "出力を確かめ、${CONTACT} に相談する" "${state}"
     fi
@@ -338,9 +350,13 @@ main() {
   fi
 
   # 常駐の有無（plist があるか）。版を変える前に決める
-  local managed=0 agents="${HOME}/Library/LaunchAgents"
-  if [ -n "${old}" ] && [ -f "${agents}/${LABEL_PLIST}" ]; then managed=1; fi
-  if [ -n "${old}" ] && [ "${managed}" = 0 ] && ls "${agents}"/*.touryou.daemon.plist >/dev/null 2>&1; then
+  # 常駐の daemon は、既定の設定の 1 つ（hasdef）と、設定ごとの別名の daemon（hasext。touryou launchd init --config。#165）。
+  # どちらかがあれば managed。登録されたすべてを、止める → 付け替え → 起動し直す
+  local managed=0 hasdef=0 hasext=0 agents="${HOME}/Library/LaunchAgents"
+  if [ -n "${old}" ] && [ -f "${agents}/${LABEL_PLIST}" ]; then hasdef=1; fi
+  if [ -n "${old}" ] && has_extra_daemons; then hasext=1; fi
+  if [ "${hasdef}" = 1 ] || [ "${hasext}" = 1 ]; then managed=1; fi
+  if [ -n "${old}" ] && [ "${hasdef}" = 0 ] && ls "${agents}"/*.touryou.daemon.plist >/dev/null 2>&1; then
     die "常駐（launchd）が、組織の名前つき（--org）で設定されている。この script は、それを起動し直さない" "docs/launchd.md の手作業の手順で版を上げる"
   fi
   if [ "${managed}" = 1 ] && [ "${consent}" = 0 ]; then
@@ -413,16 +429,20 @@ main() {
   local prev="" migrated=0
   [ -L "${BASE}/current" ] && prev="$(readlink "${BASE}/current")"
   if [ "${managed}" = 1 ]; then
-    # 止める前に、新しい版の daemon で設定を検査する（通らない設定で起動し直すと、起動のたびに落ち続ける。Issue #65）
-    if ! run_masked "${VDIR}/${DIST_DIR}/bin/touryou-daemon" --check-config --config "${BASE}/config.json"; then
+    # 止める前に、新しい版の daemon で設定を検査する（通らない設定で起動し直すと、起動のたびに落ち続ける。Issue #65）。
+    # 別名の daemon（--config）の設定は、起動し直す apply が、同じ検査をする（通らなければ、restore_old で前の版に戻す）
+    if [ "${hasdef}" = 1 ] && ! run_masked "${VDIR}/${DIST_DIR}/bin/touryou-daemon" --check-config --config "${BASE}/config.json"; then
       die "config.json が、v${ver} の daemon の設定の検査を通らない（repoRoot・rootCwd・worktreeRoot が、ない・実パスでない・git のリポジトリでない、など。上の「失敗」の行）" "config.json の値を、今ある git のリポジトリ・フォルダの実パスに直してから（または設定をやり直してから）、もう一度 /touryou:setup" "daemon は止めていない（v${old} のまま）。v${ver} は \$HOME/.touryou/v${ver} に置いたが、current は v${old} のまま"
     fi
     say "常駐の daemon（v${old}）を止めます"
-    if ! run_masked "${BASE}/current/bin/touryou" launchd init; then
+    if [ "${hasdef}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd init; then
       die "v${old} の launchd init が通らない（上の出力。生成物が、引数なしの launchd init と違う〔--org・--path-prefix を手で付けた、など〕か、v${old} の設定の検査が通らない）" "docs/launchd.md の手作業の手順で版を上げる" "daemon は止めていない（v${old} のまま動いている）。v${ver} は \$HOME/.touryou/v${ver} に置いたが、current は v${old} のまま"
     fi
-    if ! run_masked "${BASE}/current/bin/touryou" launchd stop; then
+    if [ "${hasdef}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd stop; then
       restore_old "常駐の daemon を止められなかった"
+    fi
+    if [ "${hasext}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd stop --others; then
+      restore_old "設定ごとの別名の常駐の daemon を止められなかった"
     fi
     # ここから先は、daemon が止まっている。どこで失敗しても、current を前の版に戻して起動し直してから止まる（NFR_015）
     if ! swap_link "${VDIR}/${DIST_DIR}" "${BASE}/current"; then
@@ -432,12 +452,15 @@ main() {
     rm -rf "${BASE}/.old-v${ver}.$$" || true
     # 新しい版の init で、生成物を新しい版の形にする（古い形〔run-daemon.sh を起こす plist〕なら、置き換える。#64）
     migrated=1
-    if ! run_masked "${BASE}/current/bin/touryou" launchd init; then
+    if [ "${hasdef}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd init; then
       restore_old "v${ver} の launchd init が通らなかった"
     fi
     say "常駐の daemon を、v${ver} で起動し直します"
-    if ! run_masked "${BASE}/current/bin/touryou" launchd apply --yes; then
+    if [ "${hasdef}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd apply --yes; then
       restore_old "v${ver} の daemon が起動しなかった"
+    fi
+    if [ "${hasext}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd apply --yes --others; then
+      restore_old "v${ver} の、設定ごとの別名の daemon が起動しなかった"
     fi
     say "常駐の daemon を v${ver} で起動し直しました。開いている統合セッションは、/mcp で plugin:touryou:node を Reconnect してください"
     finish 0 upgraded-restarted

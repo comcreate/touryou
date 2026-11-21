@@ -39,11 +39,12 @@ touryou reclaim <nodeId>
 
 ## 状態画面を開く `touryou ui`
 
-`touryou ui`（引数なし）: 状態画面を、既定のブラウザ（macOS の `open`）で開く。**環境変数の `TOURYOU_HUMAN_TOKEN`・`TOURYOU_DAEMON_URL` は使わない**。`$HOME/.touryou/config.json`（`TOURYOU_DAEMON_CONFIG` があればそれ）の `stateDir` から、`port`・`human-token`・`daemon-identity` を自分で読み、daemon の身元を確かめてから、使い捨てのチケット（60 秒・1 回だけ）をもらって `http://127.0.0.1:<port>/ui#ticket=<チケット>` を開く（くわしくは `docs/ui.md` の「認証」）。
+`touryou ui`（ふつうは引数なし。複数の daemon があるときは、下の `--config`・`--list`）: 状態画面を、既定のブラウザ（macOS の `open`）で開く。**環境変数の `TOURYOU_HUMAN_TOKEN`・`TOURYOU_DAEMON_URL` は使わない**。`$HOME/.touryou/config.json`（`TOURYOU_DAEMON_CONFIG` があればそれ）の `stateDir` から、`port`・`human-token`・`daemon-identity` を自分で読み、daemon の身元を確かめてから、使い捨てのチケット（60 秒・1 回だけ）をもらって `http://127.0.0.1:<port>/ui#ticket=<チケット>` を開く（くわしくは `docs/ui.md` の「認証」）。
 
 - トークン・チケット・URL は、標準出力・標準エラーに出さない。`open` の引数（`ps` に出る）は、使い捨てのチケットだけ。
-- 失敗（設定・`port`・`human-token` が読めない、daemon に届かない、身元が合わない、チケットをもらえない、ブラウザを開けない）は、原因と次の操作を出して終了コード 1。ブラウザを開けない（macOS でない・`open` が失敗した）ときは、「Mac のターミナルで `touryou ui` を実行してください」と出す。引数を付けたら終了コード 2。
-- plugin の `/touryou:ui` は、これを 1 回実行するだけ。
+- 失敗（設定・`port`・`human-token` が読めない、daemon に届かない、身元が合わない、チケットをもらえない、ブラウザを開けない）は、原因と次の操作を出して終了コード 1。ブラウザを開けない（macOS でない・`open` が失敗した）ときは、「Mac のターミナルで `touryou ui` を実行してください」と出す。上で挙げた以外の引数を付けたら終了コード 2。
+- **複数の daemon（設定ごと。#165）**: どの daemon の画面を開くかは、`--config <絶対パス>` ＞ `TOURYOU_DAEMON_CONFIG` ＞ 候補が 2 つ以上のとき、実行した場所（cwd）が設定の `repoRoot` の中にあるもの（いちばん深い root）＞ `$HOME/.touryou/config.json` の順で決める。候補は、既定の設定と、`$HOME/.touryou/launchd` の別名の plist（`touryou.daemon-<8 文字>.plist`）の `--config` の設定。`touryou ui --list` は、候補の設定のパスと `repoRoot` の一覧だけを出す（トークン・ポートは出さず、開かない）。`--config` が絶対パスでない・ほかの引数は終了コード 2。
+- plugin の `/touryou:ui` は、これを 1 回実行するだけ（複数の daemon から選ぶときは、`--list` で一覧を出して利用者に選んでもらい、`--config` を付ける）。
 
 ## 受信箱の項目を片付ける `touryou inbox resolve` / `touryou inbox reopen`（#99）
 
@@ -138,7 +139,7 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 
 ## 常駐の生成 `touryou launchd init`
 
-`touryou launchd init [--org <組織の逆ドメイン>] [--path-prefix <ディレクトリ>]`: daemon を launchd で常駐させるための plist を `$HOME/.touryou` の下に生成する。plist は、同梱の node（`current/bin/node`）で daemon の JS（`current/lib/dist/bin.js`）を直に起こす（起動スクリプト・shell を通さない。#64）。
+`touryou launchd init [--org <組織の逆ドメイン>] [--path-prefix <ディレクトリ>] [--config <絶対パス>]`（`--config` は、設定ごとの別の daemon にするとき。下の「常駐の操作」）: daemon を launchd で常駐させるための plist を `$HOME/.touryou` の下に生成する。plist は、同梱の node（`current/bin/node`）で daemon の JS（`current/lib/dist/bin.js`）を直に起こす（起動スクリプト・shell を通さない。#64）。
 
 - 窓口・人間のトークン・環境変数（`TOURYOU_DAEMON_URL` など）は使わない（`HOME` だけ）。
 - **`init` は `launchctl` を実行しない**（読み込みは、下の `touryou launchd apply`）。起動する子プロセスは、設定の検査（`touryou-daemon --check-config`）だけ。トークンの値は、生成も表示もしない。
@@ -166,6 +167,7 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 - `apply`・`restart` が途中で止まったとき（窓口が約 60 秒で応答しない）は、**daemon は読み込み済みのまま**（KeepAlive で動き続けうる）。`touryou launchd stop` で止めるか、直してから `apply --yes` をやり直す。
 - `uninstall` は、`init` が作るのと同じ内容（`--path-prefix` の違いを含む。PATH の値はファイルから取って作り直して比べる）とバイト単位で同じもの（LaunchAgents の plist は `.touryou/launchd` の plist と同じもの）だけを消す。古い形（v0.1.0 まで）も、同じ内容なら消す。LaunchAgents の plist が `.touryou/launchd` の plist と違っても、同じ PATH の古い形なら消す（`init` だけ新しい形にした場面）。LaunchAgents の plist を残したときは、古い形の起動スクリプトも残す（次のログインで、ないスクリプトを指さないように）。
 - `--org` は `init` と同じ値にする（省略すると Label は `touryou.daemon`）。
+- **複数の daemon（設定ごと。#165）**: `init`・`apply`・`status`・`restart`・`stop`・`uninstall` は、`--config <絶対パス>` で、その設定の daemon を対象にする（省略は `$HOME/.touryou/config.json`。絶対パスでなければ終了コード 2）。Label は `touryou.daemon-<設定パスの sha256 の先頭 8 文字>`、ログは `logs/daemon-<8 文字>.log`。`apply`・`status`・`restart`・`stop`・`uninstall` は、`--others` で、`.touryou/launchd` にある別名の plist すべてを対象にできる（`--config` とは同時に使えない。終了コード 2。別名がなければ何もせず成功）。`uninstall` は、ほかの daemon の plist が残るあいだ、TouRyou.app の LaunchServices の登録を解かない。前の形（v0.1.0・v0.1.1）からの引っ越しは、既定の設定だけ。くわしくは `docs/launchd.md` の「複数の daemon を常駐させる」。
 - 終了コード: 0 成功 / 1 前提がない・設定の検査が通らない・既存と違う・起動の確認で問題・消せなかったものがある / 2 引数の誤り・`--yes` がない。
 
 ## 子の認証（外した）

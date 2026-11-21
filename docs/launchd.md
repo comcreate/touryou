@@ -83,7 +83,38 @@ macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動か�
 
 ## 4. 版を上げる
 
+別名の daemon（設定ごと。下の「複数の daemon を常駐させる」）があるときは、既定の daemon と同じ順で、すべてを止めて（`stop --others`）・起動し直します（`apply --yes --others`）。
+
 **止める → `/setup` → 起動し直す**の順です（`/setup` の「版を上げる」が、この順で案内します）。`/setup` の `--restart-daemon` の道は、古い版の `launchd init`（生成物が同じかの確かめ）→ `stop` → `current` の付け替え → 新しい版の `launchd init`（古い形なら、新しい形に置き換える）→ 新しい版の `apply --yes` です。新しい版の `init`・`apply` が失敗したときは、新しい版の `uninstall --yes` で新しい形を外し、`current` を戻し、古い版の `init`・`apply --yes` で、古い形のまま起動し直します。
+
+### 複数の daemon を常駐させる（root ごとに分ける。#165）
+
+root（`repoRoot`）ごとに daemon を分けるとき、設定ファイルごとに別の daemon として常駐させられます。単一の root の利用者は、何も変えなくてよい（引数なしは、これまでどおり `<H>/.touryou/config.json`・Label `touryou.daemon`・`logs/daemon.log`）。
+
+```sh
+"$HOME/.touryou/current/bin/touryou" launchd init  --config <設定の絶対パス>
+"$HOME/.touryou/current/bin/touryou" launchd apply --yes --config <設定の絶対パス>
+```
+
+- `init`・`apply`・`status`・`restart`・`stop`・`uninstall` は、`--config <絶対パス>` を受け取ります（絶対パスでなければ終了コード 2）。名前は、既定の設定なら `daemon`、それ以外は **`daemon-<設定パスの sha256 の先頭 8 文字>`** で、同じ設定からは、いつも同じ名前になります。
+- 設定ごとに別になるもの: Label（`touryou.daemon-<8 文字>`。`--org` を付ければ `<org>.touryou.daemon-<8 文字>`）・plist（`launchd/<Label>.plist`）・ログ（`logs/daemon-<8 文字>.log`）・設定の検査（その設定で `--check-config`）・窓口の応答の確認（その設定の `stateDir` の `port`）。`apply` は、その daemon の窓口が応答するまで待ちます。
+- **`--others`**: `<H>/.touryou/launchd` にある、別名の plist（`touryou.daemon-<8 文字>.plist`）すべてを対象にします（`apply`・`status`・`restart`・`stop`・`uninstall`）。plist の `--config` の次の値が、設定のパスです。`--config` と同時には指定できません（終了コード 2）。別名がなければ、何もせずに成功します。版上げ（`/setup` の `--restart-daemon`。`plugin/scripts/install-runtime.sh`）は、既定の daemon に加えて、登録されたすべての別名の daemon を、`stop --others` で止めて `apply --yes --others` で起動し直します。
+- 設定は、daemon ごとに、`stateDir`・`repoRoot`・`worktreeRoot`・ポートを別にします（同じ `stateDir` を 2 つの daemon が使うと、`storeLocked` で失敗します。上の「同じ `stateDir`」）。
+- `uninstall` で、ほかの daemon の plist が残っているときは、TouRyou.app の LaunchServices の登録（`lsregister -u`）を解きません（残った daemon のログイン項目を保つため）。最後の 1 つを外したときに解きます。
+- 前の形（v0.1.0・v0.1.1）からの引っ越しは、既定の設定にだけ適用します。
+
+**どの daemon につなぐか（環境変数の渡し方）**:
+
+- 統合セッションの `touryou-mcp --stdio` は、`TOURYOU_DAEMON_CONFIG`（なければ `<H>/.touryou/config.json`）の `stateDir` の `root-token`・`port` を読みます。別の daemon につなぐときは、統合セッション（`claude`）を起動する端末で `export TOURYOU_DAEMON_CONFIG=<設定の絶対パス>` してから起動します。
+- `touryou ui` は、`--config <絶対パス>` ＞ `TOURYOU_DAEMON_CONFIG` ＞ 複数の候補があるときは実行した場所（cwd）が `repoRoot` の中にあるもの（いちばん深い root）＞ 既定の設定、の順で選びます。`touryou ui --list` で、設定のパスと `repoRoot` の一覧を見られます（`docs/ui.md`）。
+
+**できないこと**:
+
+- 1 つの統合セッションから、複数の daemon を同時に扱うこと（セッションは、1 つの daemon につながる）。
+- 設定を、TouRyou が自動で作ること（設定ファイルは、利用者が作る。`docs/config.md`）。
+- 同じ設定の daemon を、別の Label で 2 つ動かすこと（名前は設定のパスから決まる）。
+- 設定のパスを変えると、別の daemon になる（古い名前の plist は、`uninstall --others` で外す）。
+- 常駐の daemon には制御端末がないので、Desktop の木の取り消せない操作は、daemon ごとに、上の「取り消せない操作の確認」のとおり。
 
 ## 5. ログの整理
 

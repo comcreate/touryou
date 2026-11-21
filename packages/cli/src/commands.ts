@@ -127,14 +127,15 @@ const USAGE = `使い方:
       保管している先端から、新しいブランチを作る（作成だけ。既存のブランチは上書きしない。保管は残る）。既定の名前は touryou/restored/<key>
   touryou discarded drop <nodeId|key> [--yes] [--request-id <id>]
       保管を 1 件消す（取り消せない）。--yes がなければ、対象の表示だけで止まる
-  touryou launchd init [--org <組織の逆ドメイン。省略で Label は touryou.daemon>] [--path-prefix <ディレクトリ>]
+  touryou launchd init [--org <組織の逆ドメイン。省略で Label は touryou.daemon>] [--path-prefix <ディレクトリ>] [--config <絶対パス>]
       daemon・touryou-mcp を launchd で常駐させる起動スクリプトと plist を、$HOME/.touryou の下に生成する（窓口・トークンは不要。launchctl は実行しない。
       トークンの値は、生成も表示もしない）。詳しくは docs/launchd.md
-  touryou launchd apply --yes | status | restart | stop | uninstall --yes  [--org …]
-      launchd の常駐の操作（launchctl を実行する。apply・uninstall は、利用者の同意を取ってから --yes）。詳しくは docs/launchd.md
+  touryou launchd apply --yes | status | restart | stop | uninstall --yes  [--org …] [--config <絶対パス> | --others]
+      launchd の常駐の操作（launchctl を実行する。apply・uninstall は、利用者の同意を取ってから --yes）。
+      --config は設定ごとの daemon、--others は別名の daemon すべて。詳しくは docs/launchd.md
   --request-id <id>  結果が確認できなかった要求を、同じ識別子で再実行する
-  touryou ui
-      状態画面を、既定のブラウザで開く（macOS）。人間のトークンのファイルを自分で読み、使い捨てのチケット（60 秒・1 回だけ）にして開く。
+  touryou ui [--config <絶対パス> | --list]
+      （--config は開く daemon の設定、--list は設定の一覧だけを出す）状態画面を、既定のブラウザで開く（macOS）。人間のトークンのファイルを自分で読み、使い捨てのチケット（60 秒・1 回だけ）にして開く。
       トークン・チケット・URL は出さない。環境変数の TOURYOU_HUMAN_TOKEN は要らない。詳しくは docs/ui.md
   -h, --help         この使い方を表示する（終了コード 0）
 終了コード: 0 成功 / 1 失敗・結果が確認できない / 2 引数の誤り`;
