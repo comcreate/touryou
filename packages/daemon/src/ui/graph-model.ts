@@ -137,6 +137,22 @@ export function agoText(ms: number, lang: Lang = "ja"): string {
   return graphString(lang, "time.dayAgo", { n: Math.floor(m / 1440) });
 }
 
+/** 箱の「役割　何分前」（#204。描き直さずに、nowMs から計算し直せるよう、純粋な関数にしてある）。 */
+export function roleAgoText(role: string, at: number, now: number, lang: Lang = "ja"): string {
+  return graphString(lang, "graph.roleAgo", { role, ago: agoText(now - at, lang) });
+}
+
+/** 線の札の「矢印 種類　何分前」（#204。同上）。 */
+export function laneAgoText(
+  arrow: string,
+  label: string,
+  at: number,
+  now: number,
+  lang: Lang = "ja",
+): string {
+  return graphString(lang, "graph.laneAgo", { arrow, label, ago: agoText(now - at, lang) });
+}
+
 /** ノードの、人に関わる項目の有無（表示モデルの受信箱・判断・拡張要求から）。札は、答え待ち・失敗・止まっているかもの順に決める（app.js の `statusesOf` と同じ）。 */
 function flagsOf(
   v: Record<string, unknown>,

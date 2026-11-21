@@ -11,10 +11,11 @@ import { ReadonlyPlugin } from "rete-readonly-plugin";
 import { type LayoutPos, layoutOf } from "./graph-layout.js";
 import {
   ageClassOf,
-  agoText,
   type GraphLane,
   type GraphNode,
   graphModelOf,
+  laneAgoText,
+  roleAgoText,
   stageText,
 } from "./graph-model.js";
 import {
@@ -63,11 +64,24 @@ interface Shape {
   readonly stage?: string;
   /** 線の title（言葉と段。描く言語で作っておく）。 */
   readonly title?: string;
+  /** 札の元（時刻なしの札は、時刻が動かない）。「何分前」だけを nowMs から計算し直すために持つ（#204）。 */
+  readonly ago?: { readonly arrow: string; readonly label: string; readonly at: number };
 }
+
+/**
+ * 「何分前」の文字を計算し直す更新（#204）。描いた要素ごとに 1 つ。画面ごと描き直さずに、文字と濃さのクラスだけを書き換える
+ * （箱・線は作り直さないので、浮かび・focus・拡大・移動はそのまま）。要素が図から外れていたら false を返す（一覧から外す）。
+ */
+type AgoTick = (now: number) => boolean;
+
+/** 更新の間隔。背面のタブはブラウザが間引くので、前面に戻ったとき・focus のときにも、すぐ計算し直す。 */
+const AGO_TICK_MS = 15000;
 
 let current: AreaPlugin<Schemes, never> | null = null;
 /** いまの図の合図の受け手を、まとめて外すためのもの（`destroy` で外す）。 */
 let listening: AbortController | null = null;
+/** 「何分前」を計算し直す interval（#204）。描き直し・`destroy` の `teardown` で止める。 */
+let agoTimer: number | null = null;
 let currentHost: HTMLElement | null = null;
 /** 描きの番号（世代）。`draw`・`destroy` のたびに進む。古い `draw` の続きは、番号が違えば黙って抜ける。 */
 let generation = 0;
@@ -103,6 +117,8 @@ function teardown(): void {
   // 先に合図の受け手を外す（器を空にしたときの blur などで、覚えた ID を消さないため）
   listening?.abort();
   listening = null;
+  if (agoTimer !== null) window.clearInterval(agoTimer);
+  agoTimer = null;
   if (current !== null && currentHost !== null) {
     const t = current.area.transform;
     kept = { host: currentHost, k: t.k, x: t.x, y: t.y };
@@ -198,6 +214,22 @@ export async function draw(
   const opt = { signal: ac.signal };
   const onPick = typeof options.onPick === "function" ? options.onPick : null;
   const lang: Lang = options.lang === "en" ? "en" : "ja";
+  // 「何分前」の更新（#204）。interval・前面に戻ったとき・focus で、描き直さずに文字だけ計算し直す。
+  // 受け手は `ac` につなぐので、描き直し・`destroy` で外れる（interval も止まる）
+  let ticks: AgoTick[] = [];
+  const retick = (): void => {
+    const now = Date.now();
+    ticks = ticks.filter((t) => t(now));
+  };
+  agoTimer = window.setInterval(retick, AGO_TICK_MS); // 描き直し・destroy の teardown で止める
+  document.addEventListener(
+    "visibilitychange",
+    () => {
+      if (!document.hidden) retick();
+    },
+    opt,
+  );
+  window.addEventListener("focus", retick, opt);
   /** つながりの器と、その両端のノード ID（指を置いた箱の線だけ浮かべる）。 */
   const wires: { el: HTMLElement; a: string; b: string }[] = [];
   const litId = (): string | null => hoverId ?? focusId;
@@ -284,11 +316,11 @@ export async function draw(
     };
     if (type === "node") {
       const n = byId.get(payload.id);
-      const box = drawNode(element, n, now, lang);
+      const box = drawNode(element, n, now, lang, ticks);
       if (box !== null && n !== undefined) listen(box, n.id);
     } else if (type === "connection") {
       const c = payload as ReteConn;
-      drawShape(element, shapes[c.shape], width, height);
+      drawShape(element, shapes[c.shape], width, height, lang, ticks);
       const w = { el: element, a: c.source, b: c.target };
       // 描き直しの最中も、覚えた箱の線は浮かべたまま（器の hot は残してある）
       if (touches(w, litId())) element.classList.add("lit");
@@ -425,13 +457,7 @@ function laneShape(
   const extra = ` ${ageClassOf(l.at, now)}${l.waiting && !finished ? " wait" : ""}${finished ? " over" : ""}`;
   const arrow = l.dir === "up" ? "← " : "→ ";
   const label =
-    l.at === null
-      ? `${arrow}${l.label}`
-      : graphString(lang, "graph.laneAgo", {
-          arrow,
-          label: l.label,
-          ago: agoText(now - l.at, lang),
-        });
+    l.at === null ? `${arrow}${l.label}` : laneAgoText(arrow, l.label, l.at, now, lang);
   const stageWords = stageText(l, lang);
   return {
     kind: "lane",
@@ -441,6 +467,7 @@ function laneShape(
     label,
     stage: stageWords,
     title: graphString(lang, "graph.lineTitle", { label, stage: stageWords }),
+    ...(l.at === null ? {} : { ago: { arrow, label: l.label, at: l.at } }),
   };
 }
 
@@ -459,6 +486,7 @@ function drawNode(
   n: GraphNode | undefined,
   now: number,
   lang: Lang,
+  ticks: AgoTick[],
 ): HTMLElement | null {
   if (n === undefined) return null;
   element.replaceChildren();
@@ -469,16 +497,21 @@ function drawNode(
   const row = el("div", "gr");
   const icon = svgEl("svg", { class: "gic", width: 12, height: 12, viewBox: "0 0 12 12" });
   icon.append(svgEl("path", { class: "role-ic", d: roleIconOf(n.integrator) }));
-  row.append(
-    icon,
-    el(
-      "span",
-      "gs",
-      n.lastAt === null
-        ? n.role
-        : graphString(lang, "graph.roleAgo", { role: n.role, ago: agoText(now - n.lastAt, lang) }),
-    ),
+  const gs = el(
+    "span",
+    "gs",
+    n.lastAt === null ? n.role : roleAgoText(n.role, n.lastAt, now, lang),
   );
+  if (n.lastAt !== null) {
+    const { role, lastAt } = n;
+    ticks.push((t) => {
+      if (!gs.isConnected) return false;
+      const text = roleAgoText(role, lastAt, t, lang);
+      if (gs.textContent !== text) gs.textContent = text;
+      return true;
+    });
+  }
+  row.append(icon, gs);
   box.append(el("span", "gt", n.title), row, el("span", `gst st-${n.status}`, n.statusText));
   if (n.alive) box.append(el("span", "galive"));
   if (n.needsHuman > 0) {
@@ -489,7 +522,14 @@ function drawNode(
   return box;
 }
 
-function drawShape(element: HTMLElement, s: Shape | undefined, w: number, h: number): void {
+function drawShape(
+  element: HTMLElement,
+  s: Shape | undefined,
+  w: number,
+  h: number,
+  lang: Lang,
+  ticks: AgoTick[],
+): void {
   if (s === undefined) return;
   element.replaceChildren();
   const svg = svgEl("svg", { class: "glink", width: w, height: h, viewBox: `0 0 ${w} ${h}` });
@@ -514,10 +554,42 @@ function drawShape(element: HTMLElement, s: Shape | undefined, w: number, h: num
           rx: 3.5,
         }),
       );
-    svg.append(
-      svgEl("text", { class: `mlabel ${look}`, x: lane.labelX, y: lane.labelY }, s.label ?? ""),
-      svgEl("text", { class: `mstage ${look}`, x: lane.labelX, y: lane.stageY }, s.stage ?? ""),
+    const mlabel = svgEl(
+      "text",
+      { class: `mlabel ${look}`, x: lane.labelX, y: lane.labelY },
+      s.label ?? "",
     );
+    const mstage = svgEl(
+      "text",
+      { class: `mstage ${look}`, x: lane.labelX, y: lane.stageY },
+      s.stage ?? "",
+    );
+    svg.append(mlabel, mstage);
+    if (s.ago !== undefined) {
+      const { arrow, label, at } = s.ago;
+      const title = line.querySelector("title");
+      // 札の文字・線の title・線の濃さ（新しいほど濃い。a1〜a4）を、nowMs から計算し直す（作り直さない）
+      const aged = [line, ...svg.querySelectorAll<SVGElement>(".tip, .port"), mlabel, mstage];
+      ticks.push((now) => {
+        if (!mlabel.isConnected) return false;
+        const text = laneAgoText(arrow, label, at, now, lang);
+        if (mlabel.textContent !== text) {
+          mlabel.textContent = text;
+          if (title !== null)
+            title.textContent = graphString(lang, "graph.lineTitle", {
+              label: text,
+              stage: s.stage ?? "",
+            });
+        }
+        const age = ageClassOf(at, now);
+        for (const e of aged) {
+          if (e.classList.contains(age)) continue;
+          e.classList.remove("a1", "a2", "a3", "a4");
+          e.classList.add(age);
+        }
+        return true;
+      });
+    }
   }
   element.append(svg);
 }

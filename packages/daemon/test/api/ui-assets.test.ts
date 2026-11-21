@@ -393,6 +393,10 @@ describe("画面の資産（走査）", () => {
       "attachDir",
       // 紐付けが切れた子（#189。表示モデルの値 'idle' | 'absolute'）
       "bindExpired",
+      // 相対時刻（「N 分前」）を、画面を描き直さずに計算し直す（#204）。基準の時刻・文の鍵・ほかの値を dataset に持たせ、interval で回す
+      "tkey",
+      "tvars",
+      "setInterval",
     ]);
     // 埋め込んだ文字の表（#140。JSON の値で、コードでない）は、走査から除く
     const code = UI_JS.replace(TABLE_LINE, "")
@@ -1247,6 +1251,8 @@ describe("画面の使い勝手（#13）", () => {
       fnOf("fetchFailureText"),
       fnOf("timeText"),
       fnOf("agoText"),
+      fnOf("whenText"),
+      fnOf("refreshTimes"),
       fnOf("stageText"),
       fnOf("attachWith"),
       fnOf("attachCommand"),
@@ -1254,7 +1260,7 @@ describe("画面の使い勝手（#13）", () => {
       fnOf("attachCommands"),
       fnOf("cleanText"),
       lineOf("function nodeLabel("),
-      "({ inboxBand: inboxBand, fetchFailureText: fetchFailureText, UNREACHABLE_TEXT: unreachableText(), timeText: timeText, agoText: agoText, stageText: stageText, attachCommand: attachCommand, attachCommandByRef: attachCommandByRef, attachCommands: attachCommands, nodeLabel: nodeLabel })",
+      "({ inboxBand: inboxBand, fetchFailureText: fetchFailureText, UNREACHABLE_TEXT: unreachableText(), timeText: timeText, agoText: agoText, whenText: whenText, refreshTimes: refreshTimes, stageText: stageText, attachCommand: attachCommand, attachCommandByRef: attachCommandByRef, attachCommands: attachCommands, nodeLabel: nodeLabel })",
     ].join("\n"),
     uiContext,
   ) as {
@@ -1263,6 +1269,8 @@ describe("画面の使い勝手（#13）", () => {
     UNREACHABLE_TEXT: string;
     timeText(iso: unknown, nowMs: number): string;
     agoText(ms: number): string;
+    whenText(iso: unknown, key: string, vars: Record<string, string> | undefined, nowMs: number): string;
+    refreshTimes(nowMs: number): void;
     stageText(f: Record<string, unknown>): string;
     attachCommand(n: unknown): string;
     attachCommandByRef(n: unknown): string;
@@ -1348,6 +1356,74 @@ describe("画面の使い勝手（#13）", () => {
     expect(api.timeText(undefined, now)).toBe("");
     expect(api.agoText(30_000)).toBe("いま");
     expect(api.agoText(2 * 3_600_000)).toBe("2 時間前");
+  });
+
+  it("(#204) 相対時刻は nowMs を渡して計算し直せる。言葉の境目は、これまでと同じ", () => {
+    const at = new Date(2026, 10, 17, 14, 0, 0);
+    const iso = at.toISOString();
+    const after = (ms: number) => at.getTime() + ms;
+    expect(api.whenText(iso, "", undefined, after(30_000))).toBe("14:00（いま）");
+    expect(api.whenText(iso, "", undefined, after(60_000))).toBe("14:00（1 分前）");
+    expect(api.whenText(iso, "", undefined, after(59 * 60_000))).toBe("14:00（59 分前）");
+    expect(api.whenText(iso, "", undefined, after(60 * 60_000))).toBe("14:00（1 時間前）");
+    // 文の鍵があれば、{when} に入れる（鍵のない値は、そのまま）
+    expect(api.whenText(iso, "card.last", undefined, after(5 * 60_000))).toBe(
+      api.whenText(iso, "card.last", {}, after(5 * 60_000)),
+    );
+    expect(api.whenText(iso, "card.last", undefined, after(5 * 60_000))).toContain("5 分前");
+    // 読めない値は、時刻の部分が空
+    expect(api.whenText("壊れた", "", undefined, after(0))).toBe("");
+  });
+
+  it("(#204) refreshTimes は、要素を作り直さず、変わった文字だけ書き直す", () => {
+    const at = new Date(2026, 10, 17, 14, 0, 0);
+    const iso = at.toISOString();
+    const makeEl = (dataset: Record<string, string>, textContent: string) => ({
+      dataset,
+      textContent,
+      writes: 0,
+    });
+    const plain = makeEl({ at: iso }, "14:00（いま）");
+    const keyed = makeEl({ at: iso, tkey: "card.last", tvars: "{}" }, "");
+    const broken = makeEl({ at: iso, tvars: "{壊れた" }, "");
+    // textContent への書き込みを数える（同じ文字なら、書かない）
+    for (const e of [plain, keyed, broken]) {
+      let value = e.textContent;
+      Object.defineProperty(e, "textContent", {
+        get: () => value,
+        set: (v: string) => {
+          e.writes += 1;
+          value = v;
+        },
+      });
+    }
+    uiContext.document = { querySelectorAll: () => [plain, keyed, broken] };
+    const t0 = at.getTime();
+    api.refreshTimes(t0 + 30_000);
+    expect(plain.textContent).toBe("14:00（いま）");
+    expect(plain.writes).toBe(0);
+    api.refreshTimes(t0 + 3 * 60_000);
+    expect(plain.textContent).toBe("14:00（3 分前）");
+    expect(plain.writes).toBe(1);
+    expect(keyed.textContent).toContain("3 分前");
+    // vars が壊れていても、止まらない
+    expect(broken.textContent).toBe("14:00（3 分前）");
+    // 変わらないなら、書かない
+    api.refreshTimes(t0 + 3 * 60_000 + 10_000);
+    expect(plain.writes).toBe(1);
+  });
+
+  it("(#204) 相対時刻の要素は、基準の時刻を持つ。interval・前面に戻った瞬間・focus で計算し直す", () => {
+    expect(UI_JS).toContain("e.dataset.at = ");
+    expect(UI_JS).toContain("window.setInterval(function () { refreshTimes(Date.now()); }, TIME_TICK_MS)");
+    const visible = UI_JS.slice(UI_JS.indexOf("document.addEventListener('visibilitychange'"));
+    expect(visible.slice(0, visible.indexOf("window.addEventListener('focus'"))).toContain(
+      "refreshTimes(Date.now())",
+    );
+    const focus = visible.slice(visible.indexOf("window.addEventListener('focus'"));
+    expect(focus.slice(0, focus.indexOf("});"))).toContain("refreshTimes(Date.now())");
+    // 呼び出しは、すべて whenEl 経由（描き直しのときだけ計算する書き方を残さない）
+    expect(UI_JS).not.toMatch(/el\([^\n]*timeText\(/);
   });
 
   it("(#89) やり取りの段の言葉。届いたかの記録がない・推定は、そう言う", () => {

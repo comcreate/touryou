@@ -368,6 +368,8 @@ export const UI_JS = `'use strict';
   var POLL_MS = 2000;
   var SAFETY_MS = 30000;
   var THROTTLE_MS = 1000;
+  // 相対時刻だけを計算し直す間隔（画面全体の描き直しとは別）
+  var TIME_TICK_MS = 15000;
   var BACKOFF_MIN = 1000;
   var BACKOFF_MAX = 300000;
   // 裏のタブ: 隠れてこの時間たったら購読を閉じ（ほかのタブに枠を空ける）、ポーリングも間を空ける。
@@ -419,6 +421,31 @@ export const UI_JS = `'use strict';
     if (m < 60) return t('time.minAgo', { n: m });
     if (m < 1440) return t('time.hourAgo', { n: Math.floor(m / 60) });
     return t('time.dayAgo', { n: Math.floor(m / 1440) });
+  }
+  // 相対時刻の文字（#204）。key があれば、その文の {when} に時刻を入れる（vars は、ほかの {…} の値）。nowMs を渡して計算する（試験できる形）
+  function whenText(iso, key, vars, nowMs) {
+    var when = timeText(iso, nowMs);
+    if (!key) return when;
+    var args = { when: when };
+    Object.keys(vars || {}).forEach(function (k) { args[k] = vars[k]; });
+    return t(key, args);
+  }
+  // 相対時刻を出す要素。基準の ISO 時刻・文の鍵・ほかの値を data に持たせ、refreshTimes が、画面を描き直さずに文字だけ計算し直す
+  function whenEl(tag, cls, iso, key, vars) {
+    var e = el(tag, cls, whenText(iso, key, vars, Date.now()));
+    e.dataset.at = typeof iso === 'string' ? iso : '';
+    if (key) { e.dataset.tkey = key; e.dataset.tvars = JSON.stringify(vars || {}); }
+    return e;
+  }
+  // 画面の中の相対時刻の文字を、nowMs から計算し直す。要素は作り直さない（入力中の欄・折りたたみ・スクロール位置に触らない）。
+  // 変わった文字だけ書く（読み上げに、同じ文を繰り返させない）
+  function refreshTimes(nowMs) {
+    document.querySelectorAll('[data-at]').forEach(function (e) {
+      var vars = {};
+      if (e.dataset.tvars) { try { vars = JSON.parse(e.dataset.tvars); } catch (err) { vars = {}; } }
+      var text = whenText(e.dataset.at, e.dataset.tkey || '', vars, nowMs);
+      if (e.textContent !== text) e.textContent = text;
+    });
   }
   // やり取りの段の言葉。届いたかの記録がない（deliveryUnknown）・推定（doneInferred）は、そう言う
   function stageText(f) {
@@ -796,7 +823,7 @@ export const UI_JS = `'use strict';
     var who = el('div', 'who');
     who.appendChild(el('span', 'chip ' + chip, label));
     who.appendChild(el('span', 'strong', n ? nodeLabel(n, 60) : nodeId));
-    if (n) who.appendChild(el('span', '', n.lastActivityAt ? t('who.roleLast', { role: name(ROLE_NAMES, n.role), when: timeText(n.lastActivityAt, Date.now()) }) : t('who.role', { role: name(ROLE_NAMES, n.role) })));
+    if (n) who.appendChild(n.lastActivityAt ? whenEl('span', '', n.lastActivityAt, 'who.roleLast', { role: name(ROLE_NAMES, n.role) }) : el('span', '', t('who.role', { role: name(ROLE_NAMES, n.role) })));
     card.appendChild(who);
     return card;
   }
@@ -850,7 +877,7 @@ export const UI_JS = `'use strict';
         n += 1;
         var card = taskCard('task stall', 'i-' + i.id, t('stall.chip'), 'stall', node, i.nodeId);
         card.appendChild(el('div', 'ask', t('stall.ask')));
-        if (i.at) card.appendChild(el('div', 'when', t('stall.when', { when: timeText(i.at, Date.now()) })));
+        if (i.at) card.appendChild(whenEl('div', 'when', i.at, 'stall.when'));
         var cmds = attachCommands(node);
         if (cmds.length) {
           cmds.forEach(function (cmd, idx) {
@@ -1008,7 +1035,7 @@ export const UI_JS = `'use strict';
     meta.appendChild(el('span', '', n.parentId === null ? t('card.roleTop', { role: name(ROLE_NAMES, n.role) }) : t('card.roleParent', { role: name(ROLE_NAMES, n.role), parent: parent ? nodeLabel(parent, 13) : n.parentId })));
     // 最後の動き。表示モデルに時刻がない（いちばん上の統合が、指示を出しただけ など）ときは、その子のいちばん新しいやり取りの時刻
     var last = n.lastActivityAt || latestFlowAt(n.id, flows);
-    if (last) meta.appendChild(el('span', 'when', t('card.last', { when: timeText(last, Date.now()) })));
+    if (last) meta.appendChild(whenEl('span', 'when', last, 'card.last'));
     card.appendChild(meta);
     card.appendChild(sparkOf(n.id, flows, Date.now()));
     // 最近のやり取り（新しい順に 3 件）
@@ -1096,7 +1123,7 @@ export const UI_JS = `'use strict';
     markNew(row, 'e-' + i.id);
     var head = el('div', '');
     head.appendChild(el('span', 'chip ' + (i.stall === true ? 'stall' : band.cls), i.stall === true ? t('stall.chip') : isStopRequest(i, delegated) ? band.label : name(KIND_NAMES, i.kind)));
-    head.appendChild(el('span', 'when', timeText(i.at, Date.now())));
+    head.appendChild(whenEl('span', 'when', i.at));
     row.appendChild(head);
     // daemon が書いた知らせ（msg つき）は、選んだ言語の文。msg のない知らせは、summary のまま（#140 の利用者の決め）
     var raw = itemText(i);
@@ -1136,7 +1163,7 @@ export const UI_JS = `'use strict';
     var row = el('div', 'entry');
     var head = el('div', '');
     head.appendChild(el('span', 'chip', name(KIND_NAMES, r.kind)));
-    head.appendChild(el('span', 'when', timeText(r.resolvedAt, Date.now())));
+    head.appendChild(whenEl('span', 'when', r.resolvedAt));
     row.appendChild(head);
     var text = itemText(r);
     if (text) row.appendChild(el('div', 'confirm-line', cleanText(text, 120)));
@@ -1210,7 +1237,7 @@ export const UI_JS = `'use strict';
   function flowCell(f, up, n) {
     if (!f) return el('span', 'when', t(n.parentId === null ? 'list.top' : 'list.noFlow'));
     var c = el('span', isAwaiting(f) ? 'await' : up ? 'up' : 'down', t('list.flow', { dir: up ? '↑' : '↓', kind: name(FLOW_KIND_NAMES, f.kind), stage: stageText(f) }));
-    c.appendChild(el('span', 'when', t('list.flowWhen', { when: timeText(f.sentAt, Date.now()) })));
+    c.appendChild(whenEl('span', 'when', f.sentAt, 'list.flowWhen'));
     return c;
   }
   // 関係図（#89）。/ui/graph.js が出す入口の draw・destroy だけを呼ぶ。読めないときは一覧だけ
@@ -2097,9 +2124,16 @@ export const UI_JS = `'use strict';
       return;
     }
     if (hideTimer !== null) { window.clearTimeout(hideTimer); hideTimer = null; }
+    // 前面に戻った瞬間に、相対時刻を現在時刻から計算し直す（背面の間は、ブラウザがタイマーを間引くため）
+    refreshTimes(Date.now());
     resumeEvents();
   });
-  window.addEventListener('focus', resumeEvents);
+  window.addEventListener('focus', function () {
+    refreshTimes(Date.now());
+    resumeEvents();
+  });
+  // 相対時刻（「N 分前」）は、画面を描き直さなくても、一定の間ごとに現在時刻から計算し直す（#204）
+  window.setInterval(function () { refreshTimes(Date.now()); }, TIME_TICK_MS);
 
   function start() {
     generation += 1;
