@@ -84,6 +84,7 @@ TouRyou は、**セッションを起動しません**。**Anthropic の認証�
 ## 注意（CLI の子）
 
 - **CLI の子と plugin**: `--plugin-dir` で開いたのは、そのセッションだけ。`--plugin-dir` だけで開いた親の子（`claude --bg`）には plugin が付かず、子は `child_bind` を見つけられないまま止まり、TouRyou のフック（守り）も効かない。そこで TouRyou は、親の mcp の plugin の場所（`CLAUDE_PLUGIN_ROOT`）が確かめを通れば、子の起動の文に `--plugin-dir` を足す（marketplace から入れた plugin と重なっても 1 つにまとまる）。付けられなかったときは、受信箱に理由が出る。そのときは plugin を設定の置き場に入れる（marketplace から入れる）。daemon は、起動の報告のあと所定の時間（`cliWatch.unboundMinutes`。既定 3 分）紐付けのない子を、受信箱に 1 回だけ出す。
+- **紐付けが外れた子は、`child_bind` を引数なしで呼べば、親に知らせられる**（#186）: 紐付けの前（`/mcp` の再接続・`claude attach`・daemon の再起動・トークンの期限切れのあと）の子が使えるのは `child_bind`（`mcp__plugin_touryou_node__child_bind`）と `whoami` だけで、`report_progress` などは使えない。コードなしのつなぎ直し（#145）が通らなかったとき、daemon が、親の受信箱に「紐付けをやり直して」を出す（ノードごとに 1 回。作業ツリーの確認を通ったあとだけ。親は `node_bindCode` で出し直す）。子の自由文は受信箱に入れず、新しい道具も足さない。拒否の文にも、この名前を出す（画面を見ている人に頼む道は、`claude --bg` の子には行き止まりなので、やめた）。印がない子・`CLAUDE_CODE_SESSION_ID` が mcp に渡らない子・daemon に届かない子は、この道では知らせられない。起動の報告のあとの紐付けの見張り（`cliWatch.unboundMinutes`）が拾う。
 - **agent view の入力欄に貼った文は、新しい裏のセッションになる**。子に答えるつもりで agent view の入力欄に書くと、別の子が増える。子に入力するときは `claude attach <名前>` でつなぐ。
 - **組織の管理の設定（managed settings）がある環境では、モデルの切り替えで失敗が出ることがある**（`--model` で、許されていないモデルを指定したときなど）。そのときは、出た文面を `parent_report` の `reason` に入れて報告する。
 - **auto でないモード（ふつうのモード）では、`claude` のコマンドごとに許可の確認が出る**。変数を含むコマンドは「A variable in this command can't be checked before it runs」の確認が出るので、TouRyou の依頼のコマンドは、変数のない形にしている（値は単一引用符で 1 語にする）。親の skill も、コマンドを書き換えない・変数を足さない・つなげない。確認を減らすには、`/touryou:setup` の「許可の一覧」を見る。
