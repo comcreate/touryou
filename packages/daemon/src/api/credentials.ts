@@ -55,7 +55,7 @@ export interface CredentialStore {
    * トークンを確かめる。`touch` が真（既定）なら、使ったものとして数える（使わなければ切れる時計を延ばす）。
    * 偽なら、確かめるだけで時計を延ばさない（期限切れ・役目の終わりの失効は、どちらでも行う）。窓口は、子の呼び出し
    * （購読の接続・heartbeat・`child.inbox` を含む）では、ふつう真にする。例外は、前置きの知らせ（#189）だけを読む `child.inbox`
-   * の呼び出し（窓口の `processBody` が、操作と引数がわかってから `touchNode` を呼ぶかを決める）。
+   * の呼び出し（窓口の `processBody` が、操作と引数がわかってから、数えない印を立てる。数えるのは窓口が、処理の最後に `touchNode` で行う）。
    */
   authenticate(token: unknown, touch?: boolean): Principal | undefined;
   /** 直近に期限切れ・役目の終わりで失効させたトークンか（応答の失敗の記号を tokenExpired にするため。メモリだけ）。 */

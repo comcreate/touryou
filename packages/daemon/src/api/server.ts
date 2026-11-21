@@ -449,8 +449,15 @@ interface InProgressEntry {
   readonly fingerprint: string;
   readonly startedAt: number;
   readonly operation: string;
+  /** 前置きの知らせだけを読む `child.inbox` か（合流した同じ要求も、時計を延ばさない）。 */
+  readonly prefaceOnly: boolean;
   waiters: number;
   readonly reply: Promise<Reply>;
+}
+
+/** 1 つの要求の、ノードのトークンを数えるかの印（`skipTouch` が真なら、数えない）。 */
+interface TouchState {
+  skipTouch: boolean;
 }
 
 const reject = (res: ServerResponse, error: Failure, extra: Record<string, string> = {}): void =>
@@ -708,12 +715,32 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       });
     }
     const token = parseBearer(req.headers.authorization);
-    // ノードのトークンの「使った」印は、操作と引数がわかってから付ける（`processBody`。前置きの知らせだけを読む `child.inbox` の
-    // 呼び出しだけは付けない。#189）。ほかの呼び出しは、これまでどおり使ったものとして数える
+    // ノードのトークンの「使った」印は、ここでは付けない。認証に通った呼び出しは、弾かれたものも含めて、処理の最後（`handleAuthed` の
+    // 外の finally）で使ったものとして数える。例外は、前置きの知らせだけを読む `child.inbox`（#189）で、数えない
     const principal = authenticate(token, true, false);
     if (principal === undefined) {
       return authFailed(req, res, failReason(token));
     }
+    // 認証に通ったら、弾かれた呼び出し（429・検証の失敗・権限の拒否・重複の合流）でも、使ったものとして数える（時計を延ばす）。
+    // 例外は 1 つだけ: 前置きの知らせだけを読む `child.inbox`（`skipTouch`。processBody が、引数がわかってから立てる）。
+    // 時計を戻す形にせず、最後（finally）で 1 回だけ数える（最後に使った時刻・警告の印・失効の判定は、これまでの touchNode のまま）。
+    const state: TouchState = { skipTouch: false };
+    try {
+      return await handleAuthed(req, res, principal, state);
+    } finally {
+      if (principal.role !== "human" && !state.skipTouch) {
+        deps.credentials.touchNode?.(principal.nodeId);
+      }
+    }
+  }
+
+  /** 認証に通った `POST /v1/request` の続き。ノードのトークンを数えるのは、呼び出し側（`handle`）。 */
+  async function handleAuthed(
+    req: IncomingMessage,
+    res: ServerResponse,
+    principal: Principal,
+    state: TouchState,
+  ): Promise<void> {
     const valid = checkPrincipal(principal, deps.getState());
     if (!valid.ok) {
       counters.count("authFailed", "principalRejected");
@@ -746,7 +773,7 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       return tooMany(res, used.retryAfterSec, true);
     }
     try {
-      await processBody(req, res, principal, key, releaseSlot);
+      await processBody(req, res, principal, key, releaseSlot, state);
     } finally {
       releaseSlot(); // ハンドラが終わった（または、ハンドラまで進まなかった）時点で、枠を返す
     }
@@ -770,6 +797,7 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     principal: Principal,
     key: string,
     releaseSlot: () => void,
+    state: TouchState,
   ): Promise<void> {
     if (!/^application\/json(\s*;|$)/i.test(String(req.headers["content-type"] ?? ""))) {
       req.resume();
@@ -819,6 +847,8 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       existing = undefined;
     }
     if (existing !== undefined) {
+      // 前置きだけの呼び出しに合流した同じ要求も、時計を延ばさない（合流で、前置きの読み出しが延ばす道にならないように）
+      if (existing.prefaceOnly) state.skipTouch = true;
       releaseSlot();
       if (existing.fingerprint !== fingerprint) {
         // 同じ requestId が、別の内容の要求に使われている（実行しない）。ハンドラ層の requestIdConflict と同じ 422。
@@ -870,14 +900,13 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     if (!params.ok) return reject(res, params.error);
     const scope = authorizeScope(principal, operation, params.value, deps.getState());
     if (!scope.ok) return reject(res, scope.error);
-    // ノードのトークンを、使ったものとして数える（使わなければ切れる時計を延ばす）。受信箱の読み出し（`child.inbox`）も、購読の接続・
-    // heartbeat も、ふつうは延ばす（購読して待つ生きた子が、切れないように）。例外は 1 つだけ: この呼び出しが読む・受け取りにする
-    // 指示が、前置き（「もうすぐ切れる」の追加指示。#189）だけのとき。前置きは、これで子に届くので、前置きを読むだけで延びると、
-    // 無人のセッションが切れなくなる。前置きの次の呼び出し（ack のあとの空の読み出しなど）からは、ふつうに延ばす。
-    // 引数の検証のあとで判定する（本文の引数を信じない）。
-    if (principal.role !== "human" && !isPrefaceOnlyInboxRead(principal, operation, params.value)) {
-      deps.credentials.touchNode?.(principal.nodeId);
-    }
+    // 受信箱の読み出し（`child.inbox`）も、購読の接続・heartbeat も、ふつうは延ばす（購読して待つ生きた子が、切れないように）。
+    // 例外は 1 つだけ: この呼び出しが読む・受け取りにする指示が、前置き（「もうすぐ切れる」の追加指示。#189）だけのとき。
+    // 前置きは、これで子に届くので、前置きを読むだけで延びると、無人のセッションが切れなくなる。前置きの次の呼び出し
+    // （ack のあとの空の読み出しなど）からは、ふつうに延ばす。引数の検証のあとで判定する（本文の引数を信じない）。
+    // ここで立てるのは「延ばさない」印だけ（数えるのは `handle` の最後。ここより前に弾かれた呼び出しは、印がないので延ばす）。
+    const prefaceOnly = isPrefaceOnlyInboxRead(principal, operation, params.value);
+    if (prefaceOnly) state.skipTouch = true;
 
     const handler = Object.hasOwn(deps.handlers, operation)
       ? (deps.handlers[operation] as ((r: HandlerRequest) => unknown) | undefined)
@@ -908,6 +937,7 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       fingerprint,
       startedAt: monoNow(),
       operation,
+      prefaceOnly,
       waiters: 0,
       reply: new Promise<Reply>((resolve) => {
         resolveReply = resolve;
