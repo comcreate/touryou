@@ -118,7 +118,10 @@ describe("lastActivityMs（#195。見張りと画面の共通の数え方）", (
         },
         T1,
       ),
-      ev({ type: "scope.extensionDecided", payload: { extensionId: "x1", decision: "reject" } }, T3),
+      ev(
+        { type: "scope.extensionDecided", payload: { extensionId: "x1", decision: "reject" } },
+        T3,
+      ),
     ]);
     expect(lastActivityMs(s, "a")).toBe(Date.parse(T3));
     expect(lastActivityAt(s, "a")).toBe(T3);
