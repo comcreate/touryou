@@ -848,7 +848,10 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           clock,
           bind,
           writeCodeFile: (worktree, code) => {
-            writeBindCodeFile(worktree, code);
+            // 書いた daemon の公開 ID も入れる（子の mcp が、接続先違いを見分ける）。起動の前（身元がまだない）なら、コードだけ
+            writeBindCodeFile(worktree, code, {
+              ...(currentIdentity === undefined ? {} : { daemonId: currentIdentity.daemonId }),
+            });
           },
           removeCodeFile: (worktree) => {
             removeBindCodeFile(worktree);

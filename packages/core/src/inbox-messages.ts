@@ -88,8 +88,8 @@ export const INBOX_MESSAGES = {
     en: "Child {node} has not picked up instruction #{seq} after {minutes} min. Check that the child is running",
   },
   unbound: {
-    ja: "子 {node} が紐付けていない（起動の報告から {minutes} 分）。touryou の plugin が、子の設定の置き場に入っていない見込み。--plugin-dir で開いた親の子には plugin が付かない。plugin を設定の置き場に入れて（/touryou:setup）、子を起動し直す",
-    en: "Child {node} has not bound itself ({minutes} min since the launch report). The touryou plugin is probably missing from the child's settings. Children of a parent opened with --plugin-dir do not get the plugin. Install the plugin into the settings (/touryou:setup) and restart the child",
+    ja: "子 {node} が紐付けていない（起動から {minutes} 分）。原因の候補: (1) 接続先違い（--config・TOURYOU_DAEMON_CONFIG を確かめる）(2) plugin 欠落（--plugin-dir の親の子には付かない。/touryou:setup）(3) コード期限切れ（node_bindCode で出し直す）",
+    en: "Child {node} has not bound itself ({minutes} min since launch). Likely causes: (1) wrong daemon (check --config and TOURYOU_DAEMON_CONFIG) (2) missing plugin (children of a --plugin-dir parent do not get it; run /touryou:setup) (3) expired code (reissue with node_bindCode)",
   },
   rebind: {
     ja: "子 {node} の紐付けをやり直して（コードが無効。daemon の再起動・期限切れなど）。node_bindCode でコードを出し直し、子に child_bind を引数なしでもう一度呼ばせる",

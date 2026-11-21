@@ -551,23 +551,28 @@ describe("bind 専用の入口（POST /v1/bind。Bearer なしで、nodeId と b
     expect(res.status).toBe(200);
   });
 
-  it("コードは一度だけ・結び付いたノードだけ。未知・使用済み・期限切れ・別のノードは、区別せず 401", async () => {
+  it("コードは一度だけ・結び付いたノードだけ。使用済み・期限切れは、そのコードを持つノードにだけ区別して返し（いずれも 401）、未知・別のノードは区別しない", async () => {
     let now = 1_000_000;
     const r = await rigBind({ now: () => now });
     const code = r.bind.issue("a");
     expect((await r.call({ nodeId: "a", bindCode: code })).status).toBe(200);
-    for (const [nodeId, c] of [
-      ["a", code],
-      ["a", "WXYZ2345ABCDEFGHJKMNPQRSTV"],
-    ] as const) {
-      const res = await r.call({ nodeId, bindCode: c });
-      expect(res.status).toBe(401);
-      expect(res.json.error.code).toBe("unauthenticated");
-    }
+    const used = await r.call({ nodeId: "a", bindCode: code });
+    expect(used.status).toBe(401);
+    expect(used.json.error.code).toBe("bindCodeUsed");
+    const unknown = await r.call({ nodeId: "a", bindCode: "WXYZ2345ABCDEFGHJKMNPQRSTV" });
+    expect(unknown.status).toBe(401);
+    expect(unknown.json.error.code).toBe("unauthenticated");
     const other = r.bind.issue("a");
-    expect((await r.call({ nodeId: "m2", bindCode: other })).status).toBe(401);
+    const wrongNode = await r.call({ nodeId: "m2", bindCode: other });
+    expect(wrongNode.status).toBe(401);
+    expect(wrongNode.json.error.code).toBe("unauthenticated");
     now += 10 * 60_000;
-    expect((await r.call({ nodeId: "a", bindCode: other })).status).toBe(401);
+    const expired = await r.call({ nodeId: "a", bindCode: other });
+    expect(expired.status).toBe(401);
+    expect(expired.json.error.code).toBe("bindCodeExpired");
+    // 応答の本文に、コードそのものは含まれない
+    for (const res of [used, unknown, wrongNode, expired])
+      expect(JSON.stringify(res.json)).not.toContain(code);
   });
 
   it("ノードごとのロックはない。同じノードの失敗が続いても、正しいコードで紐付けられる（nodeId は誰でも申告できる）", async () => {
@@ -654,8 +659,10 @@ describe("bind 専用の入口（POST /v1/bind。Bearer なしで、nodeId と b
     const events = logs.map((l) => l.event);
     expect(events[0]).toBe("bindSucceeded");
     expect(logs[0]).toMatchObject({ nodeId: "a", at: "2026-10-20T00:00:00.000Z" });
-    expect(logs[1]).toMatchObject({ event: "bindFailed", reason: "invalid" });
+    expect(logs[1]).toMatchObject({ event: "bindFailed", reason: "unknownCode" });
     expect(logs[2]).toMatchObject({ event: "bindFailed", reason: "malformed" });
+    // 使用済みのコードでの再試行は、理由が区別される
+    expect(logs.at(-1)).toMatchObject({ event: "bindFailed", reason: "used" });
     expect(events).not.toContain("bindLocked");
     // 失敗の記録に nodeId は含めない（申告された値は信用できない）
     for (const l of logs.filter((x) => x.event !== "bindSucceeded"))
