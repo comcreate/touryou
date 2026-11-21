@@ -31,7 +31,7 @@ allowed-tools: Read
   外したあと、手で起動するときは、`/setup` の手順 3-B。
 - **uninstall-all**: TouRyou をまとめて外す（常駐・plugin・marketplace・`$HOME/.touryou`）。**実行の前に、次の定型文で尋ねる**。はっきり「はい」でなければ、何もせずに終わる。
   定型文（まとめて外す）: 「TouRyou をまとめて外します。いま、常駐（daemon）を止めて外します。plugin・marketplace・$HOME/.touryou（ログと daemon の状態を含む）は、この会話を終えたあとに、ターミナルで消すコマンドを出します。動いている子のセッションは止まります。よいですか（はい／いいえ）」
-  「はい」のあと、実行する: `"$HOME/.touryou/current/bin/touryou" launchd uninstall --yes`（1 回）。別名の daemon があるときは、続けて `"$HOME/.touryou/current/bin/touryou" launchd uninstall --yes --others`（1 回）。常駐にしていなかったときも、同じものを実行する（消すものがなければ、何も消さずに終わる）。
+  「はい」のあと、**1 回だけ**実行する: `"$HOME/.touryou/current/bin/touryou" launchd uninstall --yes`。別名の daemon があるときは、続けて `"$HOME/.touryou/current/bin/touryou" launchd uninstall --yes --others`（1 回）。常駐にしていなかったときも、同じものを実行する（消すものがなければ、何も消さずに終わる）。
   結果: 終了コード 0、または終了コード 1 で「残した」の行があるときは、消したもの・残したもの（理由）を伝えて、次へ進む。終了コード 1 で「何も消していない」（止めるのに失敗）・終了コード 2 は、出力を伝えて止まる（次のブロックは出さない）。
   続けて、次のことを伝え、ブロックを出す（**会話の中では実行しない**）。
   - 手で起動した daemon（`/setup` の手順 3-B）があれば、先にそのターミナルで Ctrl-C で止める。
