@@ -139,7 +139,8 @@ const homeWith = (aliases: Record<string, string>, opts: { defaultPlist?: boolea
   const agents = join(h, "Library", "LaunchAgents");
   mkdirSync(agents, { recursive: true });
   if (opts.defaultPlist) writeFileSync(join(agents, "touryou.daemon.plist"), "<plist/>");
-  for (const [name, cfg] of Object.entries(aliases)) writeFileSync(join(agents, name), aliasPlist(cfg));
+  for (const [name, cfg] of Object.entries(aliases))
+    writeFileSync(join(agents, name), aliasPlist(cfg));
   return h;
 };
 
@@ -270,7 +271,9 @@ describe("版上げ（別名の daemon がある。#165）", () => {
     const r = upgrade(h);
     expect(r.status, out(r)).toBe(1);
     expect(r.stdout).toMatch(/RESULT: failed/);
-    expect(r.stdout).toMatch(/別名の daemon（.*）の設定が、v1\.0\.0 の daemon の設定の検査を通らない/);
+    expect(r.stdout).toMatch(
+      /別名の daemon（.*）の設定が、v1\.0\.0 の daemon の設定の検査を通らない/,
+    );
     expect(r.stdout).toMatch(/daemon は止めていない（v0\.9\.0 のまま）/);
     expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
     // stop・init などは 1 つも呼んでいない

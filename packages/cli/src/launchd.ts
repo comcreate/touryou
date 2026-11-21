@@ -398,7 +398,9 @@ export interface StateDirSharing {
 
 /** 案内に出す、同じ stateDir を使う相手の説明。同じ設定を別の Label で init したものは、Label も示す。 */
 export const describeSharing = (s: StateDirSharing): string =>
-  s.label === undefined ? s.configPath : `${s.configPath}。Label ${s.label} の plist が、同じ設定を使っている`;
+  s.label === undefined
+    ? s.configPath
+    : `${s.configPath}。Label ${s.label} の plist が、同じ設定を使っている`;
 
 /**
  * 同じ stateDir（実パスで比べる）を使う、ほかの daemon。既定の設定（`<base>/config.json`）と、init 済みの plist
