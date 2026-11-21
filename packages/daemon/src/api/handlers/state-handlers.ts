@@ -243,13 +243,14 @@ export function createStateHandlers(deps: StateHandlerDeps) {
       const openItems = (nodeId: string): number =>
         unresolvedInbox(v.inbox).filter((i) => i.nodeId === nodeId && i.kind !== "digest").length;
       // 止まった子の未回答の判断。動いていない（running・waiting・stopping でない）子の判断を数える:
-      // - closed（破棄を決めた子。答えても届かない）→「届かない」
+      // - closed（破棄を決めた子。答えても届かない）→「届かない」。出した子が取り下げた判断（closedReason が withdrawn。#196）は、
+      //   もう要らないもので、届かなかったものではないので数えない
       // - open（止まった子。回答で再開する道はあるが、いまは止まっている）→「止まった子」
       const live = new Set(["running", "waiting", "stopping"]);
       const countPending = (nodeId: string): { undeliverable: number; stopped: number } => {
         const state = all.find((x) => x.id === nodeId)?.state ?? "";
         const undeliverable = v.decisions.filter(
-          (d) => d.nodeId === nodeId && d.status === "closed",
+          (d) => d.nodeId === nodeId && d.status === "closed" && d.closedReason !== "withdrawn",
         ).length;
         const stopped = live.has(state)
           ? 0

@@ -1076,6 +1076,104 @@ describe("tree.list の pendingDecision 列", () => {
     expect(pending("b")).toEqual({ undeliverable: 0, stopped: 1 });
     expect(pending("root")).toEqual({ undeliverable: 0, stopped: 0 });
   });
+
+  // a を止めて停止済みにし、破棄を決める（open の判断は closed になる）
+  const stopAndDiscard = (r: ReturnType<typeof rig>, suffix: string): void => {
+    r.log.append({
+      requestId: `stop-${suffix}`,
+      actor: SYS,
+      body: {
+        type: "node.stateChanged",
+        payload: { nodeId: "a", event: { type: "stop", mode: "immediate" } },
+      },
+    });
+    r.log.append({
+      requestId: `conf-${suffix}`,
+      actor: SYS,
+      body: {
+        type: "node.stateChanged",
+        payload: { nodeId: "a", event: { type: "confirmStopped" } },
+      },
+    });
+    r.log.append({
+      requestId: `disc-${suffix}`,
+      actor: { human: true },
+      body: { type: "node.discardDecided", payload: { nodeId: "a" } },
+    });
+  };
+  const pendingOfA = async (r: ReturnType<typeof rig>) => {
+    const listed = (await r.call("tree.list", r.req("tree.list", {}, ROOT))).value;
+    const nodes = listed.nodes as { id: string; pendingDecisions?: unknown }[];
+    const row =
+      (listed.table as string).split("\n").find((l) => l.split("|")[1]?.trim() === "a") ?? "";
+    return { counts: nodes.find((x) => x.id === "a")?.pendingDecisions, row };
+  };
+  const withdrawOne = async (r: ReturnType<typeof rig>, suffix: string): Promise<void> => {
+    const asked = await r.call(
+      "report.decision",
+      r.req("report.decision", { question: "どちらにするか", options: ["X", "Y"] }, A),
+    );
+    const decisionId = asked.value.decisionId as string;
+    const res = await r.call(
+      "decision.withdraw",
+      r.req("decision.withdraw", { decisionId }, A, `withdraw-${suffix}`),
+    );
+    expect(res.ok).toBe(true);
+    expect(r.state().decisions.find((d) => d.decisionId === decisionId)?.closedReason).toBe(
+      "withdrawn",
+    );
+  };
+
+  it("取り下げた判断（closedReason が withdrawn）は、「届かない」に数えない（#207）", async () => {
+    const r = rig();
+    await withdrawOne(r, "1");
+    const { counts, row } = await pendingOfA(r);
+    expect(counts).toEqual({ undeliverable: 0, stopped: 0 });
+    expect(row).not.toContain("届かない");
+    // 止めて破棄を決めたあとも、取り下げた判断は数えない（取り下げは届かなかったものではない）
+    stopAndDiscard(r, "a1");
+    const after = await pendingOfA(r);
+    expect(after.counts).toEqual({ undeliverable: 0, stopped: 0 });
+    expect(after.row).not.toContain("届かない");
+  });
+
+  it("届かなかった closed（破棄を決めた子の判断）は、これまでどおり数える（#207）", async () => {
+    const r = rig();
+    r.log.append({
+      requestId: "d-a2",
+      actor: SYS,
+      body: { type: "decision.requested", payload: { decisionId: "a-d2", nodeId: "a" } },
+    });
+    stopAndDiscard(r, "a2");
+    expect(r.state().decisions.find((d) => d.decisionId === "a-d2")?.closedReason).toBe(
+      "discarded",
+    );
+    const { counts, row } = await pendingOfA(r);
+    expect(counts).toEqual({ undeliverable: 1, stopped: 0 });
+    expect(row).toContain("1（届かない）");
+  });
+
+  it("取り下げと届かないが混ざるときは、届かなかったものだけを数える（#207）", async () => {
+    const r = rig();
+    await withdrawOne(r, "3");
+    await withdrawOne(r, "4");
+    r.log.append({
+      requestId: "d-a3",
+      actor: SYS,
+      body: { type: "decision.requested", payload: { decisionId: "a-d3", nodeId: "a" } },
+    });
+    stopAndDiscard(r, "a3");
+    const closed = r.state().decisions.filter((d) => d.nodeId === "a" && d.status === "closed");
+    expect(closed.map((d) => d.closedReason).sort()).toEqual([
+      "discarded",
+      "withdrawn",
+      "withdrawn",
+    ]);
+    const { counts, row } = await pendingOfA(r);
+    expect(counts).toEqual({ undeliverable: 1, stopped: 0 });
+    expect(row).toContain("1（届かない）");
+    expect(row).not.toContain("3（届かない）");
+  });
 });
 
 describe("tree.list の題（#115）", () => {

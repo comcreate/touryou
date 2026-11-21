@@ -113,7 +113,7 @@ export interface TreeListNode {
   /** 破棄の判断（`node.reclaimInstruct`）が記録済みか。 */
   readonly discarded: boolean;
   /**
-   * 止まった子の未回答の判断の数（表の pendingDecision 列と同じ数え方）。`undeliverable`: 閉じた判断（破棄を決めた子。答えても届かない）。
+   * 止まった子の未回答の判断の数（表の pendingDecision 列と同じ数え方）。`undeliverable`: 閉じた判断（破棄を決めた子。答えても届かない）。出した子が取り下げた判断（`closedReason: "withdrawn"`）は数えない。
    * `stopped`: 動いていない（running・waiting・stopping でない）子の open の判断（回答で再開する道はあるが、いまは止まっている）。
    * この版以降の daemon が付ける（古い daemon にはない。ないときは、表の列を見る）。
    */
