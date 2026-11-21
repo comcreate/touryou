@@ -140,6 +140,37 @@ export function createCredentialStore(options: {
     kind: TokenKind,
     issuedAt: string,
   ) => void;
+  /**
+   * 紐付け（`bind`）のトークンが、使われないまま `idleWarnMs` 以内に切れるとき、見回りで 1 回だけ呼ぶ（#189。失効の前の知らせ）。
+   * 同じ「最後に使った時刻」には 1 回だけ（使われて時計が進めば、また出せる）。`lastUsedMs` は、その止まりを見分ける印。
+   * 判断待ち・done・役目の終わりの子と、発行からの絶対の期限が先に来るトークンには呼ばない。
+   * 戻り値は、知らせを記録できたか。`true` のときだけ「出した」印を立てる（記録できなかった・出さなかったときは `false` か例外で、
+   * 次の見回りで、もう一度呼ぶ）。
+   */
+  readonly onIdleSoon?: (info: {
+    readonly nodeId: string;
+    readonly issuedAt: string;
+    readonly lastUsedMs: number;
+    readonly remainingMs: number;
+  }) => boolean;
+  /** `onIdleSoon` を呼ぶ、切れるまでの残り時間（ミリ秒）。省略すると呼ばない。 */
+  readonly idleWarnMs?: number;
+  /**
+   * 「もうすぐ切れる」を出したあと、そのトークンが使われて（または判断待ち・done で時計が止まって）切れなくなったとき、
+   * 見回りで呼ぶ（#189。出した知らせを解決にする）。認証の経路では呼ばない（記録の書き込みを、認証に持ち込まない）。
+   * 戻り値は、解決にできたか。`true` のときだけ「出した」印を外す（できなかった・例外のときは、次の見回りで、もう一度呼ぶ）。
+   */
+  readonly onIdleRecovered?: (nodeId: string) => boolean;
+  /**
+   * そのノードに、未解決の「もうすぐ切れる」の知らせがあるか（記録から引く）。印はメモリだけなので、daemon を起動し直したあとも、
+   * 再起動の前に出した知らせを、復帰で解決にし、同じ知らせを二重に出さないために使う。省略すると、メモリの印だけで決める。
+   */
+  readonly hasOpenIdleSoon?: (nodeId: string) => boolean;
+  /**
+   * ノードのトークンを発行したあとに呼ぶ（`issueNodeToken`・`rebindNodeToken` の成功のあと）。紐付けが結び直された・再開で
+   * 出し直されたことを知るのに使う（#189。失効・もうすぐ切れるの知らせを解決にする）。例外は発行を止めない。
+   */
+  readonly onTokenIssued?: (nodeId: string, kind: TokenKind) => void;
 }): CredentialStore {
   if (typeof options.humanToken !== "string" || options.humanToken.length < MIN_HUMAN_TOKEN) {
     throw new RangeError(`人間のトークンは ${MIN_HUMAN_TOKEN} 文字以上が必要`);
@@ -160,6 +191,8 @@ export function createCredentialStore(options: {
       issuedMs: number;
       lastUsedMs: number;
       writtenMs: number;
+      /** 失効の前の知らせを出した、そのときの `lastUsedMs`（メモリだけ。使われて時計が進めば、また出せる）。 */
+      warnedFor?: number | undefined;
     }
   >();
   /**
@@ -265,6 +298,56 @@ export function createCredentialStore(options: {
     options.onNodeTokenChanged?.(nodeId);
     options.onExpired?.(nodeId, reason, m.kind, m.issuedAt);
   };
+  /** 失効していない bind のトークンが、使われないまま `idleWarnMs` 以内に切れるなら、1 回だけ知らせる（#189）。 */
+  const warnIdleSoon = (nodeId: string, now: number): void => {
+    const warn = options.idleWarnMs;
+    const m = meta.get(nodeId);
+    if (warn === undefined || options.onIdleSoon === undefined || m === undefined) return;
+    if (m.kind !== "bind" || nodeId === options.exemptNodeId) return;
+    const idleAt = m.lastUsedMs + expiry.bindIdleMs;
+    const remainingMs = idleAt - now;
+    // 使えば延びると言えるのは、発行からの絶対の期限が、idle の期限より前の窓（`warn`）を過ぎても来ないとき。
+    // 絶対の期限が先（同時・窓の中）に来るなら、使っても延びないので知らせない（切れたあとの知らせが出る）
+    const inWindow = m.issuedMs + expiry.bindAbsoluteMs > idleAt + warn && remainingMs <= warn;
+    const hasOpen = (): boolean => options.hasOpenIdleSoon?.(nodeId) === true;
+    // 出したあとに時計が進んだ（使われた・判断待ちで止まった）・窓の外になった: もう切れないので、出した知らせを解決にする。
+    // 印はメモリだけなので、再起動の前に出した知らせも、記録から引いて解決にする。解決できたときだけ印を外す（失敗は次の見回りで）
+    const recover = (): boolean => {
+      try {
+        // 結び先がない（解決する先がない）ときは、印だけ外す。`false` は解決にできなかった
+        if (options.onIdleRecovered?.(nodeId) === false) return false;
+      } catch {
+        // 解決の失敗で、見回り・失効を止めない
+        return false;
+      }
+      m.warnedFor = undefined;
+      return true;
+    };
+    if (!inWindow) {
+      if (m.warnedFor !== undefined || hasOpen()) recover();
+      return;
+    }
+    if (m.warnedFor === m.lastUsedMs) return;
+    // 前の止まりで出した知らせが残っているなら、先に解決にする（失敗したら、二重に出さず次の見回りで）
+    if (m.warnedFor !== undefined && !recover()) return;
+    // 再起動の前に出した知らせが、まだ未解決で残っている: 同じ止まりの知らせなので、二重に出さない（印だけ立てる）
+    if (hasOpen()) {
+      m.warnedFor = m.lastUsedMs;
+      return;
+    }
+    try {
+      // 記録できたときだけ印を立てる（できなかったら、次の見回りで、もう一度出す）
+      const sent = options.onIdleSoon({
+        nodeId,
+        issuedAt: m.issuedAt,
+        lastUsedMs: m.lastUsedMs,
+        remainingMs,
+      });
+      if (sent === true) m.warnedFor = m.lastUsedMs;
+    } catch {
+      // 知らせの失敗で、見回り・失効を止めない
+    }
+  };
   /** 最後に使った時刻を更新し、保存先へは 1 ノードにつき LAST_USED_WRITE_MS に 1 回まで書く。 */
   const touch = (nodeId: string, h: string, now: number): void => {
     const m = meta.get(nodeId);
@@ -337,7 +420,10 @@ export function createCredentialStore(options: {
       const out: string[] = [];
       for (const nodeId of [...byNode.keys()]) {
         const reason = expiredReason(nodeId, now);
-        if (reason === undefined) continue;
+        if (reason === undefined) {
+          warnIdleSoon(nodeId, now);
+          continue;
+        }
         expire(nodeId, reason);
         out.push(nodeId);
       }
@@ -358,6 +444,11 @@ export function createCredentialStore(options: {
       const now = nowMs();
       meta.set(nodeId, { kind, role, issuedAt, issuedMs: now, lastUsedMs: now, writtenMs: now });
       options.onNodeTokenChanged?.(nodeId);
+      try {
+        options.onTokenIssued?.(nodeId, kind);
+      } catch {
+        // 知らせの解決の失敗で、発行を止めない
+      }
       return token;
     },
     nodeIds: () => [...byNode.keys()],

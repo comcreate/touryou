@@ -619,8 +619,19 @@ export const INSTRUCTION_KINDS = [
   "extensionApproved",
   "extensionRejected",
   "extensionSplit",
+  "tokenIdleSoon",
 ] as const;
 export type InstructionKind = (typeof INSTRUCTION_KINDS)[number];
+
+/**
+ * 子が読まなくても構わない、daemon の前置きの指示の種類（#189）。子の動きとして数えず、未読の指示にもしない
+ * （番の終わりの促し・cli-watch の「読まれていない指示」・状態画面の最後の動きが、同じ 1 か所を見る）。
+ */
+export const PREFACE_INSTRUCTION_KINDS: ReadonlySet<string> = new Set<InstructionKind>([
+  "tokenIdleSoon",
+]);
+export const isPrefaceInstruction = (i: { readonly kind?: string }): boolean =>
+  i.kind !== undefined && PREFACE_INSTRUCTION_KINDS.has(i.kind);
 
 export interface InstructionRecord {
   readonly seq: number;
@@ -1907,9 +1918,9 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
     case "node.instructed": {
       const { nodeId, text, kind } = p;
       if (!isId(nodeId)) return invalid(seq, "node.instructed の nodeId");
-      if (kind !== undefined && !(INSTRUCTION_KINDS as readonly unknown[]).includes(kind)) {
-        return invalid(seq, "node.instructed の kind");
-      }
+      // 知らない kind（新しい版の daemon が足したもの）は、記録を拒まず、種類のないふつうの指示として読む。
+      // kind を足すたびに、古い版が新しいログを読めなくなるのを避ける（前向きの互換）
+      const knownKind = (INSTRUCTION_KINDS as readonly unknown[]).includes(kind);
       if (!isBoundedText(text, LIMITS.reportText) || text.trim() === "") {
         return invalid(seq, `node.instructed の text（空でない ${LIMITS.reportText} 文字以下）`);
       }
@@ -1923,7 +1934,7 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
           nodeId,
           text,
           actor,
-          ...(kind === undefined ? {} : { kind: kind as InstructionKind }),
+          ...(knownKind ? { kind: kind as InstructionKind } : {}),
         }),
       );
       return commit();

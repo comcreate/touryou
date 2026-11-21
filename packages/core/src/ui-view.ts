@@ -15,11 +15,17 @@
  * - 件数には上限がある（`UI_LIMITS`）。切ったときは、`truncated` に種類を入れる。
  */
 
-import { type Actor, isSessionRef, type NodeRuntime, type OrchState } from "./events.js";
+import {
+  type Actor,
+  isPrefaceInstruction,
+  isSessionRef,
+  type NodeRuntime,
+  type OrchState,
+} from "./events.js";
 import { ID_PATTERN } from "./ids.js";
 import { isResolvedByHuman } from "./inbox.js";
 import { isStallSummary, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
-import { copyInboxMessage, type InboxMessage } from "./inbox-messages.js";
+import { copyInboxMessage, type InboxMessage, NON_ACTIVITY_NOTICE_KEYS } from "./inbox-messages.js";
 import type { NodeRole, NodeState } from "./index.js";
 
 export const UI_TEXT_MAX = 200;
@@ -74,6 +80,12 @@ export interface UiNode {
    * ほかは付けない（記録のないものを、画面で推し量らない）。画面は、実行環境の札と、開き方・安全面の注記を出す。
    */
   readonly runtime?: NodeRuntime;
+  /**
+   * 紐付けのトークンが切れた子（#189）。未解決の `tokenExpiredIdleBind`（使わなかった時間が長い。`idle`）・
+   * `tokenExpiredAbsoluteBind`（発行から時間がたった。`absolute`）の知らせの鍵から導く（文は見ない）。両方あれば新しいほう。
+   * 紐付けが成功すると daemon が知らせを解決にするので、付かなくなる。`needsHuman`・`band` には数えない（次の操作は親の `node_bindCode`）。
+   */
+  readonly bindExpired?: "idle" | "absolute";
   /** 題: 目的（objective）の先頭を整えて `UI_TITLE_MAX` で切ったもの。目的がなければ、なし。 */
   readonly title?: string;
   /** そのノードの最後の動き（報告・受信箱の項目・指示と受け取り・判断と拡張の要求）の時刻。記録がなければ、なし。 */
@@ -187,6 +199,8 @@ const INSTRUCTION_FLOW: Readonly<Record<string, UiFlowKind | null>> = {
   extensionApproved: "approved",
   extensionRejected: "rejected",
   extensionSplit: "split",
+  // 紐付けの期限の前置き（#189）は、daemon が子へ知らせる system の指示。親子のやり取りではないので、矢印にしない
+  tokenIdleSoon: null,
 };
 function instructionKind(kind: string | undefined): UiFlowKind | null {
   if (kind === undefined || !Object.hasOwn(INSTRUCTION_FLOW, kind)) return "instruction";
@@ -341,11 +355,26 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       sessionRefs.set(r.nodeId, r.report.sessionRef);
     }
   }
+  const BIND_EXPIRED_HIDDEN_STATES: ReadonlySet<string> = new Set([
+    "verified",
+    "archived",
+    "stopped",
+    "reclaimable",
+  ]);
+  // 紐付けが切れた子（#189）: 未解決の失効の知らせの鍵。seq の大きい（新しい）ほうを残す
+  const bindExpired = new Map<string, "idle" | "absolute">();
+  for (const i of [...unresolved].sort((a, b) => a.seq - b.seq)) {
+    const key = i.msg?.key;
+    if (key === "tokenExpiredIdleBind") bindExpired.set(i.nodeId, "idle");
+    else if (key === "tokenExpiredAbsoluteBind") bindExpired.set(i.nodeId, "absolute");
+  }
   const nodes = cap("nodes", state.nodes, UI_LIMITS.nodes).map((n): UiNode => {
     const title = titleOf(n.objective);
     const needsHuman = human.get(n.id) ?? 0;
     const at = last.get(n.id);
     const sessionRef = sessionRefs.get(n.id);
+    // 役目の終わった子には、次の操作がないので出さない
+    const expired = BIND_EXPIRED_HIDDEN_STATES.has(n.state) ? undefined : bindExpired.get(n.id);
     const runtime = n.runtime ?? (cliChildren.has(n.id) ? "cli" : undefined);
     return {
       id: idOf(n.id),
@@ -359,6 +388,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       ...(cliChildren.has(n.id) ? { cli: true as const } : {}),
       ...(sessionRef === undefined ? {} : { sessionRef }),
       ...(runtime === undefined ? {} : { runtime }),
+      ...(expired === undefined ? {} : { bindExpired: expired }),
       ...(title === "" ? {} : { title }),
       ...(at === undefined ? {} : { lastActivityAt: uiText(at) }),
       needsHuman,
@@ -502,9 +532,13 @@ function lastActivity(state: OrchState): Map<string, string> {
     if (cur === undefined || at > cur) m.set(id, at);
   };
   for (const r of state.reports) see(r.nodeId, r.at);
-  for (const i of state.inbox) see(i.nodeId, i.at);
+  for (const i of state.inbox) {
+    // daemon の前置きの知らせ（#189）は、子の動きではない
+    if (i.msg === undefined || !NON_ACTIVITY_NOTICE_KEYS.has(i.msg.key)) see(i.nodeId, i.at);
+  }
   for (const i of state.instructions) {
-    see(i.nodeId, i.at);
+    // daemon の前置き（#189）も、記録した時刻では動かさず、子が受け取った時刻だけを数える
+    if (!isPrefaceInstruction(i)) see(i.nodeId, i.at);
     see(i.nodeId, i.deliveredAt);
   }
   for (const d of state.decisions) see(d.nodeId, d.requestedAt);

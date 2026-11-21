@@ -45,6 +45,30 @@ describe("画面の文字の表（#140）", () => {
     expect(storedLang(1)).toBe(undefined);
   });
 
+  it("紐付けが切れた子のカードの文（#189）: 日英とも、利用者に idle という語を見せず、親の次の操作を CLI・Desktop・不明で分ける", () => {
+    expect(uiString("ja", "card.bindExpiredIdle")).toBe("紐付けが切れた（しばらく使われなかった）");
+    expect(uiString("en", "card.bindExpiredIdle")).toBe("Binding expired (unused for too long)");
+    expect(uiString("ja", "card.bindExpiredAbsolute")).toBe(
+      "紐付けが切れた（発行から時間がたった）",
+    );
+    expect(uiString("en", "card.bindExpiredAbsolute")).toBe(
+      "Binding expired (too long since it was issued)",
+    );
+    for (const key of [
+      "card.bindExpiredIdle",
+      "card.bindExpiredAbsolute",
+      "card.bindExpiredNextCli",
+      "card.bindExpiredNextDesktop",
+      "card.bindExpiredNextUnknown",
+    ] as const) {
+      expect(uiString("ja", key), key).not.toMatch(/idle/i);
+      expect(uiString("en", key), key).not.toMatch(/idle/i);
+    }
+    expect(uiString("ja", "card.bindExpiredNextCli")).toContain("child_bind");
+    expect(uiString("en", "card.bindExpiredNextDesktop")).toContain("node_bindCode");
+    expect(uiString("en", "card.bindExpiredNextUnknown")).toContain("node_bindCode");
+  });
+
   it("inboxItemText：daemon が書いた知らせは、選んだ言語の文。msg のない・知らない鍵の知らせは、summary のまま（利用者の決め）", () => {
     const m = inboxMessage("unreadInstruction", { node: "c1", seq: 7, minutes: 10 });
     const item = { summary: m.summary, msg: m.msg };
