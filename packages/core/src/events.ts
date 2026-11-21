@@ -1529,7 +1529,9 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
           nodeId,
           reason: reason as ScopeViolationReason,
           subject,
-          ...(diagnosis === undefined ? {} : { diagnosis: { ...(diagnosis as ViolationDiagnosis) } }),
+          ...(diagnosis === undefined
+            ? {}
+            : { diagnosis: { ...(diagnosis as ViolationDiagnosis) } }),
           actor,
         }),
       );

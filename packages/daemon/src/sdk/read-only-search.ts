@@ -427,7 +427,8 @@ export async function isReadOnlySearch(
   protectedRoots: readonly string[] = [],
 ): Promise<boolean> {
   return (
-    (await diagnoseReadOnlySearch(command, toolCwd, worktree, resolve, protectedRoots)) === undefined
+    (await diagnoseReadOnlySearch(command, toolCwd, worktree, resolve, protectedRoots)) ===
+    undefined
   );
 }
 
