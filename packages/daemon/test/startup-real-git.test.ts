@@ -113,8 +113,10 @@ describe("起動を、実物の git の口（loadWorktreePorts）を通して確
     const st = lstatSync(codePath);
     expect(st.isFile()).toBe(true);
     expect(st.mode & 0o777).toBe(0o600);
-    const code = readFileSync(codePath, "utf8").trim();
+    // 1 行目がコード、2 行目が書いた daemon の公開 ID
+    const [code = "", daemonLine = ""] = readFileSync(codePath, "utf8").trim().split("\n");
     expect(code).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+    expect(daemonLine).toMatch(/^daemon=[0-9a-f]{32}$/);
     // 依頼の中身: コードは入らない。作業ツリーと名前は入る
     // 組み立てで、plugin の場所の確かめが handler に渡る: 外の plugin は実パスで付き、作業ツリーの中は付かない
     const pluginBase = realpathSync(mkdtempSync(join(tmpdir(), "touryou-plugin-")));
@@ -207,7 +209,7 @@ describe("起動を、実物の git の口（loadWorktreePorts）を通して確
       ) as string;
     const codePath = (id: string) =>
       join(git(wtOf(id), "rev-parse", "--absolute-git-dir"), "touryou-bind-code");
-    const codeA = readFileSync(codePath(a), "utf8").trim();
+    const codeA = readFileSync(codePath(a), "utf8").split("\n")[0]?.trim() ?? "";
     const bindAt = (url: string, code: string, cwd: string) =>
       fetch(`${url}/v1/bind`, {
         method: "POST",
@@ -249,7 +251,7 @@ describe("起動を、実物の git の口（loadWorktreePorts）を通して確
     // 親が出し直す: ファイルが新しいコードに書き直され、応答にコードはない
     const re = await call(second.url, "bc-1", "node.bindCode", { nodeId: a });
     expect(re.ok, JSON.stringify(re)).toBe(true);
-    const codeA2 = readFileSync(codePath(a), "utf8").trim();
+    const codeA2 = readFileSync(codePath(a), "utf8").split("\n")[0]?.trim() ?? "";
     expect(codeA2).not.toBe(codeA);
     expect(String(re.value?.instruction)).not.toContain(codeA2);
     expect((await bindAt(second.url, codeA2, wtOf(a))).status).toBe(200);

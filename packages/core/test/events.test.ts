@@ -214,6 +214,54 @@ describe("scope.violation / inbox / 判断", () => {
     expect(s.nodes).toEqual(before.nodes);
   });
 
+  it("scope.violation の診断（cwd の内外・落ちた段・子の種別）は、記録に残る（#179）", () => {
+    const diagnosis = { runtime: "cli", cwdInside: false, stage: "cwdOutside" } as const;
+    const s = must(
+      foldEvents([
+        ...base(),
+        ev({
+          type: "scope.violation",
+          payload: { nodeId: "a", reason: "commandNotAllowed", subject: "ls", diagnosis },
+        }),
+      ]),
+    );
+    expect(s.violations[0]?.diagnosis).toEqual(diagnosis);
+  });
+
+  it("診断のない scope.violation（以前の記録）は、そのまま読める", () => {
+    const s = must(
+      foldEvents([
+        ...base(),
+        ev({
+          type: "scope.violation",
+          payload: { nodeId: "a", reason: "commandNotAllowed", subject: "ls" },
+        }),
+      ]),
+    );
+    expect(s.violations[0]?.diagnosis).toBeUndefined();
+  });
+
+  it.each([
+    { runtime: "web", cwdInside: true },
+    { runtime: "cli", cwdInside: "yes" },
+    { runtime: "cli", cwdInside: true, stage: "nope" },
+    { runtime: "cli", cwdInside: true, path: "/home/u/state" },
+  ])("形の違う診断は拒否される: %j", (diagnosis) => {
+    const r = foldEvents([
+      ...base(),
+      ev({
+        type: "scope.violation",
+        payload: {
+          nodeId: "a",
+          reason: "commandNotAllowed",
+          subject: "ls",
+          diagnosis,
+        } as never,
+      }),
+    ]);
+    expect(r.ok).toBe(false);
+  });
+
   it("inbox.added は seq・at を envelope から取り、同じ id は拒否される", () => {
     const b = base();
     const e = ev({

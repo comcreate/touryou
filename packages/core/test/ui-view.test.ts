@@ -78,6 +78,32 @@ describe("uiViewOf の cli（#136）", () => {
     expect(of([...base(), req("r1", "launch"), rep("r1", "failed")])).not.toHaveProperty("cli");
     expect(of([...base(), req("r1", "launch"), rep("r1", "done")])?.cli).toBe(true);
   });
+
+  it("起動の報告の sessionRef を、表示モデルの応答にだけ載せる。ないもの・形が不正なもの・停止の報告のものは載せない（#150）", () => {
+    const req = (ref: string, kind: string) =>
+      ev({
+        type: "node.parentRequested",
+        payload: { nodeId: "a", requestRef: ref, kind, worktree: "/w/a" },
+      } as never);
+    const rep = (ref: string, outcome: string, sessionRef?: string) =>
+      ev({
+        type: "node.parentReported",
+        payload: { nodeId: "a", requestRef: ref, outcome, ...(sessionRef ? { sessionRef } : {}) },
+      } as never);
+    const of = (events: OrchEvent[]) => uiViewOf(must(events)).nodes.find((x) => x.id === "a");
+    expect(of([...base(), req("r1", "launch"), rep("r1", "done")])).not.toHaveProperty(
+      "sessionRef",
+    );
+    expect(of([...base(), req("r1", "launch"), rep("r1", "done", "bg-1234")])?.sessionRef).toBe(
+      "bg-1234",
+    );
+    expect(of([...base(), req("r1", "launch"), rep("r1", "failed", "bg-1234")])).not.toHaveProperty(
+      "sessionRef",
+    );
+    expect(
+      of([...base(), req("r1", "launch"), rep("r1", "done", "bg-1234"), req("r2", "stop")]),
+    ).toHaveProperty("sessionRef", "bg-1234");
+  });
 });
 
 describe("node.created の runtime と uiViewOf の runtime（#159）", () => {

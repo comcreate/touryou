@@ -41,6 +41,49 @@ export type ScopeViolationReason =
   | "invalidPath" // 判定対象のパスが不正（空、NUL・書式制御文字を含む）
   | "invalidScope"; // 範囲の設定が不正（validateScope を参照）
 
+/**
+ * Bash が「探すコマンド」の判定（daemon の `read-only-search.ts`）のどの段で落ちたか。違反の記録に、原因を特定できるよう残す。
+ * 実パスは含めない（段の名前だけ）。
+ */
+export const SEARCH_STAGES = [
+  "cwdOutside", // フックに渡った cwd が作業ツリーの外
+  "protectedOverlap", // 禁じる場所が作業ツリーと重なる
+  "unquotedExpansion", // 引用符の外に展開文字（* ? [ { ~）がある
+  "unparsable", // 字句解析できない・空の区切りがある
+  "separator", // 許さない区切り（| & や 区切りの数の食い違い）
+  "cdRejected", // cd の位置・行き先が許されない
+  "filterRejected", // `|` の後ろの絞るコマンドが許されない
+  "notSearchCommand", // 探すコマンドではない（ほかのコマンドが混在、または別のコマンド）
+  "optionNotAllowed", // 許す表にないオプション・式
+  "pathOutside", // 位置の引数が作業ツリーの外を指す・実パスにできない
+  "noSearchCommand", // 探すコマンドが 1 つもない
+] as const;
+export type SearchStage = (typeof SEARCH_STAGES)[number];
+
+/** 子の種別。 */
+export type ChildRuntime = "cli" | "desktop";
+
+/** 拒否の原因の診断（記録用）。真偽・段の名前・種別だけで、パスや秘密は持たない。 */
+export interface ViolationDiagnosis {
+  readonly runtime: ChildRuntime;
+  /** フックに渡った cwd が、作業ツリーの中か。 */
+  readonly cwdInside: boolean;
+  /** 探すコマンドの判定で落ちた段（Bash の拒否だけ）。 */
+  readonly stage?: SearchStage;
+}
+
+/** 診断の形が正しいか（記録の検証用）。 */
+export function isViolationDiagnosis(x: unknown): x is ViolationDiagnosis {
+  if (typeof x !== "object" || x === null || Array.isArray(x)) return false;
+  const o = x as Record<string, unknown>;
+  return (
+    (o.runtime === "cli" || o.runtime === "desktop") &&
+    typeof o.cwdInside === "boolean" &&
+    (o.stage === undefined || (SEARCH_STAGES as readonly unknown[]).includes(o.stage)) &&
+    Object.keys(o).every((k) => k === "runtime" || k === "cwdInside" || k === "stage")
+  );
+}
+
 export type ScopeDecision =
   | { readonly allowed: true }
   | {
