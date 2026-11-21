@@ -74,11 +74,13 @@ export function selectInboxInstructions(
 /**
  * この呼び出しが読む・受け取りにする指示が、前置きの指示（`tokenIdleSoon`。#189）だけか。1 件もないとき（空の受信箱の読み出し）は、
  * 偽（ふつうの呼び出しとして、使わなければ切れる時計を延ばす）。前置きを読むだけでは、時計を延ばさない。
+ * `all: true`（配信済みを含めて読む）は、配信済みの前置きを選び直せてしまうので、前置きだけとは判定せず、常に偽（延ばす）。
  */
 export function readsOnlyPrefaces(
   mine: readonly InstructionRecord[],
   params: { readonly all?: boolean | undefined; readonly ackThrough?: number | undefined },
 ): boolean {
+  if (params.all === true) return false;
   const { picked, toMark } = selectInboxInstructions(mine, params);
   const read = picked.length > 0 ? picked : toMark;
   return read.length > 0 && read.every(isPrefaceInstruction);

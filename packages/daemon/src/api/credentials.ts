@@ -73,7 +73,7 @@ export interface CredentialStore {
    */
   expireNode?(nodeId: string): boolean;
   /** そのノードのトークンを使ったものとして数える（フックの呼び出し・道具の使用）。 */
-  touchNode?(nodeId: string): void;
+  touchNode(nodeId: string): void;
   /** ノード専用のトークンを発行する（そのノードの既存のトークンは無効になる）。`kind` の既定は `sdk`。 */
   issueNodeToken(nodeId: string, role: NodeRoleForToken, kind?: TokenKind): string;
   revokeNode(nodeId: string): void;

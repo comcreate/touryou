@@ -729,7 +729,7 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       return await handleAuthed(req, res, principal, state);
     } finally {
       if (principal.role !== "human" && !state.skipTouch) {
-        deps.credentials.touchNode?.(principal.nodeId);
+        deps.credentials.touchNode(principal.nodeId);
       }
     }
   }

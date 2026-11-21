@@ -171,4 +171,11 @@ describe("ノードのトークンを使ったと数える（窓口）", () => {
     await after.call("child.inbox", { ackThrough: seq });
     expect(await after.extended(() => after.call("child.inbox"))).toBe(true);
   });
+
+  it("(d) all: true は、配信済みの前置きだけを選んでも、時計を延ばす", async () => {
+    const s = await setup();
+    const seq = s.instruct("もうすぐ切れる", "tokenIdleSoon");
+    await s.call("child.inbox", { ackThrough: seq }); // 前置きを配信済みにする（延ばさない）
+    expect(await s.extended(() => s.call("child.inbox", { all: true }))).toBe(true);
+  });
 });
