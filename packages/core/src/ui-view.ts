@@ -15,17 +15,13 @@
  * - 件数には上限がある（`UI_LIMITS`）。切ったときは、`truncated` に種類を入れる。
  */
 
-import {
-  type Actor,
-  isPrefaceInstruction,
-  isSessionRef,
-  type NodeRuntime,
-  type OrchState,
-} from "./events.js";
+import { lastActivityByNode } from "./activity.js";
+import { type Actor, isSessionRef, type NodeRuntime, type OrchState } from "./events.js";
+
 import { ID_PATTERN } from "./ids.js";
 import { isResolvedByHuman } from "./inbox.js";
 import { isStallSummary, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
-import { copyInboxMessage, type InboxMessage, NON_ACTIVITY_NOTICE_KEYS } from "./inbox-messages.js";
+import { copyInboxMessage, type InboxMessage } from "./inbox-messages.js";
 import type { NodeRole, NodeState } from "./index.js";
 
 export const UI_TEXT_MAX = 200;
@@ -88,7 +84,7 @@ export interface UiNode {
   readonly bindExpired?: "idle" | "absolute";
   /** 題: 目的（objective）の先頭を整えて `UI_TITLE_MAX` で切ったもの。目的がなければ、なし。 */
   readonly title?: string;
-  /** そのノードの最後の動き（報告・受信箱の項目・指示と受け取り・判断と拡張の要求）の時刻。記録がなければ、なし。 */
+  /** そのノードの最後の動き（報告・範囲違反・道具の拒否・指示・親の依頼の報告・判断と拡張の要求と答え。受信箱の項目は数えない）の時刻。記録がなければ、なし。 */
   readonly lastActivityAt?: string;
   /**
    * 人の操作が要る数: 未回答の判断・未判定の拡張要求・未解決の「止まっているかも」と停止未完了の項目。
@@ -528,28 +524,8 @@ export function humanCounts(state: OrchState): Map<string, number> {
   return m;
 }
 
-/** ノードごとの最後の動きの時刻。ISO 8601 UTC の文字列は、辞書順で時刻順になる。 */
-function lastActivity(state: OrchState): Map<string, string> {
-  const m = new Map<string, string>();
-  const see = (id: string, at: string | undefined): void => {
-    if (typeof at !== "string" || at === "") return;
-    const cur = m.get(id);
-    if (cur === undefined || at > cur) m.set(id, at);
-  };
-  for (const r of state.reports) see(r.nodeId, r.at);
-  for (const i of state.inbox) {
-    // daemon の前置きの知らせ（#189）は、子の動きではない
-    if (i.msg === undefined || !NON_ACTIVITY_NOTICE_KEYS.has(i.msg.key)) see(i.nodeId, i.at);
-  }
-  for (const i of state.instructions) {
-    // daemon の前置き（#189）も、記録した時刻では動かさず、子が受け取った時刻だけを数える
-    if (!isPrefaceInstruction(i)) see(i.nodeId, i.at);
-    see(i.nodeId, i.deliveredAt);
-  }
-  for (const d of state.decisions) see(d.nodeId, d.requestedAt);
-  for (const x of state.extensions) see(x.nodeId, x.requestedAt);
-  return m;
-}
+/** ノードごとの最後の動きの時刻（ISO 8601）。数え方は、見張りと同じ（core の activity.ts。#195）。動きの記録がないノードは載せない。 */
+const lastActivity = lastActivityByNode;
 
 const actorOf = (a: Actor | undefined): string =>
   a !== undefined && "nodeId" in a ? idOf(a.nodeId) || UI_HUMAN : UI_HUMAN;
