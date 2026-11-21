@@ -28,7 +28,7 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 | `maxTurns` | `100` | 子ごとのターン数の上限 |
 | `maxBudgetUsd` | `5` | 子ごとの費用の上限（USD） |
 | `startLimits` | `perParent: 4`・`total: 4` | スケジューラが同時に起動する数の上限（1〜64） |
-| `tokenExpiryMinutes` | `sdkIdle: 360`・`sdkAbsolute: 10080`・`bindAbsolute: 1440`・`bindIdle: 60`・`hookAbsolute: 1440` | トークンの期限（分）。`bindIdle` は、紐付けのトークンが使われなければ切れる期限で、切れる前（既定 10 分前）に知らせが出る。`bindAbsolute` は、発行からの期限。切れたときの知らせと状態画面のカードは、この 2 つの変え方を案内する。`docs/plugin.md` の「トークンの期限」 |
+| `tokenExpiryMinutes` | `sdkIdle: 360`・`sdkAbsolute: 10080`・`bindAbsolute: 1440`・`bindIdle: 60`・`hookAbsolute: 1440` | トークンの期限（分）。`bindIdle` は、紐付けのトークンが使われなければ切れる期限で、切れる前（既定 10 分前）に知らせが出る（「使われる」には、知らせの購読の接続と heartbeat も数えるので、購読して待つ子には、この知らせは出ない。`docs/plugin.md` の「トークンの期限」）。`bindAbsolute` は、発行からの期限。切れたときの知らせと状態画面のカードは、この 2 つの変え方を案内する。`docs/plugin.md` の「トークンの期限」 |
 | `retentionDays` | `90` | 最終削除の保持期間（日） |
 | `purgeTombstone` | `true` | `node.purge` で墓標を残すか |
 | `autoPurge` | 無効 | 自動の最終削除（[`auto-purge.md`](auto-purge.md)）。有効にするなら `retentionDays` は 7 以上 |
@@ -43,7 +43,7 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 | `desktopRequireVerifiedHooks` | `true` | Desktop の子で、フックの確認前の起動を拒否する |
 | `touryouCommand` | なし | Desktop の子が `touryou` を起動する語（Desktop の子で必要） |
 | `hookFreshSeconds` | `30` | Desktop の子のフックの鮮度の窓（秒） |
-| `cliWatch` | `{ "stallMinutes": 30, "unreadMinutes": 30, "unboundMinutes": 3, "intervalSec": 60 }` | CLI の子の見張り。`unboundMinutes` 分、親の起動の報告（done）のあとも紐付け（`child_bind`）がない子を、子ごとに 1 回だけ受信箱に出す（TouRyou の plugin が子の設定の置き場にない見込み。`--plugin-dir` だけでは子に付かない）。`stallMinutes` 分、報告・道具の使用・指示のやり取り（送った時刻も受け取った時刻も）の記録がない子を「止まっているかもしれない」として受信箱に出す。`unreadMinutes` 分、子が受け取らない指示も受信箱に出す。`intervalSec` は見回りの間隔 |
+| `cliWatch` | `{ "stallMinutes": 30, "unreadMinutes": 30, "unboundMinutes": 3, "intervalSec": 60 }` | CLI の子の見張り。`unboundMinutes` 分、親の起動の報告（done）のあとも紐付け（`child_bind`）がない子を、子ごとに 1 回だけ受信箱に出す（TouRyou の plugin が子の設定の置き場にない見込み。`--plugin-dir` だけでは子に付かない）。`stallMinutes` 分、報告・道具の使用・指示のやり取り（送った時刻も受け取った時刻も）の記録がない子を「止まっているかもしれない」として受信箱に出す（知らせの購読の heartbeat は数えない。トークンの `bindIdle` の時計とは別）。`unreadMinutes` 分、子が受け取らない指示も受信箱に出す。`intervalSec` は見回りの間隔 |
 | `hookSettingsCheckSeconds` | `2` | Desktop の子の見張りの間隔（秒） |
 | `hookFirstSeenMinutes` | `5` | Desktop の子でフックが来ないときに知らせるまでの時間（分） |
 | `claudeConfigDirs` | なし | 見張りが守る設定のディレクトリに足す場所（`~/.claude` と `CLAUDE_CONFIG_DIR` に加えて） |
