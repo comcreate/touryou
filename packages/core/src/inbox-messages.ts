@@ -13,12 +13,6 @@
 export const LANGS = ["ja", "en"] as const;
 export type Lang = (typeof LANGS)[number];
 
-/**
- * 子の動きとして数えない、daemon 由来の知らせの鍵（#189）。同じ書き込みで足す前置きの指示（`PREFACE_INSTRUCTION_KINDS`）と対で、
- * 状態画面の最後の動きを、記録した時刻では進めない。
- */
-export const NON_ACTIVITY_NOTICE_KEYS: ReadonlySet<string> = new Set(["tokenIdleSoonBind"]);
-
 /** 知らせの文の表。鍵は小文字で始まる英数字。ja は、これまでの summary と同じ文にする。 */
 export const INBOX_MESSAGES = {
   stall: {

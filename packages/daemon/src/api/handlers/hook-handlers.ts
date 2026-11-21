@@ -10,6 +10,7 @@
  */
 
 import {
+  awaitingHuman,
   type Failure,
   type InboxMessageKey,
   isPrefaceInstruction,
@@ -19,7 +20,6 @@ import {
   type Result,
   stateOf,
 } from "@touryou/core";
-import { awaitingHuman } from "../../cli-watch.js";
 import { type HookTokens, type SessionBinder, sessionActor } from "../hook.js";
 import type { HandlerRequest } from "../server.js";
 import {

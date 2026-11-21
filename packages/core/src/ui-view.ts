@@ -15,7 +15,7 @@
  * - 件数には上限がある（`UI_LIMITS`）。切ったときは、`truncated` に種類を入れる。
  */
 
-import { lastActivityAt } from "./activity.js";
+import { lastActivityByNode } from "./activity.js";
 import { type Actor, isSessionRef, type NodeRuntime, type OrchState } from "./events.js";
 
 import { ID_PATTERN } from "./ids.js";
@@ -519,15 +519,8 @@ export function humanCounts(state: OrchState): Map<string, number> {
   return m;
 }
 
-/** ノードごとの最後の動きの時刻（ISO 8601）。数え方は、見張りと同じ `lastActivityAt`・`lastActivityMs`（core の activity.ts。#195）。動きの記録がないノードは載せない。 */
-function lastActivity(state: OrchState): Map<string, string> {
-  const m = new Map<string, string>();
-  for (const n of state.nodes) {
-    const at = lastActivityAt(state, n.id);
-    if (at !== undefined) m.set(n.id, at);
-  }
-  return m;
-}
+/** ノードごとの最後の動きの時刻（ISO 8601）。数え方は、見張りと同じ（core の activity.ts。#195）。動きの記録がないノードは載せない。 */
+const lastActivity = lastActivityByNode;
 
 const actorOf = (a: Actor | undefined): string =>
   a !== undefined && "nodeId" in a ? idOf(a.nodeId) || UI_HUMAN : UI_HUMAN;

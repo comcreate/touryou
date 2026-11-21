@@ -13,6 +13,8 @@ const SYS = { system: true } as const;
 let n = 0;
 const ev = (body: EventBody, at: string): OrchEvent =>
   ({ seq: ++n, at, requestId: `r${n}`, actor: SYS, ...body }) as OrchEvent;
+/** 人・親が送った指示（daemon が自動で送る指示は、送った時刻を動きに数えない）。 */
+const byHuman = (e: OrchEvent): OrchEvent => ({ ...e, actor: { human: true } });
 const must = (events: OrchEvent[]): OrchState => {
   const r = foldEvents(events);
   if (!r.ok) throw new Error(`${r.error.code}: ${r.error.cause}`);
@@ -72,7 +74,9 @@ describe("watchFindings の止まっているかも（#195）", () => {
   it("指示を送った時刻も動きに数える（受け取る前でも、送った直後は出さない）", () => {
     const s = must([
       ...base(),
-      ev({ type: "node.instructed", payload: { nodeId: "a", text: "x" } }, iso(T0 + 35 * MIN)),
+      byHuman(
+        ev({ type: "node.instructed", payload: { nodeId: "a", text: "x" } }, iso(T0 + 35 * MIN)),
+      ),
     ]);
     expect(watchFindings(s, T0 + 40 * MIN, SPEC).stalled).toEqual([]);
   });
@@ -104,7 +108,9 @@ describe("watchFindings の止まっているかも（#195）", () => {
     const after = must([
       ...base(),
       stalled,
-      ev({ type: "node.instructed", payload: { nodeId: "a", text: "x" } }, iso(T0 + 33 * MIN)),
+      byHuman(
+        ev({ type: "node.instructed", payload: { nodeId: "a", text: "x" } }, iso(T0 + 33 * MIN)),
+      ),
     ]);
     expect(watchFindings(after, T0 + 34 * MIN, SPEC).resolvedStalls).toEqual(["i1"]);
   });

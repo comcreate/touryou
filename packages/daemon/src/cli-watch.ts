@@ -17,7 +17,6 @@
 import type { EventBody, OrchState } from "@touryou/core";
 
 import {
-  awaitingHuman,
   intentionallyIdle,
   isPrefaceInstruction,
   isStallSummary,
@@ -76,9 +75,6 @@ export const boundInState = (state: OrchState, nodeId: string): boolean =>
   state.nodes.find((n) => n.id === nodeId)?.sessionId !== undefined;
 
 const ms = (iso: string | undefined): number => (iso === undefined ? 0 : Date.parse(iso) || 0);
-
-// 判断の答え・範囲の頼みの判定を待っている子か（cli-watch と Notification のフックで同じ決め方）は core。既存の import を保つ
-export { awaitingHuman };
 
 export function watchFindings(
   state: OrchState,
