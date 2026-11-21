@@ -83,6 +83,16 @@ describe("画面の文字の表（#140）", () => {
     expect(uiString("en", "card.bindExpiredNextUnknown")).toContain("node_bindCode");
   });
 
+  it("紐付けが外れているかもしれない子のカードの文: 日英とも、切れた札と別の文で、親が子へ child_bind を呼ばせる手順を言う", () => {
+    expect(uiString("ja", "card.bindLost")).not.toBe(uiString("ja", "card.bindExpiredIdle"));
+    expect(uiString("en", "card.bindLost")).not.toBe(uiString("en", "card.bindExpiredIdle"));
+    for (const lang of ["ja", "en"] as const) {
+      expect(uiString(lang, "card.bindLostNext"), lang).toContain("child_bind");
+      expect(uiString(lang, "card.bindLostNext"), lang).toContain("node_send");
+      expect(uiString(lang, "card.bindLostNext"), lang).toContain("node_bindCode");
+    }
+  });
+
   it("inboxItemText：daemon が書いた知らせは、選んだ言語の文。msg のない・知らない鍵の知らせは、summary のまま（利用者の決め）", () => {
     const m = inboxMessage("unreadInstruction", { node: "c1", seq: 7, minutes: 10 });
     const item = { summary: m.summary, msg: m.msg };

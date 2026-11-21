@@ -2215,18 +2215,41 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     unreadMs: (config.cliWatch?.unreadMinutes ?? 30) * 60_000,
     // 紐付けのない子。既定 3 分: 子の最初の番で child_bind を呼ぶので、ふつうは数十秒で済む。遅い起動の余裕を見ても 3 分で足りる
     unboundMs: (config.cliWatch?.unboundMinutes ?? 3) * 60_000,
+    // 紐付けが外れているかも: 購読がない状態がこれだけ続いたら知らせる。既定 15 分（トークンが切れる前の知らせ〔既定 10 分前〕と、
+    // 止まっているかも〔30 分〕の間）
+    unsubscribedMs: (config.cliWatch?.unsubscribedMinutes ?? 15) * 60_000,
     // 起動の時刻を「最後の動き」の下限にする（フックの時刻はメモリだけなので）
     sinceMs: Date.parse(clock()),
   };
   const cliWatchCounts: WatchCounts = new Map();
+  // 購読がない状態を見始めた時刻（ノードごと。メモリだけ）。見回りのたびに観測するので、daemon の起動の直後は、最初の見回りから数え始める
+  // （子の mcp が購読を張り直す間の猶予になる）。購読がある・対象でない（動いていない・有効な紐付けのトークンがない）ノードは持たない
+  const absentSince = new Map<string, number>();
+  const observeSubscriptions = (nowMs: number): void => {
+    // 購読の窓口がまだ結ばれていない間は、観測しない（ないと決めつけない）
+    if (nodeSubscription === undefined) return;
+    for (const n of log.state().nodes) {
+      const eligible =
+        (n.state === "running" || n.state === "waiting") &&
+        credentials.hasBindToken?.(n.id) === true;
+      if (!eligible || nodeSubscription(n.id)) absentSince.delete(n.id);
+      else if (!absentSince.has(n.id)) absentSince.set(n.id, nowMs);
+    }
+  };
   const runCliWatch = (): number => {
     try {
+      const nowMs = Date.parse(clock());
+      observeSubscriptions(nowMs);
       const f = watchFindings(
         log.state(),
-        Date.parse(clock()),
+        nowMs,
         cliWatchSpec,
         (id) => cliHookAt.get(id),
         (id) => credentials.hasBindToken?.(id) === true || boundInState(log.state(), id),
+        {
+          absentSinceMs: (id) => absentSince.get(id),
+          hasValidBindToken: (id) => credentials.hasBindToken?.(id) === true,
+        },
       );
       return recordWatchFindings(
         log,

@@ -52,6 +52,14 @@ export const APP_TEXT = {
     ja: "次の操作: 統合の Claude に、紐付けの出し直しを頼む（統合が node_bindCode で出し直し、子が結び直す）",
     en: "Next: ask the integrator Claude to issue the binding again (it issues a new one with node_bindCode, and the child binds again)",
   },
+  "card.bindLost": {
+    ja: "紐付けが外れているかも（通知の受け取りが途切れている）",
+    en: "Binding may be lost (not receiving notices)",
+  },
+  "card.bindLostNext": {
+    ja: "次の操作: 統合の Claude に、子へ「touryou の child_bind を引数なしで呼んで」と送ってもらう（node_send。トークンが切れていたら先に node_bindCode）",
+    en: 'Next: ask the integrator Claude to send the child "call touryou\'s child_bind with no arguments" (node_send; if the token has expired, node_bindCode first)',
+  },
   "approval.code": { ja: "確認コード", en: "Confirmation code" },
   "approval.done": { ja: "確認して実行しました（{label}）", en: "Confirmed and ran ({label})" },
   "approval.expires": { ja: "期限", en: "Expires" },

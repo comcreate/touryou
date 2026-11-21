@@ -1028,11 +1028,15 @@ export const UI_JS = `'use strict';
     // 紐付けのトークンが切れた子（#189）: くすんだ黄の札（止まっているかもと同じ系統）。切れた理由と親の次の操作は、題の下に出す
     var bindExpired = n.bindExpired === 'idle' || n.bindExpired === 'absolute';
     if (bindExpired) head.appendChild(el('span', 'chip stall', t(n.bindExpired === 'idle' ? 'card.bindExpiredIdle' : 'card.bindExpiredAbsolute')));
+    // 紐付けが外れているかもしれない子: トークンは有効なまま、通知の受け取りが長く途切れている。切れた札（上）とは別の札・別の次の操作
+    var bindLost = n.bindLost === true && !bindExpired;
+    if (bindLost) head.appendChild(el('span', 'chip stall', t('card.bindLost')));
     card.appendChild(head);
     card.appendChild(el('h3', '', nodeLabel(n, 200)));
     if (bindExpired) {
       card.appendChild(el('p', 'desc', t(n.runtime === 'cli' ? 'card.bindExpiredNextCli' : n.runtime === 'desktop' ? 'card.bindExpiredNextDesktop' : 'card.bindExpiredNextUnknown')));
     }
+    if (bindLost) card.appendChild(el('p', 'desc', t('card.bindLostNext')));
     var meta = el('div', 'meta');
     var parent = n.parentId === null ? null : byId.get(n.parentId);
     meta.appendChild(el('span', '', n.parentId === null ? t('card.roleTop', { role: name(ROLE_NAMES, n.role) }) : t('card.roleParent', { role: name(ROLE_NAMES, n.role), parent: parent ? nodeLabel(parent, 13) : n.parentId })));

@@ -82,6 +82,12 @@ export interface UiNode {
    * 紐付けが成功すると daemon が知らせを解決にするので、付かなくなる。`needsHuman`・`band` には数えない（次の操作は親の `node_bindCode`）。
    */
   readonly bindExpired?: "idle" | "absolute";
+  /**
+   * 紐付けが外れているかもしれない子。トークンは有効なまま、知らせを受け取る接続が長く途切れている（未解決の `bindLostSuspect` の鍵から導く）。
+   * `bindExpired`（#189。トークンが切れた）とは別の状態で、次の操作も違う（親が子へ child_bind を引数なしで呼ぶよう送る）。
+   * 子が結び直す・接続が戻る・トークンが切れると daemon が知らせを解決にするので、付かなくなる。`needsHuman`・`band` には数えない。
+   */
+  readonly bindLost?: true;
   /** 題: 目的（objective）の先頭を整えて `UI_TITLE_MAX` で切ったもの。目的がなければ、なし。 */
   readonly title?: string;
   /** そのノードの最後の動き（報告・範囲違反・道具の拒否・指示・親の依頼の報告・判断と拡張の要求と答え。受信箱の項目は数えない）の時刻。記録がなければ、なし。 */
@@ -366,6 +372,10 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
     if (key === "tokenExpiredIdleBind") bindExpired.set(i.nodeId, "idle");
     else if (key === "tokenExpiredAbsoluteBind") bindExpired.set(i.nodeId, "absolute");
   }
+  // 紐付けが外れているかもしれない子: 未解決の知らせの鍵
+  const bindLost = new Set(
+    unresolved.filter((i) => i.msg?.key === "bindLostSuspect").map((i) => i.nodeId),
+  );
   const nodes = cap("nodes", state.nodes, UI_LIMITS.nodes).map((n): UiNode => {
     const title = titleOf(n.objective);
     const needsHuman = human.get(n.id) ?? 0;
@@ -373,6 +383,9 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
     const sessionRef = sessionRefs.get(n.id);
     // 役目の終わった子には、次の操作がないので出さない
     const expired = BIND_EXPIRED_HIDDEN_STATES.has(n.state) ? undefined : bindExpired.get(n.id);
+    // トークンが切れた子には、切れた札を出すので、重ねない
+    const lost =
+      !BIND_EXPIRED_HIDDEN_STATES.has(n.state) && expired === undefined && bindLost.has(n.id);
     const runtime = n.runtime ?? (cliChildren.has(n.id) ? "cli" : undefined);
     return {
       id: idOf(n.id),
@@ -387,6 +400,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       ...(sessionRef === undefined ? {} : { sessionRef }),
       ...(runtime === undefined ? {} : { runtime }),
       ...(expired === undefined ? {} : { bindExpired: expired }),
+      ...(lost ? { bindLost: true as const } : {}),
       ...(title === "" ? {} : { title }),
       ...(at === undefined ? {} : { lastActivityAt: uiText(at) }),
       needsHuman,

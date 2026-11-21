@@ -417,6 +417,8 @@ describe("画面の資産（走査）", () => {
       "tkey",
       "tvars",
       "setInterval",
+      // 紐付けが外れているかもしれない子（表示モデルの値 true）
+      "bindLost",
     ]);
     // 埋め込んだ文字の表（#140。JSON の値で、コードでない）は、走査から除く
     const code = UI_JS.replace(TABLE_LINE, "")
