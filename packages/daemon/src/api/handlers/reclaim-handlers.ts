@@ -236,7 +236,6 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
     open: readonly string[],
     nodeId: string,
     discarded: ReadonlySet<string>,
-    shared?: { processes: readonly ProcessInfo[] | null },
   ): Promise<{ result: Result<ReclaimAssessment, Failure>; facts?: WorktreeFacts }> {
     const raw = await safely(nodeId, () => ports.factsFor(nodeId), undefined);
     // 消すものがない（gone）事実は、人が破棄を決めた停止ノードと、まだ判断のない停止ノード（判断が要ると示すため）にだけ使う。
@@ -246,11 +245,9 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
       (self.state === "stopped" || (self.state === "reclaimable" && discarded.has(nodeId)));
     const found = raw?.gone === true && !goneUsable ? undefined : raw;
     let processes: readonly ProcessInfo[] | null = null;
+    // プロセスの調査は、そのノードの作業ツリーだけに絞る（置き場全体を `lsof +D` で走査すると、時間切れで全ノードが不明になる）。
     if (found !== undefined) {
-      processes =
-        shared !== undefined
-          ? shared.processes
-          : await safely(nodeId, () => ports.probe(found.worktreePath), null);
+      processes = await safely(nodeId, () => ports.probe(found.worktreePath), null);
     }
     const result = assessReclaim(
       {
@@ -268,7 +265,7 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
 
   /**
    * 対象と配下を、配下から順に判定する。先に判定した回収可能なノードは、後のノード（親）の判定では回収可能とみなす。
-   * アーカイブ済みは判定せず、回収済みとして数える。プロセスの調査は、置き場全体で 1 回だけ行い、全ノードで共有する。
+   * アーカイブ済みは判定せず、回収済みとして数える。プロセスの調査は、ノードごとに、そのノードの作業ツリーだけで行う。
    */
   async function assess(
     state: OrchState,
@@ -279,14 +276,9 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
     const open = openDecisionNodes(state);
     const discarded = new Set(discardedNodeIds(state));
     const unmet: Unmet[] = [];
-    const shared = {
-      processes: plan.every((n) => n.state === "archived")
-        ? []
-        : await safely("", () => ports.probe(ports.worktreeRoot), null),
-    };
     for (const n of plan) {
       if (n.state === "archived") continue;
-      const { result: r } = await assessNode([...virtual.values()], open, n.id, discarded, shared);
+      const { result: r } = await assessNode([...virtual.values()], open, n.id, discarded);
       if (!r.ok) {
         unmet.push({ nodeId: n.id, unmet: ["stateNotEligible"], blockers: [] });
         continue;
@@ -368,6 +360,12 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
     if (openDecision) {
       actions.push(
         "人が daemon の Web 画面の「判断待ち」で、その判断に答える（または `touryou answer <decisionId>` で答える）",
+      );
+    }
+    // lsof の失敗・時間切れ。作業ツリーが動作中かを確かめられないので、回収は止めている（人が原因を取り除いて、もう一度確認する）。
+    if (list.some((u) => u.unmet.includes("processesUnknown"))) {
+      actions.push(
+        "作業ツリーでプロセスが動いていないか、lsof が使えるか（時間切れでないか）を確かめてから、もう一度確認する",
       );
     }
     actions.push("条件を満たしてから、もう一度確認する");

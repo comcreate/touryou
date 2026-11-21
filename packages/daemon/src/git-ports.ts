@@ -396,7 +396,20 @@ export function createGitPorts(
     }
   };
 
-  /** きれいか: 未保存の変更・未追跡のファイルがなく、gitignore の対象は、再生成できるもの（許可リスト）だけ。調べられなければ false。 */
+  /**
+   * `git status --ignored` の `!! <パス>` の行が、シンボリックリンクそのものか。リンクは、消してもリンク先を失わないので、
+   * 失われるものに数えない（作業ツリーの作成時にできる `.envrc` のリンクなど。Issue #160）。調べられなければ false（安全側）。
+   */
+  const isIgnoredLink = (worktreePath: string, line: string): boolean => {
+    if (!line.startsWith("!! ")) return false;
+    try {
+      return lstatSync(join(worktreePath, line.slice(3).replace(/\/$/, ""))).isSymbolicLink();
+    } catch {
+      return false;
+    }
+  };
+
+  /** きれいか: 未保存の変更・未追跡のファイルがなく、gitignore の対象は、再生成できるもの（許可リスト）かリンクだけ。調べられなければ false。 */
   const isClean = async (path: string): Promise<boolean> => {
     const seeded = seededPaths();
     // fsmonitor・フックは使わない（作業ツリーの設定に、コマンドを走らせない）。
@@ -421,7 +434,8 @@ export function createGitPorts(
         .every(
           (l) =>
             ((l.startsWith("!! ") || l.startsWith("?? ")) && seeded.has(l.slice(3))) ||
-            (l.startsWith("!! ") && regenerable.has(l.slice(3).split("/")[0] ?? "")),
+            (l.startsWith("!! ") && regenerable.has(l.slice(3).split("/")[0] ?? "")) ||
+            isIgnoredLink(path, l),
         )
     );
   };
@@ -494,7 +508,8 @@ export function createGitPorts(
         if (line.startsWith("?? ")) out.untracked += 1;
         else if (line.startsWith("!! ")) {
           // 再生成できる gitignore の対象（許可リスト）は、失われるものに数えない。
-          if (!regenerable.has(line.slice(3).split("/")[0] ?? "")) out.untracked += 1;
+          if (!regenerable.has(line.slice(3).split("/")[0] ?? "") && !isIgnoredLink(path, line))
+            out.untracked += 1;
         } else out.uncommitted = true;
       }
     }

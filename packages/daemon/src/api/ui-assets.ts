@@ -1160,6 +1160,14 @@ export const UI_JS = `'use strict';
         any = true;
       }
     }
+    // 受け入れた子は、回収できるかを確かめられる（読み取りだけ。回収できない理由と、取れる手を出す。#160）
+    if (n.state === 'verified' && ID_RE.test(n.id)) {
+      var check = el('button', '', t('ops.reclaimCheck'));
+      check.addEventListener('click', function () { checkReclaim(n.id); });
+      box.appendChild(check);
+      box.appendChild(el('p', 'desc', t('ops.reclaimCheckNote')));
+      any = true;
+    }
     // 停止を親に代行してもらうノード（stopDelegated。Desktop の子）が停止未完了なら、止めたと宣言できる
     if (n.state === 'stopIncomplete' && n.stopDelegated === true && ID_RE.test(n.id)) {
       box.appendChild(confirmStoppedBox(n.id));
@@ -1383,14 +1391,7 @@ export const UI_JS = `'use strict';
       [t('line.target'), nodeId],
       [t('line.content'), t('reclaim.content')]
     ];
-    v.unmet.slice(0, 10).forEach(function (u) { lines.push([t('line.unmet'), name(UNMET_NAMES, String(u))]); });
-    if (v.unmet.length > 10) lines.push([t('line.unmet'), t('more.n', { n: v.unmet.length - 10 })]);
-    v.blockers.slice(0, 10).forEach(function (b) {
-      var cmd = b && b.kind === 'process' && typeof b.command === 'string' ? cleanText(b.command, 33) : '';
-      var who = b && b.kind === 'process' ? (cmd ? t('blocker.processCmd', { pid: Number(b.pid), cmd: cmd }) : t('blocker.process', { pid: Number(b.pid) })) : t('blocker.node', { id: cleanText(String(b && b.nodeId), 128) });
-      lines.push([t('line.cause'), t('blocker.line', { who: who, reason: name(UNMET_NAMES, String(b && b.reason)) })]);
-    });
-    if (v.blockers.length > 10) lines.push([t('line.cause'), t('more.n', { n: v.blockers.length - 10 })]);
+    unmetLines(v, lines);
     var loss = v.loss || [];
     var lossHead = t('loss.head');
     if (!loss.length) lines.push([lossHead, t('loss.none')]);
@@ -1410,6 +1411,35 @@ export const UI_JS = `'use strict';
     if (tipIds.length > NODE_LIST_MAX) lines.push([t('tip.head'), t('tip.more', { n: tipIds.length - NODE_LIST_MAX })]);
     lines.push([t('tip.check'), t('tip.checkNote')]);
     return lines;
+  }
+  // 満たしていない条件（unmet）と原因（blockers）の行。lines に足す
+  function unmetLines(v, lines) {
+    v.unmet.slice(0, 10).forEach(function (u) { lines.push([t('line.unmet'), name(UNMET_NAMES, String(u))]); });
+    if (v.unmet.length > 10) lines.push([t('line.unmet'), t('more.n', { n: v.unmet.length - 10 })]);
+    v.blockers.slice(0, 10).forEach(function (b) {
+      var cmd = b && b.kind === 'process' && typeof b.command === 'string' ? cleanText(b.command, 33) : '';
+      var who = b && b.kind === 'process' ? (cmd ? t('blocker.processCmd', { pid: Number(b.pid), cmd: cmd }) : t('blocker.process', { pid: Number(b.pid) })) : t('blocker.node', { id: cleanText(String(b && b.nodeId), 128) });
+      lines.push([t('line.cause'), t('blocker.line', { who: who, reason: name(UNMET_NAMES, String(b && b.reason)) })]);
+    });
+    if (v.blockers.length > 10) lines.push([t('line.cause'), t('more.n', { n: v.blockers.length - 10 })]);
+  }
+  // 受け入れた子（verified）を回収できるかの確かめ（読み取りだけ）。回収できない理由と、取れる手を出す（#160）。
+  // 回収そのものは、統合ノードが行う。ここからは何も指示しない（blocked で、送れなくする）
+  var CHECK_TODO = { dirty: 'reclaimCheck.dirty', processesUnknown: 'reclaimCheck.processesUnknown', processesRunning: 'reclaimCheck.processesRunning', factsMissing: 'reclaim.factsMissing' };
+  function checkReclaim(nodeId) {
+    readOperationResult('node.reclaimPreview', { nodeId: nodeId }).then(function (r) {
+      if (r === null) return;
+      if (!r.ok) { notice(t('err.failed', { code: r.error.code, cause: r.error.cause }), true); return; }
+      var v = r.value;
+      if (!isReclaimPreview(v)) { notice(t('err.badPreview'), true); return; }
+      if (v.reclaimable) { notice(t('reclaimCheck.ok', { id: nodeId })); return; }
+      var lines = [[t('line.target'), nodeId]];
+      unmetLines(v, lines);
+      Object.keys(CHECK_TODO).forEach(function (code) {
+        if (v.unmet.indexOf(code) !== -1) lines.push([t('line.todo'), t(CHECK_TODO[code])]);
+      });
+      openConfirm(t('reclaimCheck.title'), lines, 'node.reclaimPreview', { nodeId: nodeId }, '', { blocked: t('reclaimCheck.blocked') });
+    });
   }
   function startReclaim(nodeId) {
     readOperationResult('node.reclaimPreview', { nodeId: nodeId }).then(function (r) {
