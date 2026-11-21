@@ -282,6 +282,32 @@ describe("複数の daemon（--config）", () => {
     expect((await bin(w, ["init", "--config", dup2])).exitCode).toBe(1);
   });
 
+  it("同じ設定を別の --org で 2 回 init すると止まる（Label が違っても、同じ設定・stateDir は別の daemon として検査する）。同じ --org のやり直しは通る", async () => {
+    const w = makeWorld();
+    const first = await bin(w, ["init", "--config", w.otherConfig, "--org", "com.example"]);
+    expect(first.stderr).toBe("");
+    expect(first.exitCode).toBe(0);
+    const firstLabel = `com.example.touryou.${daemonNameOf(w.base, w.otherConfig)}`;
+    expect(readdirSync(join(w.base, "launchd"))).toEqual([`${firstLabel}.plist`]);
+
+    // 同じ --org で作り直す（既存と同じ内容）のは、自分の plist なので通る
+    const again = await bin(w, ["init", "--config", w.otherConfig, "--org", "com.example"]);
+    expect(again.stderr).toBe("");
+    expect(again.exitCode).toBe(0);
+
+    // 別の --org で同じ設定を init すると、同じ stateDir を使う別の daemon になるので、plist を作らずに止める
+    const other = await bin(w, ["init", "--config", w.otherConfig, "--org", "com.other"]);
+    expect(other.exitCode).toBe(1);
+    expect(other.stderr).toContain("stateDir が、別の設定");
+    expect(other.stderr).toContain(`Label ${firstLabel}`);
+    expect(readdirSync(join(w.base, "launchd"))).toEqual([`${firstLabel}.plist`]);
+
+    // --org なしでも同じ（既定の Label の plist は作らない）
+    const none = await bin(w, ["init", "--config", w.otherConfig]);
+    expect(none.exitCode).toBe(1);
+    expect(readdirSync(join(w.base, "launchd"))).toEqual([`${firstLabel}.plist`]);
+  });
+
   it("別名の daemon の apply・uninstall は、既定と共有する古い形の起動スクリプトを消さない", async () => {
     const w = makeWorld();
     await bin(w, ["init"]);

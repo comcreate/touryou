@@ -37,6 +37,7 @@ import {
   DEFAULT_PATH,
   daemonNameOf,
   daemonProgramArguments,
+  describeSharing,
   LSREGISTER,
   labelOf,
   legacyPlistText,
@@ -424,10 +425,10 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
     const sharing =
       u.stateDir === undefined
         ? undefined
-        : stateDirSharedWith(ctx.base, ctx.plistDir, u.configPath, u.stateDir);
+        : stateDirSharedWith(ctx.base, ctx.plistDir, u.configPath, u.stateDir, u.label);
     if (sharing !== undefined) {
       return fail(
-        `${u.label} の stateDir が、別の設定（${sharing}）の daemon と同じ。同じ state を 2 つの daemon が使うと壊れるので、何も置かずに止めた。設定ごとに、別の stateDir にする`,
+        `${u.label} の stateDir が、別の設定（${describeSharing(sharing)}）の daemon と同じ。同じ state を 2 つの daemon が使うと壊れるので、何も置かずに止めた。設定ごとに、別の stateDir にする`,
         1,
       );
     }

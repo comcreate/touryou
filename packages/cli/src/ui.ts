@@ -13,7 +13,13 @@ import { join } from "node:path";
 import { readSecureFile } from "@touryou/core/fs";
 import { createIdentityVerifier, IDENTITY_FILE, type IdentityVerifier } from "@touryou/mcp/relay";
 import type { CommandResult } from "./commands.js";
-import { otherPlistNames, plistConfigOf } from "./launchd.js";
+import {
+  agentsDirOf,
+  canonicalPath,
+  otherPlistNames,
+  plistConfigOf,
+  plistDirOf,
+} from "./launchd.js";
 
 export interface UiDeps {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -50,20 +56,28 @@ interface Candidate {
   readonly worktreeRoot?: string;
 }
 
-/** `<home>/.touryou/launchd` の別名の daemon の plist から、設定のパスを集める（絶対パスのものだけ）。 */
+/**
+ * 別名の daemon の plist から、設定のパスを集める（絶対パスのものだけ）。
+ * 対象は、`--others`・版上げと同じ、LaunchAgents に置いた（常駐にした）もの。init しただけの plist は候補にしない。
+ * 元の plist（`<home>/.touryou/launchd`）が消えていて LaunchAgents にだけ残るものは、LaunchAgents のものを読む。
+ */
 function otherConfigs(
   home: string,
   deps: UiDeps,
   read: (p: string, f: number) => string,
 ): string[] {
-  const dir = `${home}/.touryou/launchd`;
+  const agentsDir = agentsDirOf(home);
+  const plistDir = plistDirOf(home);
   const out: string[] = [];
-  for (const n of otherPlistNames(dir, deps.readDir)) {
-    try {
-      const cfg = plistConfigOf(read(`${dir}/${n}`, 0o022));
-      if (cfg !== undefined && cfg.startsWith("/")) out.push(cfg);
-    } catch {
-      // 読めない plist は、候補にしない
+  for (const n of otherPlistNames(agentsDir, deps.readDir)) {
+    for (const file of [`${plistDir}/${n}`, `${agentsDir}/${n}`]) {
+      try {
+        const cfg = plistConfigOf(read(file, 0o022));
+        if (cfg !== undefined && cfg.startsWith("/")) out.push(cfg);
+        break;
+      } catch {
+        // 読めない plist は、次の置き場のものを試す（どちらも読めなければ、候補にしない）
+      }
     }
   }
   return out;
@@ -155,11 +169,25 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
       : undefined;
   // 複数の daemon（設定ごと）があるときの候補。既定の設定・`touryou launchd init --config` で作った別名の設定・
   // 環境変数 TOURYOU_DAEMON_CONFIG の設定（init していない daemon も、これで指せる）
+  // 候補が要るのは、--list と、選び方が実行場所（cwd）まで進むとき。--config か TOURYOU_DAEMON_CONFIG で決まるときは、
+  // 使わない候補の設定・plist を読まない
+  const needCandidates = list || (configArg === undefined && envConfig === undefined);
   const paths: string[] = [];
-  if (defaultConfig !== undefined) {
-    paths.push(defaultConfig, ...otherConfigs(home.replace(/\/+$/, ""), deps, read));
+  const seen = new Set<string>();
+  const addPath = (p: string): void => {
+    // リンク経由の別の書き方でも、同じ設定は 1 つにまとめる（実パスで比べる）
+    const key = canonicalPath(p);
+    if (seen.has(key)) return;
+    seen.add(key);
+    paths.push(p);
+  };
+  if (needCandidates) {
+    if (defaultConfig !== undefined) {
+      addPath(defaultConfig);
+      for (const c of otherConfigs(home.replace(/\/+$/, ""), deps, read)) addPath(c);
+    }
+    if (envConfig !== undefined) addPath(envConfig);
   }
-  if (envConfig !== undefined && !paths.includes(envConfig)) paths.push(envConfig);
   const candidates: Candidate[] = paths.map((c) => ({ configPath: c, ...rootsOf(c, read) }));
   if (list) {
     // HOME が空で、環境変数の設定もないときは、探す場所がない。空の一覧で成功にせず、理由を出す

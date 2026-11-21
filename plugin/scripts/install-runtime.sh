@@ -14,7 +14,7 @@
 #   8. 新しい版の touryou-daemon --help が動くことを確かめる（current を付け替える前）
 #   9. 常駐（launchd の plist がある）で、版が変わるときだけ: 同意（--restart-daemon）があれば、止める → 付け替え → 新しい版で init → 起動し直す
 #      同意がなければ、付け替えずに終わる（終了コード 3）。常駐は、既定の設定の daemon と、設定ごとの別名の daemon
-#      （touryou launchd init --config で作り、LaunchAgents に置いたもの。[<org>.]touryou.daemon-<8 文字>.plist。--others の対象と同じ）。
+#      （touryou launchd init --config で作り、LaunchAgents に置いたもの。[<org>.]touryou.daemon-<小文字の 16 進 8 文字>.plist。--others の対象と同じ）。
 #      登録されたすべてを、起動し直す（#165）
 #  10. current を付け替える（できるだけ原子的に）
 #
@@ -74,8 +74,12 @@ has_extra_daemons() {
 }
 extra_daemon_plists() {
   # 別名の daemon の plist（LaunchAgents に置いたもの）を 1 行に 1 つ出す
-  local f
-  for f in "${HOME}/Library/LaunchAgents/"touryou.daemon-????????.plist "${HOME}/Library/LaunchAgents/"*.touryou.daemon-????????.plist; do
+  # 末尾は、TS 側（launchd.ts の OTHER_PLIST）と同じ、小文字の 16 進 8 文字だけ。[a-f] はロケールで変わるので、1 字ずつ並べる
+  local f h pat
+  h="[0123456789abcdef]"
+  pat="${h}${h}${h}${h}${h}${h}${h}${h}"
+  # shellcheck disable=SC2231
+  for f in "${HOME}/Library/LaunchAgents/"touryou.daemon-${pat}.plist "${HOME}/Library/LaunchAgents/"*.touryou.daemon-${pat}.plist; do
     [ -f "${f}" ] && printf '%s\n' "${f}"
   done
   return 0

@@ -1,77 +1,356 @@
-import { readFileSync } from "node:fs";
+// plugin/scripts/install-runtime.sh の、別名の daemon（touryou launchd init --config。#165）の扱いを、実際に script を走らせて確かめる。
+// 形は scripts/install-runtime.test.mjs と同じ: script を source して platform・has_git・fetch だけを差し替え、main を呼ぶ。
+// 偽の touryou（呼ばれた引数を ${HOME}/calls.log に足す）・偽の touryou-daemon（--check-config）・偽の HOME を使い、ネットワークには出ない。
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readlinkSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
-const script = readFileSync(
-  fileURLToPath(new URL("../../../plugin/scripts/install-runtime.sh", import.meta.url)),
-  "utf8",
+const SCRIPT = fileURLToPath(
+  new URL("../../../plugin/scripts/install-runtime.sh", import.meta.url),
 );
+const script = readFileSync(SCRIPT, "utf8");
 
-describe("install-runtime.sh の版上げ（複数の daemon。#165）", () => {
-  it("別名の daemon の plist を探す", () => {
-    expect(script).toContain("has_extra_daemons");
-    expect(script).toContain("touryou.daemon-????????.plist");
+const made: string[] = [];
+afterAll(() => {
+  for (const d of made) rmSync(d, { recursive: true, force: true });
+});
+const tmp = (): string => {
+  const d = mkdtempSync(join(tmpdir(), "touryou-multi-"));
+  made.push(d);
+  return d;
+};
+const sha = (f: string): string => createHash("sha256").update(readFileSync(f)).digest("hex");
+
+/**
+ * 仮の配布物（tar.gz）。偽の touryou は、`v<版> <引数>` を ${HOME}/calls.log に足し、`${FAIL_ON}` に書いた
+ * 引数の並び（「;」区切り。`v<版> ` を付けない）と一致する呼び出しだけ終了コード 1 にする。
+ * 偽の touryou-daemon は、--config の値に `bad` を含むときだけ --check-config が通らない。
+ */
+const makeTarball = (ver: string): string => {
+  const d = tmp();
+  const bin = join(d, "touryou-darwin-arm64", "bin");
+  mkdirSync(bin, { recursive: true });
+  writeFileSync(
+    join(bin, "touryou-daemon"),
+    `#!/bin/sh
+[ "$1" = "--help" ] && { echo "usage: touryou-daemon"; exit 0; }
+if [ "$1" = "--check-config" ]; then
+  echo "$3" >> "$HOME/checked.log"
+  case "$3" in *bad*) echo "失敗 [invalidConfig]: 設定が通らない" >&2; exit 1 ;; esac
+  exit 0
+fi
+exit 0
+`,
+  );
+  writeFileSync(
+    join(bin, "touryou"),
+    `#!/bin/sh
+echo "v${ver} $*" >> "$HOME/calls.log"
+args="$*"
+old_ifs="$IFS"; IFS=";"
+for f in \${FAIL_ON:-}; do
+  if [ "$f" = "$args" ] || [ "$f" = "v${ver} $args" ]; then IFS="$old_ifs"; exit 1; fi
+done
+IFS="$old_ifs"
+exit 0
+`,
+  );
+  chmodSync(join(bin, "touryou-daemon"), 0o755);
+  chmodSync(join(bin, "touryou"), 0o755);
+  const out = join(tmp(), `touryou-${ver}-darwin-arm64.tar.gz`);
+  const r = spawnSync("tar", ["-czf", out, "-C", d, "touryou-darwin-arm64"]);
+  expect(r.status, String(r.stderr)).toBe(0);
+  return out;
+};
+
+/** 仮の plugin（script の写しと checksums.json・plugin.json）。 */
+const makePlugin = (ver: string, tarball: string): string => {
+  const P = join(tmp(), "plugin");
+  mkdirSync(join(P, "scripts"), { recursive: true });
+  mkdirSync(join(P, ".claude-plugin"), { recursive: true });
+  copyFileSync(SCRIPT, join(P, "scripts", "install-runtime.sh"));
+  const name = `touryou-${ver}-darwin-arm64.tar.gz`;
+  const json = {
+    version: ver,
+    assets: { "darwin-arm64": { name, sha256: sha(tarball) } },
+    extensions: { mcpb: { name: `touryou-mcp-${ver}.mcpb`, sha256: "0".repeat(64) } },
+  };
+  writeFileSync(join(P, "checksums.json"), `${JSON.stringify(json, null, 2)}\n`);
+  writeFileSync(
+    join(P, ".claude-plugin", "plugin.json"),
+    `${JSON.stringify({ name: "touryou", version: ver, repository: "https://github.com/comcreate/touryou" }, null, 2)}\n`,
+  );
+  return P;
+};
+
+const run = (
+  P: string,
+  home: string,
+  tarball: string,
+  args: string[] = [],
+  env: Record<string, string> = {},
+) => {
+  const body = [
+    'source "$1"; shift',
+    'platform() { echo "Darwin arm64"; }',
+    "has_git() { :; }",
+    'fetch() { cp "$SRC" "$2"; }',
+    'main "$@"',
+  ].join("\n");
+  return spawnSync("bash", ["-c", body, "_", join(P, "scripts", "install-runtime.sh"), ...args], {
+    env: { PATH: process.env.PATH ?? "", HOME: home, SRC: tarball, ...env },
+    encoding: "utf8",
   });
-  it("別名の daemon の探す場所は、--others の対象と同じ LaunchAgents（init しただけの plist は数えない）", () => {
-    const fn = script.slice(
-      script.indexOf("has_extra_daemons() {"),
-      script.indexOf("cleanup_lists() {"),
+};
+const out = (r: { stdout: string; stderr: string }): string => `${r.stdout}${r.stderr}`;
+const lines = (f: string): string[] =>
+  existsSync(f) ? readFileSync(f, "utf8").trim().split("\n") : [];
+
+/** 別名の daemon の plist の中身（ProgramArguments の --config の次の行が、設定のパス）。 */
+const aliasPlist = (cfg: string): string =>
+  `<plist><dict><key>ProgramArguments</key><array>
+    <string>/x/touryou-daemon</string>
+    <string>--config</string>
+    <string>${cfg}</string>
+  </array></dict></plist>\n`;
+
+const PLIST_ALIAS = "touryou.daemon-0123abcd.plist";
+
+/** v0.9.0 が入った HOME。別名の plist（名前 → 設定のパス）を LaunchAgents に置く。 */
+const homeWith = (aliases: Record<string, string>, opts: { defaultPlist?: boolean } = {}) => {
+  const old = makeTarball("0.9.0");
+  const h = join(tmp(), "home");
+  mkdirSync(h);
+  expect(run(makePlugin("0.9.0", old), h, old).status).toBe(0);
+  const agents = join(h, "Library", "LaunchAgents");
+  mkdirSync(agents, { recursive: true });
+  if (opts.defaultPlist) writeFileSync(join(agents, "touryou.daemon.plist"), "<plist/>");
+  for (const [name, cfg] of Object.entries(aliases)) writeFileSync(join(agents, name), aliasPlist(cfg));
+  return h;
+};
+
+const OLD = (h: string): string => join(h, ".touryou", "v0.9.0", "touryou-darwin-arm64");
+const NEW = (h: string): string => join(h, ".touryou", "v1.0.0", "touryou-darwin-arm64");
+
+/** 版上げを --restart-daemon で走らせる。 */
+const upgrade = (h: string, env: Record<string, string> = {}) => {
+  const tb = makeTarball("1.0.0");
+  return run(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"], env);
+};
+
+describe("別名の daemon の plist の検出（extra_daemon_plists・has_extra_daemons）", () => {
+  const detect = (home: string) =>
+    spawnSync(
+      "bash",
+      [
+        "-c",
+        'source "$1"; has_extra_daemons && echo HAS || echo NONE; extra_daemon_plists',
+        "_",
+        SCRIPT,
+      ],
+      { env: { PATH: process.env.PATH ?? "", HOME: home }, encoding: "utf8" },
     );
-    expect(fn).toContain('"${HOME}/Library/LaunchAgents/"touryou.daemon-????????.plist');
-    expect(fn).toContain('"${HOME}/Library/LaunchAgents/"*.touryou.daemon-????????.plist');
-    expect(fn).not.toContain('"${HOME}/.touryou/launchd/"touryou.daemon-');
+  const homeOnly = (names: string[]): string => {
+    const h = join(tmp(), "home");
+    mkdirSync(join(h, "Library", "LaunchAgents"), { recursive: true });
+    for (const n of names) writeFileSync(join(h, "Library", "LaunchAgents", n), "<plist/>");
+    return h;
+  };
+
+  it("小文字の 16 進 8 文字の名前（組織名つきも）だけを拾う", () => {
+    const h = homeOnly([PLIST_ALIAS, "com.example.touryou.daemon-89abcdef.plist"]);
+    const r = detect(h);
+    expect(r.status).toBe(0);
+    const [first, ...found] = r.stdout.trim().split("\n");
+    expect(first).toBe("HAS");
+    expect(found.sort()).toEqual([
+      join(h, "Library", "LaunchAgents", "com.example.touryou.daemon-89abcdef.plist"),
+      join(h, "Library", "LaunchAgents", PLIST_ALIAS),
+    ]);
   });
-  it("冒頭の説明も、LaunchAgents に置いたものと書いている", () => {
-    expect(script).toContain("LaunchAgents に置いたもの。[<org>.]touryou.daemon-<8 文字>.plist");
+  it("16 進でない 8 文字・大文字・長さの違う名前は拾わない（TS 側の OTHER_PLIST と同じ）", () => {
+    const h = homeOnly([
+      "touryou.daemon-zzzzzzzz.plist",
+      "touryou.daemon-0123ABCD.plist",
+      "touryou.daemon-0123abc.plist",
+      "touryou.daemon-0123abcde.plist",
+      "touryou.daemon-backup.plist",
+      "touryou.daemon.plist",
+    ]);
+    const r = detect(h);
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe("NONE");
   });
+  it("LaunchAgents にない（~/.touryou/launchd に init しただけの）plist は数えない", () => {
+    const h = join(tmp(), "home");
+    mkdirSync(join(h, ".touryou", "launchd"), { recursive: true });
+    mkdirSync(join(h, "Library", "LaunchAgents"), { recursive: true });
+    writeFileSync(join(h, ".touryou", "launchd", PLIST_ALIAS), "<plist/>");
+    expect(detect(h).stdout.trim()).toBe("NONE");
+  });
+});
+
+describe("finish の出力（LAUNCHD・LAUNCHD_OTHERS）", () => {
+  it("別名の daemon だけが常駐: LAUNCHD: absent と LAUNCHD_OTHERS: present を出す（setup.md は、これで手順 3 を飛ばす）", () => {
+    const h = homeWith({ [PLIST_ALIAS]: "/cfg/a.json" });
+    const tb = makeTarball("0.9.0");
+    const r = run(makePlugin("0.9.0", tb), h, tb);
+    expect(r.status, out(r)).toBe(0);
+    expect(r.stdout).toMatch(/RESULT: already/);
+    expect(r.stdout).toContain("LAUNCHD: absent");
+    expect(r.stdout).toContain("LAUNCHD_OTHERS: present");
+  });
+  it("別名がなければ LAUNCHD_OTHERS を出さない", () => {
+    const h = homeWith({});
+    const tb = makeTarball("0.9.0");
+    const r = run(makePlugin("0.9.0", tb), h, tb);
+    expect(r.stdout).toContain("LAUNCHD: absent");
+    expect(r.stdout).not.toContain("LAUNCHD_OTHERS");
+  });
+});
+
+describe("版上げ（別名の daemon がある。#165）", () => {
+  it("別名だけが常駐でも managed になり、同意がなければ何も変えずに終了コード 3", () => {
+    const h = homeWith({ [PLIST_ALIAS]: "/cfg/a.json" });
+    const tb = makeTarball("1.0.0");
+    const r = run(makePlugin("1.0.0", tb), h, tb);
+    expect(r.status, out(r)).toBe(3);
+    expect(r.stdout).toMatch(/RESULT: need-restart-consent/);
+    expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
+    expect(lines(join(h, "calls.log"))).toEqual([]);
+  });
+  it("--restart-daemon: 止める前に別名の設定を新しい版で検査 → stop --others → 付け替え → init --others → apply --yes --others", () => {
+    const h = homeWith({ [PLIST_ALIAS]: "/cfg/a.json" });
+    const r = upgrade(h);
+    expect(r.status, out(r)).toBe(0);
+    expect(r.stdout).toMatch(/RESULT: upgraded-restarted/);
+    expect(readlinkSync(join(h, ".touryou", "current"))).toBe(NEW(h));
+    expect(lines(join(h, "checked.log"))).toEqual(["/cfg/a.json"]);
+    // 既定の daemon はないので、引数なしの init・stop・apply は呼ばない
+    expect(lines(join(h, "calls.log"))).toEqual([
+      "v0.9.0 launchd stop --others",
+      "v1.0.0 launchd init --others",
+      "v1.0.0 launchd apply --yes --others",
+    ]);
+  });
+  it("既定と別名の両方: 既定の分も呼び、別名の分は --others で続ける", () => {
+    const h = homeWith({ [PLIST_ALIAS]: "/cfg/a.json" }, { defaultPlist: true });
+    writeFileSync(join(h, ".touryou", "config.json"), "{}\n");
+    const r = upgrade(h);
+    expect(r.status, out(r)).toBe(0);
+    expect(lines(join(h, "calls.log"))).toEqual([
+      "v0.9.0 launchd init",
+      "v0.9.0 launchd stop",
+      "v0.9.0 launchd stop --others",
+      "v1.0.0 launchd init",
+      "v1.0.0 launchd init --others",
+      "v1.0.0 launchd apply --yes",
+      "v1.0.0 launchd apply --yes --others",
+    ]);
+  });
+  it("別名の設定が --check-config を通らない: 止める前に die し、daemon を止めず、current も変えない", () => {
+    const h = homeWith({
+      "touryou.daemon-11111111.plist": "/cfg/ok.json",
+      [PLIST_ALIAS]: "/cfg/bad.json",
+    });
+    const r = upgrade(h);
+    expect(r.status, out(r)).toBe(1);
+    expect(r.stdout).toMatch(/RESULT: failed/);
+    expect(r.stdout).toMatch(/別名の daemon（.*）の設定が、v1\.0\.0 の daemon の設定の検査を通らない/);
+    expect(r.stdout).toMatch(/daemon は止めていない（v0\.9\.0 のまま）/);
+    expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
+    // stop・init などは 1 つも呼んでいない
+    expect(lines(join(h, "calls.log"))).toEqual([]);
+    expect(lines(join(h, "checked.log"))).toContain("/cfg/bad.json");
+  });
+  it("別名の plist に --config がなく設定を読めない: 同じく止める前に die する", () => {
+    const h = homeWith({});
+    writeFileSync(join(h, "Library", "LaunchAgents", PLIST_ALIAS), "<plist/>\n");
+    const r = upgrade(h);
+    expect(r.status, out(r)).toBe(1);
+    expect(r.stdout).toMatch(/設定が、v1\.0\.0 の daemon の設定の検査を通らない/);
+    expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
+    expect(lines(join(h, "calls.log"))).toEqual([]);
+  });
+});
+
+describe("restore_old（別名の daemon の分岐）", () => {
+  it("stop --others が失敗: current は前の版のまま、前の版で apply --yes --others してから止まる（init --others はしない）", () => {
+    const h = homeWith({ [PLIST_ALIAS]: "/cfg/a.json" });
+    const r = upgrade(h, { FAIL_ON: "launchd stop --others" });
+    expect(r.status, out(r)).toBe(1);
+    expect(r.stdout).toMatch(/設定ごとの別名の常駐の daemon を止められなかった/);
+    expect(r.stdout).toMatch(/v0\.9\.0 で動いている/);
+    expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
+    expect(lines(join(h, "calls.log"))).toEqual([
+      "v0.9.0 launchd stop --others",
+      "v0.9.0 launchd apply --yes --others",
+    ]);
+  });
+  it("init --others が失敗: current を前の版に戻し、前の版の init --others で plist を前の形に戻してから apply --yes --others", () => {
+    const h = homeWith({ [PLIST_ALIAS]: "/cfg/a.json" });
+    const r = upgrade(h, { FAIL_ON: "v1.0.0 launchd init --others" });
+    expect(r.status, out(r)).toBe(1);
+    expect(r.stdout).toMatch(/launchd init --others が通らなかった/);
+    expect(r.stdout).toMatch(/v0\.9\.0 で動いている/);
+    expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
+    expect(lines(join(h, "calls.log"))).toEqual([
+      "v0.9.0 launchd stop --others",
+      "v1.0.0 launchd init --others",
+      "v0.9.0 launchd init --others",
+      "v0.9.0 launchd apply --yes --others",
+    ]);
+  });
+  it("apply --yes --others が新しい版でだけ失敗: current を前の版に戻し、前の版で init --others → apply --yes --others で動いている", () => {
+    const h = homeWith({ [PLIST_ALIAS]: "/cfg/a.json" });
+    const r = upgrade(h, { FAIL_ON: "v1.0.0 launchd apply --yes --others" });
+    expect(r.status, out(r)).toBe(1);
+    expect(r.stdout).toMatch(/v0\.9\.0 で動いている/);
+    expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
+    expect(lines(join(h, "calls.log")).slice(-2)).toEqual([
+      "v0.9.0 launchd init --others",
+      "v0.9.0 launchd apply --yes --others",
+    ]);
+  });
+  it("apply --yes --others が前の版でも失敗: current は前の版、daemon は止まっている、と出す", () => {
+    const h = homeWith({ [PLIST_ALIAS]: "/cfg/a.json" });
+    const r = upgrade(h, { FAIL_ON: "launchd apply --yes --others" });
+    expect(r.status, out(r)).toBe(1);
+    expect(r.stdout).toMatch(/設定ごとの別名の daemon が起動しなかった/);
+    expect(r.stdout).toMatch(/常駐の daemon は止まっている/);
+    expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
+    expect(lines(join(h, "calls.log"))).toEqual([
+      "v0.9.0 launchd stop --others",
+      "v1.0.0 launchd init --others",
+      "v1.0.0 launchd apply --yes --others",
+      "v0.9.0 launchd init --others",
+      "v0.9.0 launchd apply --yes --others",
+    ]);
+  });
+});
+
+describe("script の書き方", () => {
   it("変数は、コメントも ${NAME} の形で書く（$HOME のように括弧なしで書かない）", () => {
     const bare = script
       .split("\n")
       .filter((l) => l.trimStart().startsWith("#") && /\$[A-Za-z_]/.test(l));
     expect(bare).toEqual([]);
   });
-  it("付け替えのあとに、別名の daemon の plist を新しい版で作り直してから、起動し直す", () => {
-    // restore_old の中にも init --others がある。付け替えのあとの最後の 1 つを見る
-    const init = script.lastIndexOf('"${BASE}/current/bin/touryou" launchd init --others');
-    const swap = script.indexOf('swap_link "${VDIR}/${DIST_DIR}" "${BASE}/current"');
-    // restore_old の中にも apply --others がある。付け替えのあとの最後の 1 つを見る
-    const apply = script.lastIndexOf('"${BASE}/current/bin/touryou" launchd apply --yes --others');
-    expect(swap).toBeGreaterThan(-1);
-    expect(init).toBeGreaterThan(swap);
-    expect(apply).toBeGreaterThan(init);
-    expect(script).toContain("launchd init --others が通らなかった");
-  });
-  it("別名の daemon を止めて、付け替えのあとに起動し直す", () => {
-    expect(script).toContain("launchd stop --others");
-    expect(script).toContain("launchd apply --yes --others");
-  });
-  it("止める前に、別名の daemon の設定も、新しい版の --check-config で検査する", () => {
-    const check = script.indexOf('plist_config_of "${extra_plist}"');
-    const stop = script.indexOf("launchd stop --others");
-    expect(check).toBeGreaterThan(-1);
-    expect(script).toContain(
-      '"${VDIR}/${DIST_DIR}/bin/touryou-daemon" --check-config --config "${extra_cfg}"',
-    );
-    expect(stop).toBeGreaterThan(check);
-    // 検査は、LaunchAgents に置いた plist（init --others・stop --others の対象と同じ集合）だけを見る
-    expect(script).toContain("extra_daemon_plists");
-  });
-  it("巻き戻しは、別名の daemon も旧版の launchd init --others で plist を旧版の形に戻してから、apply --others する", () => {
-    const fn = script.slice(script.indexOf("restore_old() {"), script.indexOf("check_kinds() {"));
-    const init = fn.indexOf('"${BASE}/current/bin/touryou" launchd init --others');
-    const apply = fn.indexOf('"${BASE}/current/bin/touryou" launchd apply --yes --others');
-    expect(init).toBeGreaterThan(-1);
-    expect(apply).toBeGreaterThan(init);
-  });
-  it("init --others・has_extra_daemons・stop --others は、同じ LaunchAgents の集合を対象にする（壊れた未使用の plist で巻き戻さない）", () => {
-    const fn = script.slice(
-      script.indexOf("has_extra_daemons() {"),
-      script.indexOf("cleanup_lists() {"),
-    );
-    expect(fn).toContain("extra_daemon_plists");
-    expect(fn).not.toContain('"${HOME}/.touryou/launchd/"');
-  });
-  it("別名の daemon があることを LAUNCHD_OTHERS で知らせる", () => {
-    expect(script).toContain("LAUNCHD_OTHERS: present");
+  it("bash 3.2 の構文で読める（bash -n）", () => {
+    expect(spawnSync("bash", ["-n", SCRIPT]).status).toBe(0);
   });
 });

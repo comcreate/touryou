@@ -233,6 +233,26 @@ export const OTHER_PLIST = /^((?:[a-z0-9-]+\.)*touryou\.daemon-([0-9a-f]{8}))\.p
 /** 既定・別名のどちらも含む、touryou の daemon の plist のファイル名。 */
 export const DAEMON_PLIST = /^(?:[a-z0-9-]+\.)*touryou\.daemon(?:-[0-9a-f]{8})?\.plist$/;
 
+/** init の出力先（`<home>/.touryou/launchd`）。 */
+export const plistDirOf = (home: string): string => join(home, ".touryou", "launchd");
+
+/** 常駐にした plist の置き場（`<home>/Library/LaunchAgents`）。`--others`・版上げの対象は、ここに置いたもの。 */
+export const agentsDirOf = (home: string): string => join(home, "Library", "LaunchAgents");
+
+/** plist の置き場にある、既定・別名どちらも含む daemon の plist のファイル名（並べ替え済み）。置き場がない・読めなければ空。 */
+export const daemonPlistNames = (
+  plistDir: string,
+  readDir: (path: string) => string[] = (p) => readdirSync(p),
+): string[] => {
+  try {
+    return readDir(plistDir)
+      .filter((n) => DAEMON_PLIST.test(n))
+      .sort();
+  } catch {
+    return [];
+  }
+};
+
 /** plist の置き場にある、別名の設定の daemon の plist のファイル名（並べ替え済み）。置き場がない・読めなければ空。 */
 export const otherPlistNames = (
   plistDir: string,
@@ -370,30 +390,49 @@ export function stateDirOf(configPath: string): string | undefined {
   }
 }
 
+/** 同じ stateDir を使う、ほかの daemon。`label` は、その plist の Label（既定の設定の、plist がまだない分は無し）。 */
+export interface StateDirSharing {
+  readonly configPath: string;
+  readonly label?: string;
+}
+
+/** 案内に出す、同じ stateDir を使う相手の説明。同じ設定を別の Label で init したものは、Label も示す。 */
+export const describeSharing = (s: StateDirSharing): string =>
+  s.label === undefined ? s.configPath : `${s.configPath}。Label ${s.label} の plist が、同じ設定を使っている`;
+
 /**
- * 同じ stateDir（実パスで比べる）を使う、別の設定。既定の設定（`<base>/config.json`）と、init 済みの別名の設定を見る。
- * 見つかったら、その設定のパス。なければ undefined。
+ * 同じ stateDir（実パスで比べる）を使う、ほかの daemon。既定の設定（`<base>/config.json`）と、init 済みの plist
+ * （既定・別名のどちらも。`--org` 違いの Label も）を見る。
+ * 自分の plist（`selfLabel`）だけは、同じ daemon なので飛ばす（同じ --org の init のやり直しを止めない）。
+ * 同じ設定でも Label が違う plist（別の --org で 2 回 init した）は、別の daemon として検査し、見つけたら止める。
+ * 見つかったら、その設定のパス（と Label）。なければ undefined。
  */
 export function stateDirSharedWith(
   base: string,
   plistDir: string,
   configPath: string,
   stateDir: string,
-): string | undefined {
-  const others = [join(base, "config.json")];
-  for (const n of otherPlistNames(plistDir)) {
+  selfLabel: string,
+): StateDirSharing | undefined {
+  const others: StateDirSharing[] = [{ configPath: join(base, "config.json") }];
+  for (const n of daemonPlistNames(plistDir)) {
     try {
       const cfg = plistConfigOf(readFileSync(join(plistDir, n), "utf8"));
-      if (cfg !== undefined) others.push(cfg);
+      if (cfg !== undefined) others.push({ configPath: cfg, label: n.replace(/\.plist$/, "") });
     } catch {
       // 読めない plist は、飛ばす（その 1 つのために、検出全体をやめない）
     }
   }
   const self = canonicalPath(configPath);
   const mine = canonicalPath(stateDir);
+  const selfIsDefault = self === canonicalPath(join(base, "config.json"));
   for (const c of others) {
-    if (canonicalPath(c) === self) continue;
-    const sd = stateDirOf(c);
+    // 自分の plist（同じ Label）は、同じ daemon なので飛ばす。
+    // 既定の設定は、--org を変えて並べられる（既存の動き。plist だけが別名になる）ので、同じ設定どうしは飛ばす。
+    // 別名の設定（--config）は、Label（--org）が違っても同じ設定なら、同じ stateDir の別の daemon として止める
+    if (c.label === selfLabel) continue;
+    if (selfIsDefault && canonicalPath(c.configPath) === self) continue;
+    const sd = stateDirOf(c.configPath);
     if (sd !== undefined && canonicalPath(sd) === mine) return c;
   }
   return undefined;
@@ -409,10 +448,10 @@ function initOthers(args: readonly string[], deps: LaunchdDeps): CommandResult {
   if (home === undefined || home === "" || !isAbsolute(home) || !plainPath(home)) {
     return fail("HOME が、絶対パスでない・空・使えない文字を含む");
   }
-  const plistDir = join(home, ".touryou", "launchd");
+  const plistDir = plistDirOf(home);
   // 対象は、LaunchAgents に置いた（常駐にした）ものだけ（has_extra_daemons・stop/apply --others と同じ集合）。
   // init しただけで使っていない plist は、壊れていても見ない
-  const agentsDir = join(home, "Library", "LaunchAgents");
+  const agentsDir = agentsDirOf(home);
   const names = otherPlistNames(agentsDir);
   if (names.length === 0) {
     return {
@@ -587,11 +626,13 @@ function planInit(args: readonly string[], deps: LaunchdDeps): InitPlan | Comman
   const binDir = join(base, "bin");
   const logsDir = join(base, "logs");
   const plistDir = join(base, "launchd");
-  // 同じ stateDir（port・トークン・DB の置き場）を、別の設定の daemon が使うと、同じ state を取り合って壊れる
-  const sharing = stateDirSharedWith(base, plistDir, configPath, stateDir);
+  // 同じ stateDir（port・トークン・DB の置き場）を、別の設定の daemon が使うと、同じ state を取り合って壊れる。
+  // 同じ設定を別の --org で init したもの（Label が違う plist）も、別の daemon として数える
+  const daemonLabel = labelOf(org, daemonName);
+  const sharing = stateDirSharedWith(base, plistDir, configPath, stateDir, daemonLabel);
   if (sharing !== undefined) {
     return fail(
-      `stateDir が、別の設定（${sharing}）の daemon と同じ。同じ state を 2 つの daemon が使うと壊れるので、何も書かずに止めた。設定ごとに、別の stateDir にする`,
+      `stateDir が、別の設定（${describeSharing(sharing)}）の daemon と同じ。同じ state を 2 つの daemon が使うと壊れるので、何も書かずに止めた。設定ごとに、別の stateDir にする（同じ設定を別の --org で作り直すときは、先に uninstall --yes で外す）`,
       1,
     );
   }
@@ -608,7 +649,6 @@ function planInit(args: readonly string[], deps: LaunchdDeps): InitPlan | Comman
       1,
     );
   }
-  const daemonLabel = labelOf(org, daemonName);
   const plistPath = join(plistDir, `${daemonLabel}.plist`);
   const common = {
     label: daemonLabel,

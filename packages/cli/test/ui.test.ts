@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { runBin } from "../src/bin.js";
 import type { UiDeps } from "../src/ui.js";
@@ -287,6 +290,106 @@ describe("touryou ui（複数の daemon）", () => {
     });
     expect(r.exitCode).toBe(0);
     expect(r.stdout.split(OTHER).length - 1).toBe(1);
+  });
+
+  // 別名の候補は、--others・版上げと同じ LaunchAgents に置いた（常駐にした）plist が基準（#165）
+  const AGENTS = "/home/u/Library/LaunchAgents";
+  const SRC = `/home/u/.touryou/launchd/${PLIST}`;
+  const listWith = async (
+    opts: {
+      readDir: (dir: string) => string[];
+      over?: Record<string, string | undefined>;
+      env?: Record<string, string>;
+      args?: string[];
+    },
+    reads: string[] = [],
+  ) => {
+    const read = multi(opts.over);
+    const { f } = ticketFetch();
+    return runBin(["ui", ...(opts.args ?? ["--list"])], {
+      env: { HOME: "/home/u", ...opts.env },
+      cwd: "/work/a",
+      isTTY: TTY,
+      fetch: f,
+      ui: {
+        readFile: (p, ...rest) => {
+          reads.push(p);
+          return (read as (p: string, ...r: unknown[]) => string)(p, ...rest);
+        },
+        readDir: opts.readDir,
+        verifierFor: verifier(),
+        openUrl: () => true,
+      },
+    });
+  };
+  const inAgents = (dir: string): string[] => (dir === AGENTS ? [PLIST] : []);
+
+  it("LaunchAgents に置いていない（init しただけの）plist は、候補にしない", async () => {
+    const r = await listWith({ readDir: () => [] });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout).not.toContain(OTHER);
+    // .touryou/launchd にだけ plist がある（LaunchAgents は空）
+    const initOnly = await listWith({ readDir: (dir) => (dir === AGENTS ? [] : [PLIST]) });
+    expect(initOnly.stdout).not.toContain(OTHER);
+  });
+
+  it("LaunchAgents に置いたものは、候補にする。元の plist がなくて LaunchAgents にだけ残るものも、候補にする", async () => {
+    const both = await listWith({ readDir: inAgents });
+    expect(both.stdout).toContain(`${OTHER}（repoRoot: /work/b）`);
+    const agentsOnly = await listWith({
+      readDir: inAgents,
+      over: {
+        [SRC]: undefined,
+        [`${AGENTS}/${PLIST}`]: `<array>\n<string>--config</string>\n<string>${OTHER}</string>\n</array>`,
+      },
+    });
+    expect(agentsOnly.exitCode).toBe(0);
+    expect(agentsOnly.stdout).toContain(`${OTHER}（repoRoot: /work/b）`);
+  });
+
+  it("環境変数の設定が、リンク経由の別の書き方でも、同じ設定は重ねて出さない（実パスで比べる）", async () => {
+    const real = realpathSync(mkdtempSync(join(tmpdir(), "touryou-ui-")));
+    try {
+      const target = join(real, "target");
+      const link = join(real, "link");
+      mkdirSync(target);
+      symlinkSync(target, link);
+      const cfgReal = join(target, "c.json");
+      const cfgLink = join(link, "c.json");
+      const json = JSON.stringify({ stateDir: "/state-b", repoRoot: "/work/b" });
+      const r = await listWith({
+        readDir: inAgents,
+        env: { TOURYOU_DAEMON_CONFIG: cfgLink },
+        over: {
+          [SRC]: `<array>\n<string>--config</string>\n<string>${cfgReal}</string>\n</array>`,
+          [cfgReal]: json,
+          [cfgLink]: json,
+        },
+      });
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout.split("（repoRoot: /work/b）").length - 1).toBe(1);
+    } finally {
+      rmSync(real, { recursive: true, force: true });
+    }
+  });
+
+  it("--config（や環境変数）で設定が決まるときは、使わない候補（別名の plist・設定）を読まない。--list は読む", async () => {
+    const reads: string[] = [];
+    const r = await listWith({ readDir: inAgents, args: ["--config", OTHER] }, reads);
+    expect(r.exitCode).toBe(0);
+    expect(reads.filter((p) => p.includes("/launchd/") || p.includes("LaunchAgents"))).toEqual([]);
+    expect(reads).not.toContain("/home/u/.touryou/config.json");
+    const envReads: string[] = [];
+    await listWith(
+      { readDir: inAgents, args: [], env: { TOURYOU_DAEMON_CONFIG: OTHER } },
+      envReads,
+    );
+    expect(envReads.filter((p) => p.includes("/launchd/") || p.includes("LaunchAgents"))).toEqual(
+      [],
+    );
+    const listReads: string[] = [];
+    await listWith({ readDir: inAgents }, listReads);
+    expect(listReads).toContain(SRC);
   });
 
   it("--config に相対パスは渡せない", async () => {
