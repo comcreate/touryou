@@ -96,6 +96,15 @@ import {
 import { createAutoPurger } from "./auto-purge.js";
 import { removeBindCodeFile, writeBindCodeFile } from "./bind-code-file.js";
 import {
+  createIdleSoonNotifier,
+  IDLE_SOON_KEYS,
+  idleWarnMsOf,
+  openBindNotices,
+  resolveBindNotices,
+  resolveBodies,
+  TOKEN_SWEEP_MS,
+} from "./bind-notices.js";
+import {
   CHILD_DIR_NEEDED,
   ChildrenDirError,
   type ChildrenDirs,
@@ -405,9 +414,6 @@ const writeControllingTerminal = (line: string): void => {
   }
 };
 
-/** トークンの期限の見回りの間隔。 */
-const TOKEN_SWEEP_MS = 5 * 60_000;
-
 /**
  * ノードのトークンが、もう要らない状態か（種類〔sdk・bind〕を問わない。認証・見回りのたびに見る）。記録にないノードも
  * 要らない。done は残す（差し戻しで動き直す）。
@@ -683,40 +689,19 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           ...notice(key2, { node: nodeId }),
         },
       },
+      // 切れたので、「もうすぐ切れる」の知らせは解決にする（同じ追記にまとめる）
+      ...resolveBodies(openBindNotices(log.state(), nodeId, IDLE_SOON_KEYS)),
     ]);
     if (!r.ok) note("tokenExpiredNoticeFailure", { nodeId, cause: r.error.code });
   };
-  // 失効の前の知らせ（#189。bind のトークンだけ）: 親へは受信箱の info、子へは system の追加指示。同じ「最後に使った時刻」には
-  // 1 回だけ（要求 ID を、ノードと最後に使った時刻から決める）。running の子だけ（判断待ち・done は時計が止まる）。
-  const noticeIdleSoon = (info: {
-    nodeId: string;
-    lastUsedMs: number;
-    remainingMs: number;
-  }): void => {
-    const { nodeId, lastUsedMs } = info;
-    if (tokenStateOf(nodeId) !== "running") return;
-    const mins = Math.max(1, Math.ceil(info.remainingMs / 60_000));
-    const key = `token-idle-soon/${nodeId}/${lastUsedMs}`;
-    const r = appendAtomically(log, clock, key, { system: true }, [
-      {
-        type: "inbox.added",
-        payload: {
-          id: deriveId("inbox", "system", key, "token-idle-soon"),
-          kind: "info",
-          nodeId,
-          ...notice("tokenIdleSoonBind", { node: nodeId, minutes: mins }),
-        },
-      },
-      {
-        type: "node.instructed",
-        payload: {
-          nodeId,
-          text: `紐付けの期限が、使われないまま約 ${mins} 分で切れる。touryou の道具を 1 つ（inbox_fetch など）呼べば延びる。`,
-        },
-      },
-    ]);
-    if (!r.ok) note("tokenIdleSoonNoticeFailure", { nodeId, cause: r.error.code });
+  // 失効の前の知らせ（#189。bind のトークンだけ）: 親へは受信箱の info、子へは system の追加指示（bind-notices.ts）。
+  const noticeIdleSoon = createIdleSoonNotifier({ log, clock, stateOf: tokenStateOf, note });
+  // 紐付けが結び直された・もう切れなくなった・失効した: 期限にまつわる未解決の知らせを、1 回の追記で解決にする
+  const resolveBindNoticesOf = (nodeId: string, keys?: ReadonlySet<string>): void => {
+    const r = resolveBindNotices(log, clock, nodeId, keys);
+    if (!r.ok) note("tokenExpiredResolveFailure", { nodeId, cause: r.code });
   };
+  const idleWarn = idleWarnMsOf(minutes(te?.bindIdle, 60));
   let credentials: ReturnType<typeof createCredentialStore>;
   // 退役（役目の終わりでの失効）を、ノードの購読へ知らせる（`retired` を送って閉じる。sse-hub は server の中で作られるので、
   // `onSseHub` であとから結ぶ）。
@@ -750,8 +735,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
         bindAbsoluteMs: minutes(te?.bindAbsolute, 1440),
         bindIdleMs: minutes(te?.bindIdle, 60),
       },
-      // 失効の前の知らせ: 10 分前（使わなければ切れる期限が短いときは、その半分）。見回りの間隔より長くしておく
-      idleWarnMs: Math.min(10 * 60_000, minutes(te?.bindIdle, 60) / 2),
+      // 失効の前の知らせ: 見回りの間隔の 2 倍（既定 10 分）前。使わなければ切れる期限が短すぎる（見回りの間隔の 4 倍未満）と出さない
+      ...(idleWarn === undefined ? {} : { idleWarnMs: idleWarn }),
       onIdleSoon: noticeIdleSoon,
       exemptNodeId: config.rootNodeId,
       // 役目の終わり: verified・reclaimable・archived（記録にないノードも）。種類を問わない。stopped は、なったときに失効させる
@@ -770,8 +755,16 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
         const st = tokenStateOf(nodeId);
         if (reason !== "retired" && (st === "running" || st === "waiting" || st === "done")) {
           notifyTokenExpired(nodeId, reason, kind, issuedAt);
+        } else {
+          // 知らせを出さない失効（役目の終わり・止まった子）でも、「もうすぐ切れる」は残さない
+          resolveBindNoticesOf(nodeId, IDLE_SOON_KEYS);
         }
       },
+      // 結び直し・つなぎ直し・再開で、トークンが出し直された: 期限にまつわる未解決の知らせを解決にする（状態画面のカードから消す）。
+      // 新しい子の最初の発行（sdk。知らせがない）では、何も書かない。
+      onTokenIssued: (nodeId) => resolveBindNoticesOf(nodeId),
+      // 「もうすぐ切れる」を出したあと、使われて切れなくなった: その知らせを解決にする
+      onIdleRecovered: (nodeId) => resolveBindNoticesOf(nodeId, IDLE_SOON_KEYS),
     });
     // 止まった・役目の終わった子のトークンを、その状態になったその場で失効させる（見回りを待たない。種類を問わない）。
     // 起動時は、いま止まっている子のトークンも失効させる（前回、止まったあとに失効させられなかった分。再開で発行し直す）。
@@ -2189,16 +2182,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       if (!sessionBindings.bound(nodeId, info)) note("sessionBindFailed", { nodeId });
       // 使われたコードのファイルを消す（コードは、もうメモリにない）
       const st = log.state();
-      // 結び直せたので、「紐付けが切れた」の知らせを解決にする（状態画面のカードから消す。#189）
-      for (const i of st.inbox) {
-        const k = i.msg?.key;
-        if (i.nodeId !== nodeId || i.resolved !== undefined) continue;
-        if (k !== "tokenExpiredIdleBind" && k !== "tokenExpiredAbsoluteBind") continue;
-        const r = appendAtomically(log, clock, `token-expired-resolved/${i.id}`, { system: true }, [
-          { type: "inbox.resolved", payload: { itemId: i.id } },
-        ]);
-        if (!r.ok) note("tokenExpiredResolveFailure", { nodeId, cause: r.error.code });
-      }
+      // 「紐付けが切れた」「もうすぐ切れる」の知らせの解決は、トークンの発行（credentials の onTokenIssued）で済んでいる
       const worktree =
         latestLaunch(st, nodeId)?.worktree ??
         st.nodes.find((n) => n.id === nodeId)?.adopted?.worktree;
