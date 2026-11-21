@@ -535,6 +535,37 @@ describe("追加指示の記録（node.instructed。記録のみ）", () => {
     expect(code(foldEvents([...base(), instructed("a", text)]))).toBeNull();
   });
 
+  describe("kind（daemon が付ける種類）", () => {
+    const withKind = (kind: unknown) =>
+      ev({ type: "node.instructed", payload: { nodeId: "a", text: "x", kind } } as never);
+
+    it("知っている文字列の kind は、種類つきで記録する", () => {
+      const s = must(foldEvents([...base(), withKind("tokenIdleSoon")]));
+      expect(s.instructions[0]).toMatchObject({ kind: "tokenIdleSoon" });
+    });
+
+    it("知らない文字列の kind（新しい版が足した種類）は拒まず、種類のないふつうの指示として読む（前向きの互換）", () => {
+      const s = must(foldEvents([...base(), withKind("someFutureKind")]));
+      expect(s.instructions).toHaveLength(1);
+      expect(s.instructions[0]).not.toHaveProperty("kind");
+    });
+
+    it("kind がなければ、ふつうの指示", () => {
+      const s = must(foldEvents([...base(), instructed("a", "x")]));
+      expect(s.instructions[0]).not.toHaveProperty("kind");
+    });
+
+    it.each([
+      ["数値", 5],
+      ["オブジェクト", { a: 1 }],
+      ["配列", ["tokenIdleSoon"]],
+      ["真偽値", true],
+      ["null", null],
+    ])("文字列でない kind（%s）は invalidPayload", (_name, kind) => {
+      expect(code(foldEvents([...base(), withKind(kind)]))).toBe("invalidPayload");
+    });
+  });
+
   it("存在しないノードは unknownNode、識別子の形式が不正なら invalidPayload", () => {
     expect(code(foldEvents([...base(), instructed("zz", "x")]))).toBe("unknownNode");
     expect(code(foldEvents([...base(), instructed("a b", "x")]))).toBe("invalidPayload");

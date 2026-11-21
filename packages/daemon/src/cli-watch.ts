@@ -15,7 +15,7 @@
  */
 
 import type { EventBody, OrchState } from "@touryou/core";
-import { isStallSummary } from "@touryou/core";
+import { isPrefaceInstruction, isStallSummary } from "@touryou/core";
 import { appendAtomically, deriveId, type LogPort, notice } from "./api/handlers/context.js";
 
 export interface WatchSpec {
@@ -120,7 +120,13 @@ export function watchFindings(
     }
     if (n.state === "running" || n.state === "waiting") {
       for (const i of state.instructions) {
-        if (i.nodeId === n.id && i.deliveredSeq === undefined && nowMs - ms(i.at) > spec.unreadMs)
+        // daemon の前置き（`tokenIdleSoon`。#189）は、子が読まなくても構わない知らせなので、読まれていない指示にしない
+        if (
+          i.nodeId === n.id &&
+          !isPrefaceInstruction(i) &&
+          i.deliveredSeq === undefined &&
+          nowMs - ms(i.at) > spec.unreadMs
+        )
           unread.push({ nodeId: n.id, seq: i.seq });
       }
     }

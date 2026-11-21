@@ -77,6 +77,11 @@ export interface PauseHandlerDeps {
   readonly deliver?: InstructionDelivery["deliver"];
   readonly canDeliver?: InstructionDelivery["available"];
   readonly onFailure?: (nodeId: string, cause: string) => void;
+  /**
+   * 再開が成功した（起動して、`restart` の記録まで済んだ）あとに呼ぶ（#189。「紐付けが切れた」「もうすぐ切れる」の知らせを
+   * 解決にするのに使う。トークンの発行では解決にしない: 起動に失敗してトークンを失効させたときは、知らせを残す）。例外は再開の結果を変えない。
+   */
+  readonly onResumed?: (nodeId: string) => void;
 }
 
 const PAUSABLE = new Set(["running", "waiting"]);
@@ -327,6 +332,12 @@ export function createPauseHandlers(deps: PauseHandlerDeps) {
         note(target, `起動した子を止められない: ${String(e)}`);
       }
       return abort("再開を記録できない");
+    }
+    // 起動も再開の記録も済んだ（ここまで来て初めて、トークンは有効なまま残る）。期限にまつわる知らせを解決にする（#189）
+    try {
+      deps.onResumed?.(target);
+    } catch (e) {
+      note(target, `再開後の知らせの解決に失敗: ${String(e)}`);
     }
     return { kind: "resumed" };
   }

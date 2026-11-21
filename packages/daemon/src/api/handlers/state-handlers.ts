@@ -496,9 +496,7 @@ export function createStateHandlers(deps: StateHandlerDeps) {
             id: deriveId("inbox", caller, req.requestId, "inbox"),
             kind: "info",
             nodeId: caller,
-            summary: summarize(
-              `判断を取り下げた（要らなくなった）: ${d.question ?? d.decisionId}`,
-            ),
+            summary: summarize(`判断を取り下げた（要らなくなった）: ${d.question ?? d.decisionId}`),
           },
         },
       ];

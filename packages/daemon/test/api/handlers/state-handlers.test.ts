@@ -133,10 +133,7 @@ describe("判断の取り下げ（#196）", () => {
     );
     expect(other.ok).toBe(false);
     expect(other.error?.code).toBe("notFound");
-    await r.call(
-      "decision.answer",
-      r.req("decision.answer", { decisionId, choice: "X" }, "human"),
-    );
+    await r.call("decision.answer", r.req("decision.answer", { decisionId, choice: "X" }, "human"));
     const late = await r.call("decision.withdraw", r.req("decision.withdraw", { decisionId }, A));
     expect(late.ok).toBe(false);
     expect(late.error?.code).toBe("decisionNotOpen");
