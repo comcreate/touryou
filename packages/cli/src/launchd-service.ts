@@ -647,7 +647,9 @@ function uninstall(ctx: Ctx): CommandResult {
     // 止められなかった unit は、動いたまま plist がなくならないように、何も消さない。止められた unit は、後始末を進める
     kept.push(
       ...err.split("\n"),
-      ...[...failed].map((u) => `${u.plistDest}（${u.label} を止められなかったので、消さずに残した）`),
+      ...[...failed].map(
+        (u) => `${u.plistDest}（${u.label} を止められなかったので、消さずに残した）`,
+      ),
     );
   }
   /** 消したか、もともとなければ true。判定できずに残したら false。 */

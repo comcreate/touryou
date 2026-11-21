@@ -263,7 +263,11 @@ describe("版上げ（別名の daemon がある。#165）", () => {
     const tb = makeTarball("1.0.0", { daemonReadsStdin: true });
     const r = run(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"]);
     expect(r.status, out(r)).toBe(0);
-    expect(lines(join(h, "checked.log")).sort()).toEqual(["/cfg/a.json", "/cfg/b.json", "/cfg/c.json"]);
+    expect(lines(join(h, "checked.log")).sort()).toEqual([
+      "/cfg/a.json",
+      "/cfg/b.json",
+      "/cfg/c.json",
+    ]);
   });
   it("別名が 2 つ以上で、2 つ目の設定が検査を通らない: 標準入力を奪われても見逃さず、止める前に die する", () => {
     const h = homeWith({

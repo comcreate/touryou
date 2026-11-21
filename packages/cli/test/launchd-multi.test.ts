@@ -717,7 +717,7 @@ describe("複数の daemon（--config）", () => {
       run: (cmd: string, args: readonly string[]): RunResult =>
         args[0] === "bootout" && [...fails].some((l) => (args[1] ?? "").endsWith(`/${l}`))
           ? { status: 5, stdout: "", stderr: "Input/output error" }
-          : w.launchd.run(cmd, args),
+          : (w.launchd.run?.(cmd, args) ?? { status: 0, stdout: "", stderr: "" }),
     };
     const through = (args: string[]) =>
       runBin(["launchd", ...args], {
