@@ -15,7 +15,9 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
+  realpathSync,
   renameSync,
   rmSync,
   writeFileSync,
@@ -190,10 +192,29 @@ export const daemonProgramArguments = (
  * 既定でない設定（`--config`）の daemon の名前（Label・ログ・plist のファイル名に使う）。設定のパスの sha256 の先頭 8 文字で、
  * 設定ごとに別になる（#165）。既定の設定（`<base>/config.json`）は、今までどおり `daemon`。
  */
-export const daemonNameOf = (base: string, configPath: string): string =>
-  configPath === join(base, "config.json")
+export const daemonNameOf = (base: string, configPath: string): string => {
+  // リンク経由でも、同じ設定は同じ daemon になるように、実パスで比べる・名前にする
+  const canonical = canonicalPath(configPath);
+  return canonical === canonicalPath(join(base, "config.json"))
     ? "daemon"
-    : `daemon-${createHash("sha256").update(configPath).digest("hex").slice(0, 8)}`;
+    : `daemon-${createHash("sha256").update(canonical).digest("hex").slice(0, 8)}`;
+};
+
+/** 実パス（リンクを解決したもの）。実在しない・解決できないなら、そのまま返す。 */
+export const canonicalPath = (p: string): string => {
+  try {
+    return realpathSync(p);
+  } catch {
+    return p;
+  }
+};
+
+/** init が生成する、別名の設定（--config）の daemon の plist のファイル名。`[<org>.]touryou.daemon-<8 文字>.plist`。 */
+export const OTHER_PLIST = /^((?:[a-z0-9-]+\.)*touryou\.daemon-([0-9a-f]{8}))\.plist$/;
+
+/** plist の ProgramArguments の `--config` の値。 */
+export const plistConfigOf = (text: string): string | undefined =>
+  text.match(/<string>--config<\/string>\s*<string>([^<]*)<\/string>/)?.[1];
 
 /** `--config` に渡せる設定のパス（絶対パスで、使える文字だけ）。 */
 export const usableConfigPath = (p: string): boolean => isAbsolute(p) && plainPath(p);
@@ -314,6 +335,36 @@ export function stateDirOf(configPath: string): string | undefined {
   }
 }
 
+/**
+ * 同じ stateDir（実パスで比べる）を使う、別の設定。既定の設定（`<base>/config.json`）と、init 済みの別名の設定を見る。
+ * 見つかったら、その設定のパス。なければ undefined。
+ */
+function stateDirSharedWith(
+  base: string,
+  plistDir: string,
+  configPath: string,
+  stateDir: string,
+): string | undefined {
+  const others = [join(base, "config.json")];
+  try {
+    for (const n of readdirSync(plistDir).sort()) {
+      if (!OTHER_PLIST.test(n)) continue;
+      const text = readFileSync(join(plistDir, n), "utf8");
+      const cfg = plistConfigOf(text);
+      if (cfg !== undefined) others.push(cfg);
+    }
+  } catch {
+    // plist の置き場がまだない・読めない: 見る相手は既定の設定だけ
+  }
+  const mine = canonicalPath(stateDir);
+  for (const c of others) {
+    if (canonicalPath(c) === configPath) continue;
+    const sd = stateDirOf(c);
+    if (sd !== undefined && canonicalPath(sd) === mine) return c;
+  }
+  return undefined;
+}
+
 export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandResult {
   if (argv[0] !== "init") {
     return fail(
@@ -372,7 +423,13 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
       "--config は、設定ファイルの絶対パスにする。英数字・. _ / @ + 空白 - だけが使える（.. の要素・// は使えない）",
     );
   }
-  const configPath = configArg ?? join(base, "config.json");
+  // plist に書く設定のパスも、実パスにそろえる（リンク経由の指定でも、同じ設定は同じ plist・Label になる）
+  const configPath = canonicalPath(configArg ?? join(base, "config.json"));
+  if (!usableConfigPath(configPath)) {
+    return fail(
+      "--config の実パス（リンクを解決したもの）が、使えない文字を含む。英数字・. _ / @ + 空白 - だけが使える（.. の要素・// は使えない）",
+    );
+  }
   const daemonName = daemonNameOf(base, configPath);
   const isDefault = daemonName === "daemon";
   if (!existsSync(configPath) || !existsSync(join(base, "current"))) {
@@ -396,6 +453,14 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
   const binDir = join(base, "bin");
   const logsDir = join(base, "logs");
   const plistDir = join(base, "launchd");
+  // 同じ stateDir（port・トークン・DB の置き場）を、別の設定の daemon が使うと、同じ state を取り合って壊れる
+  const sharing = stateDirSharedWith(base, plistDir, configPath, stateDir);
+  if (sharing !== undefined) {
+    return fail(
+      `stateDir が、別の設定（${sharing}）の daemon と同じ。同じ state を 2 つの daemon が使うと壊れるので、何も書かずに止めた。設定ごとに、別の stateDir にする`,
+      1,
+    );
+  }
   // 生成先のディレクトリが、リンクだと、辿って別の場所へ書いてしまう。リンク・通常のディレクトリでないものは、書かずに止める
   const badDirs = [base, binDir, logsDir, plistDir].filter((d) => {
     const st = lstatOrUndefined(d);

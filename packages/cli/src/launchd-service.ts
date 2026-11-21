@@ -30,6 +30,7 @@ import type { CommandResult } from "./commands.js";
 import type { RunResult } from "./launchd.js";
 import {
   appBundlePath,
+  canonicalPath,
   type ConfigChecker,
   configProblem,
   DEFAULT_PATH,
@@ -40,7 +41,9 @@ import {
   legacyPlistText,
   legacyScriptPath,
   maskValues,
+  OTHER_PLIST,
   plainPath,
+  plistConfigOf,
   plistText,
   REVERSE_DOMAIN,
   runDaemonScript,
@@ -70,8 +73,6 @@ export interface LaunchdServiceDeps {
 export const SERVICE_SUBCOMMANDS = ["apply", "status", "restart", "stop", "uninstall"] as const;
 type Sub = (typeof SERVICE_SUBCOMMANDS)[number];
 
-/** init が生成する、別名の設定（--config）の daemon の plist のファイル名。`[<org>.]touryou.daemon-<8 文字>.plist`。 */
-const OTHER_PLIST = /^((?:[a-z0-9-]+\.)*touryou\.daemon-([0-9a-f]{8}))\.plist$/;
 /** 既定・別名のどちらも含む、touryou の daemon の plist のファイル名。 */
 const DAEMON_PLIST = /^(?:[a-z0-9-]+\.)*touryou\.daemon(?:-[0-9a-f]{8})?\.plist$/;
 
@@ -756,10 +757,7 @@ export async function runLaunchdService(
       const m = OTHER_PLIST.exec(n);
       if (m === null) continue;
       const text = readOr(join(plistDir, n));
-      const cfg =
-        text === undefined
-          ? undefined
-          : /<string>--config<\/string>\s*<string>([^<]*)<\/string>/.exec(text)?.[1];
+      const cfg = text === undefined ? undefined : plistConfigOf(text);
       const stateDir = cfg === undefined || !usableConfigPath(cfg) ? undefined : stateDirOf(cfg);
       if (cfg === undefined || stateDir === undefined || !plainPath(stateDir)) {
         return fail(
@@ -777,7 +775,11 @@ export async function runLaunchdService(
       };
     }
   } else {
-    const configPath = configArg ?? join(base, "config.json");
+    // init と同じに、実パスにそろえる（リンク経由の指定でも、init が作った plist・Label と同じ daemon を指す）
+    const configPath = canonicalPath(configArg ?? join(base, "config.json"));
+    if (!usableConfigPath(configPath)) {
+      return fail("--config の実パス（リンクを解決したもの）が、使えない文字を含む");
+    }
     const stateDir = stateDirOf(configPath);
     if (stateDir === undefined || !plainPath(stateDir)) {
       return fail(

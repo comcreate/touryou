@@ -6,6 +6,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -237,6 +238,48 @@ describe("複数の daemon（--config）", () => {
     );
     expect(r.exitCode).toBe(1);
     expect(clock).toBeLessThanOrEqual(waitMs + 2000);
+  });
+
+  it("リンク経由の --config でも、実パスの設定と同じ daemon（同じ Label・plist）になる", async () => {
+    const w = makeWorld();
+    const linkToOther = join(w.base, "link-other.json");
+    const linkToDefault = join(w.base, "link-default.json");
+    symlinkSync(w.otherConfig, linkToOther);
+    symlinkSync(w.defaultConfig, linkToDefault);
+    expect(daemonNameOf(w.base, linkToOther)).toBe(daemonNameOf(w.base, w.otherConfig));
+    expect(daemonNameOf(w.base, linkToDefault)).toBe("daemon");
+    const r = await bin(w, ["init", "--config", linkToOther]);
+    expect(r.stderr).toBe("");
+    expect(r.exitCode).toBe(0);
+    expect(readdirSync(join(w.base, "launchd"))).toEqual([`${w.otherLabel}.plist`]);
+    // plist には、実パスの設定が書かれる。リンク経由でも、同じ daemon を apply・stop できる
+    expect(readFileSync(join(w.base, "launchd", `${w.otherLabel}.plist`), "utf8")).toContain(
+      `<string>${w.otherConfig}</string>`,
+    );
+    expect((await bin(w, ["apply", "--yes", "--config", linkToOther])).exitCode).toBe(0);
+    expect([...w.loaded]).toEqual([w.otherLabel]);
+    expect((await bin(w, ["stop", "--config", w.otherConfig])).exitCode).toBe(0);
+    expect(w.loaded.size).toBe(0);
+  });
+
+  it("別の設定と同じ stateDir を使う設定は、plist を作らずに止める", async () => {
+    const w = makeWorld();
+    expect((await bin(w, ["init"])).exitCode).toBe(0);
+    const dup = join(w.base, "dup", "config.json");
+    mkdirSync(join(w.base, "dup"), { recursive: true });
+    // 既定の設定の stateDir（<base>/state）を、リンク経由の別の書き方で指す
+    const stateLink = join(w.base, "state-link");
+    symlinkSync(join(w.base, "state"), stateLink);
+    writeFileSync(dup, JSON.stringify({ stateDir: stateLink }), { mode: 0o600 });
+    const r = await bin(w, ["init", "--config", dup]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("stateDir が、別の設定");
+    expect(readdirSync(join(w.base, "launchd"))).toEqual(["touryou.daemon.plist"]);
+    // init 済みの別名の設定とも、重ならない
+    expect((await bin(w, ["init", "--config", w.otherConfig])).exitCode).toBe(0);
+    const dup2 = join(w.base, "dup", "config2.json");
+    writeFileSync(dup2, JSON.stringify({ stateDir: w.states[w.otherLabel] }), { mode: 0o600 });
+    expect((await bin(w, ["init", "--config", dup2])).exitCode).toBe(1);
   });
 
   it("別名の daemon の apply・uninstall は、既定と共有する古い形の起動スクリプトを消さない", async () => {
