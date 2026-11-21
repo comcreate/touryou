@@ -293,7 +293,7 @@ test("版が変わり、常駐しているとき: はっきり「はい」のと
     /\*\*はっきり「はい」のときだけ\*\* `env -u BASH_ENV -u ENV bash "\$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/install-runtime\.sh" --restart-daemon`/,
   );
   assert.match(up, /それ以外（「いいえ」・あいまい・質問）は、何もせずに、版を上げずに終わる/);
-  assert.match(up, /動いている子のセッションは止まります/);
+  assert.match(up, /動いている子のセッションは止まりません/);
   const after = /## 版を上げたあと\n([\s\S]*?)\n## /.exec(body)?.[1] ?? "";
   assert.match(after, /古い版のまま動き続ける/);
   assert.match(after, /`\/mcp` で `plugin:touryou:node` を選んで Reconnect する/);

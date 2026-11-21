@@ -216,14 +216,32 @@ describe("つなぎ直し（POST /v1/bind。コードなし）", () => {
     expect((await r.rebind({ nodeId: "zzz" })).status).toBe(401);
   });
 
-  it("失敗は、失敗の数に数えるが、受信箱への「紐付けをやり直して」（onBindInvalid）は出さない", async () => {
+  it("失敗は、失敗の数に数え、作業ツリーの確認を通っていれば、受信箱への「紐付けをやり直して」（onBindInvalid）を出す（#186）", async () => {
     const r = await rig();
     await r.first();
-    await r.rebind({ sessionId: "s-other" });
+    const res = await r.rebind({ sessionId: "s-other" });
+    // 応答の文・状態は、これまでと同じ
+    expect(res.status).toBe(401);
+    expect(res.json.error?.cause).toBe("bind コードが無効");
     expect(r.logs).toContainEqual(
       expect.objectContaining({ event: "bindFailed", reason: "rebindRejected" }),
     );
+    expect(r.invalid()).toBe(1);
+  });
+
+  it("作業ツリーの確認を通らない（cwd が別の場所）つなぎ直しの失敗では、受信箱に出さない", async () => {
+    const r = await rig();
+    await r.first();
+    expect((await r.rebind({ cwd: "/home/x/repo" })).status).toBe(401);
     expect(r.invalid()).toBe(0);
+  });
+
+  it("トークンがなくてつなぎ直せないときも、受信箱に出す（#186）", async () => {
+    const r = await rig();
+    await r.first();
+    r.credentials.revokeNode("a");
+    expect((await r.rebind()).status).toBe(401);
+    expect(r.invalid()).toBe(1);
   });
 
   it("Desktop の木（rebindOk なし）は、コードなしの bind を必ず断る", async () => {

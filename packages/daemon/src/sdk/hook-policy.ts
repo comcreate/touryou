@@ -25,11 +25,12 @@ import {
   evaluateScope,
   isPathUnder,
   ownMcpToolOf,
+  PLUGIN_NAME,
   type Scope,
   type ScopeViolationReason,
   type SearchStage,
 } from "@touryou/core";
-import { commandEntryProblem } from "./child-permissions.js";
+import { commandEntryProblem, NODE_MCP_SERVER } from "./child-permissions.js";
 import { diagnoseReadOnlySearch } from "./read-only-search.js";
 
 /** パスの実パス化（書き込み先の判定用）。解決できなければ reject する。 */
@@ -739,10 +740,13 @@ const deny = (reason: ScopeViolationReason, subject: string): Denied => ({
   reason: `作業範囲の外の操作です（${reason}: ${subject}）。範囲の拡張が必要なら、親へ拡張要求を出してください。`,
 });
 
+/** 紐付けの前（外れたとき）の子が使える、紐付けの MCP の道具の名前（plugin から入れた形。`packages/mcp` の `CHILD_BIND_TOOL`）。 */
+export const CHILD_BIND_MCP_TOOL = `mcp__plugin_${PLUGIN_NAME}_${NODE_MCP_SERVER}__child_bind`;
+
 const denyUnknown = (tool: string): ToolDecision => ({
   allow: false,
   unknownTool: tool,
-  reason: `ツール ${tool} は、このノードでは使えない。自分で原因を探したり、別の手を試したりしない。\n- touryou の道具（report_progress など）が使えるなら、この拒否の文を親に知らせて待つ。\n- 使えない（紐付けが外れている）なら、画面を見ている人に「親の統合セッションに、この子の紐付けの出し直し（node_bindCode）を頼んでください」と頼んで待つ。`,
+  reason: `ツール ${tool} は、このノードでは使えない。自分で原因を探したり、別の手を試したりしない。\n- touryou の道具（report_progress など）が使えるなら、この拒否の文を親に知らせて待つ。\n- 使えない（紐付けが外れている）なら、${CHILD_BIND_MCP_TOOL} を引数なしで 1 回だけ呼ぶ。つなぎ直せなければ、daemon が親の受信箱に「紐付けをやり直して」を出す。そのあとは、親が紐付けを出し直す（node_bindCode）まで待つ。`,
 });
 
 /** scope の場所（writable・forbidden）を実パスにする。解決できない writable は落とし、forbidden は絶対パスのまま残す。 */

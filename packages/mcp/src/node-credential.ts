@@ -16,10 +16,18 @@ export interface NodeCredentialStore {
   set(c: NodeCredential): void;
   clear(): void;
   onChange(fn: (c: NodeCredential | undefined) => void): () => void;
+  /**
+   * daemon が、この token を拒んだ（401 `unauthenticated`）。復旧（`setRecover`）が通れば、入れ物は新しい資格情報に替わり、
+   * 真を返す。通らなければ、入れ物を空にして偽を返す。すでに別の資格情報に替わっていれば、何もせず真を返す。
+   */
+  reject(token: string): Promise<boolean>;
+  /** `reject` で試す復旧（コードなしの結び直し）を登録する。復旧が通ったら、自分で `set` する。 */
+  setRecover(fn: () => Promise<boolean>): void;
 }
 
 export function createNodeCredentialStore(): NodeCredentialStore {
   let current: NodeCredential | undefined;
+  let recover: (() => Promise<boolean>) | undefined;
   const listeners = new Set<(c: NodeCredential | undefined) => void>();
   const emit = (): void => {
     for (const fn of listeners) {
@@ -44,6 +52,22 @@ export function createNodeCredentialStore(): NodeCredentialStore {
     onChange(fn) {
       listeners.add(fn);
       return () => listeners.delete(fn);
+    },
+    async reject(token) {
+      if (current === undefined) return false;
+      if (current.token !== token) return true;
+      let recovered = false;
+      try {
+        recovered = (await recover?.()) === true;
+      } catch {
+        // 復旧の失敗は、空にする側へ落とす
+      }
+      if (recovered) return true;
+      if (current?.token === token) this.clear();
+      return false;
+    },
+    setRecover(fn) {
+      recover = fn;
     },
   };
 }
