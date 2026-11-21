@@ -25,11 +25,7 @@ import {
 import { ID_PATTERN } from "./ids.js";
 import { isResolvedByHuman } from "./inbox.js";
 import { isStallSummary, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
-import {
-  copyInboxMessage,
-  type InboxMessage,
-  NON_ACTIVITY_NOTICE_KEYS,
-} from "./inbox-messages.js";
+import { copyInboxMessage, type InboxMessage, NON_ACTIVITY_NOTICE_KEYS } from "./inbox-messages.js";
 import type { NodeRole, NodeState } from "./index.js";
 
 export const UI_TEXT_MAX = 200;

@@ -218,7 +218,10 @@ describe("Stop（番の終わりの未読の確かめ）", () => {
 
   it("紐付けの期限の前置き（kind: tokenIdleSoon）だけを抱えた子には、受信箱を読むよう促さない。ふつうの指示があれば、その数だけ促す（#189）", () => {
     const { log, add } = rig();
-    add({ type: "node.instructed", payload: { nodeId: "a", text: "前置き", kind: "tokenIdleSoon" } });
+    add({
+      type: "node.instructed",
+      payload: { nodeId: "a", text: "前置き", kind: "tokenIdleSoon" },
+    });
     expect(pendingForChild(log.state(), "a")).toBe(0);
     expect(stopOutcome(log.state(), "a", false)).toEqual({ decision: "allow" });
     add({ type: "node.instructed", payload: { nodeId: "a", text: "x" } });
