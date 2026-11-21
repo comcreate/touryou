@@ -385,3 +385,21 @@ test("start.md: /setup の直後は、Reconnect（または起動し直し）を
   assert.match(start, /自動でつながる/);
   assert.match(start, /Reconnect/);
 });
+
+test("setup.md: 別名の daemon だけが常駐のとき（LAUNCHD_OTHERS: present）は、手順 3 を飛ばして service を案内する（#165）", () => {
+  const line = body.split("\n").find((l) => l.includes("`RESULT: already`"));
+  assert.ok(line, "RESULT: already の行がある");
+  assert.match(line, /`LAUNCHD: absent` でも `LAUNCHD_OTHERS: present`/);
+  assert.match(line, /手順 3 も飛ばす/);
+  assert.match(line, /\/touryou:service/);
+});
+
+test("service.md: uninstall-all は「合計で最大 2 回」で、「1 回だけ」と矛盾しない（#165）", () => {
+  const service = readFileSync(join(root, "plugin", "commands", "service.md"), "utf8");
+  assert.match(service, /合計で最大 2 回/);
+  assert.match(service, /uninstall --yes --others`（もう 1 回）/);
+  // uninstall-all の手順の行に、「1 回だけ」が残っていない
+  const lines = service.split("\n").filter((l) => /uninstall --yes --others/.test(l));
+  assert.ok(lines.length > 0);
+  for (const l of lines) assert.doesNotMatch(l, /1 回だけ/);
+});

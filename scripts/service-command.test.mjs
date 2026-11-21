@@ -79,6 +79,18 @@ test("status・restart: 読み込まれていないときは restart を案内�
   assert.match(item("restart"), /読み込み済みのときだけ使える/);
 });
 
+test("uninstall-all: 先に status --others で件数を数え、定型文（はいの前）に、分けた daemon の件数と承認が最大 2 回出ることを入れる", () => {
+  const u = item("uninstall-all");
+  assert.match(u, /launchd status --others` で確かめ、出力から件数 N を数える/);
+  const formula = /定型文（まとめて外す）:([^\n]*)/.exec(u)?.[1] ?? "";
+  assert.match(formula, /ほかのリポジトリ用に分けた daemon（N 件）も止めて外します/);
+  assert.match(formula, /承認の確認が最大 2 回出ます/);
+  assert.ok(u.indexOf("launchd status --others") < u.indexOf("定型文（まとめて外す）"));
+  assert.ok(u.indexOf("定型文（まとめて外す）") < u.indexOf("launchd uninstall --yes"));
+  assert.match(u, /N が 1 以上のときだけ、続けて/);
+  assert.doesNotMatch(body, /別名の daemon/);
+});
+
 test("uninstall-all: 「はい」のあと 1 回だけ uninstall --yes。plugin・$HOME/.touryou は会話で消さず、/exit のあとのブロックとして出す", () => {
   const u = item("uninstall-all");
   assert.match(
@@ -87,7 +99,7 @@ test("uninstall-all: 「はい」のあと 1 回だけ uninstall --yes。plugin�
   );
   assert.match(
     u,
-    /\*\*1 回だけ\*\*実行する: `"\$HOME\/\.touryou\/current\/bin\/touryou" launchd uninstall --yes`/,
+    /実行するのは\*\*合計で最大 2 回\*\*: まず `"\$HOME\/\.touryou\/current\/bin\/touryou" launchd uninstall --yes`（1 回）/,
   );
   assert.ok(
     u.indexOf("定型文（まとめて外す）") < u.indexOf("launchd uninstall --yes"),

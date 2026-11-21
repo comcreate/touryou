@@ -184,6 +184,19 @@ daemon の窓口が、状態を見るための HTML 画面を配る。**状態�
   4. 手元で Playwright の試験を流し、CSP の違反がないことを確かめる。
   5. 大きさ（`node scripts/ui-graph-bundle.mjs` が出す最小化・gzip）を PR に書く。
 
+## 複数の daemon（設定ごと。#165）
+
+`touryou ui` は、開く daemon の設定を、次の順で選びます。
+
+1. `--config <絶対パス>`（絶対パスでなければ終了コード 2）
+2. 環境変数 `TOURYOU_DAEMON_CONFIG`（空は無視）
+3. 実行した場所（cwd）が、候補の設定の `repoRoot` か `worktreeRoot` の中にあるもの（いちばん深い root）。`repoRoot` の名前の前半だけが同じ別のフォルダは、中として数えません。候補は、既定の設定（`<H>/.touryou/config.json`）と、`<H>/Library/LaunchAgents` に置いた（常駐にした）別名の plist（`--config` の値）の設定です（`--others`・版上げと同じ集合。init しただけの plist は候補にしません。元の plist が消えて LaunchAgents にだけ残るものは候補にします）。`touryou ui --list` は、これに `TOURYOU_DAEMON_CONFIG` の設定も加えて並べます。1・2 で設定が決まるときは、使わない候補は読みません
+4. 既定の設定
+
+- 開いたときの標準出力の先頭に、`開いた設定: <設定のパス>` を出します（環境変数・`--config` が優先されたときも、どの設定を開いたかが分かります）。トークン・チケット・URL は、これまでどおり出しません。
+- `touryou ui --list` は、選べる設定を `<パス>（repoRoot: …・worktreeRoot: …）` の形で出します（トークン・ポートは出さない）。候補は、既定の設定・別名の plist の設定・`TOURYOU_DAEMON_CONFIG` の設定（`init` していないものも。重ねては出さない）です。
+- `HOME` が空のときは、`<H>` が決まらないので、既定の設定と別名の plist は候補に入りません。`--list` は、環境変数の設定があればそれだけを出し、なければ理由を出して終了コード 1 で止まります。環境変数・`--config` の設定なら、`HOME` が空でも開けます。
+
 ## 言語（日本語・英語。#140）
 
 状態画面と、画面に出る知らせの言語を、日本語と英語で切り替えられる（v0.1.5）。設定の窓の「言語」で選ぶと、その場で画面・関係図・知らせの文が切り替わり、html の `lang` も合わせる（属性の書き換えは使わず、`document.documentElement.lang` のプロパティで入れる）。

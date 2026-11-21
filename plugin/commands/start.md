@@ -14,6 +14,7 @@ TouRyou を使えるようにします。リポジトリやファイルの場所
 3. 次の起動の手順を、人間に示す（別の端末で行う。起動の順序は daemon → 統合セッション）。トークンは、チャットに貼らせない。
    - `"$HOME/.touryou/current/bin/touryou-daemon" --config "$HOME/.touryou/config.json"`（窓口の URL が出る）
    （launchd を使っていれば、daemon は自動で動いている。子用の HTTP の `touryou-mcp` は外した。子も plugin の stdio の mcp を使う）
+   - **複数の daemon（設定ごと。#165）**: root ごとに daemon を分けているときは、**どの設定の daemon を起動するかを、人間に聞く**（`"$HOME/.touryou/current/bin/touryou" ui --list` で、既定の設定と、ほかのリポジトリ用に分けた daemon の設定の一覧が出る）。選んだ設定で、`"$HOME/.touryou/current/bin/touryou-daemon" --config <設定ファイルの絶対パス>` を示す。常駐なら、`/touryou:service` で対象を選ぶ（`touryou launchd status --config <設定>`）。統合セッションが、その daemon につながるように、統合セッション（`claude`）を起動する端末で `export TOURYOU_DAEMON_CONFIG=<設定ファイルの絶対パス>` してから起動する（`touryou-mcp --stdio` が、その設定の `stateDir` の `root-token`・`port` を読む）。設定ごとに、stateDir・ポートは別にする。
    - 統合セッションの接続は、plugin の `.mcp.json` が済ませる（サーバー名 `node`・**種類 stdio**。Claude Code が `touryou-mcp --stdio` を起動し、`touryou-mcp` が `$HOME/.touryou/state` の `root-token`・`port` を自分で読む。MCP の設定を、手で足さない。環境変数は要らない）。**トークンの値は、設定ファイルに書かない・チャットに貼らせない**。配布物がまだない・daemon が動いていないあいだは、plugin の中継（`scripts/touryou-mcp-shim.sh`）が落ちずに待ち、整ったら自動で `touryou-mcp --stdio` に引き継ぐ。daemon が途中で止まったあとなどで node が failed なら、`/mcp` で `node` を Reconnect する（stdio のサーバーは、失敗したまま自動では起動し直さない）。
    起動を、人間が済ませたら、手順 1 をやり直す。
 4. `mcp__node__tree_list` で、木を見せる。`self` が「あなた」の行が、自分。続けて、`integrator` の skill に従って作業する。

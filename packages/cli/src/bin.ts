@@ -50,7 +50,9 @@ export interface BinDeps {
   /** `touryou hook` のフック入力。読み取りの上限で切れたら、`truncated: true`（途中までの `text`）。 */
   readonly readHookStdin?: () => Promise<{ readonly text: string; readonly truncated: boolean }>;
   /** `touryou ui` の差し替え（試験用）。 */
-  readonly ui?: Partial<Pick<UiDeps, "readFile" | "verifierFor" | "openUrl">>;
+  readonly ui?: Partial<Pick<UiDeps, "readFile" | "verifierFor" | "openUrl" | "readDir">>;
+  /** 実行したディレクトリ（試験用。既定は `process.cwd()`）。`touryou ui` が、複数の daemon から選ぶのに使う。 */
+  readonly cwd?: string | (() => string);
   /** 待ち（daemon の再起動の待ちなど。試験で差し替える）。 */
   readonly sleep?: (ms: number) => Promise<void>;
   /** `touryou launchd apply|status|…` の外部コマンド・窓口の確認（試験で差し替える）。 */
@@ -229,6 +231,9 @@ export async function runBin(argv: readonly string[], deps: BinDeps): Promise<Co
     // 状態画面を開く。human-token を自分で読み、チケットにして開く（環境変数の TOURYOU_HUMAN_TOKEN は使わない）
     return runUi(argv.slice(1), {
       env: deps.env,
+      // cwd は、選びで必要になるまで取らない（削除済みの cwd でも、--config・環境変数で決まるなら開ける）
+      cwd: deps.cwd ?? (() => process.cwd()),
+      ...(deps.ui?.readDir === undefined ? {} : { readDir: deps.ui.readDir }),
       ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
       ...(deps.ui?.readFile === undefined ? {} : { readFile: deps.ui.readFile }),
       ...(deps.ui?.verifierFor === undefined ? {} : { verifierFor: deps.ui.verifierFor }),

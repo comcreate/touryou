@@ -5,7 +5,7 @@ allowed-tools: Read
 
 TouRyou の配布物（Node 同梱。daemon・`touryou-mcp`・`touryou`）を、この Mac に置きます。**利用者が、自分で実行するコマンド**です。置く場所は `$HOME` の下の `.touryou` です（実際のパスは、この文書に書きません）。
 
-最初に、利用者に伝える（定型文）: 「これから、約 3 回、コマンドの承認の確認が出ます（本体の導入・設定・常駐の登録で 1 回ずつ。常駐にしないときは 2 回。版を上げるときは 1〜2 回）。1 回ごとに、画面のコマンドを読んで、問題なければ「1. Yes」で承認してください。これより多く出たときは、その画面のコマンドを控えて、COMCREATE に知らせてください。」
+最初に、利用者に伝える（定型文）: 「これから、約 3 回、コマンドの承認の確認が出ます（本体の導入・設定・常駐の登録で 1 回ずつ。常駐にしないときは 2 回。版を上げるときは 1〜2 回。常駐の版上げで、ほかのリポジトリ用に分けた daemon の件数を数えるときは、もう 1 回）。1 回ごとに、画面のコマンドを読んで、問題なければ「1. Yes」で承認してください。これより多く出たときは、その画面のコマンドを控えて、COMCREATE に知らせてください。」
 
 Claude Code の auto モード（権限の自動判定）で実行しているときは、承認の確認はほとんど出ない見込み（推測）。自動判定で止められたときは、出た文面をそのまま利用者に伝え、利用者に手で許可してもらう（書き換えて実行し直さない）。**チャットでの「はい」（常駐の同意など。`--yes`・`--restart-daemon` を付ける前の定型文）は、auto モードでも必ず取る**（権限の自動判定とは別のもの）。
 
@@ -14,7 +14,7 @@ Claude Code の auto モード（権限の自動判定）で実行している�
 - **この文書に書かれたコマンドを、書かれたとおりに実行する**。引数・取得先・書き込み先を、変えない。ほかのコマンドは、実行しない。**コマンドが失敗したら、書き換えて実行し直さずに止まり**、出力をそのまま人に伝える（書き換えが安全に見えても、文書の外の動きになる）。
 - **途中で中断したときは、そのまま `/setup` を最初からやり直してよい**（導入の script は、照合が通った取得済みのファイルを使い直し、途中の展開は片付けてから置き直す）。
 - このコマンドは、`Read` 以外を、事前に許可していない。**コマンドごとに、承認の確認が出る**（正常）。
-- **この `/setup` の中で走らせる Bash は、手順 1・手順 2・手順 3-A の 2 の 3 つだけ**（版が変わり常駐しているときは、手順 1 を引数なしで 1 回〔`RESULT: need-restart-consent`・終了コード 3〕、チャットで「はい」のあとに `--restart-daemon` つきで 1 回、の 2 回。手順 2・3 は飛ばす。同意を、終了コード 3 の前に先回りして取らない）。それぞれを、**書かれた 1 行のまま、1 回の Bash で**走らせる（`&&` の前後を別の Bash に分けない・つなぎ足さない）。承認の確認の回数は、Bash の数と同じにする。
+- **この `/setup` の中で走らせる Bash は、手順 1・手順 2・手順 3-A の 2 の 3 つだけ**（版が変わり常駐しているときは、手順 1 を引数なしで 1 回〔`RESULT: need-restart-consent`・終了コード 3〕、チャットで「はい」のあとに `--restart-daemon` つきで 1 回、の 2 回。手順 2・3 は飛ばす。同意を、終了コード 3 の前に先回りして取らない。**例外として、終了コード 3 のあと・問いの前に、読み取りだけの `"$HOME/.touryou/current/bin/touryou" launchd status --others` を 1 回だけ走らせてよい**〔ほかのリポジトリ用に分けた daemon の件数 N を、出力から数えるため。承認の確認が 1 回増える。コマンドが失敗した・数えられないときは、N を分からないものとして扱い、書き換えて実行し直さない〕）。それぞれを、**書かれた 1 行のまま、1 回の Bash で**走らせる（`&&` の前後を別の Bash に分けない・つなぎ足さない）。承認の確認の回数は、Bash の数と同じにする。
 - **確かめのための別のコマンドは、走らせない**。`ls`・`cat`・`test`・`stat`・`readlink`・`which`・`git -C … rev-parse`・`launchctl`・`uname`・`echo` などで、置き場・パス・リポジトリ・常駐を前もって・あとから確かめない。確かめは、**script とコマンドの出力（`RESULT:`・`CONFIG:`・`LAUNCHD:`・`OK`・`launchd apply` の状態の表示）と、`Read`**（事前に許可されていて、確認が出ない）で行う。ただし、`root-token` などのトークンのファイルは、Read でも読まない（下の決まり）。出力が長くて切れたときも、読み直すためのコマンドは走らせない（出力の最後の行で分ける）。
 - 手順 2 のパス（ホームの下か・git のリポジトリか・`config.json` がないか）は、手順 2 のコマンドの中で確かめる。**前もって別のコマンドで確かめない**（`OK` が出なければ止まる）。
 - **この `/setup` の中で、node の道具（`whoami`・`tree_list` など）・`/touryou:service`・`/touryou:start` の中身を、代わりに実行しない**（それぞれに承認の確認が出る）。接続の確かめは、最後に、利用者に `/touryou:start` を打ってもらう。
@@ -34,9 +34,9 @@ Claude Code の auto モード（権限の自動判定）で実行している�
 1. **本体の導入（script。1 コマンド）**: `env -u BASH_ENV -u ENV bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-runtime.sh"`。`${CLAUDE_PLUGIN_ROOT}` は、この文書の中で、plugin のディレクトリの絶対パスに置き換わっている（Bash の環境変数には入らないので、置き換わった文字列のまま実行する）。置き換わっていない（`${CLAUDE_PLUGIN_ROOT}` の文字のまま）ときは、止まる。**このコマンドは、タイムアウトを長め（最大 10 分）にして実行する**（初めて・版が変わったときは、約 41MB の取得〔展開後は約 130MB〕を含む）。
    `env -u BASH_ENV -u ENV` は、非対話の bash が script の前に読むファイル（環境変数 `BASH_ENV`・`ENV` が指すもの）を読ませないため（script の頭では、環境から取り込まれた関数を消し、`PATH` を OS の既定にする）。承認の画面では、`env -u BASH_ENV -u ENV bash` と、plugin の中の `scripts/install-runtime.sh` だけで、引数がない（`--restart-daemon` は、下の「版が変わり、常駐しているとき」だけ）ことを確かめてもらう。
    script がすること（順に。どこで失敗しても、`current` は古いまま。理由と次にすることを出して、0 以外で終わる）: 対象の確認（`Darwin arm64`・`git`〔Xcode の Command Line Tools〕）→ plugin の中の `checksums.json`・`plugin.json` から版・名前・sha256 を読み、版の一致・`repository` の固定値・形を確かめる → 同じ版が入って動くなら、何もせずに終わる → plugin の版が、いまの本体より古ければ、何も変えずに止まる（古い版に入れ替えない。常駐の有無で変えない。版の大小が比べられない形は、止めずに先へ進む）→ `curl`（https だけ）で `$HOME/.touryou/work` に取得 → sha256 を `checksums.json` と照合（**通るまで、展開も実行もしない**。合わなければ、取得したものを消す）→ quarantine の確かめ → `tar -t` の検査（先頭が `touryou-darwin-arm64/` だけ・絶対パス・`..` を断る）→ 一時ディレクトリに展開し、外を指すシンボリックリンク・quarantine を断る → `$HOME/.touryou/v<版>` に移す → 新しい版の `touryou-daemon --help` が動くことを確かめる → `current` を付け替える（新しいリンクを作ってから入れ替える）。
-   出力の最後の行（`RESULT: …`）で分ける。その前の `CONFIG:`・`LAUNCHD:` の行は、設定・常駐の有無（成功のときだけ出る）:
+   出力の最後の行（`RESULT: …`）で分ける。その前の `CONFIG:`・`LAUNCHD:` の行は、設定・常駐の有無（成功のときだけ出る。ほかのリポジトリ用に分けた daemon（2 つ目以降）があるときだけ、`LAUNCHD_OTHERS: present` も出る）:
    - `RESULT: installed`（初めて）: 手順 2 へ。
-   - `RESULT: already`（同じ版がすでに入っている）・`RESULT: upgraded`（版を上げた。常駐なし）・`RESULT: upgraded-restarted`（版を上げ、常駐の daemon を起動し直した）: `CONFIG: present` なら、手順 2 を飛ばす。`LAUNCHD: present` なら、手順 3 も飛ばして、下の「版を上げたあと」へ。`upgraded` で daemon を手で動かしているなら、止めてから起動し直すよう伝える。
+   - `RESULT: already`（同じ版がすでに入っている）・`RESULT: upgraded`（版を上げた。常駐なし）・`RESULT: upgraded-restarted`（版を上げ、常駐の daemon を起動し直した）: `CONFIG: present` なら、手順 2 を飛ばす。`LAUNCHD: present` なら、手順 3 も飛ばして、下の「版を上げたあと」へ。**`LAUNCHD: absent` でも `LAUNCHD_OTHERS: present`（ほかのリポジトリ用に分けた daemon だけが常駐している）なら、手順 3 も飛ばす**（手順 3 は 2 つ目の既定の daemon を作ってしまう）。分けた daemon の確認・起動し直し・止める・外すは `/touryou:service` と伝え、下の「版を上げたあと」へ。`upgraded` で daemon を手で動かしているなら、止めてから起動し直すよう伝える。
    - `RESULT: need-restart-consent`（終了コード 3。版が変わり、常駐している）: 何も変わっていない。下の「版が変わり、常駐しているとき」の問いを出す。
    - `RESULT: plugin-older`（終了コード 4。plugin が、いまの本体より古い）: 何も変わっていない。本体を古い版に入れ替えず、手順 2 以降にも進まず、止まる。下の定型文（plugin が古い）を伝える。常駐しているときも同じで、同意は聞かない。
    - `RESULT: failed`（終了コード 1・2）: 止まる。出力の「止めました」「次にすること」を、そのまま伝える。
@@ -71,6 +71,7 @@ Claude Code の auto モード（権限の自動判定）で実行している�
    定型文: 「次のコマンドを、別のターミナルで実行してください。」
    定型文（つながるのを待つ。3-A・3-B のどちらでも）: 「この会話の node は、10 秒ほどで自動でつながります。つながらなければ、/mcp で node を選んで Reconnect してください（または Claude Code を起動し直してください）。」
    デスクトップアプリ（普通のチャット・Cowork〔このコンピュータ〕）でも使うなら、続けて `/touryou:desktop` で拡張機能を入れられる、と 1 行だけ伝える（このコマンドでは入れない）。
+   **ほかのリポジトリ用に分けた daemon（2 つ目以降。任意。root ごとに daemon を分けるとき。#165）**: 利用者が、別のリポジトリ用に daemon を分けたいと言ったときだけ、案内する（**この `/setup` の中では実行しない**。上の Bash の数を増やさない。設定ファイル・`stateDir`・ポートは、1 つ目と別にする）。手順: ① 2 つ目の設定ファイル（`<設定>`。絶対パスで、1 つ目と別の `stateDir`・`repoRoot`・`worktreeRoot`）を、利用者が `docs/config.md` のとおり作る（自分で書き換えない）。② 常駐にするなら、同意を取ってから、`"$HOME/.touryou/current/bin/touryou" launchd init --config <設定> && "$HOME/.touryou/current/bin/touryou" launchd apply --yes --config <設定>`（Label は `touryou.daemon-<8 文字>`。1 つ目の常駐は、そのまま）。手で起動するなら、`"$HOME/.touryou/current/bin/touryou-daemon" --config <設定>`。③ その daemon につなぐ統合セッションは、起動する端末で `export TOURYOU_DAEMON_CONFIG=<設定>` してから `claude` を起動する。以後の確認・起動し直し・止める・外すは、`/touryou:service`（対象を `--config <設定>` で選ぶ）。詳しくは `docs/launchd.md` の「複数の daemon」。
 
 ## CLI の子と plugin の置き場
 
@@ -139,11 +140,11 @@ CLI の子は、親のセッション（統合）が Bash で `claude` のコマ
 
 plugin を新しい版にしたあと（`claude plugin marketplace update touryou` のあと `claude plugin update touryou@touryou --scope user`。セッションの始まりに「本体と plugin の版が違います」と出たときなど）は、この `/setup` を、もう一度実行する。plugin のほうが本体より古いとき（`RESULT: plugin-older`）は、常駐していても、この問いを出さずに、手順 1 の定型文（plugin が古い）を伝えて止まる。常駐（launchd の plist がある）なら、手順 1 の script は、何も変えずに `RESULT: need-restart-consent`（終了コード 3）で終わる。そのときは、次の定型文で尋ねる。
 
-定型文: 「常駐している daemon を、いったん止めて、新しい版に入れ替えます。入れ替えたあと、常駐の設定のまま（ログイン時に自動で動くまま）起動し直します。動いている子のセッションは止まりません（daemon が戻るまでの間は、子の道具が届かないことがあります）。よいですか（はい／いいえ）」
+定型文: 「常駐している daemon を、いったん止めて、新しい版に入れ替えます。入れ替えたあと、常駐の設定のまま（ログイン時に自動で動くまま）起動し直します。{N が 1 以上のときだけ: ほかのリポジトリ用に分けた daemon（N 件）も起動し直します。}動いている子のセッションは止まりません（daemon が戻るまでの間は、子の道具が{N が 1 以上のときだけ: 数十秒}届かないことがあります）。よいですか（はい／いいえ）」（`{…}` は文面に出さない。N は、終了コード 3 のあとに `launchd status --others` の出力から数えた、ほかのリポジトリ用に分けた daemon の件数。0 のときは、その部分を省く。数えられなかったときは、{N が 1 以上のときだけ…} の代わりに「ほかのリポジトリ用に分けた daemon があれば、それも起動し直します。」と「数十秒」を入れる）
 
 **はっきり「はい」のときだけ** `env -u BASH_ENV -u ENV bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-runtime.sh" --restart-daemon` を実行する（タイムアウトは最大 10 分）。この実行の前に、手順 1 の定型文（script を実行する前）を、もう一度言う（1 回目の実行は、取得の前に終わっているため。取得するか・取得済みのものを使い直すかは、この 2 回目で決まる）。それ以外（「いいえ」・あいまい・質問）は、何もせずに、版を上げずに終わる（今の版のまま動き続ける）。
 
-script は、新しい版を置いて `--help` を確かめたあとで、今の版の `touryou launchd init`（今の生成物が、引数なしの init と同じかの確かめ。違えば、止めずに終わる）→ `touryou launchd stop` → `current` の付け替え → 新しい版の `touryou launchd apply --yes` の順に行う。新しい版の `apply` が失敗したら、`current` を前の版に戻して、前の版で `apply --yes` をやり直す。組織の名前つき（`--org`）の常駐は、起動し直さずに止まる（`docs/launchd.md` の手作業の手順で上げる）。
+script は、新しい版を置いて `--help` を確かめたあとで、今の版の `touryou launchd init`（今の生成物が、引数なしの init と同じかの確かめ。違えば、止めずに終わる）→ `touryou launchd stop` → `current` の付け替え → 新しい版の `touryou launchd apply --yes` の順に行う。新しい版の `apply` が失敗したら、`current` を前の版に戻して、前の版で `apply --yes` をやり直す。**ほかのリポジトリ用に分けた daemon（`touryou launchd init --config` で作ったもの。出力に `LAUNCHD_OTHERS: present`）があるときは、登録されたすべてを、同じ順で止めて（`launchd stop --others`）・起動し直す（`launchd apply --yes --others`）**（1 つでも起動しなければ、`current` を前の版に戻す）。同意の問い（上の定型文）は、1 回で、すべての daemon に及ぶ。組織の名前つき（`--org`）の常駐は、起動し直さずに止まる（`docs/launchd.md` の手作業の手順で上げる）。
 
 ## 版を上げたあと
 
