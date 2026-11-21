@@ -32,6 +32,26 @@ export const APP_TEXT = {
     en: "Too long ({n} characters; {max} or fewer)",
   },
   "approval.cancel": { ja: "取り消す", en: "Cancel" },
+  "card.bindExpiredIdle": {
+    ja: "紐付けが切れた（idle: 使わない時間が長かった）",
+    en: "Binding expired (idle: unused for too long)",
+  },
+  "card.bindExpiredAbsolute": {
+    ja: "紐付けが切れた（発行から時間がたった）",
+    en: "Binding expired (too long since it was issued)",
+  },
+  "card.bindExpiredNextCli": {
+    ja: "次の操作: 親が node_bindCode で紐付けのコードを出し直し、子が child_bind を引数なしで呼んで結び直す",
+    en: "Next: the parent issues a new code with node_bindCode, and the child calls child_bind with no arguments to bind again",
+  },
+  "card.bindExpiredNextDesktop": {
+    ja: "次の操作: 親が node_bindCode で紐付けの文面を出し直し、子が新しい文面で、紐付けを最初からやり直す",
+    en: "Next: the parent issues a new binding text with node_bindCode, and the child starts the binding over with the new text",
+  },
+  "card.bindExpiredNextUnknown": {
+    ja: "次の操作: 親が node_bindCode で紐付けを出し直し、子が結び直す",
+    en: "Next: the parent issues a new binding with node_bindCode, and the child binds again",
+  },
   "approval.code": { ja: "確認コード", en: "Confirmation code" },
   "approval.done": { ja: "確認して実行しました（{label}）", en: "Confirmed and ran ({label})" },
   "approval.expires": { ja: "期限", en: "Expires" },

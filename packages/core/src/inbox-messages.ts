@@ -112,12 +112,16 @@ export const INBOX_MESSAGES = {
     en: "Child {node}'s watch (hook) was removed ({detail}). The settings were restored and the child's token was revoked. Decide whether to stop the child or issue node.bindCode again",
   },
   tokenExpiredAbsoluteBind: {
-    ja: "子 {node} のトークンの期限が切れた（発行から時間がたった）。node.bindCode で紐付けのコードを出し直し、子が結び直す",
-    en: "Child {node}'s token expired (too long since it was issued). Issue a new binding code with node.bindCode and have the child bind again",
+    ja: "子 {node} のトークンの期限が切れた（発行から時間がたった）。node_bindCode で紐付けのコードを出し直し、子が結び直す。期限は設定 tokenExpiryMinutes.bindAbsolute（分。既定 1440）で変えられる",
+    en: "Child {node}'s token expired (too long since it was issued). Issue a new binding code with node_bindCode and have the child bind again. The limit can be changed with the setting tokenExpiryMinutes.bindAbsolute (minutes; default 1440)",
   },
   tokenExpiredIdleBind: {
-    ja: "子 {node} のトークンの期限が切れた（使わなかった時間が長い）。node.bindCode で紐付けのコードを出し直し、子が結び直す",
-    en: "Child {node}'s token expired (unused for too long). Issue a new binding code with node.bindCode and have the child bind again",
+    ja: "子 {node} のトークンの期限が切れた（使わなかった時間が長い）。node_bindCode で紐付けのコードを出し直し、子が結び直す。使わなければ切れる期限は設定 tokenExpiryMinutes.bindIdle（分。既定 60）で変えられる",
+    en: "Child {node}'s token expired (unused for too long). Issue a new binding code with node_bindCode and have the child bind again. The unused-time limit can be changed with the setting tokenExpiryMinutes.bindIdle (minutes; default 60)",
+  },
+  tokenIdleSoonBind: {
+    ja: "子 {node} のトークンが、使われないまま、もうすぐ（約 {minutes} 分後）切れる。子が touryou の道具を 1 つ呼べば延びる。切れたら node_bindCode で紐付けを出し直す。使わなければ切れる期限は設定 tokenExpiryMinutes.bindIdle（分。既定 60）で変えられる",
+    en: "Child {node}'s token will expire in about {minutes} min if it stays unused. It is extended when the child calls any touryou tool. If it expires, issue a new binding with node_bindCode. The unused-time limit can be changed with the setting tokenExpiryMinutes.bindIdle (minutes; default 60)",
   },
   tokenExpiredAbsolute: {
     ja: "子 {node} のトークンの期限が切れた（発行から時間がたった）。子を再開するか、作り直す",

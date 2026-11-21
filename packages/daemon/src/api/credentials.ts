@@ -140,6 +140,19 @@ export function createCredentialStore(options: {
     kind: TokenKind,
     issuedAt: string,
   ) => void;
+  /**
+   * 紐付け（`bind`）のトークンが、使われないまま `idleWarnMs` 以内に切れるとき、見回りで 1 回だけ呼ぶ（#189。失効の前の知らせ）。
+   * 同じ「最後に使った時刻」には 1 回だけ（使われて時計が進めば、また出せる）。`lastUsedMs` は、その止まりを見分ける印。
+   * 判断待ち・done・役目の終わりの子と、発行からの絶対の期限が先に来るトークンには呼ばない。
+   */
+  readonly onIdleSoon?: (info: {
+    readonly nodeId: string;
+    readonly issuedAt: string;
+    readonly lastUsedMs: number;
+    readonly remainingMs: number;
+  }) => void;
+  /** `onIdleSoon` を呼ぶ、切れるまでの残り時間（ミリ秒）。省略すると呼ばない。 */
+  readonly idleWarnMs?: number;
 }): CredentialStore {
   if (typeof options.humanToken !== "string" || options.humanToken.length < MIN_HUMAN_TOKEN) {
     throw new RangeError(`人間のトークンは ${MIN_HUMAN_TOKEN} 文字以上が必要`);
@@ -160,6 +173,8 @@ export function createCredentialStore(options: {
       issuedMs: number;
       lastUsedMs: number;
       writtenMs: number;
+      /** 失効の前の知らせを出した、そのときの `lastUsedMs`（メモリだけ。使われて時計が進めば、また出せる）。 */
+      warnedFor?: number;
     }
   >();
   /**
@@ -265,6 +280,24 @@ export function createCredentialStore(options: {
     options.onNodeTokenChanged?.(nodeId);
     options.onExpired?.(nodeId, reason, m.kind, m.issuedAt);
   };
+  /** 失効していない bind のトークンが、使われないまま `idleWarnMs` 以内に切れるなら、1 回だけ知らせる（#189）。 */
+  const warnIdleSoon = (nodeId: string, now: number): void => {
+    const warn = options.idleWarnMs;
+    const m = meta.get(nodeId);
+    if (warn === undefined || options.onIdleSoon === undefined || m === undefined) return;
+    if (m.kind !== "bind" || nodeId === options.exemptNodeId || m.warnedFor === m.lastUsedMs) return;
+    const idleAt = m.lastUsedMs + expiry.bindIdleMs;
+    // 発行からの絶対の期限が先（同時）に来るなら、延ばせないので知らせない（切れたあとの知らせが出る）
+    if (m.issuedMs + expiry.bindAbsoluteMs <= idleAt) return;
+    const remainingMs = idleAt - now;
+    if (remainingMs > warn) return;
+    m.warnedFor = m.lastUsedMs;
+    try {
+      options.onIdleSoon({ nodeId, issuedAt: m.issuedAt, lastUsedMs: m.lastUsedMs, remainingMs });
+    } catch {
+      // 知らせの失敗で、見回り・失効を止めない
+    }
+  };
   /** 最後に使った時刻を更新し、保存先へは 1 ノードにつき LAST_USED_WRITE_MS に 1 回まで書く。 */
   const touch = (nodeId: string, h: string, now: number): void => {
     const m = meta.get(nodeId);
@@ -337,7 +370,10 @@ export function createCredentialStore(options: {
       const out: string[] = [];
       for (const nodeId of [...byNode.keys()]) {
         const reason = expiredReason(nodeId, now);
-        if (reason === undefined) continue;
+        if (reason === undefined) {
+          warnIdleSoon(nodeId, now);
+          continue;
+        }
         expire(nodeId, reason);
         out.push(nodeId);
       }

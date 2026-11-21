@@ -74,6 +74,12 @@ export interface UiNode {
    * ほかは付けない（記録のないものを、画面で推し量らない）。画面は、実行環境の札と、開き方・安全面の注記を出す。
    */
   readonly runtime?: NodeRuntime;
+  /**
+   * 紐付けのトークンが切れた子（#189）。未解決の `tokenExpiredIdleBind`（使わなかった時間が長い。`idle`）・
+   * `tokenExpiredAbsoluteBind`（発行から時間がたった。`absolute`）の知らせの鍵から導く（文は見ない）。両方あれば新しいほう。
+   * 紐付けが成功すると daemon が知らせを解決にするので、付かなくなる。`needsHuman`・`band` には数えない（次の操作は親の `node_bindCode`）。
+   */
+  readonly bindExpired?: "idle" | "absolute";
   /** 題: 目的（objective）の先頭を整えて `UI_TITLE_MAX` で切ったもの。目的がなければ、なし。 */
   readonly title?: string;
   /** そのノードの最後の動き（報告・受信箱の項目・指示と受け取り・判断と拡張の要求）の時刻。記録がなければ、なし。 */
@@ -341,11 +347,19 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       sessionRefs.set(r.nodeId, r.report.sessionRef);
     }
   }
+  // 紐付けが切れた子（#189）: 未解決の失効の知らせの鍵。seq の大きい（新しい）ほうを残す
+  const bindExpired = new Map<string, "idle" | "absolute">();
+  for (const i of [...unresolved].sort((a, b) => a.seq - b.seq)) {
+    const key = i.msg?.key;
+    if (key === "tokenExpiredIdleBind") bindExpired.set(i.nodeId, "idle");
+    else if (key === "tokenExpiredAbsoluteBind") bindExpired.set(i.nodeId, "absolute");
+  }
   const nodes = cap("nodes", state.nodes, UI_LIMITS.nodes).map((n): UiNode => {
     const title = titleOf(n.objective);
     const needsHuman = human.get(n.id) ?? 0;
     const at = last.get(n.id);
     const sessionRef = sessionRefs.get(n.id);
+    const expired = bindExpired.get(n.id);
     const runtime = n.runtime ?? (cliChildren.has(n.id) ? "cli" : undefined);
     return {
       id: idOf(n.id),
@@ -359,6 +373,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       ...(cliChildren.has(n.id) ? { cli: true as const } : {}),
       ...(sessionRef === undefined ? {} : { sessionRef }),
       ...(runtime === undefined ? {} : { runtime }),
+      ...(expired === undefined ? {} : { bindExpired: expired }),
       ...(title === "" ? {} : { title }),
       ...(at === undefined ? {} : { lastActivityAt: uiText(at) }),
       needsHuman,

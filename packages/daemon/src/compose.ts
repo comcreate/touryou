@@ -686,6 +686,37 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     ]);
     if (!r.ok) note("tokenExpiredNoticeFailure", { nodeId, cause: r.error.code });
   };
+  // 失効の前の知らせ（#189。bind のトークンだけ）: 親へは受信箱の info、子へは system の追加指示。同じ「最後に使った時刻」には
+  // 1 回だけ（要求 ID を、ノードと最後に使った時刻から決める）。running の子だけ（判断待ち・done は時計が止まる）。
+  const noticeIdleSoon = (info: {
+    nodeId: string;
+    lastUsedMs: number;
+    remainingMs: number;
+  }): void => {
+    const { nodeId, lastUsedMs } = info;
+    if (tokenStateOf(nodeId) !== "running") return;
+    const mins = Math.max(1, Math.ceil(info.remainingMs / 60_000));
+    const key = `token-idle-soon/${nodeId}/${lastUsedMs}`;
+    const r = appendAtomically(log, clock, key, { system: true }, [
+      {
+        type: "inbox.added",
+        payload: {
+          id: deriveId("inbox", "system", key, "token-idle-soon"),
+          kind: "info",
+          nodeId,
+          ...notice("tokenIdleSoonBind", { node: nodeId, minutes: mins }),
+        },
+      },
+      {
+        type: "node.instructed",
+        payload: {
+          nodeId,
+          text: `紐付けの期限が、使われないまま約 ${mins} 分で切れる。touryou の道具を 1 つ（inbox_fetch など）呼べば延びる。`,
+        },
+      },
+    ]);
+    if (!r.ok) note("tokenIdleSoonNoticeFailure", { nodeId, cause: r.error.code });
+  };
   let credentials: ReturnType<typeof createCredentialStore>;
   // 退役（役目の終わりでの失効）を、ノードの購読へ知らせる（`retired` を送って閉じる。sse-hub は server の中で作られるので、
   // `onSseHub` であとから結ぶ）。
@@ -719,6 +750,9 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
         bindAbsoluteMs: minutes(te?.bindAbsolute, 1440),
         bindIdleMs: minutes(te?.bindIdle, 60),
       },
+      // 失効の前の知らせ: 10 分前（使わなければ切れる期限が短いときは、その半分）。見回りの間隔より長くしておく
+      idleWarnMs: Math.min(10 * 60_000, minutes(te?.bindIdle, 60) / 2),
+      onIdleSoon: noticeIdleSoon,
       exemptNodeId: config.rootNodeId,
       // 役目の終わり: verified・reclaimable・archived（記録にないノードも）。種類を問わない。stopped は、なったときに失効させる
       // （下の onCommitted と、起動時）。
@@ -2155,6 +2189,16 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       if (!sessionBindings.bound(nodeId, info)) note("sessionBindFailed", { nodeId });
       // 使われたコードのファイルを消す（コードは、もうメモリにない）
       const st = log.state();
+      // 結び直せたので、「紐付けが切れた」の知らせを解決にする（状態画面のカードから消す。#189）
+      for (const i of st.inbox) {
+        const k = i.msg?.key;
+        if (i.nodeId !== nodeId || i.resolved !== undefined) continue;
+        if (k !== "tokenExpiredIdleBind" && k !== "tokenExpiredAbsoluteBind") continue;
+        const r = appendAtomically(log, clock, `token-expired-resolved/${i.id}`, { system: true }, [
+          { type: "inbox.resolved", payload: { itemId: i.id } },
+        ]);
+        if (!r.ok) note("tokenExpiredResolveFailure", { nodeId, cause: r.error.code });
+      }
       const worktree =
         latestLaunch(st, nodeId)?.worktree ??
         st.nodes.find((n) => n.id === nodeId)?.adopted?.worktree;

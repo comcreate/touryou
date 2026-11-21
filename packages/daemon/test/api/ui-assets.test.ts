@@ -389,6 +389,8 @@ describe("画面の資産（走査）", () => {
       "documentElement",
       "cli",
       "attachDir",
+      // 紐付けが切れた子（#189。表示モデルの値 'idle' | 'absolute'）
+      "bindExpired",
     ]);
     // 埋め込んだ文字の表（#140。JSON の値で、コードでない）は、走査から除く
     const code = UI_JS.replace(TABLE_LINE, "")
