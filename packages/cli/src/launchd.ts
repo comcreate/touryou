@@ -18,6 +18,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, isAbsolute, join } from "node:path";
 import { readSecureFile } from "@touryou/core/fs";
 import type { CommandResult } from "./commands.js";
@@ -64,11 +65,12 @@ export function configProblem(
   home: string,
   path: string,
   check: ConfigChecker,
+  configPath?: string,
 ): string | undefined {
   const base = join(home, ".touryou");
   const daemon = join(base, "current", "bin", "touryou-daemon");
   // plist と同じ HOME・PATH（git は、この PATH で探す）
-  const r = check(daemon, ["--check-config", "--config", join(base, "config.json")], {
+  const r = check(daemon, ["--check-config", "--config", configPath ?? join(base, "config.json")], {
     HOME: home,
     PATH: path,
   });
@@ -111,21 +113,24 @@ export const DEFAULT_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
 export const labelOf = (org: string | undefined, name: string): string =>
   org === undefined ? `touryou.${name}` : `${org}.touryou.${name}`;
 
-const HELP = `touryou launchd init [--org <組織の逆ドメイン>] [--path-prefix <ディレクトリ[:ディレクトリ…]>]
+const HELP = `touryou launchd init [--org <組織の逆ドメイン>] [--path-prefix <ディレクトリ[:ディレクトリ…]>] [--config <設定ファイルの絶対パス>]
 
 daemon を、launchd で常駐させるための plist を生成する（同梱の node で daemon を直に起こす。起動スクリプトは作らない）。\`launchctl\` は実行しない。秘密は扱わない。
 
   --org            plist の Label に使う、組織の逆ドメイン（省略すると Label は touryou.daemon。例: com.example → com.example.touryou.daemon。小文字の英数字とハイフン、ドットで 2 つ以上）
   --path-prefix    plist の PATH の先頭に足す、絶対パスのディレクトリ（git の場所。例: Homebrew の bin）。省略可
+  --config         別の daemon の設定ファイル（絶対パス）。省略すると $HOME/.touryou/config.json（今までどおり）。指定すると、設定ごとに
+                   別の Label（touryou.daemon-<8 文字>）・plist・ログ（logs/daemon-<8 文字>.log）・stateDir になる（docs/launchd.md の「複数の daemon」）
   -h, --help       この使い方を表示する
 
-常駐の操作（launchctl を実行する。docs/launchd.md）:
-  touryou launchd apply --yes [--org …]      plist を LaunchAgents に置き、daemon を読み込む（ログイン時に自動で動くようになる）
-  touryou launchd status [--org …]           読み込みの状態・終了コードと、窓口の応答（whoami が 401）を表示する
-  touryou launchd restart [--org …]          daemon を起動し直す（版を上げたあと）
-  touryou launchd stop [--org …]             daemon を止める（plist は残るので、次のログインでまた動く）
-  touryou launchd uninstall --yes [--org …]
+常駐の操作（launchctl を実行する。docs/launchd.md）。どれも --config <設定> で対象の daemon を選ぶ（省略すると既定の設定）:
+  touryou launchd apply --yes [--org …] [--config …]   plist を LaunchAgents に置き、daemon を読み込む（ログイン時に自動で動くようになる）
+  touryou launchd status [--org …] [--config …]        読み込みの状態・終了コードと、窓口の応答（whoami が 401）を表示する
+  touryou launchd restart [--org …] [--config …]       daemon を起動し直す（版を上げたあと）
+  touryou launchd stop [--org …] [--config …]          daemon を止める（plist は残るので、次のログインでまた動く）
+  touryou launchd uninstall --yes [--org …] [--config …]
                                          止めて、touryou が生成した plist（古い形の run-daemon.sh も）を消す（logs・state は残す）
+  --config の代わりに --others を付けると、init が生成した別名の daemon（--config で作ったもの）すべてが対象（apply・status・restart・stop・uninstall。版上げが使う）
 
 出力先: <HOME>/.touryou/launchd（plist 0644）・<HOME>/.touryou/logs（0700）。
 古い形（v0.1.0 まで。<HOME>/.touryou/bin/run-daemon.sh を起こす plist）は、生成したものと同じときだけ、新しい形に置き換える。
@@ -170,12 +175,27 @@ export const appBundlePath = (base: string): string => join(base, "current", "To
  * plist の ProgramArguments（#73）。shell を通さず、TouRyou.app の中の node（実行ファイルの名前が TouRyou）で daemon の JS を直に起こす。
  * ログイン項目には「TouRyou」の 1 項目が出る（node の名前ではなく）。current のリンクを通すので、版を上げても変わらない。
  */
-export const daemonProgramArguments = (base: string): readonly string[] => [
+export const daemonProgramArguments = (
+  base: string,
+  configPath: string = join(base, "config.json"),
+): readonly string[] => [
   join(appBundlePath(base), "Contents", "MacOS", "TouRyou"),
   join(base, "current", "lib", "dist", "bin.js"),
   "--config",
-  join(base, "config.json"),
+  configPath,
 ];
+
+/**
+ * 既定でない設定（`--config`）の daemon の名前（Label・ログ・plist のファイル名に使う）。設定のパスの sha256 の先頭 8 文字で、
+ * 設定ごとに別になる（#165）。既定の設定（`<base>/config.json`）は、今までどおり `daemon`。
+ */
+export const daemonNameOf = (base: string, configPath: string): string =>
+  configPath === join(base, "config.json")
+    ? "daemon"
+    : `daemon-${createHash("sha256").update(configPath).digest("hex").slice(0, 8)}`;
+
+/** `--config` に渡せる設定のパス（絶対パスで、使える文字だけ）。 */
+export const usableConfigPath = (p: string): boolean => isAbsolute(p) && plainPath(p);
 
 /** 前の形（v0.1.1。#64）の ProgramArguments。同梱の node（`current/bin/node`）を直に起こす。引っ越し・外すときの確かめだけに使う。 */
 export const v011ProgramArguments = (base: string): readonly string[] => [
@@ -306,12 +326,14 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
   let org: string | undefined;
   let pathPrefix = "";
   let prefixGiven = false;
+  let configArg: string | undefined;
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i] as string;
     const v = args[i + 1];
-    if (a === "--org" || a === "--path-prefix") {
+    if (a === "--org" || a === "--path-prefix" || a === "--config") {
       if (v === undefined || v.startsWith("--")) return fail(`${a} には値を指定する`);
       if (a === "--org") org = v;
+      else if (a === "--config") configArg = v;
       else {
         pathPrefix = v;
         prefixGiven = true;
@@ -344,10 +366,19 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
     );
   }
   const base = join(home, ".touryou");
-  const configPath = join(base, "config.json");
+  if (configArg !== undefined && !usableConfigPath(configArg)) {
+    return fail(
+      "--config は、設定ファイルの絶対パスにする。英数字・. _ / @ + 空白 - だけが使える（.. の要素・// は使えない）",
+    );
+  }
+  const configPath = configArg ?? join(base, "config.json");
+  const daemonName = daemonNameOf(base, configPath);
+  const isDefault = daemonName === "daemon";
   if (!existsSync(configPath) || !existsSync(join(base, "current"))) {
     return fail(
-      "/setup が済んでいない（HOME の .touryou に config.json と current がない）。先に /setup を実行する",
+      isDefault
+        ? "/setup が済んでいない（HOME の .touryou に config.json と current がない）。先に /setup を実行する"
+        : "--config の設定ファイルがない、または /setup が済んでいない（HOME の .touryou に current がない）",
       1,
     );
   }
@@ -358,7 +389,7 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
       1,
     );
   }
-  const problem = configProblem(home, pathValue, deps.checkConfig);
+  const problem = configProblem(home, pathValue, deps.checkConfig, configPath);
   if (problem !== undefined) return fail(problem, 1);
 
   const binDir = join(base, "bin");
@@ -377,31 +408,35 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
       1,
     );
   }
-  const daemonLabel = labelOf(org, "daemon");
+  const daemonLabel = labelOf(org, daemonName);
   const plistPath = join(plistDir, `${daemonLabel}.plist`);
   const common = {
     label: daemonLabel,
     workingDirectory: base,
-    log: join(logsDir, "daemon.log"),
+    log: join(logsDir, `${daemonName}.log`),
     path: pathValue,
   };
   const targets: Target[] = [
     {
       path: plistPath,
-      content: plistText({ ...common, programArguments: daemonProgramArguments(base) }),
+      content: plistText({
+        ...common,
+        programArguments: daemonProgramArguments(base, configPath),
+      }),
       mode: 0o644,
     },
   ];
-  // 古い形（v0.1.0 まで）の生成物。同じ --org・--path-prefix の init が生成したものと、バイト単位で同じときだけ、置き換える（#64）
+  // 古い形（v0.1.0 まで）の生成物。同じ --org・--path-prefix の init が生成したものと、バイト単位で同じときだけ、置き換える（#64）。
+  // 別名の設定（--config）には、古い形がない（#165）ので、見ない
   const legacyScript = legacyScriptPath(base);
-  const legacyPlist = legacyPlistText({ ...common, script: legacyScript });
-  const v011Plist = v011PlistText({ ...common, base });
+  const legacyPlist = isDefault ? legacyPlistText({ ...common, script: legacyScript }) : undefined;
+  const v011Plist = isDefault ? v011PlistText({ ...common, base }) : undefined;
   const readRegular = (p: string): string | undefined => {
     const st = lstatOrUndefined(p);
     return st?.isFile() === true ? readFileSync(p, "utf8") : undefined;
   };
-  const scriptSt = lstatOrUndefined(legacyScript);
-  const scriptIsLegacy = readRegular(legacyScript) === runDaemonScript(base);
+  const scriptSt = isDefault ? lstatOrUndefined(legacyScript) : undefined;
+  const scriptIsLegacy = isDefault && readRegular(legacyScript) === runDaemonScript(base);
 
   // 先に全部を確かめる（1 つでも、違う内容の既存があれば、何も書かない）
   const toWrite: Target[] = [];
@@ -415,9 +450,13 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
       toWrite.push(t);
     } else if (text === t.content) {
       same.push(t.path);
-    } else if (text === legacyPlist && (scriptSt === undefined || scriptIsLegacy)) {
+    } else if (
+      legacyPlist !== undefined &&
+      text === legacyPlist &&
+      (scriptSt === undefined || scriptIsLegacy)
+    ) {
       toReplace.push(t);
-    } else if (text === v011Plist) {
+    } else if (v011Plist !== undefined && text === v011Plist) {
       // v0.1.1 の形（current/bin/node を直に起こす）。同じ --org・--path-prefix の v0.1.1 の init の生成物と同じときだけ（#73）
       toReplace.push(t);
     } else {

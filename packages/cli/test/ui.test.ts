@@ -137,3 +137,74 @@ describe("touryou ui", () => {
     expect(r2.exitCode).toBe(2);
   });
 });
+
+// 複数の daemon（設定ごと。#165）。別名の設定は、launchd の plist（--config）から見つける
+describe("touryou ui（複数の daemon）", () => {
+  const OTHER = "/work/b/.touryou-config.json";
+  const PLIST = "touryou.daemon-0123abcd.plist";
+  const multi = (over: Record<string, string | undefined> = {}) =>
+    files({
+      "/home/u/.touryou/config.json": JSON.stringify({ stateDir: "/state", repoRoot: "/work/a" }),
+      [`/home/u/.touryou/launchd/${PLIST}`]: `<array>\n<string>x</string>\n<string>--config</string>\n<string>${OTHER}</string>\n</array>`,
+      [OTHER]: JSON.stringify({ stateDir: "/state-b", repoRoot: "/work/b" }),
+      "/state-b/port": "43211\n",
+      "/state-b/human-token": `${TOKEN}\n`,
+      ...over,
+    });
+
+  const go = async (args: string[], env: Record<string, string>, cwd: string) => {
+    const { f, seen } = ticketFetch();
+    const opened: string[] = [];
+    const r = await runBin(["ui", ...args], {
+      env: { HOME: "/home/u", ...env },
+      cwd,
+      isTTY: TTY,
+      fetch: f,
+      ui: {
+        readFile: multi(),
+        readDir: () => [PLIST, "touryou.daemon.plist", "other.txt"],
+        verifierFor: verifier(),
+        openUrl: (u) => {
+          opened.push(u);
+          return true;
+        },
+      },
+    });
+    return { r, seen, opened };
+  };
+
+  it("実行したリポジトリの root に合う daemon を、既定にする", async () => {
+    const b = await go([], {}, "/work/b/packages/x");
+    expect(b.r.exitCode).toBe(0);
+    expect(b.opened).toEqual([`http://127.0.0.1:43211/ui#ticket=${TICKET}`]);
+    const a = await go([], {}, "/work/a");
+    expect(a.opened).toEqual([`http://127.0.0.1:43210/ui#ticket=${TICKET}`]);
+  });
+
+  it("どの root にも合わないときは、既定の設定にする", async () => {
+    const r = await go([], {}, "/elsewhere");
+    expect(r.opened).toEqual([`http://127.0.0.1:43210/ui#ticket=${TICKET}`]);
+  });
+
+  it("--config と TOURYOU_DAEMON_CONFIG は、実行場所より先に効く", async () => {
+    const byArg = await go(["--config", OTHER], {}, "/work/a");
+    expect(byArg.opened).toEqual([`http://127.0.0.1:43211/ui#ticket=${TICKET}`]);
+    const byEnv = await go([], { TOURYOU_DAEMON_CONFIG: OTHER }, "/work/a");
+    expect(byEnv.opened).toEqual([`http://127.0.0.1:43211/ui#ticket=${TICKET}`]);
+  });
+
+  it("--list は、選べる設定を出す（トークン・ポートは出さない）", async () => {
+    const r = await go(["--list"], {}, "/work/a");
+    expect(r.r.exitCode).toBe(0);
+    expect(r.r.stdout).toContain("/home/u/.touryou/config.json（repoRoot: /work/a）");
+    expect(r.r.stdout).toContain(`${OTHER}（repoRoot: /work/b）`);
+    expect(r.r.stdout).not.toContain(TOKEN);
+    expect(r.opened).toEqual([]);
+    expect(r.seen).toEqual([]);
+  });
+
+  it("--config に相対パスは渡せない", async () => {
+    const r = await go(["--config", "rel.json"], {}, "/work/a");
+    expect(r.r.exitCode).toBe(2);
+  });
+});

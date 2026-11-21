@@ -44,7 +44,9 @@ import {
   REVERSE_DOMAIN,
   runDaemonScript,
   stateDirOf,
+  usableConfigPath,
   v011PlistText,
+  daemonNameOf,
 } from "./launchd.js";
 
 export type { RunResult } from "./launchd.js";
@@ -67,6 +69,11 @@ export interface LaunchdServiceDeps {
 
 export const SERVICE_SUBCOMMANDS = ["apply", "status", "restart", "stop", "uninstall"] as const;
 type Sub = (typeof SERVICE_SUBCOMMANDS)[number];
+
+/** init が生成する、別名の設定（--config）の daemon の plist のファイル名。`[<org>.]touryou.daemon-<8 文字>.plist`。 */
+const OTHER_PLIST = /^((?:[a-z0-9-]+\.)*touryou\.daemon-([0-9a-f]{8}))\.plist$/;
+/** 既定・別名のどちらも含む、touryou の daemon の plist のファイル名。 */
+const DAEMON_PLIST = /^(?:[a-z0-9-]+\.)*touryou\.daemon(?:-[0-9a-f]{8})?\.plist$/;
 
 /** apply・restart が途中で止まったときの状態の案内。 */
 const PARTIAL =
@@ -103,7 +110,6 @@ interface Ctx {
   readonly deps: LaunchdServiceDeps;
   readonly home: string;
   readonly base: string;
-  readonly stateDir: string;
   readonly binDir: string;
   readonly logsDir: string;
   readonly plistDir: string;
@@ -112,7 +118,13 @@ interface Ctx {
   readonly units: readonly Unit[];
 }
 interface Unit {
-  readonly name: "daemon";
+  /** `daemon`（既定の設定）か、`daemon-<8 文字>`（`--config` の設定。#165）。 */
+  readonly name: string;
+  /** daemon の設定ファイルと、その stateDir（daemon ごとに別）。 */
+  readonly configPath: string;
+  readonly stateDir: string;
+  /** 既定の設定（`<base>/config.json`）の daemon か。 */
+  readonly isDefault: boolean;
   readonly label: string;
   /** 古い形（v0.1.0 まで）の起動スクリプト。いまは生成しない。古い形と同じなら、uninstall で消す。 */
   readonly legacyScript: string;
@@ -144,23 +156,23 @@ function info(ctx: Ctx, u: Unit): UnitInfo {
 }
 
 /** state の port（数字だけ）。 */
-function portOf(ctx: Ctx): number | undefined {
-  const text = readOr(join(ctx.stateDir, "port"));
+function portOf(u: Unit): number | undefined {
+  const text = readOr(join(u.stateDir, "port"));
   const first = text?.split("\n")[0]?.trim();
   return first !== undefined && /^[0-9]{1,5}$/.test(first) ? Number(first) : undefined;
 }
 
-async function whoami(ctx: Ctx): Promise<number | undefined> {
-  const port = portOf(ctx);
+async function whoami(ctx: Ctx, u: Unit): Promise<number | undefined> {
+  const port = portOf(u);
   return port === undefined ? undefined : ctx.deps.probe(port);
 }
 
 /** daemon の窓口が、未認証の whoami に 401 を返すまで待つ。 */
-async function waitDaemon(ctx: Ctx): Promise<boolean> {
+async function waitDaemon(ctx: Ctx, u: Unit): Promise<boolean> {
   const now = ctx.deps.now ?? Date.now;
   const deadline = now() + (ctx.deps.waitMs ?? 60_000);
   for (;;) {
-    if ((await whoami(ctx)) === 401) return true;
+    if ((await whoami(ctx, u)) === 401) return true;
     if (now() + 1000 > deadline) return false;
     await ctx.deps.sleep(1000);
   }
@@ -228,22 +240,27 @@ async function statusLines(ctx: Ctx): Promise<{ lines: string[]; ok: boolean }> 
   }
   if (loadedCount === 0) {
     // 止めた後に restart を案内されないように、戻し方をここで出す（restart は読み込まれていないと使えない）
+    const hint = ctx.units.every((u) => u.isDefault) ? "" : " （--config か --others を、止めたときと同じにする）";
     lines.push(
       ctx.units.every((u) => lstatOr(u.plistDest) !== undefined)
-        ? '読み込まれていない（stop で止めた後）。次のログインで、また動く。すぐ動かすなら "$HOME/.touryou/current/bin/touryou" launchd apply --yes（利用者の同意のあとだけ）。restart は、読み込まれていないので使えない'
+        ? `読み込まれていない（stop で止めた後）。次のログインで、また動く。すぐ動かすなら "$HOME/.touryou/current/bin/touryou" launchd apply --yes（利用者の同意のあとだけ）。restart は、読み込まれていないので使えない${hint}`
         : "読み込まれていない（常駐にしていない）。常駐にするなら /setup の手順 3-A。restart は、読み込まれていないので使えない",
     );
   }
-  const code = await whoami(ctx);
-  if (code === 401) {
-    lines.push("daemon の窓口: 応答あり（未認証の whoami が 401）");
-  } else {
-    ok = false;
-    lines.push(
-      code === undefined
-        ? "daemon の窓口: 応答なし（state の port がない、または届かない）"
-        : `daemon の窓口: 想定外の応答（whoami が ${code}）`,
-    );
+  for (const u of ctx.units) {
+    // 複数の daemon があるときは、どの daemon の行かが分かるように、Label を頭に付ける（既定の 1 つだけなら、今までどおり）
+    const head = ctx.units.length > 1 || !u.isDefault ? `${u.label} の窓口` : "daemon の窓口";
+    const code = await whoami(ctx, u);
+    if (code === 401) {
+      lines.push(`${head}: 応答あり（未認証の whoami が 401）`);
+    } else {
+      ok = false;
+      lines.push(
+        code === undefined
+          ? `${head}: 応答なし（state の port がない、または届かない）`
+          : `${head}: 想定外の応答（whoami が ${code}）`,
+      );
+    }
   }
   return { lines, ok };
 }
@@ -265,7 +282,7 @@ function isGeneratedPlist(ctx: Ctx, u: Unit, text: string): boolean {
     text ===
       plistText({
         label: u.label,
-        programArguments: daemonProgramArguments(ctx.base),
+        programArguments: daemonProgramArguments(ctx.base, u.configPath),
         workingDirectory: ctx.base,
         log: u.log,
         path,
@@ -278,6 +295,8 @@ function isGeneratedPlist(ctx: Ctx, u: Unit, text: string): boolean {
  * 前の形は 2 つ: v0.1.0 まで（run-daemon.sh を起こす。#64）と、v0.1.1（current/bin/node を直に起こす。#73）。
  */
 function isLegacyPlist(ctx: Ctx, u: Unit, text: string): boolean {
+  // 別名の設定（--config。#165）には、前の形がない
+  if (!u.isDefault) return false;
   const path = pathValueOf(text);
   if (path === undefined) return false;
   const common = { label: u.label, workingDirectory: ctx.base, log: u.log, path };
@@ -390,6 +409,7 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
       ctx.home,
       pathValueOf(text) ?? DEFAULT_PATH,
       ctx.deps.checkConfig,
+      u.configPath,
     );
     if (problem !== undefined) return fail(problem, 1);
   }
@@ -463,10 +483,10 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
       }
       out.push(`${u.label}: 読み込んだ`);
     }
-    if (u.name === "daemon" && !(await waitDaemon(ctx))) {
+    if (!(await waitDaemon(ctx, u))) {
       const st = await statusLines(ctx);
       return fail(
-        `daemon の窓口が応答しない（未認証の whoami が 401 にならない）\n${PARTIAL}`,
+        `${u.label} の窓口が応答しない（未認証の whoami が 401 にならない）\n${PARTIAL}`,
         1,
         `${[...out, "", ...st.lines].join("\n")}\n`,
       );
@@ -517,10 +537,10 @@ async function restart(ctx: Ctx): Promise<CommandResult> {
       );
     }
     out.push(`${u.label}: 起動し直した`);
-    if (u.name === "daemon" && !(await waitDaemon(ctx))) {
+    if (!(await waitDaemon(ctx, u))) {
       const st = await statusLines(ctx);
       return fail(
-        `daemon の窓口が応答しない\n${PARTIAL}`,
+        `${u.label} の窓口が応答しない\n${PARTIAL}`,
         1,
         `${[...out, "", ...st.lines].join("\n")}\n`,
       );
@@ -556,6 +576,24 @@ function stop(ctx: Ctx): CommandResult {
     'plist は LaunchAgents に残っているので、次のログインで、また動く。常駐をやめるなら "$HOME/.touryou/current/bin/touryou" launchd uninstall --yes',
   );
   return { exitCode: 0, stdout: `${out.join("\n")}\n`, stderr: "" };
+}
+
+/** この uninstall の対象でない、touryou の daemon の plist（`<base>/launchd` と LaunchAgents）。 */
+function remainingPlists(ctx: Ctx): string[] {
+  const mine = new Set(ctx.units.map((u) => `${u.label}.plist`));
+  const found: string[] = [];
+  for (const dir of [ctx.plistDir, ctx.agentsDir]) {
+    let names: string[] = [];
+    try {
+      names = readdirSync(dir);
+    } catch {
+      continue;
+    }
+    for (const n of names) {
+      if (DAEMON_PLIST.test(n) && !mine.has(n)) found.push(join(dir, n));
+    }
+  }
+  return found;
 }
 
 function uninstall(ctx: Ctx): CommandResult {
@@ -605,8 +643,15 @@ function uninstall(ctx: Ctx): CommandResult {
       remove(u.legacyScript, (t) => isLegacyScript(ctx, u, t));
     }
   }
-  out.push(...lsregister(ctx, "-u"));
-  out.push(`残した: ${ctx.logsDir}（ログ）・${ctx.stateDir}（daemon の状態）`);
+  // ほかの daemon の plist が残っているうちは、TouRyou.app の登録を解かない（残った daemon が、同じ app を使う）
+  if (remainingPlists(ctx).length > 0) {
+    out.push("ほかの daemon の plist が残っているので、TouRyou.app の LaunchServices の登録は解かなかった");
+  } else {
+    out.push(...lsregister(ctx, "-u"));
+  }
+  out.push(
+    `残した: ${ctx.logsDir}（ログ）・${ctx.units.map((u) => u.stateDir).join("・")}（daemon の状態）`,
+  );
   if (kept.length > 0) out.push("", ...kept);
   return {
     exitCode: kept.length > 0 ? 1 : 0,
@@ -622,15 +667,20 @@ export async function runLaunchdService(
   const sub = argv[0] as Sub;
   if (!SERVICE_SUBCOMMANDS.includes(sub)) return fail(`不明なサブコマンド: ${argv[0] ?? ""}`);
   let org: string | undefined;
+  let configArg: string | undefined;
+  let others = false;
   let yes = false;
   const args = argv.slice(1);
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i] as string;
-    if (a === "--org") {
+    if (a === "--org" || a === "--config") {
       const v = args[i + 1];
-      if (v === undefined || v.startsWith("--")) return fail("--org には値を指定する");
-      org = v;
+      if (v === undefined || v.startsWith("--")) return fail(`${a} には値を指定する`);
+      if (a === "--org") org = v;
+      else configArg = v;
       i += 1;
+    } else if (a === "--others") {
+      others = true;
     } else if (a === "--yes" && (sub === "apply" || sub === "uninstall")) {
       yes = true;
     } else {
@@ -654,37 +704,85 @@ export async function runLaunchdService(
   if (!Number.isInteger(uid) || uid < 0) {
     return fail("利用者の uid を得られない（launchd の常駐の操作は macOS だけ）");
   }
-  const base = join(home, ".touryou");
-  const stateDir = stateDirOf(join(base, "config.json"));
-  if (stateDir === undefined || !plainPath(stateDir)) {
-    return fail("config.json の stateDir を読めない。先に /setup を実行する", 1);
+  if (others && configArg !== undefined) return fail("--others と --config は、同時に指定できない");
+  if (configArg !== undefined && !usableConfigPath(configArg)) {
+    return fail(
+      "--config は、設定ファイルの絶対パスにする。英数字・. _ / @ + 空白 - だけが使える（.. の要素・// は使えない）",
+    );
   }
+  const base = join(home, ".touryou");
   const binDir = join(base, "bin");
   const plistDir = join(base, "launchd");
   const agentsDir = join(home, "Library", "LaunchAgents");
   const logsDir = join(base, "logs");
-  const unit = (name: Unit["name"]): Unit => {
-    const label = labelOf(org, name);
-    return {
-      name,
-      label,
-      legacyScript: legacyScriptPath(base),
-      plistSrc: join(plistDir, `${label}.plist`),
-      plistDest: join(agentsDir, `${label}.plist`),
-      log: join(logsDir, `${name}.log`),
-    };
-  };
+  const unit = (label: string, name: string, configPath: string, stateDir: string): Unit => ({
+    name,
+    configPath,
+    stateDir,
+    isDefault: name === "daemon",
+    label,
+    legacyScript: legacyScriptPath(base),
+    plistSrc: join(plistDir, `${label}.plist`),
+    plistDest: join(agentsDir, `${label}.plist`),
+    log: join(logsDir, `${name}.log`),
+  });
+  let units: Unit[] = [];
+  if (others) {
+    // init が生成した別名の daemon（--config で作ったもの）すべて。plist の ProgramArguments の設定から、対象を決める
+    let names: string[] = [];
+    try {
+      names = readdirSync(plistDir).sort();
+    } catch {
+      names = [];
+    }
+    for (const n of names) {
+      const m = OTHER_PLIST.exec(n);
+      if (m === null) continue;
+      const text = readOr(join(plistDir, n));
+      const cfg =
+        text === undefined
+          ? undefined
+          : /<string>--config<\/string>\s*<string>([^<]*)<\/string>/.exec(text)?.[1];
+      const stateDir = cfg === undefined || !usableConfigPath(cfg) ? undefined : stateDirOf(cfg);
+      if (cfg === undefined || stateDir === undefined || !plainPath(stateDir)) {
+        return fail(
+          `${join(plistDir, n)} の設定（--config）または stateDir を読めない。手で外すか、"$HOME/.touryou/current/bin/touryou" launchd init --config <設定> で作り直す`,
+          1,
+        );
+      }
+      units.push(unit(m[1] as string, `daemon-${m[2] as string}`, cfg, stateDir));
+    }
+    if (units.length === 0) {
+      return {
+        exitCode: 0,
+        stdout: "別名の設定（--config）の daemon は、登録されていない（何もしていない）\n",
+        stderr: "",
+      };
+    }
+  } else {
+    const configPath = configArg ?? join(base, "config.json");
+    const stateDir = stateDirOf(configPath);
+    if (stateDir === undefined || !plainPath(stateDir)) {
+      return fail(
+        configArg === undefined
+          ? "config.json の stateDir を読めない。先に /setup を実行する"
+          : "--config の設定ファイルの stateDir を読めない（ファイルがない・他の人が書ける・stateDir が絶対パスでない）",
+        1,
+      );
+    }
+    const name = daemonNameOf(base, configPath);
+    units = [unit(labelOf(org, name), name, configPath, stateDir)];
+  }
   const ctx: Ctx = {
     deps,
     home,
     base,
-    stateDir,
     binDir,
     logsDir,
     plistDir,
     agentsDir,
     domain: `gui/${uid}`,
-    units: [unit("daemon")],
+    units,
   };
   switch (sub) {
     case "apply":

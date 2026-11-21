@@ -9,6 +9,7 @@
  * `human-token` は、メモリの中だけで使い、標準出力・標準エラー・引数・ログに出さない。チケットも、標準出力・標準エラーに出さない
  * （`open` の引数にだけ渡す。`ps` に出るのは、使い捨てのチケットだけ）。ブラウザを開けないときは、URL を出さずに止まる。
  */
+import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { readSecureFile } from "@touryou/core/fs";
 import { createIdentityVerifier, IDENTITY_FILE, type IdentityVerifier } from "@touryou/mcp/relay";
@@ -22,6 +23,10 @@ export interface UiDeps {
   readonly verifierFor?: (daemonUrl: string, identityPath: string) => IdentityVerifier;
   /** ブラウザで開く。開けたら true。既定は macOS の `open`（ほかの OS では false）。 */
   readonly openUrl?: (url: string) => boolean;
+  /** 実行したディレクトリ。複数の daemon があるとき、repoRoot がこの中にある daemon を既定にする。 */
+  readonly cwd?: string;
+  /** ディレクトリの一覧（試験用）。 */
+  readonly readDir?: (path: string) => string[];
 }
 
 const MAX_BYTES = 64 * 1024;
@@ -38,25 +43,107 @@ const NOT_MAC = fail(
   'Mac のターミナルで "$HOME/.touryou/current/bin/touryou" ui を実行してください（Claude Code では /touryou:ui）',
 );
 
+/** init が生成する、別名の設定（`--config`）の daemon の plist のファイル名から、設定のパスを読むための形。 */
+const OTHER_PLIST = /touryou\.daemon-[0-9a-f]{8}\.plist$/;
+const PLIST_CONFIG = /<string>--config<\/string>\s*<string>([^<]*)<\/string>/;
+
+interface Candidate {
+  readonly configPath: string;
+  /** その設定の repoRoot（読めなければ undefined）。 */
+  readonly repoRoot?: string;
+}
+
+/** `<home>/.touryou/launchd` の別名の daemon の plist から、設定のパスを集める（絶対パスのものだけ）。 */
+function otherConfigs(home: string, deps: UiDeps, read: (p: string, f: number) => string): string[] {
+  const dir = `${home}/.touryou/launchd`;
+  let names: string[];
+  try {
+    names = (deps.readDir ?? ((p: string) => readdirSync(p)))(dir).filter((n) => OTHER_PLIST.test(n));
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const n of names.sort()) {
+    try {
+      const cfg = PLIST_CONFIG.exec(read(`${dir}/${n}`, 0o022))?.[1];
+      if (cfg !== undefined && cfg.startsWith("/")) out.push(cfg);
+    } catch {
+      // 読めない plist は、候補にしない
+    }
+  }
+  return out;
+}
+
+const repoRootOf = (path: string, read: (p: string, f: number) => string): string | undefined => {
+  try {
+    const j = JSON.parse(read(path, 0o022)) as { repoRoot?: unknown } | null;
+    return typeof j?.repoRoot === "string" ? j.repoRoot.replace(/\/+$/, "") : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const within = (cwd: string, root: string): boolean => cwd === root || cwd.startsWith(`${root}/`);
+
 export async function runUi(argv: readonly string[], deps: UiDeps): Promise<CommandResult> {
-  if (argv.length > 0) {
-    return {
-      exitCode: 2,
-      stdout: "",
-      stderr:
-        '"$HOME/.touryou/current/bin/touryou" ui は引数を取らない（トークン・URL を引数で渡さない）\n',
-    };
+  let configArg: string | undefined;
+  let list = false;
+  for (let i = 0; i < argv.length; i += 1) {
+    const a = argv[i] as string;
+    if (a === "--list") {
+      list = true;
+    } else if (a === "--config") {
+      const v = argv[i + 1];
+      if (v === undefined || !v.startsWith("/")) {
+        return {
+          exitCode: 2,
+          stdout: "",
+          stderr: "--config には、daemon の設定ファイルの絶対パスを指定する\n",
+        };
+      }
+      configArg = v;
+      i += 1;
+    } else {
+      return {
+        exitCode: 2,
+        stdout: "",
+        stderr:
+          '"$HOME/.touryou/current/bin/touryou" ui は、--config <設定ファイルの絶対パス>・--list だけを取る（トークン・URL を引数で渡さない）\n',
+      };
+    }
   }
   const read =
     deps.readFile ??
     ((p: string, forbid: number) => readSecureFile(p, { forbid, maxBytes: MAX_BYTES }));
   const home = deps.env.HOME ?? "";
+  const defaultConfig = home === "" ? undefined : `${home.replace(/\/+$/, "")}/.touryou/config.json`;
+  // 複数の daemon（設定ごと）があるときの候補。既定の設定と、`touryou launchd init --config` で作った別名の設定
+  const candidates: Candidate[] = [];
+  if (defaultConfig !== undefined) {
+    for (const c of [defaultConfig, ...otherConfigs(home.replace(/\/+$/, ""), deps, read)]) {
+      const repoRoot = repoRootOf(c, read);
+      candidates.push({ configPath: c, ...(repoRoot === undefined ? {} : { repoRoot }) });
+    }
+  }
+  if (list) {
+    return {
+      exitCode: 0,
+      stdout: `${candidates.map((c) => `${c.configPath}${c.repoRoot === undefined ? "" : `（repoRoot: ${c.repoRoot}）`}`).join("\n")}\n`,
+      stderr: "",
+    };
+  }
+  // 選び方: --config > TOURYOU_DAEMON_CONFIG > 実行したディレクトリが repoRoot の中にある候補（いちばん深いもの） > 既定の設定
+  const fromCwd =
+    deps.cwd === undefined || candidates.length < 2
+      ? undefined
+      : candidates
+          .filter((c) => c.repoRoot !== undefined && within(deps.cwd as string, c.repoRoot))
+          .sort((a, b) => (b.repoRoot?.length ?? 0) - (a.repoRoot?.length ?? 0))[0]?.configPath;
   const configPath =
-    deps.env.TOURYOU_DAEMON_CONFIG !== undefined && deps.env.TOURYOU_DAEMON_CONFIG !== ""
+    configArg ??
+    (deps.env.TOURYOU_DAEMON_CONFIG !== undefined && deps.env.TOURYOU_DAEMON_CONFIG !== ""
       ? deps.env.TOURYOU_DAEMON_CONFIG
-      : home === ""
-        ? undefined
-        : `${home.replace(/\/+$/, "")}/.touryou/config.json`;
+      : (fromCwd ?? defaultConfig));
   if (configPath === undefined) {
     return fail("daemon の設定ファイルが分からない（HOME がない）", "/touryou:setup で設定を作る");
   }
