@@ -360,6 +360,223 @@ describe("複数の daemon（--config）", () => {
     expect((await bin(w, ["init", "--others", "--config", w.otherConfig])).exitCode).toBe(2);
   });
 
+  // 指摘 1: --config 省略（既定の設定）の plist は、従来どおり <base>/config.json のまま（HOME がリンクでも）
+  it("--config を省略した plist は、HOME がシンボリックリンクでも、従来どおりの <base>/config.json を書く", async () => {
+    const w = makeWorld();
+    const linkHome = `${w.home}-link`;
+    symlinkSync(w.home, linkHome);
+    dirs.push(linkHome);
+    const r = await runBin(["launchd", "init"], {
+      env: { HOME: linkHome },
+      isTTY: { stdin: false, stdout: false },
+      sleep: async () => undefined,
+      launchd: w.launchd,
+    });
+    expect(r.stderr).toBe("");
+    expect(r.exitCode).toBe(0);
+    const text = readFileSync(join(w.base, "launchd", "touryou.daemon.plist"), "utf8");
+    // リンクを通した形（HOME のまま）で、実パスに解決しない
+    expect(text).toContain(`<string>${join(linkHome, ".touryou", "config.json")}</string>`);
+    expect(text).not.toContain(`<string>${w.defaultConfig}</string>`);
+  });
+
+  it("--config を明示したときだけ、実パスを書く（既定の設定へのリンクは、既定のパスにそろえる）", async () => {
+    const w = makeWorld();
+    const linkToDefault = join(w.base, "link-default.json");
+    symlinkSync(w.defaultConfig, linkToDefault);
+    expect((await bin(w, ["init", "--config", linkToDefault])).exitCode).toBe(0);
+    expect(readFileSync(join(w.base, "launchd", "touryou.daemon.plist"), "utf8")).toContain(
+      `<string>${w.defaultConfig}</string>`,
+    );
+  });
+
+  // 指摘 2: 読めない plist 1 つで、--others の全体を止めない
+  it("--others は、設定を読めない plist を警告して飛ばし、ほかの daemon の操作は続ける", async () => {
+    const w = makeWorld();
+    await bin(w, ["init", "--config", w.otherConfig]);
+    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+    // 設定を読めない別名の plist（ProgramArguments に --config がない）を 1 つ足す
+    const broken = join(w.base, "launchd", "touryou.daemon-deadbeef.plist");
+    writeFileSync(broken, "<plist>壊れた</plist>");
+    const r = await bin(w, ["restart", "--others"]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr).toContain("警告");
+    expect(r.stderr).toContain("touryou.daemon-deadbeef.plist");
+    expect(w.calls.some((c) => c[1] === "kickstart" && c.at(-1)?.endsWith(w.otherLabel))).toBe(
+      true,
+    );
+    // status・stop も、同じく止めない
+    expect((await bin(w, ["status", "--others"])).stderr).toContain("警告");
+    expect((await bin(w, ["stop", "--others"])).exitCode).toBe(0);
+    expect(w.loaded.size).toBe(0);
+  });
+
+  it("--others の apply・restart は、stateDir を読めない設定の daemon だけを警告して飛ばす", async () => {
+    const w = makeWorld();
+    await bin(w, ["init", "--config", w.otherConfig]);
+    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+    // 設定を消す（plist は残る）
+    rmSync(w.otherConfig);
+    const r = await bin(w, ["restart", "--others"]);
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr).toContain("stateDir を読めない");
+    expect(r.stdout).toContain("常駐にしたものがない");
+  });
+
+  it("uninstall は、設定（stateDir）を読めなくても、plist を後始末できる", async () => {
+    const w = makeWorld();
+    await bin(w, ["init", "--config", w.otherConfig]);
+    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+    rmSync(w.otherConfig);
+    // --config の単独指定でも、--others でも、外せる
+    const u = await bin(w, ["uninstall", "--yes", "--config", w.otherConfig]);
+    expect(u.stderr).toBe("");
+    expect(u.exitCode).toBe(0);
+    expect(existsSync(join(w.agents, `${w.otherLabel}.plist`))).toBe(false);
+    expect(existsSync(join(w.base, "launchd", `${w.otherLabel}.plist`))).toBe(false);
+    expect(u.stdout).toContain(join(w.base, "logs"));
+  });
+
+  it("uninstall --others も、設定がなくなった daemon を外せる", async () => {
+    const w = makeWorld();
+    await bin(w, ["init", "--config", w.otherConfig]);
+    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+    rmSync(w.otherConfig);
+    const u = await bin(w, ["uninstall", "--yes", "--others"]);
+    expect(u.exitCode, u.stdout + u.stderr).toBe(0);
+    expect(existsSync(join(w.agents, `${w.otherLabel}.plist`))).toBe(false);
+    expect(existsSync(join(w.base, "launchd", `${w.otherLabel}.plist`))).toBe(false);
+  });
+
+  // 指摘 4: init --others は、先に全部を検査してから書く
+  it("init --others は、1 つでも作り直せない設定があれば、どの plist も書かず、失敗した設定を示す", async () => {
+    const w = makeWorld();
+    await bin(w, ["init", "--config", w.otherConfig]);
+    const third = join(w.base, "third", "config.json");
+    const thirdState = join(w.base, "third", "state");
+    mkdirSync(thirdState, { recursive: true });
+    writeFileSync(third, JSON.stringify({ stateDir: thirdState }), { mode: 0o600 });
+    expect((await bin(w, ["init", "--config", third])).exitCode).toBe(0);
+    const thirdLabel = `touryou.${daemonNameOf(w.base, third)}`;
+    const otherPlist = join(w.base, "launchd", `${w.otherLabel}.plist`);
+    const thirdPlist = join(w.base, "launchd", `${thirdLabel}.plist`);
+    const otherBefore = readFileSync(otherPlist, "utf8");
+    const thirdBefore = readFileSync(thirdPlist, "utf8");
+    // third の設定を消す（検査で落ちる）。other は検査を通る
+    rmSync(third);
+    const r = await bin(w, ["init", "--others"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("何も書かずに止めた");
+    // 失敗した設定を、結果に明示する
+    expect(r.stderr).toContain(`--config ${third}`);
+    expect(r.stderr).not.toContain(`--config ${w.otherConfig}`);
+    expect(readFileSync(otherPlist, "utf8")).toBe(otherBefore);
+    expect(readFileSync(thirdPlist, "utf8")).toBe(thirdBefore);
+  });
+
+  it("init --others は、読めない plist も、失敗した設定として示す（ほかの設定の検査は続ける）", async () => {
+    const w = makeWorld();
+    await bin(w, ["init", "--config", w.otherConfig]);
+    writeFileSync(join(w.base, "launchd", "touryou.daemon-deadbeef.plist"), "<plist/>");
+    const r = await bin(w, ["init", "--others"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("touryou.daemon-deadbeef.plist");
+    expect(r.stderr).toContain("何も書かずに止めた");
+  });
+
+  // 指摘 6: stateDir の共有は、apply でも検出する
+  it("apply は、init のあとで stateDir が別の設定と同じになっていたら、何も置かずに止める", async () => {
+    const w = makeWorld();
+    expect((await bin(w, ["init"])).exitCode).toBe(0);
+    expect((await bin(w, ["init", "--config", w.otherConfig])).exitCode).toBe(0);
+    // init のあとで、別名の設定の stateDir を、既定の設定と同じに書き換える
+    writeFileSync(w.otherConfig, JSON.stringify({ stateDir: w.states["touryou.daemon"] }), {
+      mode: 0o600,
+    });
+    const r = await bin(w, ["apply", "--yes", "--config", w.otherConfig]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("stateDir が、別の設定");
+    expect(w.calls).toEqual([]);
+    expect(existsSync(join(w.agents, `${w.otherLabel}.plist`))).toBe(false);
+    // 既定の設定の apply も、同じ stateDir を共有する相手がいるので止まる
+    const d = await bin(w, ["apply", "--yes"]);
+    expect(d.exitCode).toBe(1);
+    expect(w.calls).toEqual([]);
+  });
+
+  // 指摘 8: init しただけの plist で、TouRyou.app の登録解除を飛ばさない
+  it("uninstall は、init しただけの別名の plist があっても、LaunchAgents に残らなければ登録を解く", async () => {
+    const w = makeWorld();
+    const real = join(w.base, "v9.9.9", "touryou-darwin-arm64");
+    mkdirSync(join(real, "TouRyou.app", "Contents", "MacOS"), { recursive: true });
+    mkdirSync(join(real, "bin"), { recursive: true });
+    writeFileSync(join(real, "bin", "touryou-daemon"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    rmSync(join(w.base, "current"), { recursive: true });
+    symlinkSync(real, join(w.base, "current"));
+    await bin(w, ["init"]);
+    await bin(w, ["init", "--config", w.otherConfig]); // init しただけ（apply しない）
+    expect((await bin(w, ["apply", "--yes"])).exitCode).toBe(0);
+    w.ls.length = 0;
+    const u = await bin(w, ["uninstall", "--yes"]);
+    expect(u.exitCode, u.stdout + u.stderr).toBe(0);
+    expect(w.ls).toContain(`-u ${join(real, "TouRyou.app")}`);
+    expect(u.stdout).not.toContain("登録は解かなかった");
+    // init しただけの plist は、そのまま残る
+    expect(existsSync(join(w.base, "launchd", `${w.otherLabel}.plist`))).toBe(true);
+  });
+
+  it("uninstall は、LaunchAgents に別の daemon の plist が残るなら、登録を解かず、残るものと外し方を案内する", async () => {
+    const w = makeWorld();
+    const real = join(w.base, "v9.9.9", "touryou-darwin-arm64");
+    mkdirSync(join(real, "TouRyou.app", "Contents", "MacOS"), { recursive: true });
+    mkdirSync(join(real, "bin"), { recursive: true });
+    writeFileSync(join(real, "bin", "touryou-daemon"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+    rmSync(join(w.base, "current"), { recursive: true });
+    symlinkSync(real, join(w.base, "current"));
+    await bin(w, ["init"]);
+    await bin(w, ["init", "--config", w.otherConfig]);
+    expect((await bin(w, ["apply", "--yes"])).exitCode).toBe(0);
+    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+    w.ls.length = 0;
+    const u = await bin(w, ["uninstall", "--yes"]);
+    expect(u.exitCode, u.stdout + u.stderr).toBe(0);
+    expect(w.ls.filter((x) => x.startsWith("-u"))).toEqual([]);
+    expect(u.stdout).toContain("登録は解かなかった");
+    expect(u.stdout).toContain(join(w.agents, `${w.otherLabel}.plist`));
+    expect(u.stdout).toContain("--others");
+  });
+
+  // 指摘 9: 停止後の案内の apply に、実際の対象を含める
+  it("stop のあとの status は、apply の案内に、止めたときと同じ --config を含める", async () => {
+    const w = makeWorld();
+    await bin(w, ["init", "--config", w.otherConfig]);
+    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+    const stopped = await bin(w, ["stop", "--config", w.otherConfig]);
+    expect(stopped.stdout).toContain(`launchd apply --yes --config "${w.otherConfig}"`);
+    const s = await bin(w, ["status", "--config", w.otherConfig]);
+    expect(s.exitCode).toBe(1);
+    expect(s.stdout).toContain(`launchd apply --yes --config "${w.otherConfig}"`);
+    expect(s.stdout).not.toContain("止めたときと同じにする");
+  });
+
+  it("--others で止めたあとの案内の apply には、--others（と --org）を含める", async () => {
+    const w = makeWorld();
+    await bin(w, ["init", "--config", w.otherConfig, "--org", "com.example"]);
+    const orgLabel = `com.example.${w.otherLabel}`;
+    w.states[orgLabel] = w.states[w.otherLabel] as string;
+    w.ports[orgLabel] = "4322";
+    expect(
+      (await bin(w, ["apply", "--yes", "--config", w.otherConfig, "--org", "com.example"]))
+        .exitCode,
+    ).toBe(0);
+    await bin(w, ["stop", "--others", "--org", "com.example"]);
+    const s = await bin(w, ["status", "--others", "--org", "com.example"]);
+    expect(s.stdout).toContain("launchd apply --yes --org com.example --others");
+    const rs = await bin(w, ["restart", "--others", "--org", "com.example"]);
+    expect(rs.exitCode).toBe(1);
+    expect(rs.stderr).toContain("launchd apply --yes --org com.example --others");
+  });
+
   it("--config が既定の設定と同じなら、既定の daemon として扱う", () => {
     const w = makeWorld();
     expect(daemonNameOf(w.base, w.defaultConfig)).toBe("daemon");

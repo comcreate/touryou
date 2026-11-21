@@ -9,11 +9,11 @@
  * `human-token` は、メモリの中だけで使い、標準出力・標準エラー・引数・ログに出さない。チケットも、標準出力・標準エラーに出さない
  * （`open` の引数にだけ渡す。`ps` に出るのは、使い捨てのチケットだけ）。ブラウザを開けないときは、URL を出さずに止まる。
  */
-import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import { readSecureFile } from "@touryou/core/fs";
 import { createIdentityVerifier, IDENTITY_FILE, type IdentityVerifier } from "@touryou/mcp/relay";
 import type { CommandResult } from "./commands.js";
+import { otherPlistNames, plistConfigOf } from "./launchd.js";
 
 export interface UiDeps {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -43,10 +43,6 @@ const NOT_MAC = fail(
   'Mac のターミナルで "$HOME/.touryou/current/bin/touryou" ui を実行してください（Claude Code では /touryou:ui）',
 );
 
-/** init が生成する、別名の設定（`--config`）の daemon の plist のファイル名から、設定のパスを読むための形。 */
-const OTHER_PLIST = /touryou\.daemon-[0-9a-f]{8}\.plist$/;
-const PLIST_CONFIG = /<string>--config<\/string>\s*<string>([^<]*)<\/string>/;
-
 interface Candidate {
   readonly configPath: string;
   /** その設定の repoRoot・worktreeRoot（読めなければ undefined）。子の作業ツリーは worktreeRoot の下にある。 */
@@ -61,18 +57,10 @@ function otherConfigs(
   read: (p: string, f: number) => string,
 ): string[] {
   const dir = `${home}/.touryou/launchd`;
-  let names: string[];
-  try {
-    names = (deps.readDir ?? ((p: string) => readdirSync(p)))(dir).filter((n) =>
-      OTHER_PLIST.test(n),
-    );
-  } catch {
-    return [];
-  }
   const out: string[] = [];
-  for (const n of names.sort()) {
+  for (const n of otherPlistNames(dir, deps.readDir)) {
     try {
-      const cfg = PLIST_CONFIG.exec(read(`${dir}/${n}`, 0o022))?.[1];
+      const cfg = plistConfigOf(read(`${dir}/${n}`, 0o022));
       if (cfg !== undefined && cfg.startsWith("/")) out.push(cfg);
     } catch {
       // 読めない plist は、候補にしない
@@ -147,6 +135,13 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
           '"$HOME/.touryou/current/bin/touryou" ui は、--config <設定ファイルの絶対パス>・--list だけを取る（トークン・URL を引数で渡さない）\n',
       };
     }
+  }
+  if (list && configArg !== undefined) {
+    return {
+      exitCode: 2,
+      stdout: "",
+      stderr: "--list と --config は、同時に指定できない（--list は候補の一覧だけを出す）\n",
+    };
   }
   const read =
     deps.readFile ??

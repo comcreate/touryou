@@ -31,8 +31,9 @@ import type { RunResult } from "./launchd.js";
 import {
   appBundlePath,
   type ConfigChecker,
-  canonicalPath,
+  configPathOf,
   configProblem,
+  DAEMON_PLIST,
   DEFAULT_PATH,
   daemonNameOf,
   daemonProgramArguments,
@@ -42,12 +43,14 @@ import {
   legacyScriptPath,
   maskValues,
   OTHER_PLIST,
+  otherPlistNames,
   plainPath,
   plistConfigOf,
   plistText,
   REVERSE_DOMAIN,
   runDaemonScript,
   stateDirOf,
+  stateDirSharedWith,
   usableConfigPath,
   v011PlistText,
 } from "./launchd.js";
@@ -73,12 +76,15 @@ export interface LaunchdServiceDeps {
 export const SERVICE_SUBCOMMANDS = ["apply", "status", "restart", "stop", "uninstall"] as const;
 type Sub = (typeof SERVICE_SUBCOMMANDS)[number];
 
-/** 既定・別名のどちらも含む、touryou の daemon の plist のファイル名。 */
-const DAEMON_PLIST = /^(?:[a-z0-9-]+\.)*touryou\.daemon(?:-[0-9a-f]{8})?\.plist$/;
+const TOURYOU = '"$HOME/.touryou/current/bin/touryou"';
+
+/** この操作の対象（--config・--others・--org）を、そのまま付けた touryou launchd のコマンド。案内に出して、同じ対象で打ち直せるようにする。 */
+const cmd = (ctx: Ctx, sub: Sub, flags = ""): string =>
+  `${TOURYOU} launchd ${sub}${flags}${ctx.selector}`;
 
 /** apply・restart が途中で止まったときの状態の案内。 */
-const PARTIAL =
-  'daemon は読み込み済みのまま（KeepAlive で動き続けうる）。止めるなら "$HOME/.touryou/current/bin/touryou" launchd stop、直してからやり直すなら "$HOME/.touryou/current/bin/touryou" launchd apply --yes';
+const partial = (ctx: Ctx): string =>
+  `daemon は読み込み済みのまま（KeepAlive で動き続けうる）。止めるなら ${cmd(ctx, "stop")}、直してからやり直すなら ${cmd(ctx, "apply", " --yes")}`;
 
 const fail = (cause: string, exitCode: 1 | 2 = 2, stdout = ""): CommandResult => ({
   exitCode,
@@ -117,13 +123,15 @@ interface Ctx {
   readonly agentsDir: string;
   readonly domain: string;
   readonly units: readonly Unit[];
+  /** 案内のコマンドに付ける、対象の指定（` --config "<設定>"`・` --others`・` --org <組織>`）。既定の設定だけなら空。 */
+  readonly selector: string;
 }
 interface Unit {
   /** `daemon`（既定の設定）か、`daemon-<8 文字>`（`--config` の設定。#165）。 */
   readonly name: string;
-  /** daemon の設定ファイルと、その stateDir（daemon ごとに別）。 */
+  /** daemon の設定ファイルと、その stateDir（daemon ごとに別）。stateDir は、設定を読めないとき undefined（uninstall だけが、この unit を扱う）。 */
   readonly configPath: string;
-  readonly stateDir: string;
+  readonly stateDir: string | undefined;
   /** 既定の設定（`<base>/config.json`）の daemon か。 */
   readonly isDefault: boolean;
   readonly label: string;
@@ -158,6 +166,7 @@ function info(ctx: Ctx, u: Unit): UnitInfo {
 
 /** state の port（数字だけ）。 */
 function portOf(u: Unit): number | undefined {
+  if (u.stateDir === undefined) return undefined;
   const text = readOr(join(u.stateDir, "port"));
   const first = text?.split("\n")[0]?.trim();
   return first !== undefined && /^[0-9]{1,5}$/.test(first) ? Number(first) : undefined;
@@ -246,13 +255,11 @@ async function statusLines(ctx: Ctx): Promise<{ lines: string[]; ok: boolean }> 
     }
   }
   if (loadedCount === 0) {
-    // 止めた後に restart を案内されないように、戻し方をここで出す（restart は読み込まれていないと使えない）
-    const hint = ctx.units.every((u) => u.isDefault)
-      ? ""
-      : " （--config か --others を、止めたときと同じにする）";
+    // 止めた後に restart を案内されないように、戻し方をここで出す（restart は読み込まれていないと使えない）。
+    // apply は、止めたときと同じ対象（--config・--others・--org）を付けた形で出す
     lines.push(
       ctx.units.every((u) => lstatOr(u.plistDest) !== undefined)
-        ? `読み込まれていない（stop で止めた後）。次のログインで、また動く。すぐ動かすなら "$HOME/.touryou/current/bin/touryou" launchd apply --yes（利用者の同意のあとだけ）。restart は、読み込まれていないので使えない${hint}`
+        ? `読み込まれていない（stop で止めた後）。次のログインで、また動く。すぐ動かすなら ${cmd(ctx, "apply", " --yes")}（利用者の同意のあとだけ）。restart は、読み込まれていないので使えない`
         : "読み込まれていない（常駐にしていない）。常駐にするなら /setup の手順 3-A。restart は、読み込まれていないので使えない",
     );
   }
@@ -413,6 +420,17 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
         1,
       );
     }
+    // 同じ stateDir を別の設定の daemon が使うと、同じ state を取り合って壊れる。init のあとに設定を直した場合もあるので、apply でも確かめる
+    const sharing =
+      u.stateDir === undefined
+        ? undefined
+        : stateDirSharedWith(ctx.base, ctx.plistDir, u.configPath, u.stateDir);
+    if (sharing !== undefined) {
+      return fail(
+        `${u.label} の stateDir が、別の設定（${sharing}）の daemon と同じ。同じ state を 2 つの daemon が使うと壊れるので、何も置かずに止めた。設定ごとに、別の stateDir にする`,
+        1,
+      );
+    }
     // 通らない設定で常駐にすると、KeepAlive で起こし直され、起動のたびに落ち続ける。plist を置く前・launchctl の前に止める
     const problem = configProblem(
       ctx.home,
@@ -498,7 +516,7 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
   if (unresponsive !== undefined) {
     const st = await statusLines(ctx);
     return fail(
-      `${unresponsive.label} の窓口が応答しない（未認証の whoami が 401 にならない）\n${PARTIAL}`,
+      `${unresponsive.label} の窓口が応答しない（未認証の whoami が 401 にならない）\n${partial(ctx)}`,
       1,
       `${[...out, "", ...st.lines].join("\n")}\n`,
     );
@@ -536,7 +554,7 @@ async function restart(ctx: Ctx): Promise<CommandResult> {
   for (const u of ctx.units) {
     if (!info(ctx, u).loaded) {
       return fail(
-        `${u.label} が読み込まれていない。先に "$HOME/.touryou/current/bin/touryou" launchd apply --yes を実行する`,
+        `${u.label} が読み込まれていない。先に ${cmd(ctx, "apply", " --yes")} を実行する`,
         1,
         `${out.join("\n")}\n`,
       );
@@ -555,7 +573,7 @@ async function restart(ctx: Ctx): Promise<CommandResult> {
   if (unresponsive !== undefined) {
     const st = await statusLines(ctx);
     return fail(
-      `${unresponsive.label} の窓口が応答しない\n${PARTIAL}`,
+      `${unresponsive.label} の窓口が応答しない\n${partial(ctx)}`,
       1,
       `${[...out, "", ...st.lines].join("\n")}\n`,
     );
@@ -587,27 +605,23 @@ function stop(ctx: Ctx): CommandResult {
   if (err !== undefined) return fail(err, 1, `${out.join("\n")}\n`);
   out.push(
     "",
-    'plist は LaunchAgents に残っているので、次のログインで、また動く。常駐をやめるなら "$HOME/.touryou/current/bin/touryou" launchd uninstall --yes',
+    `plist は LaunchAgents に残っているので、次のログインで、また動く。すぐ動かすなら ${cmd(ctx, "apply", " --yes")}。常駐をやめるなら ${cmd(ctx, "uninstall", " --yes")}`,
   );
   return { exitCode: 0, stdout: `${out.join("\n")}\n`, stderr: "" };
 }
 
-/** この uninstall の対象でない、touryou の daemon の plist（`<base>/launchd` と LaunchAgents）。 */
+/**
+ * 消したあとの LaunchAgents に残る、touryou の daemon の plist（常駐にしたもの。残した自分の plist も含む）。
+ * `<base>/launchd` の plist は見ない（init しただけで、まだ launchd に読まれていないものが、TouRyou.app の登録解除を止めないように）。
+ */
 function remainingPlists(ctx: Ctx): string[] {
-  const mine = new Set(ctx.units.map((u) => `${u.label}.plist`));
-  const found: string[] = [];
-  for (const dir of [ctx.plistDir, ctx.agentsDir]) {
-    let names: string[] = [];
-    try {
-      names = readdirSync(dir);
-    } catch {
-      continue;
-    }
-    for (const n of names) {
-      if (DAEMON_PLIST.test(n) && !mine.has(n)) found.push(join(dir, n));
-    }
+  try {
+    return readdirSync(ctx.agentsDir)
+      .filter((n) => DAEMON_PLIST.test(n))
+      .map((n) => join(ctx.agentsDir, n));
+  } catch {
+    return [];
   }
-  return found;
 }
 
 function uninstall(ctx: Ctx): CommandResult {
@@ -659,16 +673,18 @@ function uninstall(ctx: Ctx): CommandResult {
       remove(u.legacyScript, (t) => isLegacyScript(ctx, u, t));
     }
   }
-  // ほかの daemon の plist が残っているうちは、TouRyou.app の登録を解かない（残った daemon が、同じ app を使う）
-  if (remainingPlists(ctx).length > 0) {
+  // LaunchAgents に daemon の plist が残っているうちは、TouRyou.app の登録を解かない（残った daemon が、同じ app を使う）
+  const remaining = remainingPlists(ctx);
+  if (remaining.length > 0) {
     out.push(
-      "ほかの daemon の plist が残っているので、TouRyou.app の LaunchServices の登録は解かなかった",
+      `LaunchAgents に daemon の plist が残っているので、TouRyou.app の LaunchServices の登録は解かなかった（残っているもの: ${remaining.join("・")}）。全部外すなら、残りの daemon も ${TOURYOU} launchd uninstall --yes --config <設定> か --others で外す（最後の 1 つを外すときに、登録も解く）`,
     );
   } else {
     out.push(...lsregister(ctx, "-u"));
   }
+  const stateDirs = ctx.units.flatMap((u) => (u.stateDir === undefined ? [] : [u.stateDir]));
   out.push(
-    `残した: ${ctx.logsDir}（ログ）・${ctx.units.map((u) => u.stateDir).join("・")}（daemon の状態）`,
+    `残した: ${ctx.logsDir}（ログ）${stateDirs.length === 0 ? "" : `・${stateDirs.join("・")}（daemon の状態）`}`,
   );
   if (kept.length > 0) out.push("", ...kept);
   return {
@@ -733,7 +749,12 @@ export async function runLaunchdService(
   const plistDir = join(base, "launchd");
   const agentsDir = join(home, "Library", "LaunchAgents");
   const logsDir = join(base, "logs");
-  const unit = (label: string, name: string, configPath: string, stateDir: string): Unit => ({
+  const unit = (
+    label: string,
+    name: string,
+    configPath: string,
+    stateDir: string | undefined,
+  ): Unit => ({
     name,
     configPath,
     stateDir,
@@ -745,47 +766,59 @@ export async function runLaunchdService(
     log: join(logsDir, `${name}.log`),
   });
   let units: Unit[] = [];
+  // 読めない plist 1 つのために、全体を止めない。その unit だけ警告して飛ばす
+  const warnings: string[] = [];
+  const withWarnings = (r: CommandResult): CommandResult =>
+    warnings.length === 0
+      ? r
+      : { ...r, stderr: `${warnings.map((w) => `警告: ${w}`).join("\n")}\n${r.stderr}` };
   if (others) {
     // init が生成した別名の daemon（--config で作ったもの）すべて。plist の ProgramArguments の設定から、対象を決める
-    let names: string[] = [];
-    try {
-      names = readdirSync(plistDir).sort();
-    } catch {
-      names = [];
-    }
-    for (const n of names) {
+    for (const n of otherPlistNames(plistDir)) {
       const m = OTHER_PLIST.exec(n);
       if (m === null) continue;
       // --org があれば、その組織の Label のものだけ（なければ、すべての組織のもの）
       if (org !== undefined && m[1] !== labelOf(org, `daemon-${m[2] as string}`)) continue;
-      const text = readOr(join(plistDir, n));
+      const file = join(plistDir, n);
+      const text = readOr(file);
       const cfg = text === undefined ? undefined : plistConfigOf(text);
-      const stateDir = cfg === undefined || !usableConfigPath(cfg) ? undefined : stateDirOf(cfg);
-      if (cfg === undefined || stateDir === undefined || !plainPath(stateDir)) {
-        return fail(
-          `${join(plistDir, n)} の設定（--config）または stateDir を読めない。手で外すか、"$HOME/.touryou/current/bin/touryou" launchd init --config <設定> で作り直す`,
-          1,
+      if (cfg === undefined || !usableConfigPath(cfg)) {
+        warnings.push(
+          `${file} の設定（--config）を読めないので、この daemon は飛ばした。手で外すか、${TOURYOU} launchd init --config <設定> で作り直す`,
         );
+        continue;
+      }
+      const sd = stateDirOf(cfg);
+      const stateDir = sd !== undefined && plainPath(sd) ? sd : undefined;
+      // stateDir を読めなくても、uninstall は plist・ログを後始末できる（設定を消したあとの片づけ）。ほかは、窓口を確かめられないので飛ばす
+      if (stateDir === undefined && sub !== "uninstall") {
+        warnings.push(
+          `${file} の設定（${cfg}）の stateDir を読めないので、この daemon は飛ばした（設定がない・他の人が書ける・stateDir が絶対パスでない）。設定を直すか、${TOURYOU} launchd uninstall --yes --others で外す`,
+        );
+        continue;
       }
       units.push(unit(m[1] as string, `daemon-${m[2] as string}`, cfg, stateDir));
     }
     // uninstall のほかは、LaunchAgents に置いた（常駐にした）ものだけ。init しただけの plist を、apply・restart で常駐にしない
     if (sub !== "uninstall") units = units.filter((u) => lstatOr(u.plistDest) !== undefined);
     if (units.length === 0) {
-      return {
+      return withWarnings({
         exitCode: 0,
         stdout: "別名の設定（--config）の daemon は、常駐にしたものがない（何もしていない）\n",
         stderr: "",
-      };
+      });
     }
   } else {
-    // init と同じに、実パスにそろえる（リンク経由の指定でも、init が作った plist・Label と同じ daemon を指す）
-    const configPath = canonicalPath(configArg ?? join(base, "config.json"));
+    // --config を明示したときだけ、init と同じに実パスにそろえる（リンク経由の指定でも、init が作った plist・Label と同じ daemon を指す）。
+    // 省略は <base>/config.json のまま（init が plist に書くものと同じ）
+    const configPath = configPathOf(base, configArg);
     if (!usableConfigPath(configPath)) {
       return fail("--config の実パス（リンクを解決したもの）が、使えない文字を含む");
     }
-    const stateDir = stateDirOf(configPath);
-    if (stateDir === undefined || !plainPath(stateDir)) {
+    const sd = stateDirOf(configPath);
+    const stateDir = sd !== undefined && plainPath(sd) ? sd : undefined;
+    // 設定を消した・壊したあとでも、uninstall は plist を後始末できるようにする（stateDir は、窓口を見る操作だけが要る）
+    if (stateDir === undefined && sub !== "uninstall") {
       return fail(
         configArg === undefined
           ? "config.json の stateDir を読めない。先に /setup を実行する"
@@ -796,6 +829,12 @@ export async function runLaunchdService(
     const name = daemonNameOf(base, configPath);
     units = [unit(labelOf(org, name), name, configPath, stateDir)];
   }
+  const orgFlag = org === undefined ? "" : ` --org ${org}`;
+  const targetFlag = others
+    ? " --others"
+    : units[0]?.isDefault === true
+      ? ""
+      : ` --config "${units[0]?.configPath ?? ""}"`;
   const ctx: Ctx = {
     deps,
     home,
@@ -806,19 +845,24 @@ export async function runLaunchdService(
     agentsDir,
     domain: `gui/${uid}`,
     units,
+    selector: `${orgFlag}${targetFlag}`,
   };
   switch (sub) {
     case "apply":
-      return apply(ctx);
+      return withWarnings(await apply(ctx));
     case "status": {
       const st = await statusLines(ctx);
-      return { exitCode: st.ok ? 0 : 1, stdout: `${st.lines.join("\n")}\n`, stderr: "" };
+      return withWarnings({
+        exitCode: st.ok ? 0 : 1,
+        stdout: `${st.lines.join("\n")}\n`,
+        stderr: "",
+      });
     }
     case "restart":
-      return restart(ctx);
+      return withWarnings(await restart(ctx));
     case "stop":
-      return stop(ctx);
+      return withWarnings(stop(ctx));
     case "uninstall":
-      return uninstall(ctx);
+      return withWarnings(uninstall(ctx));
   }
 }

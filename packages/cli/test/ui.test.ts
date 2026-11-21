@@ -262,6 +262,33 @@ describe("touryou ui（複数の daemon）", () => {
     expect(open.r.stdout).toContain(`開いた設定: ${OTHER}`);
   });
 
+  it("--list と --config は、同時に指定できない（何も開かず、何も出さない）", async () => {
+    const r = await go(["--list", "--config", OTHER], {}, "/work/a");
+    expect(r.r.exitCode).toBe(2);
+    expect(r.r.stderr).toContain("--list と --config は、同時に指定できない");
+    expect(r.r.stdout).toBe("");
+    expect(r.opened).toEqual([]);
+    expect(r.seen).toEqual([]);
+  });
+
+  it("候補にするのは、plist の名前の形に合うものだけ（前後に余計な文字がある名前は数えない）", async () => {
+    const { f } = ticketFetch();
+    const r = await runBin(["ui", "--list"], {
+      env: { HOME: "/home/u" },
+      cwd: "/work/a",
+      isTTY: TTY,
+      fetch: f,
+      ui: {
+        readFile: multi(),
+        readDir: () => [PLIST, `x${PLIST}.bak`, `${PLIST}.bak`],
+        verifierFor: verifier(),
+        openUrl: () => true,
+      },
+    });
+    expect(r.exitCode).toBe(0);
+    expect(r.stdout.split(OTHER).length - 1).toBe(1);
+  });
+
   it("--config に相対パスは渡せない", async () => {
     const r = await go(["--config", "rel.json"], {}, "/work/a");
     expect(r.r.exitCode).toBe(2);

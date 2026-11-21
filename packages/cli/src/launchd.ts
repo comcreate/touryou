@@ -211,8 +211,37 @@ export const canonicalPath = (p: string): string => {
   }
 };
 
+/**
+ * plist に書く設定のパス。`--config` を明示したときだけ、実パス（リンクを解決したもの）にする。
+ * 省略（既定の設定）は、従来どおり `<base>/config.json` のまま（HOME がリンクでも、plist の内容を変えない）。
+ * 明示した設定が既定の設定と同じ実体なら、既定のパスにそろえる。
+ */
+export const configPathOf = (base: string, configArg: string | undefined): string => {
+  const def = join(base, "config.json");
+  if (configArg === undefined) return def;
+  const canonical = canonicalPath(configArg);
+  return canonical === canonicalPath(def) ? def : canonical;
+};
+
 /** init が生成する、別名の設定（--config）の daemon の plist のファイル名。`[<org>.]touryou.daemon-<8 文字>.plist`。 */
 export const OTHER_PLIST = /^((?:[a-z0-9-]+\.)*touryou\.daemon-([0-9a-f]{8}))\.plist$/;
+
+/** 既定・別名のどちらも含む、touryou の daemon の plist のファイル名。 */
+export const DAEMON_PLIST = /^(?:[a-z0-9-]+\.)*touryou\.daemon(?:-[0-9a-f]{8})?\.plist$/;
+
+/** plist の置き場にある、別名の設定の daemon の plist のファイル名（並べ替え済み）。置き場がない・読めなければ空。 */
+export const otherPlistNames = (
+  plistDir: string,
+  readDir: (path: string) => string[] = (p) => readdirSync(p),
+): string[] => {
+  try {
+    return readDir(plistDir)
+      .filter((n) => OTHER_PLIST.test(n))
+      .sort();
+  } catch {
+    return [];
+  }
+};
 
 /** plist の ProgramArguments の `--config` の値。 */
 export const plistConfigOf = (text: string): string | undefined =>
@@ -341,26 +370,25 @@ export function stateDirOf(configPath: string): string | undefined {
  * 同じ stateDir（実パスで比べる）を使う、別の設定。既定の設定（`<base>/config.json`）と、init 済みの別名の設定を見る。
  * 見つかったら、その設定のパス。なければ undefined。
  */
-function stateDirSharedWith(
+export function stateDirSharedWith(
   base: string,
   plistDir: string,
   configPath: string,
   stateDir: string,
 ): string | undefined {
   const others = [join(base, "config.json")];
-  try {
-    for (const n of readdirSync(plistDir).sort()) {
-      if (!OTHER_PLIST.test(n)) continue;
-      const text = readFileSync(join(plistDir, n), "utf8");
-      const cfg = plistConfigOf(text);
+  for (const n of otherPlistNames(plistDir)) {
+    try {
+      const cfg = plistConfigOf(readFileSync(join(plistDir, n), "utf8"));
       if (cfg !== undefined) others.push(cfg);
+    } catch {
+      // 読めない plist は、飛ばす（その 1 つのために、検出全体をやめない）
     }
-  } catch {
-    // plist の置き場がまだない・読めない: 見る相手は既定の設定だけ
   }
+  const self = canonicalPath(configPath);
   const mine = canonicalPath(stateDir);
   for (const c of others) {
-    if (canonicalPath(c) === configPath) continue;
+    if (canonicalPath(c) === self) continue;
     const sd = stateDirOf(c);
     if (sd !== undefined && canonicalPath(sd) === mine) return c;
   }
@@ -378,12 +406,7 @@ function initOthers(args: readonly string[], deps: LaunchdDeps): CommandResult {
     return fail("HOME が、絶対パスでない・空・使えない文字を含む");
   }
   const plistDir = join(home, ".touryou", "launchd");
-  let names: string[] = [];
-  try {
-    names = readdirSync(plistDir).filter((n) => OTHER_PLIST.test(n));
-  } catch {
-    names = [];
-  }
+  const names = otherPlistNames(plistDir);
   if (names.length === 0) {
     return {
       exitCode: 0,
@@ -391,8 +414,10 @@ function initOthers(args: readonly string[], deps: LaunchdDeps): CommandResult {
       stderr: "",
     };
   }
-  const results: CommandResult[] = [];
-  for (const n of names.sort()) {
+  // 先に、全部の設定を検査する（1 つでも通らなければ、何も書かない。新旧の plist が混ざらないように）
+  const plans: InitPlan[] = [];
+  const failures: string[] = [];
+  for (const n of names) {
     const file = join(plistDir, n);
     const text = lstatOrUndefined(file)?.isFile() === true ? readFileSync(file, "utf8") : undefined;
     const cfg = text === undefined ? undefined : plistConfigOf(text);
@@ -407,18 +432,33 @@ function initOthers(args: readonly string[], deps: LaunchdDeps): CommandResult {
     const label = n.replace(/\.plist$/, "");
     const org = label.match(/^(.+)\.touryou\.daemon-[0-9a-f]{8}$/)?.[1];
     if (cfg === undefined || prefix === undefined) {
-      return fail(
-        `${file} の設定（--config）または PATH を読めない。手で外すか、"$HOME/.touryou/current/bin/touryou" launchd init --config <設定> で作り直す`,
-        1,
+      failures.push(
+        `  ${file}: 設定（--config）または PATH を読めない。手で外すか、"$HOME/.touryou/current/bin/touryou" launchd init --config <設定> で作り直す`,
       );
+      continue;
     }
-    results.push(
-      runLaunchd(
-        ["init", "--config", cfg, ...(org === undefined ? [] : ["--org", org]), ...prefix],
-        deps,
-      ),
+    const planned = planInit(
+      ["--config", cfg, ...(org === undefined ? [] : ["--org", org]), ...prefix],
+      deps,
+    );
+    if ("exitCode" in planned) {
+      const reason = planned.stderr
+        .trim()
+        .split("\n")
+        .map((l) => `    ${l}`)
+        .join("\n");
+      failures.push(`  --config ${cfg}:\n${reason}`);
+    } else {
+      plans.push(planned);
+    }
+  }
+  if (failures.length > 0) {
+    return fail(
+      `init --others: 作り直せない設定が ${failures.length} 件ある。何も書かずに止めた（全部を検査してから書くので、新旧の plist は混ざらない）:\n${failures.join("\n")}\n直してから、もう一度実行する`,
+      1,
     );
   }
+  const results = plans.map(writeInit);
   const failed = results.find((r) => r.exitCode !== 0);
   return {
     exitCode: failed?.exitCode ?? 0,
@@ -438,6 +478,27 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
     return { exitCode: 0, stdout: HELP, stderr: "" };
   }
   if (args.includes("--others")) return initOthers(args, deps);
+  const planned = planInit(args, deps);
+  return "exitCode" in planned ? planned : writeInit(planned);
+}
+
+/** init の検査が済んだ、書く内容。書く前に、全部の設定で作る（`init --others` が、検査と書き込みを分けるため）。 */
+interface InitPlan {
+  readonly home: string;
+  readonly base: string;
+  readonly logsDir: string;
+  readonly plistDir: string;
+  readonly daemonLabel: string;
+  readonly targets: readonly Target[];
+  readonly toWrite: readonly Target[];
+  readonly toReplace: readonly Target[];
+  readonly same: readonly string[];
+  readonly legacyScript: string;
+  readonly scriptIsLegacy: boolean;
+}
+
+/** init の引数と、書く先の状態を全部確かめる（何も書かない）。書けなければ、止める理由（CommandResult）を返す。 */
+function planInit(args: readonly string[], deps: LaunchdDeps): InitPlan | CommandResult {
   let org: string | undefined;
   let pathPrefix = "";
   let prefixGiven = false;
@@ -486,8 +547,9 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
       "--config は、設定ファイルの絶対パスにする。英数字・. _ / @ + 空白 - だけが使える（.. の要素・// は使えない）",
     );
   }
-  // plist に書く設定のパスも、実パスにそろえる（リンク経由の指定でも、同じ設定は同じ plist・Label になる）
-  const configPath = canonicalPath(configArg ?? join(base, "config.json"));
+  // --config を明示したときだけ、plist に書く設定のパスを実パスにそろえる（リンク経由の指定でも、同じ設定は同じ plist・Label になる）。
+  // 省略（既定の設定）は <base>/config.json のまま（HOME がリンクでも、plist の内容を変えない）
+  const configPath = configPathOf(base, configArg);
   if (!usableConfigPath(configPath)) {
     return fail(
       "--config の実パス（リンクを解決したもの）が、使えない文字を含む。英数字・. _ / @ + 空白 - だけが使える（.. の要素・// は使えない）",
@@ -604,7 +666,36 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
       1,
     );
   }
+  return {
+    home,
+    base,
+    logsDir,
+    plistDir,
+    daemonLabel,
+    targets,
+    toWrite,
+    toReplace,
+    same,
+    legacyScript,
+    scriptIsLegacy,
+  };
+}
 
+/** planInit が確かめた内容を書く。 */
+function writeInit(plan: InitPlan): CommandResult {
+  const {
+    home,
+    base,
+    logsDir,
+    plistDir,
+    daemonLabel,
+    targets,
+    toWrite,
+    toReplace,
+    same,
+    legacyScript,
+    scriptIsLegacy,
+  } = plan;
   // ディレクトリ（自分が作るものだけ、権限を設定する。既存のものは、権限を確かめる）
   const dirNotes: string[] = [];
   for (const [dir, mode] of [

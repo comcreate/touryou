@@ -14,7 +14,8 @@
 #   8. 新しい版の touryou-daemon --help が動くことを確かめる（current を付け替える前）
 #   9. 常駐（launchd の plist がある）で、版が変わるときだけ: 同意（--restart-daemon）があれば、止める → 付け替え → 新しい版で init → 起動し直す
 #      同意がなければ、付け替えずに終わる（終了コード 3）。常駐は、既定の設定の daemon と、設定ごとの別名の daemon
-#      （touryou launchd init --config で作ったもの。LaunchAgents の touryou.daemon-<8 文字>.plist）。登録されたすべてを、起動し直す（#165）
+#      （touryou launchd init --config で作り、LaunchAgents に置いたもの。[<org>.]touryou.daemon-<8 文字>.plist。--others の対象と同じ）。
+#      登録されたすべてを、起動し直す（#165）
 #  10. current を付け替える（できるだけ原子的に）
 #
 # 終了コード: 0 成功、1 失敗、2 知らない引数、3 常駐の同意が要る（need-restart-consent）、4 plugin が本体より古い（plugin-older）。
@@ -59,17 +60,18 @@ finish() {
   if [ "$1" = 0 ]; then
     if [ -f "${HOME}/.touryou/config.json" ]; then echo "CONFIG: present"; else echo "CONFIG: absent"; fi
     if [ -f "${HOME}/Library/LaunchAgents/${LABEL_PLIST}" ]; then echo "LAUNCHD: present"; else echo "LAUNCHD: absent"; fi
-    # 設定ごとの別名の daemon（touryou launchd init --config で作ったもの）があるときだけ出す（#165）
+    # 設定ごとの別名の daemon（touryou launchd init --config で作り、LaunchAgents に置いたもの）があるときだけ出す（#165）
     if has_extra_daemons; then echo "LAUNCHD_OTHERS: present"; fi
   fi
   printf 'RESULT: %s\n' "$2"
   exit "$1"
 }
 has_extra_daemons() {
-  # 設定ごとの別名の daemon（#165）の plist が、あるか。--others が見る場所（launchd init の出力先 ${HOME}/.touryou/launchd）と同じにする。
+  # 設定ごとの別名の daemon（#165）の plist が、LaunchAgents に置いて（常駐にして）あるか。--others（stop・apply・restart）の対象と同じにする
+  # （launchd init の出力先 ${HOME}/.touryou/launchd にあるだけの、まだ常駐にしていないものは数えない）。
   # 名前は [<org>.]touryou.daemon-<8 文字の 16 進>.plist
   local f
-  for f in "${HOME}/.touryou/launchd/"touryou.daemon-????????.plist "${HOME}/.touryou/launchd/"*.touryou.daemon-????????.plist; do
+  for f in "${HOME}/Library/LaunchAgents/"touryou.daemon-????????.plist "${HOME}/Library/LaunchAgents/"*.touryou.daemon-????????.plist; do
     [ -f "${f}" ] && return 0
   done
   return 1

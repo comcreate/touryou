@@ -12,9 +12,23 @@ describe("install-runtime.sh の版上げ（複数の daemon。#165）", () => {
     expect(script).toContain("has_extra_daemons");
     expect(script).toContain("touryou.daemon-????????.plist");
   });
-  it("別名の daemon の探す場所は、--others が見る場所（launchd init の出力先）と同じ", () => {
-    expect(script).toContain('"${HOME}/.touryou/launchd/"touryou.daemon-????????.plist');
-    expect(script).not.toContain('"${HOME}/Library/LaunchAgents/"touryou.daemon-????????.plist');
+  it("別名の daemon の探す場所は、--others の対象と同じ LaunchAgents（init しただけの plist は数えない）", () => {
+    const fn = script.slice(
+      script.indexOf("has_extra_daemons() {"),
+      script.indexOf("cleanup_lists() {"),
+    );
+    expect(fn).toContain('"${HOME}/Library/LaunchAgents/"touryou.daemon-????????.plist');
+    expect(fn).toContain('"${HOME}/Library/LaunchAgents/"*.touryou.daemon-????????.plist');
+    expect(fn).not.toContain('"${HOME}/.touryou/launchd/"touryou.daemon-');
+  });
+  it("冒頭の説明も、LaunchAgents に置いたものと書いている", () => {
+    expect(script).toContain("LaunchAgents に置いたもの。[<org>.]touryou.daemon-<8 文字>.plist");
+  });
+  it("変数は、コメントも ${NAME} の形で書く（$HOME のように括弧なしで書かない）", () => {
+    const bare = script
+      .split("\n")
+      .filter((l) => l.trimStart().startsWith("#") && /\$[A-Za-z_]/.test(l));
+    expect(bare).toEqual([]);
   });
   it("付け替えのあとに、別名の daemon の plist を新しい版で作り直してから、起動し直す", () => {
     const init = script.indexOf('"${BASE}/current/bin/touryou" launchd init --others');

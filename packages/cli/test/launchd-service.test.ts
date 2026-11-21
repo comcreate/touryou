@@ -473,8 +473,9 @@ describe("launchd の操作の回帰", () => {
     expect(r.exitCode).toBe(1);
     expect(r.stdout).toMatch(/stop で止めた後/);
     expect(r.stdout).toMatch(/次のログインで、また動く/);
+    // apply の案内は、止めたときと同じ対象（--org）を付けた形
     expect(r.stdout).toMatch(
-      /"\$HOME\/\.touryou\/current\/bin\/touryou" launchd apply --yes（利用者の同意のあとだけ）/,
+      /"\$HOME\/\.touryou\/current\/bin\/touryou" launchd apply --yes --org com\.example（利用者の同意のあとだけ）/,
     );
     expect(r.stdout).toMatch(/restart は、読み込まれていないので使えない/);
   });
