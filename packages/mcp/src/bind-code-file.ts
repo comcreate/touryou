@@ -3,6 +3,7 @@
  *
  * - 場所: 作業ディレクトリ（子は、いつも作業ツリーの一番上から起動する）の `.git` のファイルの `gitdir:` の先の `touryou-bind-code`。
  *   daemon が、起動の依頼を作るときと、`node.bindCode` の出し直しのときに書く（`packages/daemon/src/bind-code-file.ts`）。
+ *   中身は、1 行目がコード、2 行目が書いた daemon の公開 ID（`daemon=<ID>`。古い形はコードだけ）。
  * - 読む前に確かめる: リンクでない通常のファイル・持ち主が自分・権限が 0600。開くときもリンクを辿らない（`O_NOFOLLOW`）で、
  *   開いたものが確かめたものと同じか（dev・ino）を見る。
  * - コードは、このプロセスのメモリの中で daemon へ送るだけ（ログ・失敗の原因・道具の結果に書かない）。
@@ -29,8 +30,31 @@ const CODE_SHAPE = /^[0-9A-HJKMNP-TV-Z]{26}$/;
 export const normalizeCode = (s: string): string => s.replace(/[\s-]/g, "").toUpperCase();
 export const isCodeShape = (s: string): boolean => CODE_SHAPE.test(normalizeCode(s));
 
+/** 2 行目の、書いた daemon の公開 ID（`daemon=<16 進 32 桁>`。daemon の `bindCodeFileBody` と同じ形）。 */
+const DAEMON_LINE = /^daemon=([0-9a-f]{32})$/;
+
+/**
+ * ファイルの中身を、コードと、書いた daemon の公開 ID に分ける。1 行目がコード。2 行目以降は、`daemon=<ID>` の行だけを見る
+ * （古い形＝コードだけのファイルは、`daemonId` なし。知らない行は無視する）。
+ */
+export function parseCodeFile(text: string): { readonly code: string; readonly daemonId?: string } {
+  const lines = text.split(/\r?\n/);
+  const code = (lines[0] ?? "").trim();
+  for (const line of lines.slice(1)) {
+    const m = DAEMON_LINE.exec(line.trim());
+    if (m?.[1] !== undefined) return { code, daemonId: m[1] };
+  }
+  return { code };
+}
+
 export type ReadCodeResult =
-  | { readonly ok: true; readonly code: string; readonly path: string }
+  | {
+      readonly ok: true;
+      readonly code: string;
+      readonly path: string;
+      /** コードを書いた daemon の公開 ID（古い形のファイルでは、なし）。 */
+      readonly daemonId?: string;
+    }
   | {
       readonly ok: false;
       readonly reason: "missing" | "unsafe" | "unreadable";
@@ -97,7 +121,7 @@ export function readCodeFile(cwd: string, ops: CodeFileOps = {}): ReadCodeResult
       return { ok: false, reason: "unsafe", path };
     const buf = Buffer.alloc(256);
     const n = readSync(fd, buf, 0, buf.length, 0);
-    return { ok: true, code: buf.subarray(0, n).toString("utf8").trim(), path };
+    return { ok: true, ...parseCodeFile(buf.subarray(0, n).toString("utf8")), path };
   } catch {
     return { ok: false, reason: "unreadable", path };
   } finally {

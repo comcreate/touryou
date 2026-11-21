@@ -45,6 +45,18 @@ touryou reclaim <nodeId>
 - 失敗（設定・`port`・`human-token` が読めない、daemon に届かない、身元が合わない、チケットをもらえない、ブラウザを開けない）は、原因と次の操作を出して終了コード 1。ブラウザを開けない（macOS でない・`open` が失敗した）ときは、「Mac のターミナルで `touryou ui` を実行してください」と出す。引数を付けたら終了コード 2。
 - plugin の `/touryou:ui` は、これを 1 回実行するだけ。
 
+## 受信箱の項目を片付ける `touryou inbox resolve` / `touryou inbox reopen`（#99）
+
+```sh
+touryou inbox --detail                    # 項目の ID を見る
+touryou inbox resolve <項目 ID>…          # 片付ける（inbox.resolve）
+touryou inbox reopen <項目 ID>…           # 片付けた項目を未解決に戻す（inbox.reopen）
+```
+
+- 片付けられるのは、進み具合（progress）・完了（done）・お知らせ（info）だけ。判断・違反・停止未完了・失敗が 1 件でも含まれれば、何も片付けず `notResolvable` で終了コード 1。存在しない ID も、何も片付けず `notFound`。
+- すでに片付け済みの項目は、成功のまま「すでに片付け済み N 件」と数える（同じ ID を 2 回渡しても、1 件として扱う）。1 回に渡せるのは 200 件まで。
+- 片付けた項目は、「要対応」の数に入らず、記録（イベントログ）に残る。`reopen` で戻せるのは、人が片付けた項目だけ（自動で片付いたものは戻せない）。
+
 ## 版の確認 `touryou --version`
 
 `touryou --version`（`-v` も同じ）は、入っている配布物の版を 1 行で出す（窓口・トークンは使わない。daemon の起動も不要）。`touryou-daemon --version`・`touryou-mcp --version` も同じ。daemon・mcp・cli の版の食い違いの切り分けに使う。

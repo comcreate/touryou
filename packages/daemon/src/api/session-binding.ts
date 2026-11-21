@@ -41,6 +41,11 @@ export interface SessionBindings {
    * session_id は自己申告なので、別のノードのものを名乗って結び替えられないようにする。
    */
   conflicts(nodeId: string, sessionId: string): boolean;
+  /**
+   * つなぎ直し（コードなし。#145）の前に呼ぶ。記録（`node.sessionBound`）にあるそのノードの session_id が、渡されたものと一致し、
+   * ノードが終わっていなければ真。記録は、正しいコードでの紐付けでだけ作られる（ここでは作らない）。
+   */
+  matches(nodeId: string, sessionId: string): boolean;
   /** 紐付けの成功を受け取る入口を足す。外す関数を返す。 */
   onBound(fn: (nodeId: string, info: BoundInfo) => void): () => void;
 }
@@ -94,6 +99,11 @@ export function createSessionBindings(deps: SessionBindingDeps): SessionBindings
     },
     conflicts(nodeId, sessionId) {
       return live(deps.log.state(), sessionId).some((n) => n.id !== nodeId);
+    },
+    matches(nodeId, sessionId) {
+      return deps.log
+        .state()
+        .nodes.some((n) => n.id === nodeId && n.sessionId === sessionId && !ENDED.has(n.state));
     },
     onBound(fn) {
       listeners.add(fn);

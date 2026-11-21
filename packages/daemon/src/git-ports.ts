@@ -18,7 +18,7 @@
 
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   type Failure,
@@ -121,6 +121,13 @@ export interface GitPortsOptions {
    * `node_modules`・`dist`・`.turbo`。
    */
   readonly regenerableIgnored?: readonly string[];
+  /**
+   * 採用したノード（`node.adopted`。#163）の作業ツリーとブランチ。あれば、ノード ID から導く値の代わりに使い、
+   * 回収でも作業ツリーとブランチは消さない（採用は、既存の作業ツリーを預かるだけ）。daemon の記録（状態）から引く。
+   */
+  readonly adoptedOf?: (
+    nodeId: string,
+  ) => { readonly worktree: string; readonly branch: string } | undefined;
   /** 保管する、破棄した成果（`refs/touryou/discarded/*`）の数の上限。上限に達したら、強制の回収は失敗する。省略すると 200。 */
   readonly discardedRefsMax?: number;
   /** 作業ツリーに設定ファイルを写した結果の通知（`worktree-seed.ts`）。省略すると、標準エラーに 1 行（JSON）出す。 */
@@ -217,6 +224,22 @@ export interface GitPorts {
     parentId: string;
     nodeId: string;
   }): Promise<Result<{ worktreePath: string }, Failure>>;
+  /**
+   * 既存の作業ツリーを、子として採用できるか検査する（#163。何も変えない）。`repoRoot` に登録されたブランチ付きの作業ツリーで、
+   * 主の作業ツリー・根・親の作業ツリーでなく、ブランチが指定と同じで親のブランチと別、上流が親のブランチ、子の印がまだない、を確かめる。
+   * 成功すると、実パスと、未コミットの変更があるか（`dirty`）を返す。
+   */
+  inspectAdoption(req: {
+    parentId: string;
+    worktree: string;
+    branch: string;
+  }): Promise<Result<{ worktreePath: string; branch: string; dirty: boolean }, Failure>>;
+  /** 採用する作業ツリーの git のディレクトリに、子の印（ノードの ID）を書く。すでに印があれば失敗する。 */
+  markAdopted(nodeId: string, worktreePath: string): Promise<Result<undefined, Failure>>;
+  /** 採用の途中の失敗で、書いた印を片付ける（作業ツリーとブランチは消さない）。印がなくても成功する。 */
+  unmarkAdopted(worktreePath: string): Promise<void>;
+  /** 採用したノードの作業ツリーとブランチを引く関数を差し込む（記録は、口より後に作られるため）。 */
+  useAdopted(resolve: (nodeId: string) => { worktree: string; branch: string } | undefined): void;
   cwdOf(nodeId: string): Promise<string | undefined>;
 }
 
@@ -331,8 +354,13 @@ export function createGitPorts(
     (await git(["check-ref-format", "--branch", name])).code === 0;
   const zeros = (sha: string): string => "0".repeat(sha.length);
 
-  const branchOf = (nodeId: string): string => `touryou/${nameOf(nodeId)}`;
-  const pathOf = (nodeId: string): string => join(worktreeRoot, nameOf(nodeId));
+  // 採用したノード（#163）は、記録した作業ツリーとブランチを使う。ほかは、ノード ID から導く。
+  // 記録（イベントログ）は、口を作った後に作られるので、解決する関数は後から差し込める（`useAdopted`）。
+  let adoptedOf = options.adoptedOf;
+  const branchOf = (nodeId: string): string =>
+    adoptedOf?.(nodeId)?.branch ?? `touryou/${nameOf(nodeId)}`;
+  const pathOf = (nodeId: string): string =>
+    adoptedOf?.(nodeId)?.worktree ?? join(worktreeRoot, nameOf(nodeId));
 
   /** 登録されている作業ツリーのパスとブランチ（`git worktree list --porcelain`）。調べられなければ `{ missing }`（git がないか）。 */
   const registeredWorktrees = async (): Promise<Map<string, string> | { missing: boolean }> => {
@@ -728,9 +756,181 @@ export function createGitPorts(
         }
         return { ok: true, value: { alreadyIntegrated: false, target, tip } };
       }),
+    inspectAdoption: ({ parentId, worktree, branch }) =>
+      serial(async () => {
+        const NEXT_ADOPT = "採用する作業ツリーとブランチを確かめて、もう一度 node_adopt を呼ぶ";
+        const real = realOrUndefined(worktree);
+        if (!worktree.startsWith("/") || real === undefined) {
+          return fail(
+            "adoptWorktreeNotFound",
+            `作業ツリー ${worktree} が、実在する絶対パスでない`,
+            "git worktree list で、採用する作業ツリーの実パスを確かめる",
+          );
+        }
+        const list = await git(["worktree", "list", "--porcelain"]);
+        if (list.code !== 0) {
+          return fail(
+            "gitFailed",
+            gitCause("作業ツリーの一覧を取得できなかった", missingIn(list)),
+            "git の状態を確認する",
+          );
+        }
+        // 先頭の項目が、主の作業ツリー（repoRoot）。
+        const entries: { path: string; branch: string | undefined }[] = [];
+        for (const line of list.stdout.split("\n")) {
+          if (line.startsWith("worktree ")) {
+            entries.push({ path: line.slice("worktree ".length), branch: undefined });
+          } else if (line.startsWith("branch refs/heads/") && entries.length > 0) {
+            (entries[entries.length - 1] as { branch: string | undefined }).branch = line.slice(
+              "branch refs/heads/".length,
+            );
+          }
+        }
+        const entry = entries.find((e) => (realOrUndefined(e.path) ?? e.path) === real);
+        if (entry === undefined) {
+          return fail(
+            "adoptNotRegistered",
+            `${real} は、このリポジトリ（${repoRoot}）に登録された作業ツリーでない`,
+            "リポジトリで git worktree add してから採用する",
+            "git worktree list で、登録されている作業ツリーを確かめる",
+          );
+        }
+        const main = entries[0];
+        if (
+          real === repoRoot ||
+          real === realRootCwd ||
+          (main !== undefined && (realOrUndefined(main.path) ?? main.path) === real)
+        ) {
+          return fail(
+            "adoptMainWorktree",
+            "主の作業ツリー（根の作業ツリー）は、子として採用できない",
+            "子にする作業ツリーを、git worktree add で別に作る",
+          );
+        }
+        if (entry.branch === undefined) {
+          return fail(
+            "adoptDetachedHead",
+            `作業ツリー ${real} は、ブランチをチェックアウトしていない（detached HEAD）`,
+            `ブランチをチェックアウトする（git switch -c <ブランチ> <親のブランチ>）。${NEXT_ADOPT}`,
+          );
+        }
+        if (entry.branch !== branch) {
+          return fail(
+            "adoptBranchMismatch",
+            `作業ツリー ${real} のブランチは ${entry.branch} で、指定の ${branch} と違う`,
+            `branch を ${entry.branch} にして、もう一度 node_adopt を呼ぶ`,
+          );
+        }
+        let parentBranch: string;
+        let parentPath: string | undefined;
+        if (parentId === rootNodeId) {
+          const head = await git(["symbolic-ref", "--short", "-q", "HEAD"], rootCwd);
+          parentBranch = head.stdout.trim();
+          parentPath = realRootCwd;
+          if (head.code !== 0 || parentBranch === "") {
+            return fail(
+              "rootBranchUnknown",
+              "根の作業ツリーが、ブランチをチェックアウトしていない（detached HEAD など）",
+              "根の作業ツリーで、ブランチをチェックアウトする",
+            );
+          }
+        } else {
+          parentBranch = branchOf(parentId);
+          parentPath = realOrUndefined(pathOf(parentId));
+        }
+        if (parentPath !== undefined && parentPath === real) {
+          return fail(
+            "adoptParentWorktree",
+            "親の作業ツリーそのものは、子として採用できない",
+            "子にする作業ツリーを、git worktree add で別に作る",
+          );
+        }
+        if (branch === parentBranch) {
+          return fail(
+            "adoptSameBranch",
+            `ブランチ ${branch} は、親のブランチと同じ（子の成果を、親と分けられない）`,
+            `親のブランチ（${parentBranch}）から、子のブランチを切ってチェックアウトする。${NEXT_ADOPT}`,
+          );
+        }
+        const up = await git(["rev-parse", "--abbrev-ref", `${branch}@{upstream}`]);
+        if (up.code !== 0 || up.stdout.trim() !== parentBranch) {
+          return fail(
+            "adoptUpstreamMismatch",
+            `ブランチ ${branch} の上流が、親のブランチ（${parentBranch}）でない（統合済みの判定と統合の基準が、上流になる）`,
+            `git branch --set-upstream-to=${parentBranch} ${branch} を、人が実行する（daemon は利用者の git の設定を書き換えない）`,
+            NEXT_ADOPT,
+          );
+        }
+        const gitDir = await git(["rev-parse", "--absolute-git-dir"], real);
+        if (gitDir.code !== 0 || gitDir.stdout.trim() === "") {
+          return fail(
+            "gitFailed",
+            gitCause("作業ツリーの git のディレクトリを取得できなかった", missingIn(gitDir)),
+            "git の状態を確認する",
+          );
+        }
+        if (existsSync(join(gitDir.stdout.trim(), CHILD_WORKTREE_MARKER))) {
+          return fail(
+            "adoptAlreadyChild",
+            "この作業ツリーは、すでに touryou の子の作業ツリー（印がある）",
+            "別の作業ツリーを採用する。残った印なら、人が確かめて片付ける",
+          );
+        }
+        return {
+          ok: true as const,
+          value: { worktreePath: real, branch, dirty: !(await isClean(real)) },
+        };
+      }),
+
+    markAdopted: (nodeId, worktreePath) =>
+      serial(async () => {
+        const gitDir = await git(["rev-parse", "--absolute-git-dir"], worktreePath);
+        if (gitDir.code !== 0 || gitDir.stdout.trim() === "") {
+          return fail(
+            "childMarkerFailed",
+            "採用する作業ツリーの git のディレクトリを取得できなかった",
+            "git の状態を確認する",
+          );
+        }
+        try {
+          writeFileSync(join(gitDir.stdout.trim(), CHILD_WORKTREE_MARKER), `${nodeId}\n`, {
+            mode: 0o644,
+            flag: "wx",
+          });
+        } catch {
+          return fail(
+            "childMarkerFailed",
+            "採用する作業ツリーに、印のファイルを置けなかった",
+            "git のディレクトリの書き込み権限と、ディスクの空きを確認する",
+          );
+        }
+        return { ok: true as const, value: undefined };
+      }),
+
+    useAdopted: (resolve) => {
+      adoptedOf = resolve;
+    },
+
+    unmarkAdopted: (worktreePath) =>
+      serial(async () => {
+        const gitDir = await git(["rev-parse", "--absolute-git-dir"], worktreePath);
+        if (gitDir.code === 0 && gitDir.stdout.trim() !== "") {
+          try {
+            unlinkSync(join(gitDir.stdout.trim(), CHILD_WORKTREE_MARKER));
+          } catch {
+            // 印がなければ、片付けるものはない
+          }
+        }
+      }),
+
     provisionWorktree: ({ parentId, nodeId }) =>
       serial(async () => {
         const path = pathOf(nodeId);
+        const adopted = options.adoptedOf?.(nodeId);
+        if (adopted !== undefined) {
+          // 採用した作業ツリーは、すでにある（作らない）。
+          return { ok: true as const, value: { worktreePath: realOrUndefined(path) ?? path } };
+        }
         const branch = branchOf(nodeId);
         const registered = await isRegistered(nodeId);
         if (typeof registered !== "boolean") {
@@ -890,6 +1090,18 @@ export function createGitPorts(
             "判定に使った作業ツリーのパスと、削除するパスが違う",
             "回収の判定をやり直す",
           );
+        }
+        if (options.adoptedOf?.(nodeId) !== undefined) {
+          // 採用した作業ツリー（#163）: 作業ツリーもブランチも消さない（預かっていただけ）。子の印だけ片付ける。
+          const gitDir = await git(["rev-parse", "--absolute-git-dir"], path);
+          if (gitDir.code === 0 && gitDir.stdout.trim() !== "") {
+            try {
+              unlinkSync(join(gitDir.stdout.trim(), CHILD_WORKTREE_MARKER));
+            } catch {
+              // 印がなければ、片付けるものはない
+            }
+          }
+          return { ok: true as const, value: undefined };
         }
         const registered = await isRegistered(nodeId);
         if (typeof registered !== "boolean") {

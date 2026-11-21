@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
+import { HUMAN_RESOLVABLE_KINDS } from "@touryou/core";
 import { describe, expect, it } from "vitest";
 import {
   INBOX_MESSAGES_JSON,
@@ -130,6 +131,13 @@ describe("画面の資産（走査）", () => {
       // 要素・文字列・集合・配列・Promise の、安全な操作
       // 移った先のカードへ focus を移すため（tabIndex = -1。カードを Tab の並びには入れない）
       "tabIndex",
+      // 止まった子を、セッション番号で開くコマンドを組むため（表示モデルの nodes[].sessionRef。#150）
+      "sessionRef",
+      // 受信箱の項目を人が片付ける・戻す（#99）: inbox.resolve・inbox.reopen の結果の鍵
+      "resolved",
+      "alreadyResolved",
+      "resolvedAt",
+      "reopened",
       // 画面の言語（#140）: ブラウザの言語・知らせの鍵と値・ページの文字の鍵（data-t・data-t-aria・data-t-title）
       "language",
       "args",
@@ -214,6 +222,7 @@ describe("画面の資産（走査）", () => {
       "spellcheck",
       "autocomplete",
       "ariaLabel",
+      "runtime",
       "scrollIntoView",
       "tagName",
       "confirmations",
@@ -421,6 +430,37 @@ describe("画面の資産（走査）", () => {
       "var TAGS = { div: true, span: true, p: true, button: true, textarea: true, details: true, summary: true, code: true, h3: true };",
     );
     expect(UI_JS).toContain("Object.hasOwn(TAGS, tag)");
+  });
+
+  describe("やり取りの本文（#149）", () => {
+    const fn = (name: string): string => {
+      const at = UI_JS.indexOf(`function ${name}(`);
+      expect(at, name).toBeGreaterThan(0);
+      return UI_JS.slice(at, UI_JS.indexOf("\n  }\n", at) + 4);
+    };
+    const flowTextIn = (lang: "ja" | "en") =>
+      runInNewContext(
+        `var MESSAGES = ${INBOX_MESSAGES_JSON}; var SEPS = ${LIST_SEPS_JSON}; var MESSAGE_DEPTH_MAX = 3;
+var PLACEHOLDER = /[{]([a-z][A-Za-z0-9]*)[}]/g; var lang = '${lang}';
+${fn("msgText")}\n${fn("flowText")}\nflowText`,
+      ) as (f: unknown) => string;
+    const done = {
+      text: "完了報告（根拠 3 件）",
+      msg: { key: "doneReport", args: { count: 3 } },
+    };
+
+    it("msg つきの完了報告は、選んだ言語の文で出す（英語の画面に日本語を出さない）", () => {
+      expect(flowTextIn("en")(done)).toBe("Done report (3 pieces of evidence)");
+      expect(flowTextIn("ja")(done)).toBe("完了報告（根拠 3 件）");
+      expect(flowTextIn("en")(done)).not.toMatch(/完了報告/);
+    });
+    it("msg のない古い記録・知らない鍵の記録は、書かれた text のまま出す", () => {
+      expect(flowTextIn("en")({ text: "完了報告（根拠 3 件）" })).toBe("完了報告（根拠 3 件）");
+      expect(flowTextIn("en")({ text: "古い文", msg: { key: "noSuchKey", args: {} } })).toBe(
+        "古い文",
+      );
+      expect(flowTextIn("en")({})).toBe("");
+    });
   });
 
   it("HTML に、インラインの script・style・イベント属性・javascript: を置かない（script は src だけ）", () => {
@@ -1203,10 +1243,13 @@ describe("画面の使い勝手（#13）", () => {
       fnOf("timeText"),
       fnOf("agoText"),
       fnOf("stageText"),
+      fnOf("attachWith"),
       fnOf("attachCommand"),
+      fnOf("attachCommandByRef"),
+      fnOf("attachCommands"),
       fnOf("cleanText"),
       lineOf("function nodeLabel("),
-      "({ inboxBand: inboxBand, fetchFailureText: fetchFailureText, UNREACHABLE_TEXT: unreachableText(), timeText: timeText, agoText: agoText, stageText: stageText, attachCommand: attachCommand, nodeLabel: nodeLabel })",
+      "({ inboxBand: inboxBand, fetchFailureText: fetchFailureText, UNREACHABLE_TEXT: unreachableText(), timeText: timeText, agoText: agoText, stageText: stageText, attachCommand: attachCommand, attachCommandByRef: attachCommandByRef, attachCommands: attachCommands, nodeLabel: nodeLabel })",
     ].join("\n"),
     uiContext,
   ) as {
@@ -1217,6 +1260,8 @@ describe("画面の使い勝手（#13）", () => {
     agoText(ms: number): string;
     stageText(f: Record<string, unknown>): string;
     attachCommand(n: unknown): string;
+    attachCommandByRef(n: unknown): string;
+    attachCommands(n: unknown): string[];
     nodeLabel(n: unknown, max: number): string;
   };
 
@@ -1341,6 +1386,24 @@ describe("画面の使い勝手（#13）", () => {
     );
   });
 
+  it("(#150) 子のプロセスが止まっていても開けるよう、セッション番号があるときは、名前の形と番号の形の両方を出す", () => {
+    uiContext.attachDir = "/r";
+    const child = { id: "n-a1", cli: true, sessionRef: "bg-1234" };
+    expect(api.attachCommandByRef(child)).toBe("cd '/r' && claude attach bg-1234");
+    expect(api.attachCommands(child)).toEqual([
+      "cd '/r' && claude attach n-a1",
+      "cd '/r' && claude attach bg-1234",
+    ]);
+    // 番号がない・形が不正・CLI の子でないものには、番号の形を出さない（名前の形だけ）
+    expect(api.attachCommands({ id: "n-a1", cli: true })).toEqual([
+      "cd '/r' && claude attach n-a1",
+    ]);
+    expect(api.attachCommandByRef({ id: "n-a1", cli: true, sessionRef: "a b; rm -rf" })).toBe("");
+    expect(api.attachCommandByRef({ id: "n-a1", sessionRef: "bg-1234" })).toBe("");
+    expect(api.attachCommands(undefined)).toEqual([]);
+    uiContext.attachDir = "";
+  });
+
   it("(#89) 「止まっているかも」は、daemon の知らせ（stall）があるときだけ出す（時刻から推し量らない）", () => {
     expect(UI_JS).toContain("if (i.stall === true) {");
     expect(UI_JS).not.toMatch(/lastActivityAt[^\n]*(stall|止まっているかも)/);
@@ -1359,11 +1422,11 @@ describe("画面の使い勝手（#13）", () => {
     expect(UI_CSS).toContain(
       ".still *,.still *::before{animation:none!important;transition:none!important}",
     );
-    // 図の上を動く玉は、動きを減らす設定と「動きを止める」のとき隠す（線と箱は残る）
+    // 図の上を動く彗星は、動きを減らす設定と「動きを止める」のとき隠す（線と箱は残る）
     expect(UI_CSS).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)\{[^@]*\.pip\{display:none\}\}/,
+      /@media \(prefers-reduced-motion: reduce\)\{[^@]*\.comet\{display:none\}\}/,
     );
-    expect(UI_CSS).toContain(".still .pip{display:none}");
+    expect(UI_CSS).toContain(".still .comet{display:none}");
     expect(UI_JS).toContain("root.classList.toggle('still', x.still)"); // 設定の窓の「動きを止める」（#139）
     expect(UI_JS).not.toMatch(/\.animate\(|requestAnimationFrame/);
   });
@@ -1587,5 +1650,26 @@ describe("状態変化の読み上げ・スマホの幅（UI レビューの対�
     const fitTop = Number(/const FIT_TOP = (\d+);/.exec(src)?.[1]);
     expect(top).toBe(4);
     expect(top + 44).toBeLessThanOrEqual(fitTop);
+  });
+});
+
+describe("受信箱の項目の片付け・戻し（#99）", () => {
+  it("画面の片付けられる種類は、core の HUMAN_RESOLVABLE_KINDS と同じ（進み具合・完了・お知らせだけ）", () => {
+    const m = /var CLEARABLE_KINDS = \{([^}]*)\};/.exec(UI_JS);
+    const kinds = [...(m?.[1] ?? "").matchAll(/(\w+): true/g)].map((x) => x[1]).sort();
+    expect(kinds).toEqual([...HUMAN_RESOLVABLE_KINDS].sort());
+  });
+
+  it("停止未完了（stall）の項目と、ID の形が不正な項目には、ボタンを付けない", () => {
+    expect(UI_JS).toMatch(
+      /function isClearable\(i\) \{ return Object\.hasOwn\(CLEARABLE_KINDS, i\.kind\) && i\.stall !== true && ID_RE\.test\(i\.id\); \}/,
+    );
+  });
+
+  it("「片付けた項目」の欄は view.resolved から作り、ボタンの読み上げの名前に項目の文を添える", () => {
+    expect(UI_JS).toContain("resolved-");
+    expect(UI_JS).toMatch(/\.resolved\b/);
+    expect(UI_JS).toMatch(/b\.ariaLabel = label \+ ': '/);
+    expect(UI_JS).toMatch(/undo\.ariaLabel = t\('reopen\.button'\) \+ ': '/);
   });
 });

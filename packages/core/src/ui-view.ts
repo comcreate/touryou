@@ -3,7 +3,8 @@
  *
  * - **含めるもの**: ノードの識別子・役割・親・状態・依存、未解決の受信箱の項目、未回答の判断、未判定の拡張要求。
  * - **含めないもの**: トークン・秘密・パス（作業ツリーの絶対パス・作業範囲の場所・最終コミットなど）。ただし、拡張要求の対象は、`uiTargetOf` の規則を満たすものだけ載せる。
- *   ブリーフは、目的（objective）の先頭を `UI_TITLE_MAX` で切った題（`title`）だけ載せる（#89）。受け入れ基準・目的の全文・セッションの識別子は含めない。
+ *   ブリーフは、目的（objective）の先頭を `UI_TITLE_MAX` で切った題（`title`）だけ載せる（#89）。受け入れ基準・目的の全文は含めない。
+ *   CLI の子のセッション番号（`sessionRef`）だけは、止まった子を `claude attach` で開くために、この応答にだけ載せる（#150。記録には残さない）。
  * - やり取りの段（`flows`。#89）: 記録から、種類・向き・相手・段（`sent`・`delivered`・`done`）・時刻を導く。利用者の決めで、短い本文（`text`。
  *   上限 `UI_FLOW_TEXT_MAX`）を載せる。載せるのは、画面のほかの所で、いま見える文、またはかつて見えた文だけ（報告〔受信箱の要約〕・判断の問い・範囲の頼みの理由）。
  *   追加指示・判断の答えの文は載せない（画面のどこにも出したことがないため）。
@@ -14,8 +15,9 @@
  * - 件数には上限がある（`UI_LIMITS`）。切ったときは、`truncated` に種類を入れる。
  */
 
-import type { Actor, OrchState } from "./events.js";
+import { type Actor, isSessionRef, type NodeRuntime, type OrchState } from "./events.js";
 import { ID_PATTERN } from "./ids.js";
+import { isResolvedByHuman } from "./inbox.js";
 import { isStallSummary, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
 import { copyInboxMessage, type InboxMessage } from "./inbox-messages.js";
 import type { NodeRole, NodeState } from "./index.js";
@@ -38,6 +40,8 @@ export const UI_LIMITS = {
   extensions: 100,
   options: 10,
   flows: 200,
+  /** 人が片付けた項目（「片付けた項目」にたたんで出すもの）。新しい順で、この件数まで。 */
+  resolved: 50,
 } as const;
 
 export interface UiNode {
@@ -60,6 +64,16 @@ export interface UiNode {
    * `claude attach` のコマンドを出し、Desktop の子の文は、CLI の子でない停止の代行のノードにだけ出す。
    */
   readonly cli?: true;
+  /**
+   * CLI の子のセッション番号（起動の報告の `sessionRef`。#150）。子のプロセスが止まっていると、名前では `claude attach` で
+   * 開けないので、画面は番号の形も出す。表示モデルの応答にだけ載せ、記録（イベント・ログ）には残さない。形が合わないものは付けない。
+   */
+  readonly sessionRef?: string;
+  /**
+   * 子の実行環境（`node.created` の `runtime`。#159）。記録のない古いノードは、CLI の子と分かるもの（`cli`）だけ `cli`、
+   * ほかは付けない（記録のないものを、画面で推し量らない）。画面は、実行環境の札と、開き方・安全面の注記を出す。
+   */
+  readonly runtime?: NodeRuntime;
   /** 題: 目的（objective）の先頭を整えて `UI_TITLE_MAX` で切ったもの。目的がなければ、なし。 */
   readonly title?: string;
   /** そのノードの最後の動き（報告・受信箱の項目・指示と受け取り・判断と拡張の要求）の時刻。記録がなければ、なし。 */
@@ -94,6 +108,21 @@ export interface UiInboxItem {
   /** 「止まっているかもしれない子」の知らせ（`isStallSummary`）。 */
   readonly stall?: true;
   /** daemon が書いた知らせの鍵と値（#140）。画面は、言語を選んで文にし、ないときは `summary` を出す。 */
+  readonly msg?: InboxMessage;
+}
+
+/**
+ * 人が片付けた項目（#99）。画面は「片付けた項目」にたたんで出し、「戻す」（`inbox.reopen`）を付ける。
+ * 戻せるのは人が片付けた項目だけなので、システム・ノードが解決にしたものは載せない。
+ */
+export interface UiResolvedItem {
+  readonly id: string;
+  readonly kind: string;
+  readonly nodeId: string;
+  readonly at: string;
+  /** 片付けた時刻。 */
+  readonly resolvedAt: string;
+  readonly summary?: string;
   readonly msg?: InboxMessage;
 }
 
@@ -186,17 +215,21 @@ export interface UiFlow {
   readonly doneInferred?: true;
   /** 短い本文（報告・判断の問い・範囲の頼みの理由だけ。`UI_FLOW_TEXT_MAX` で切る）。空なら、なし。 */
   readonly text?: string;
+  /** daemon が書いた報告の文の鍵と値（#149）。画面は、言語を選んで文にし、ないとき（古い記録）は `text` を出す。 */
+  readonly msg?: InboxMessage;
 }
 
 export interface UiView {
   readonly lastSeq: number;
   readonly nodes: readonly UiNode[];
   readonly inbox: readonly UiInboxItem[];
+  /** 人が片付けた項目（新しい順。`UI_LIMITS.resolved` 件まで）。 */
+  readonly resolved: readonly UiResolvedItem[];
   readonly decisions: readonly UiDecision[];
   readonly extensions: readonly UiExtension[];
   /** やり取り（新しい順。`UI_LIMITS.flows` 件まで）。 */
   readonly flows: readonly UiFlow[];
-  /** 上限で切った種類（nodes・inbox・decisions・extensions・flows）。 */
+  /** 上限で切った種類（nodes・inbox・resolved・decisions・extensions・flows）。 */
   readonly truncated: readonly string[];
 }
 
@@ -301,10 +334,19 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       .filter((r) => r.kind === "launch" && r.report?.outcome === "done")
       .map((r) => r.nodeId),
   );
+  // 起動の報告の sessionRef（新しい報告を優先）。停止・削除の報告の sessionRef は読まない
+  const sessionRefs = new Map<string, string>();
+  for (const r of state.parentRequests) {
+    if (r.kind === "launch" && r.report?.outcome === "done" && isSessionRef(r.report.sessionRef)) {
+      sessionRefs.set(r.nodeId, r.report.sessionRef);
+    }
+  }
   const nodes = cap("nodes", state.nodes, UI_LIMITS.nodes).map((n): UiNode => {
     const title = titleOf(n.objective);
     const needsHuman = human.get(n.id) ?? 0;
     const at = last.get(n.id);
+    const sessionRef = sessionRefs.get(n.id);
+    const runtime = n.runtime ?? (cliChildren.has(n.id) ? "cli" : undefined);
     return {
       id: idOf(n.id),
       role: n.role,
@@ -315,6 +357,8 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       discarded: n.discarded !== undefined,
       ...(options.stopDelegated?.(n.id) === true ? { stopDelegated: true as const } : {}),
       ...(cliChildren.has(n.id) ? { cli: true as const } : {}),
+      ...(sessionRef === undefined ? {} : { sessionRef }),
+      ...(runtime === undefined ? {} : { runtime }),
       ...(title === "" ? {} : { title }),
       ...(at === undefined ? {} : { lastActivityAt: uiText(at) }),
       needsHuman,
@@ -342,6 +386,25 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       ...(ref === "" ? {} : { ref }),
       ...(i.kind === "info" && isStallSummary(i.summary) ? { stall: true as const } : {}),
       // 記録の検査を通った形（鍵の形・値の数と長さ・制御文字なし）。値は、画面が textContent で入れる
+      ...(i.msg === undefined ? {} : { msg: copyInboxMessage(i.msg) }),
+    };
+  });
+
+  const resolved = cap(
+    "resolved",
+    state.inbox
+      .filter((i) => i.resolved !== undefined && isResolvedByHuman(i))
+      .sort((a, b) => (b.resolved?.seq ?? 0) - (a.resolved?.seq ?? 0)),
+    UI_LIMITS.resolved,
+  ).map((i): UiResolvedItem => {
+    const summary = uiText(i.summary);
+    return {
+      id: idOf(i.id),
+      kind: i.kind,
+      nodeId: idOf(i.nodeId),
+      at: uiText(i.at),
+      resolvedAt: uiText(i.resolved?.at),
+      ...(summary === "" ? {} : { summary }),
       ...(i.msg === undefined ? {} : { msg: copyInboxMessage(i.msg) }),
     };
   });
@@ -382,7 +445,16 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
 
   const flows = cap("flows", flowsOf(state), UI_LIMITS.flows);
 
-  return { lastSeq: state.lastSeq, nodes, inbox, decisions, extensions, flows, truncated };
+  return {
+    lastSeq: state.lastSeq,
+    nodes,
+    inbox,
+    resolved,
+    decisions,
+    extensions,
+    flows,
+    truncated,
+  };
 }
 
 /** 題: 改行・タブ・続く空白を空白 1 つにまとめ、前後の空白を除いて 1 行にしてから、`UI_TITLE_MAX` で切る。 */
@@ -475,6 +547,21 @@ export function flowsOf(state: OrchState): UiFlow[] {
     if (reviewed !== undefined && r.seq < reviewed) reviewedDone.set(r.nodeId, r.seq);
   }
 
+  // 統合が受け取った時刻（`inbox.acknowledged`。#102）を、項目の参照先（報告・判断・範囲の頼みの ID）ごとに。
+  // 同じ参照先の項目が複数あれば、いちばん早い受け取り。受け取りの記録がない統合では、引けない（届いたかは分からない）。
+  const acknowledgedAt = new Map<string, string>();
+  for (const i of state.inbox) {
+    if (i.ref === undefined || i.acknowledged === undefined) continue;
+    const cur = acknowledgedAt.get(i.ref);
+    if (cur === undefined || i.acknowledged.at < cur) acknowledgedAt.set(i.ref, i.acknowledged.at);
+  }
+  /** 子 → 親のやり取りの「届いた」。受け取りの記録があれば時刻、なければ「届いたかは分からない」の印。 */
+  const upDelivery = (
+    ref: string | undefined,
+  ): { deliveredAt: string } | { deliveryUnknown: true } => {
+    const at = ref === undefined ? undefined : acknowledgedAt.get(ref);
+    return at === undefined ? { deliveryUnknown: true } : { deliveredAt: t(at) };
+  };
   const out: { flow: UiFlow; seq: number }[] = [];
   const push = (flow: UiFlow, seq: number): void => {
     if (flow.from === "" || flow.to === "" || flow.sentAt === "") return;
@@ -518,6 +605,7 @@ export function flowsOf(state: OrchState): UiFlow[] {
     // その直前の完了の報告にだけ付ける。それより前の完了の報告は、済んだが時刻は分からない）。
     const lastDoneBeforeReview = done ? reviewedDone.get(r.nodeId) : undefined;
     const doneAt = !done ? r.at : lastDoneBeforeReview === r.seq ? node?.reviewedAt : undefined;
+    const delivery = upDelivery(r.reportId);
     push(
       {
         id: `f-${r.seq}`,
@@ -525,11 +613,12 @@ export function flowsOf(state: OrchState): UiFlow[] {
         dir: "up",
         from,
         to: parentOf.get(r.nodeId) ?? UI_HUMAN,
-        stage: waiting ? "sent" : "done",
+        stage: waiting ? ("deliveredAt" in delivery ? "delivered" : "sent") : "done",
         sentAt: t(r.at),
+        ...delivery,
         ...(waiting || doneAt === undefined ? {} : { doneAt: t(doneAt) }),
-        deliveryUnknown: true,
         ...body(r.text),
+        ...(r.msg === undefined ? {} : { msg: copyInboxMessage(r.msg) }),
       },
       r.seq,
     );
@@ -540,6 +629,7 @@ export function flowsOf(state: OrchState): UiFlow[] {
     if (d.requestedAt === undefined) continue;
     const doneAt =
       d.status === "answered" ? d.answeredAt : d.status === "closed" ? d.closedAt : undefined;
+    const delivery = upDelivery(d.decisionId);
     push(
       {
         id: `f-${seq}`,
@@ -547,10 +637,10 @@ export function flowsOf(state: OrchState): UiFlow[] {
         dir: "up",
         from,
         to: parentOf.get(d.nodeId) ?? UI_HUMAN,
-        stage: d.status === "open" ? "sent" : "done",
+        stage: d.status === "open" ? ("deliveredAt" in delivery ? "delivered" : "sent") : "done",
         sentAt: t(d.requestedAt),
+        ...delivery,
         ...(doneAt === undefined ? {} : { doneAt: t(doneAt) }),
-        deliveryUnknown: true,
         ...body(d.question),
       },
       seq,
@@ -576,6 +666,7 @@ export function flowsOf(state: OrchState): UiFlow[] {
   }
   for (const x of state.extensions) {
     if (x.requestedAt === undefined) continue;
+    const delivery = upDelivery(x.extensionId);
     push(
       {
         id: `f-${x.requestedSeq}`,
@@ -583,10 +674,10 @@ export function flowsOf(state: OrchState): UiFlow[] {
         dir: "up",
         from: idOf(x.nodeId),
         to: parentOf.get(x.nodeId) ?? UI_HUMAN,
-        stage: x.status === "open" ? "sent" : "done",
+        stage: x.status === "open" ? ("deliveredAt" in delivery ? "delivered" : "sent") : "done",
         sentAt: t(x.requestedAt),
+        ...delivery,
         ...(x.decidedAt === undefined ? {} : { doneAt: t(x.decidedAt) }),
-        deliveryUnknown: true,
         ...body(x.reason),
       },
       x.requestedSeq,

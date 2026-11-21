@@ -8,7 +8,7 @@
  * - `cwd` は、このプロセスの作業ディレクトリ（Claude Code が、セッションの作業ディレクトリで stdio の mcp を起動する前提。推測）。daemon は、それがノードの作業ツリーかを確かめる（FR_006）。
  * - 失敗は区別せず（daemon は 401 だけを返す）、次の操作を添えて返す。
  */
-import { type Failure, failure, isSafeId, ok, type Result } from "@touryou/core";
+import { type Failure, failure, isSafeId, isSessionId, ok, type Result } from "@touryou/core";
 import type { IdentityVerifier } from "./identity.js";
 
 export { CHILD_BIND_TOOL } from "./tools.js";
@@ -25,6 +25,11 @@ export interface ChildBindOptions {
   readonly cwd?: () => string;
   /** 子のセッションの ID（環境変数 `CLAUDE_CODE_SESSION_ID`。あれば送る。daemon が session_id → ノードを記録する）。 */
   readonly sessionId?: string;
+  /**
+   * コードを書いた daemon の公開 ID（コードのファイルの 2 行目）。渡すと、検証した接続先の daemon の ID と合うときだけ送る。
+   * 食い違えば、コードは送らずに `bind_daemon_mismatch` で失敗する（別の daemon のコード）。`verifier` がないときは確かめられない。
+   */
+  readonly codeDaemonId?: string;
   readonly timeoutMs?: number;
 }
 
@@ -42,6 +47,45 @@ const bindFailed = (): Failure =>
     "子のセッションが、そのノードの作業ツリーで起動されたかを確かめる",
   );
 
+/** コードを書いた daemon と、この mcp の接続先の daemon が違う（コードは送っていない）。 */
+export const daemonMismatch = (): Failure =>
+  failure(
+    "bind_daemon_mismatch",
+    "紐付けのコードは、いま接続している daemon ではなく、別の daemon が書いたもの（接続先違い。コードは送っていない）",
+    "作業を始めずに、会話で人（親）に、この子を作った daemon と、plugin（mcp）の接続先が同じかを確かめてもらう（--config・TOURYOU_DAEMON_CONFIG・$HOME/.touryou/config.json のどれが効いているか）",
+    "接続先を直したら、Claude Code の /mcp で touryou を Reconnect し、child_bind を引数なしでもう一度呼ぶ",
+    "それでも合わないときは、親に node_bindCode でコードを出し直してもらう",
+  );
+
+/** daemon の失敗の記号（応答の `error.code`）から、理由を区別した失敗にする。コードそのものは含まない。 */
+function failureOfDaemonCode(code: unknown): Failure {
+  switch (code) {
+    case "bindCodeExpired":
+      return failure(
+        "bind_code_expired",
+        "紐付けのコードの期限が切れている",
+        "作業を始めずに、会話で人（親）に、node_bindCode でコードを出し直してもらう",
+        "出し直されたら、child_bind を引数なしでもう一度呼ぶ",
+      );
+    case "bindCodeUsed":
+      return failure(
+        "bind_code_used",
+        "紐付けのコードは使用済み",
+        "すでに紐付け済みの子なら、そのまま作業を続ける（道具が使えるか whoami で確かめる）",
+        "紐付けが外れているなら、会話で人（親）に、node_bindCode でコードを出し直してもらう",
+      );
+    case "bindWorktreeMismatch":
+      return failure(
+        "bind_worktree_mismatch",
+        "このセッションの作業ディレクトリが、そのノードの作業ツリーと合わない",
+        "子のセッションを、そのノードの作業ツリーの一番上（作業ツリーのフォルダそのもの）で起動し直す",
+        "別のノードの作業ツリーのセッションから呼んでいないか確かめる",
+      );
+    default:
+      return bindFailed();
+  }
+}
+
 /** 紐付けのコードで、子ごとの資格情報を受け取る。 */
 export async function bindChild(
   opts: ChildBindOptions,
@@ -58,11 +102,37 @@ export async function bindChild(
       ),
     };
   }
+  return postBind(opts, nodeId, bindCode);
+}
+
+/**
+ * コードなしのつなぎ直し（#145。`claude attach` で mcp が入れ替わったあと）。セッションの ID・作業ツリー・ノード ID を送り、
+ * daemon が記録の値と全部合うときだけ、トークンが出し直される。セッションの ID がなければ送らない（`undefined` が返る）。
+ */
+export async function rebindChild(
+  opts: ChildBindOptions,
+  nodeId: unknown,
+): Promise<Result<ChildCredential> | undefined> {
+  if (!isSafeId(nodeId) || !isSessionIdShape(opts.sessionId)) return undefined;
+  return postBind(opts, nodeId, undefined);
+}
+
+const isSessionIdShape = (s: string | undefined): s is string => isSessionId(s);
+
+async function postBind(
+  opts: ChildBindOptions,
+  nodeId: string,
+  bindCode: string | undefined,
+): Promise<Result<ChildCredential>> {
   let expectedDaemonId: string | undefined;
   if (opts.verifier !== undefined) {
     const v = await opts.verifier.verify();
     if (!v.ok) return { ok: false, error: v.failure };
     expectedDaemonId = v.daemonId;
+    // コードを書いた daemon と、いま接続している daemon が違う: コードを送らない（別の daemon に渡さない・使わせない）
+    if (opts.codeDaemonId !== undefined && opts.codeDaemonId !== v.daemonId) {
+      return { ok: false, error: daemonMismatch() };
+    }
   }
   let origin: string;
   try {
@@ -84,11 +154,9 @@ export async function bindChild(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         nodeId,
-        bindCode,
+        ...(bindCode === undefined ? {} : { bindCode }),
         cwd: (opts.cwd ?? (() => process.cwd()))(),
-        ...(opts.sessionId !== undefined && /^[A-Za-z0-9_-]{1,128}$/.test(opts.sessionId)
-          ? { sessionId: opts.sessionId }
-          : {}),
+        ...(isSessionIdShape(opts.sessionId) ? { sessionId: opts.sessionId } : {}),
       }),
     });
     if (
@@ -117,7 +185,17 @@ export async function bindChild(
       };
     }
     const text = await res.text();
-    if (res.status !== 200 || text.length > MAX_BYTES) return { ok: false, error: bindFailed() };
+    if (text.length > MAX_BYTES) return { ok: false, error: bindFailed() };
+    if (res.status !== 200) {
+      // 401 の本文の `error.code` で、理由を区別する（期限切れ・使用済み・作業ツリー違い。ほかは、区別しない）
+      let daemonCode: unknown;
+      try {
+        daemonCode = (JSON.parse(text) as { error?: { code?: unknown } }).error?.code;
+      } catch {
+        // JSON でない: 区別しない
+      }
+      return { ok: false, error: failureOfDaemonCode(daemonCode) };
+    }
     const body = JSON.parse(text) as {
       ok?: unknown;
       value?: { nodeId?: unknown; token?: unknown };

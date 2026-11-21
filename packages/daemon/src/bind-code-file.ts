@@ -2,7 +2,7 @@
  * 紐付けのコードのファイル（設計 6.2）。CLI の子の起動の依頼（`claude --bg`）に、コードを入れないための写し。
  *
  * - 置き場: 子の作業ツリーの git のディレクトリ（`<作業ツリー>/.git` のファイルの `gitdir:` の先。印 `touryou-child` と同じ所。
- *   追跡されない）の `touryou-bind-code`。中身はコードだけ。権限は 0600。
+ *   追跡されない）の `touryou-bind-code`。中身は 1 行目がコード、2 行目が書いた daemon の公開 ID（`daemon=<ID>`）。権限は 0600。
  * - 書き方: 置き場がリンクでない実のディレクトリかを確かめ、ファイルの名前がリンクでないことを確かめてから、同じディレクトリの
  *   一時ファイル（`O_EXCL`・0600）に書いて、名前を替える（途中の中身を読ませない。リンクの先へ書かない）。
  * - コードの正は daemon のメモリ（`BindCodes`）。ファイルは写しで、daemon の再起動のあとは使えない（紐付けは失敗し、親が
@@ -43,7 +43,17 @@ export function gitDirOf(worktree: string): string {
   return dir;
 }
 
+/**
+ * ファイルの中身の 2 行目（書いた daemon の公開 ID。`daemon=<16 進 32 桁>`）。子の mcp は、接続先の daemon の ID と合うときだけ、
+ * コードを送る（接続先違いを、別の daemon のコードとして区別する）。公開 ID は秘密でない（窓口の応答の `x-touryou-daemon-id` と同じ）。
+ * 1 行目（コードだけ）の古い形も、mcp は読める。
+ */
+export const bindCodeFileBody = (code: string, daemonId?: string): string =>
+  daemonId === undefined ? `${code}\n` : `${code}\ndaemon=${daemonId}\n`;
+
 export interface BindCodeFileOps {
+  /** 書いた daemon の公開 ID（`api/identity.ts` の `daemonId`）。省略すると、古い形（コードだけ）で書く。 */
+  readonly daemonId?: string;
   readonly random?: (n: number) => Buffer;
   /** ACL の確かめ（既定は `defaultAclCheck`。試験で差し替える）。 */
   readonly acl?: AclCheck;
@@ -75,7 +85,7 @@ export function writeBindCodeFile(
     // 置き場（git のディレクトリ）の ACL は、作ったファイルに継承されうる。コードを書く前に確かめる（分からないときは書かない）。
     const why = (ops.acl ?? defaultAclCheck)(tmp);
     if (why !== undefined) throw new BindCodeFileError(`コードのファイルに、${why}`);
-    writeSync(fd, `${code}\n`);
+    writeSync(fd, bindCodeFileBody(code, ops.daemonId));
   } catch (e) {
     closeSync(fd);
     try {

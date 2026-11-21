@@ -21,10 +21,20 @@ const TOKEN_MAX = 8192;
 const FAILURE_TEXT_MAX = 2000;
 const FAILURE_ACTIONS_MAX = 10;
 
+/** 統合ノードの `whoami` にだけ付く、daemon の場所と識別子（`daemonId` は `docs/daemon-identity.md` の識別子）。 */
+export interface DaemonInfo {
+  readonly rootCwd: string;
+  readonly repoRoot: string;
+  readonly daemonId: string;
+}
+
 export interface Relay {
   /** トークンのロール（接続ごとに 1 回引く）。 */
-  /** 呼び出し元のロールと、ノードのトークンなら自分の nodeId（古い daemon・人間のトークンでは、なし）。 */
-  whoami(): Promise<Result<{ role: string; nodeId?: string }>>;
+  /**
+   * 呼び出し元のロールと、ノードのトークンなら自分の nodeId（古い daemon・人間のトークンでは、なし）。
+   * 統合ノードには、daemon の場所と識別子（`daemon`）も付く（子・古い daemon では、なし）。
+   */
+  whoami(): Promise<Result<{ role: string; nodeId?: string; daemon?: DaemonInfo }>>;
   /**
    * 操作を daemon へ中継する。成功の値・daemon の失敗は、そのまま返す。`requestId` を渡すと、それを使う（cli の `--request-id`
    * の再実行）。省略すると、新しく作る。再送は、どちらでも同じ requestId で行う。
@@ -303,7 +313,20 @@ export function createRelay(opts: RelayOptions): Result<Relay> {
       }
       // nodeId は、ID の形のときだけ取る（形の崩れた値は、なしとして扱う）。
       const nodeId = isSafeId(r.value.nodeId) ? r.value.nodeId : undefined;
-      return ok({ role: r.value.role, ...(nodeId === undefined ? {} : { nodeId }) });
+      // daemon は、3 つの文字列がそろったときだけ取る（形の崩れた値は、なしとして扱う）。
+      const d = isRec(r.value.daemon) ? r.value.daemon : undefined;
+      const daemon: DaemonInfo | undefined =
+        d !== undefined &&
+        typeof d.rootCwd === "string" &&
+        typeof d.repoRoot === "string" &&
+        typeof d.daemonId === "string"
+          ? { rootCwd: d.rootCwd, repoRoot: d.repoRoot, daemonId: d.daemonId }
+          : undefined;
+      return ok({
+        role: r.value.role,
+        ...(nodeId === undefined ? {} : { nodeId }),
+        ...(daemon === undefined ? {} : { daemon }),
+      });
     },
     async request(operation, params, options) {
       const requestId = options?.requestId ?? newRequestId();

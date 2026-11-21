@@ -20,7 +20,7 @@ TouRyou を使えるようにします。リポジトリやファイルの場所
 
 接続に失敗したとき:
 - `/mcp` の Reconnect で `CONNECTION_CLOSED` だけが出る: 理由の文は `/mcp` に出ない。まず daemon が動いているか、`$HOME/.touryou/current` があるかを確かめ、直してから Reconnect する。
-- `/mcp` で `node` が failed: 標準エラーの `[touryou mcp] …` の理由に従う（`配布物の touryou-mcp がない` → `/setup`。`daemon_unreachable`（daemon が動いていません）→ daemon を起動して Reconnect。`unauthenticated` → `root-token` の権限〔0600。ACL なし〕を確かめる。`invalid_config` → `$HOME/.touryou/config.json` の `stateDir`）。
+- `/mcp` で `node` が failed: 標準エラーの `[touryou mcp] …` の理由に従う（`配布物の touryou-mcp がない` → `/setup`。`daemon_unreachable`（daemon が動いていません）→ daemon を起動して Reconnect。`unauthenticated` → `root-token` の権限〔0600。ACL なし〕を確かめる。`invalid_config` → 設定ファイル〔`$HOME/.touryou/config.json`。`TOURYOU_DAEMON_CONFIG` があればそのファイル〕と、その親ディレクトリの権限・`stateDir`）。
 - `401`（`AUTH_HEADER_REJECTED`）: 根のトークンが、古い・別の daemon のもの。`touryou-mcp --stdio` は、要求の失敗のときに `root-token` を読み直して 1 回送り直すので、ふつうは自動で戻る。戻らなければ `/mcp` で Reconnect する。
 
 起動できないときは、原因（標準エラーの `daemon_identity_failed`・`identityCheckFailed` など）を、そのまま人間に伝える。身元の検証を回避する設定（`TOURYOU_MCP_ALLOW_UNVERIFIED`）は、勧めない。

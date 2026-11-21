@@ -75,6 +75,11 @@ export interface CredentialStore {
   nodeIds(): string[];
   /** そのノードが、紐付け（`POST /v1/bind`）で受け取った有効なトークンを持つか（偽の「紐付けをやり直して」を出さないため）。 */
   hasBindToken?(nodeId: string): boolean;
+  /**
+   * つなぎ直し（#145）: 期限内の紐付けのトークンを持つノードにだけ、新しい紐付けのトークンを出す（古いものは無効になる）。
+   * 発行の時刻は引き継ぐので、発行から 24 時間の上限は延びない。持たない・期限切れなら undefined。
+   */
+  rebindNodeToken?(nodeId: string): string | undefined;
 }
 
 export const TOKEN_SHAPE = /^[A-Za-z0-9._~+/=-]{16,512}$/;
@@ -281,7 +286,7 @@ export function createCredentialStore(options: {
     }
   };
 
-  return {
+  const store: CredentialStore = {
     authenticate(token) {
       if (typeof token !== "string" || token === "") return undefined;
       const h = sha256(token);
@@ -356,7 +361,30 @@ export function createCredentialStore(options: {
       return token;
     },
     nodeIds: () => [...byNode.keys()],
-    hasBindToken: (nodeId) => byNode.has(nodeId) && meta.get(nodeId)?.kind === "bind",
+    hasBindToken: (nodeId) =>
+      byNode.has(nodeId) &&
+      meta.get(nodeId)?.kind === "bind" &&
+      expiredReason(nodeId, nowMs()) === undefined,
+    rebindNodeToken(nodeId) {
+      if (store.hasBindToken?.(nodeId) !== true) return undefined;
+      const prev = meta.get(nodeId);
+      if (prev === undefined) return undefined;
+      const token = store.issueNodeToken(nodeId, "child", "bind");
+      const m = meta.get(nodeId);
+      if (m !== undefined) {
+        m.issuedMs = prev.issuedMs;
+        m.issuedAt = prev.issuedAt;
+        repository?.put({
+          tokenHash: byNode.get(nodeId) as string,
+          role: "child",
+          nodeId,
+          issuedAt: prev.issuedAt,
+          lastUsedAt: m.issuedAt,
+          kind: "bind",
+        });
+      }
+      return token;
+    },
     revokeNode(nodeId) {
       const h = byNode.get(nodeId);
       if (h === undefined) return;
@@ -368,4 +396,5 @@ export function createCredentialStore(options: {
       options.onNodeTokenChanged?.(nodeId);
     },
   };
+  return store;
 }

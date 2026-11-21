@@ -2,7 +2,8 @@
  * `touryou-mcp --stdio`: 統合セッション用の入口。Claude Code が plugin の `.mcp.json`（stdio 型）から、
  * 統合セッションごとに 1 つ起動する。子用の HTTP の `touryou-mcp`（`main.ts`）は、そのまま残る。
  *
- * - 状態の置き場: `$HOME/.touryou/config.json` の `stateDir`（`--config` で変えられる）。
+ * - 状態の置き場: 設定ファイルの `stateDir`。設定ファイルは、`--config` の引数 → 環境変数 `TOURYOU_DAEMON_CONFIG`（空は無視）→
+ *   `$HOME/.touryou/config.json` の順に決める。設定ファイルの親ディレクトリも、下の `$HOME/.touryou` と同じ検査を通す。
  * - 根のトークン: `<stateDir>/root-token` だけから読む（環境変数は使わない。Claude Code の環境に残ると、Bash などで見えうるため）。
  *   ファイルは、リンクを開かない（`O_NOFOLLOW`）・通常のファイル・自分の・権限の文字列が `-rw-------`（macOS の拡張属性 `@` は可、
  *   ACL の `+` は不可）のときだけ読む。`$HOME/.touryou`・`stateDir`・その親も、リンクでない・自分の・権限の文字列が `drwx------` か
@@ -26,7 +27,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { type Failure, failure, isSessionId, ok, type Result } from "@touryou/core";
 import { aclProblemOfMode, modeString, readSecureFile } from "@touryou/core/fs";
 import { type CodeFileOps, isCodeShape, readCodeFile, removeCodeFile } from "./bind-code-file.js";
-import { bindChild } from "./child-bind.js";
+import { bindChild, type ChildBindOptions, rebindChild } from "./child-bind.js";
 import { detectOpenMode, type MarkerOps } from "./child-marker.js";
 import { createIdentityVerifier, IDENTITY_FILE } from "./identity.js";
 import { createNodeCredentialStore, type NodeCredentialStore } from "./node-credential.js";
@@ -170,11 +171,18 @@ export function resolveDaemonEndpoint(
     return fail("invalid_config", "HOME が絶対パスでない（置き場を決められない）", SETUP);
   }
   const touryou = join(home, ".touryou");
-  configPath ??= join(touryou, "config.json");
+  // 優先順位: --config の引数 → 環境変数 TOURYOU_DAEMON_CONFIG（空は無視）→ $HOME/.touryou/config.json（touryou の cli と同じ）
+  const envConfig = env.TOURYOU_DAEMON_CONFIG;
+  configPath ??=
+    envConfig === undefined || envConfig === "" ? join(touryou, "config.json") : envConfig;
   const dirProblem = (dir: string): Result<never> | undefined => {
     const why = ops.checkDir(dir);
     if (why !== undefined)
-      return fail("invalid_config", `置き場のディレクトリが使えない: ${why}`, SETUP);
+      return fail(
+        "invalid_config",
+        `設定ファイルの置き場のディレクトリが使えない（${dir}）: ${why}`,
+        SETUP,
+      );
     const m = ops.modeString(dir);
     if (m === undefined || !DIR_MODES.has(m)) {
       return fail(
@@ -185,8 +193,9 @@ export function resolveDaemonEndpoint(
     }
     return undefined;
   };
-  const touryouProblem = dirProblem(touryou);
-  if (touryouProblem !== undefined) return touryouProblem;
+  // 設定が $HOME/.touryou の外にあっても検査が通るよう、対象は設定ファイルの親ディレクトリにする
+  const configDirProblem = dirProblem(dirname(configPath));
+  if (configDirProblem !== undefined) return configDirProblem;
   let json: unknown;
   try {
     json = JSON.parse(ops.read(configPath, 0o022));
@@ -396,13 +405,30 @@ export function openPendingStdioSession(
   const log = (e: unknown) => io.stderr(`${JSON.stringify(e)}\n`);
   const make = relayMaker(deps, log);
   const store = deps.credentials ?? createNodeCredentialStore();
+  const childBindOptions = (): ChildBindOptions => ({
+    daemonUrl: endpoint.daemonUrl,
+    verifier: verifierOf(endpoint, deps, log),
+    ...(deps.fetch ? { fetch: deps.fetch } : {}),
+    ...(deps.cwd ? { cwd: deps.cwd } : {}),
+    ...(deps.sessionId ? { sessionId: deps.sessionId } : {}),
+  });
   const bind = async (argNodeId: unknown, argCode: unknown): Promise<Result<Relay>> => {
     // 引数なし: ノードの ID は印から、コードは作業ツリーの git のディレクトリのファイルから読む
     let nodeId = argNodeId;
     let code = argCode;
     let filePath: string | undefined;
+    /** コードを書いた daemon の公開 ID（ファイルの 2 行目。古い形のファイルは、なし）。 */
+    let codeDaemonId: string | undefined;
     if (argNodeId === undefined && argCode === undefined) {
       const read = readCodeFile((deps.cwd ?? (() => process.cwd()))(), deps.codeFile ?? {});
+      // コードのファイルがない（使用済み）ときは、`claude attach` で mcp が入れ替わっただけかもしれない。セッションの ID・
+      // 作業ツリー・ノードの ID を送って、つなぎ直す（#145）。daemon が記録と合わないと言えば、下の案内に落とす。
+      if (!read.ok && read.reason === "missing" && deps.markerNodeId !== undefined) {
+        const re = await rebindChild(childBindOptions(), deps.markerNodeId);
+        if (re?.ok === true) return adopt(re.value);
+        // daemon に届かない・本人確認の失敗・失敗の上限は、案内に落とさずそのまま返す（コードの出し直しでは直らない）
+        if (re?.ok === false && re.error.code !== "bind_failed") return re;
+      }
       if (!read.ok || deps.markerNodeId === undefined) {
         if (read.ok === false && read.reason === "unsafe" && read.path !== undefined) {
           log({ event: "bindCodeFileUnsafe", at: new Date().toISOString() });
@@ -411,23 +437,19 @@ export function openPendingStdioSession(
           "bind_code_file_unavailable",
           read.ok === false && read.reason === "unsafe"
             ? "紐付けのコードのファイルが安全でない（リンク・持ち主が違う・権限が 0600 でない）ので読まなかった"
-            : "紐付けのコードのファイルがない（使用済み・期限切れ・daemon の再起動のあと）か、このセッションが作業ツリーの一番上で起動されていない",
+            : "紐付けのコードのファイルがない（使用済み・期限切れ・daemon の再起動のあと）か、このセッションが作業ツリーの一番上で起動されていない。ほかに、子を作った daemon と、この mcp の接続先の daemon が別の可能性もある（plugin が入っていないのとは限らない）",
           "作業を始めずに、会話で人（親）に「紐付けをやり直して」と頼む（親は node_bindCode でコードを出し直す）。出し直されたら、child_bind を引数なしでもう一度呼ぶ",
-          "人が claude attach で子の画面を開いたあとにこうなったなら、MCP がつなぎ直されて紐付けが外れている（#136）。同じく、親にコードの出し直しを頼む",
+          "出し直しても同じなら、親に、この子を作った daemon と、plugin（mcp）の接続先（--config・TOURYOU_DAEMON_CONFIG・$HOME/.touryou/config.json）が同じかを確かめてもらう",
+          "人が claude attach で子の画面を開いたあとにこうなったなら、MCP がつなぎ直されて紐付けが外れている（#136）。自動のつなぎ直し（#145）は、セッションの ID・作業ツリーが記録と合わない・紐付けの期限が切れた・止められたなどで通らなかった。同じく、親にコードの出し直しを頼む",
         );
       }
       nodeId = deps.markerNodeId;
       code = read.code;
       filePath = read.path;
+      codeDaemonId = read.daemonId;
     }
     const cred = await bindChild(
-      {
-        daemonUrl: endpoint.daemonUrl,
-        verifier: verifierOf(endpoint, deps, log),
-        ...(deps.fetch ? { fetch: deps.fetch } : {}),
-        ...(deps.cwd ? { cwd: deps.cwd } : {}),
-        ...(deps.sessionId ? { sessionId: deps.sessionId } : {}),
-      },
+      { ...childBindOptions(), ...(codeDaemonId === undefined ? {} : { codeDaemonId }) },
       nodeId,
       code,
     );
@@ -445,13 +467,17 @@ export function openPendingStdioSession(
       }
       return cred;
     }
+    return adopt(cred.value);
+  };
+  /** 受け取った資格情報を入れ物に入れ、子の relay にする。 */
+  const adopt = (cred: { readonly nodeId: string; readonly token: string }): Result<Relay> => {
     const made = make({
       daemonUrl: endpoint.daemonUrl,
       identityPath: endpoint.identityPath,
-      token: cred.value.token,
+      token: cred.token,
     });
     if (!made.ok) return made;
-    store.set(cred.value);
+    store.set(cred);
     const child = made.value;
     // 失効（daemon の 401）が分かったら、入れ物を空にする（購読を止める）
     const watch = <T>(r: Result<T>): Result<T> => {
@@ -459,7 +485,7 @@ export function openPendingStdioSession(
       return r;
     };
     return ok({
-      nodeId: cred.value.nodeId,
+      nodeId: cred.nodeId,
       whoami: async () => watch(await child.whoami()),
       request: async (op, params, o) => watch(await child.request(op, params, o)),
     });

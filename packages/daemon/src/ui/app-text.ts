@@ -597,6 +597,50 @@ export const APP_TEXT = {
   },
   "release.done": { ja: "保留を解除しました（{id}）", en: "Hold released ({id})" },
   "release.title": { ja: "保留の解除", en: "Release the hold" },
+  "reopen.button": { ja: "戻す", en: "Restore" },
+  "reopen.content": {
+    ja: "この項目を、片付ける前の「未解決」に戻す",
+    en: "Restores this item to unresolved, as before it was marked as done",
+  },
+  "reopen.done": { ja: "{n} 件を戻しました", en: "Restored {n} item(s)" },
+  "reopen.title": { ja: "片付けた項目を戻す", en: "Restore an item marked as done" },
+  "resolve.button": { ja: "片付ける", en: "Mark as done" },
+  "resolve.bulk": {
+    ja: "この子の済んだ項目をまとめて片付ける",
+    en: "Mark all of this child's finished items as done",
+  },
+  "resolve.content": {
+    ja: "受信箱から外し、「要対応」の数に入れない（記録には残り、「片付けた項目」から戻せる）",
+    en: 'Removes from the inbox and the "needs you" count (it stays in the record and can be restored from "Done items")',
+  },
+  "resolve.done": {
+    ja: "{n} 件を片付けました（すでに片付け済み {m} 件）",
+    en: "Marked {n} item(s) as done ({m} already done)",
+  },
+  "resolve.fold": { ja: "片付けた項目（{n} 件）", en: "Done items ({n})" },
+  "resolve.record": {
+    ja: "記録に残る。判断・違反・停止未完了・失敗は、ここでは片付けられない",
+    en: "Kept in the record. Decisions, violations, incomplete stops and failures cannot be marked as done here",
+  },
+  "resolve.title": { ja: "項目を片付ける", en: "Mark items as done" },
+  "runtime.cli": { ja: "CLI の子", en: "CLI child" },
+  "runtime.desktop": { ja: "Desktop の子", en: "Desktop child" },
+  "runtime.openCli": {
+    ja: "開き方: 端末でリポジトリのディレクトリに移り、claude attach {id} を打つと、この子の画面を開けます。",
+    en: "How to open: in a terminal, go to the repository directory and run claude attach {id} to open this child's screen.",
+  },
+  "runtime.openDesktop": {
+    ja: "開き方: Claude のデスクトップアプリで、この題の子のタスクを開きます。",
+    en: "How to open: in the Claude desktop app, open the task of the child with this title.",
+  },
+  "runtime.safetyCli": {
+    ja: "安全面: 作業範囲の外の操作は、フックが拒みます（FR_014）。",
+    en: "Safety: actions outside the work scope are refused by hooks (FR_014).",
+  },
+  "runtime.safetyDesktop": {
+    ja: "安全面: Desktop の子には、作業範囲の外の拒否（FR_014）が効かず、daemon のトークンのファイルを読めます。",
+    en: "Safety: for a Desktop child, refusing actions outside the work scope (FR_014) does not apply, and it can read the daemon's token files.",
+  },
   "sep.list": { ja: "、", en: ", " },
   "sep.sentence": { ja: "。", en: ". " },
   "settings.a11y": { ja: "アクセシビリティ", en: "Accessibility" },
@@ -607,8 +651,8 @@ export const APP_TEXT = {
   },
   "settings.still": { ja: "動きを止める", en: "Stop motion" },
   "settings.stillNote": {
-    ja: "新しい項目の入る動き・線を流れる玉・光る縁などを止めます。OS の「視差効果を減らす」を入れているときは、ここを切っていても止まります。",
-    en: 'Stops motion such as new items sliding in, dots moving along lines and glowing borders. If "Reduce motion" is on in the OS, motion stops even when this is off.',
+    ja: "新しい項目の入る動き・線を流れる彗星・光る縁などを止めます。OS の「視差効果を減らす」を入れているときは、ここを切っていても止まります。",
+    en: 'Stops motion such as new items sliding in, comets moving along lines and glowing borders. If "Reduce motion" is on in the OS, motion stops even when this is off.',
   },
   "settings.theme": { ja: "明暗", en: "Light or dark" },
   "settings.themeAuto": { ja: "OS に合わせる", en: "Match the OS" },
@@ -631,6 +675,14 @@ export const APP_TEXT = {
   "stall.paste": {
     ja: "端末に貼って、子の画面を開きます:",
     en: "Paste this in a terminal to open the child's screen:",
+  },
+  "stall.pasteByRef": {
+    ja: "上で開けないとき（子のプロセスが止まっているとき）は、番号の形で開きます:",
+    en: "If the above does not open it (the child's process has stopped), open it by session number:",
+  },
+  "stall.noRef": {
+    ja: "上で開けないとき（子のプロセスが止まっているとき）は、claude agents で子の番号を見て、claude attach <番号> を打ってください。",
+    en: "If the above does not open it (the child's process has stopped), look up the child's number with claude agents and run claude attach <number>.",
   },
   "stall.rebind": {
     ja: "開くと、子の紐付けが外れることがあります。子が「紐付けをやり直して」と言ったら、統合の会話で、この子の紐付けのコードの出し直し（node_bindCode）を頼んでください。",

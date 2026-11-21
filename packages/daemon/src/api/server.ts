@@ -95,11 +95,30 @@ export type Handlers = {
 
 /**
  * 記録するイベント（`at` は ISO 8601 UTC）。`internalError`: 500 の原因（応答には出さない）。bind の入口の結果:
- * `bindSucceeded`（成功。`nodeId` を持つのはこれだけ）、`bindFailed`（`reason`: invalid＝コードが無効・
- * rejected＝ノードの状態が許さない・malformed＝本文の形が不正。ロックはしない）、
+ * `bindSucceeded`（成功。`nodeId` を持つのはこれだけ）、`bindFailed`（`reason` は `BindFailReason`。ロックはしない）、
  * `bindThrottled`（全体のスロットル。`reason: "global"`）。コードの値・ハッシュ・先頭の文字・トークンは書かない
  * （失敗では、申告された nodeId も書かない）。logger が例外を投げても、応答は変えない。
  */
+/**
+ * bind の失敗の理由（daemon の記録の `bindFailed` の `reason`）。コードそのもの・ハッシュ・当たりを教える情報は含まない。
+ * - `malformed`: 本文の形が不正
+ * - `unknownCode`: コードが未知（誤り・daemon の再起動・再発行で無効になった・別のノードのもの）
+ * - `expired`・`used`: 提示されたコードが、発行したものと一致したうえで、期限切れ・使用済み
+ * - `nodeRejected`: コードは合ったが、ノードの状態が許さない（統合ノード・木にない・停止後など。コードは消費しない）
+ * - `cwdMismatch`: 送られた作業ディレクトリが、そのノードの作業ツリーでない（コードは消費しない）
+ * - `sessionConflict`: 同じ session_id が、ほかの生きているノードに結ばれている（コードは消費しない）
+ * - `rebindRejected`: コードなしのつなぎ直しが、記録・トークンと合わなかった
+ */
+export type BindFailReason =
+  | "malformed"
+  | "unknownCode"
+  | "expired"
+  | "used"
+  | "nodeRejected"
+  | "cwdMismatch"
+  | "sessionConflict"
+  | "rebindRejected";
+
 export type ApiLogEvent =
   | {
       readonly event: "internalError";
@@ -109,7 +128,13 @@ export type ApiLogEvent =
       readonly error: unknown;
       readonly at: string;
     }
-  | { readonly event: "bindSucceeded"; readonly nodeId: string; readonly at: string }
+  | {
+      readonly event: "bindSucceeded";
+      readonly nodeId: string;
+      readonly at: string;
+      /** `rebind`: コードなしのつなぎ直し（#145）。コードでの紐付けは省略。 */
+      readonly route?: "rebind";
+    }
   /** `POST /v1/request` を、画面のセッション（`touryou ui` のチケットから交換したもの）で受けた。トークン・チケットは書かない。 */
   | {
       readonly event: "uiSessionRequest";
@@ -121,7 +146,7 @@ export type ApiLogEvent =
   | { readonly event: "hookSessionMismatch"; readonly at: string }
   | {
       readonly event: "bindFailed";
-      readonly reason: "invalid" | "rejected" | "malformed";
+      readonly reason: BindFailReason;
       readonly at: string;
     }
   | {
@@ -188,6 +213,11 @@ export interface ApiDeps {
    */
   readonly attachDir?: string;
   /**
+   * `GET /v1/whoami` で、統合ノードにだけ返す daemon の場所（#164）。`daemonId` は `identity` の起動ごとの識別子
+   * （`docs/daemon-identity.md`）。省略すると、`daemon` は返さない。子には、どちらでも返さない。
+   */
+  readonly daemonInfo?: { readonly rootCwd: string; readonly repoRoot: string };
+  /**
    * 画面の表示モデルに出す、取り消せない操作の確認待ち（`confirmation-gate.ts`）。コードは含まない。`confirmationsVersion` は、
    * 確認待ちが変わるたびに増える数で、表示モデルのキャッシュの鍵と、SSE の変化の通知に足す（記録の seq は変わらないため）。
    */
@@ -252,6 +282,12 @@ export interface ApiDeps {
    * 偽なら、コードを消費せずに 401（`rejected`）で断る。
    */
   readonly bindSessionOk?: (nodeId: string, sessionId: string) => boolean;
+  /**
+   * コードなしのつなぎ直し（#145。`claude attach` で mcp が入れ替わった CLI の子）を許すか。渡すと、`POST /v1/bind` は
+   * `bindCode` なし・`cwd` と `sessionId` ありの本文を受け付け、記録にあるそのノードの session_id と一致し（`node.sessionBound`）、
+   * 動いているノードで、今も有効な紐付けのトークンを持つときだけ、トークンを出し直す。省略（Desktop の木）すると、コードなしは必ず断る。
+   */
+  readonly rebindOk?: (nodeId: string, sessionId: string) => boolean;
   readonly onBindSucceeded?: (
     nodeId: string,
     info: { readonly sessionId?: string; readonly cwd?: string },
@@ -357,6 +393,10 @@ const BIND_MAX_CWD = 768;
 
 const STATUS: Readonly<Record<string, number>> = {
   unauthenticated: 401,
+  // bind の失敗の細かい理由（`POST /v1/bind` だけ。どれも 401）
+  bindCodeExpired: 401,
+  bindCodeUsed: 401,
+  bindWorktreeMismatch: 401,
   tokenExpired: 401,
   hooksNotActive: 403,
   forbidden: 403,
@@ -965,12 +1005,18 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       return;
     }
     // ノードのトークン（統合・子）には、自分の nodeId も返す（mcp の `whoami` ツール）。人間には、nodeId がない。
+    // 統合ノードにだけ、daemon の場所（rootCwd・repoRoot）と daemonId も返す（#164。子には出さない）。
+    const daemonId = deps.identity?.()?.daemonId;
+    const daemon =
+      principal.role === "integrator" && deps.daemonInfo !== undefined && daemonId !== undefined
+        ? { daemon: { ...deps.daemonInfo, daemonId } }
+        : {};
     send(res, 200, {
       ok: true,
       value:
         principal.role === "human"
           ? { role: principal.role }
-          : { role: principal.role, nodeId: principal.nodeId },
+          : { role: principal.role, nodeId: principal.nodeId, ...daemon },
     });
   }
 
@@ -1638,7 +1684,7 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     // 失敗は、どれも全体のスロットルで数える（不正な本文・型違いも）。
     const denied = (
       error: Failure,
-      reason: "invalid" | "rejected" | "malformed",
+      reason: BindFailReason,
       extra: Record<string, string> = {},
     ): void => {
       throttle.fail();
@@ -1725,13 +1771,16 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       ) ||
       (b?.sessionId !== undefined && !isSessionId(b.sessionId)) ||
       !isSafeId(b?.nodeId) ||
-      !isBoundedText(b?.bindCode, 64) ||
+      // コードなし（つなぎ直し）は、CLI の木で、session_id と cwd の両方があるときだけ（#145）
+      (b?.bindCode === undefined
+        ? deps.rebindOk === undefined || b?.sessionId === undefined || b?.cwd === undefined
+        : !isBoundedText(b.bindCode, 64)) ||
       (b?.cwd !== undefined && !isBoundedText(b.cwd, BIND_MAX_CWD))
     ) {
       return denied(
         failure(
           "invalidRequest",
-          "本文は { nodeId, bindCode, cwd?, sessionId? } の形で送る",
+          "本文は { nodeId, bindCode, cwd?, sessionId? } の形で送る（つなぎ直しは bindCode なしで cwd と sessionId を送る）",
           "nodeId と bindCode を確認する",
         ),
         "malformed",
@@ -1747,14 +1796,15 @@ export function createApiServer(deps: ApiDeps): ApiServer {
         inTree = false;
       }
       if (!inTree) {
+        // 作業ツリーの確かめは、コードと無関係（コードの当たりを教えない）なので、文で区別してよい
         return denied(
           failure(
-            "unauthenticated",
-            "bind コードが無効か、作業ツリーの中のセッションでない",
+            "bindWorktreeMismatch",
+            "このセッションは、そのノードの作業ツリーの中ではない（作業ディレクトリが、ノードの作業ツリーと合わない）",
             "子のセッションを、そのノードの作業ツリーの一番上（作業ツリーのフォルダそのもの）で起動し直す",
-            "bind コードを再発行する",
+            "別のノードの作業ツリーのセッションから呼んでいないか確かめる",
           ),
-          "rejected",
+          "cwdMismatch",
           { "www-authenticate": "Bearer" },
         );
       }
@@ -1768,13 +1818,44 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     ) {
       return denied(
         failure("unauthenticated", "bind コードが無効", "bind コードを再発行する"),
-        "rejected",
+        "sessionConflict",
         { "www-authenticate": "Bearer" },
       );
     }
     // Desktop の子は、直前にフックが効いていなければ、紐付けない（コードは使わずに残す）
     if (deps.hookFresh !== undefined && !deps.hookFresh(nodeId)) {
       return reject(res, hooksNotActive(), CLOSE);
+    }
+    // つなぎ直し（コードなし。#145）: 記録にあるそのノードの session_id と作業ツリーが合い、かつ今も有効な紐付けの
+    // トークンを持つときだけ、トークンを出し直す。失敗の文・数え方はコードが無効なときと同じ（onBindInvalid は呼ばない）。
+    if (b?.bindCode === undefined) {
+      const ok =
+        deps.rebindOk?.(nodeId, b?.sessionId as string) === true &&
+        checkPrincipal({ role: "child", nodeId }, deps.getState()).ok;
+      if (!ok) {
+        return denied(
+          failure("unauthenticated", "bind コードが無効", "bind コードを再発行する"),
+          "rebindRejected",
+          { "www-authenticate": "Bearer" },
+        );
+      }
+      // 有効な（期限内の）紐付けのトークンを持つときだけ、発行の時刻を引き継いで出し直す（24 時間の上限は延びない）。
+      // 紐付けの記録（node.sessionBound）の追記・コードのファイルの削除は、コードでの紐付けのときだけ（ここでは行わない）。
+      let rebound: string | undefined;
+      try {
+        rebound = deps.credentials.rebindNodeToken?.(nodeId);
+      } catch (error) {
+        return internalError(res, "bind", "bind", error);
+      }
+      if (rebound === undefined) {
+        return denied(
+          failure("unauthenticated", "bind コードが無効", "bind コードを再発行する"),
+          "rebindRejected",
+          { "www-authenticate": "Bearer" },
+        );
+      }
+      log({ event: "bindSucceeded", nodeId, at: now(), route: "rebind" });
+      return send(res, 200, { ok: true, value: { nodeId, token: rebound } });
     }
     // 結び付いたノードが、子ロールで、トークンを持てる状態か（統合ノード・木にない・停止後などは不可）を先に確かめ、
     // 許されたときだけコードを消費する。
@@ -1783,19 +1864,35 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       b?.bindCode,
       (id) => checkPrincipal({ role: "child", nodeId: id }, deps.getState()).ok,
     );
-    const unauthorized = (reason: "invalid" | "rejected"): void =>
-      denied(failure("unauthenticated", "bind コードが無効", "bind コードを再発行する"), reason, {
-        "www-authenticate": "Bearer",
-      });
     if (!redeemed.ok) {
-      if (redeemed.reason === "invalid") {
+      // コードが無効（未知・期限切れ・使用済み）なら、親に出し直しを頼む知らせを出す。ノードの状態が許さないときは出さない
+      if (redeemed.reason !== "rejected") {
         try {
           deps.onBindInvalid?.(nodeId);
         } catch {
           // 記録の失敗で、応答を変えない
         }
       }
-      return unauthorized(redeemed.reason);
+      // 期限切れ・使用済みは、提示されたコードが発行したものと一致したときだけ分かる（コードを知らない相手には未知と同じ）
+      const error =
+        redeemed.reason === "expired"
+          ? failure(
+              "bindCodeExpired",
+              "bind コードの期限が切れている",
+              "bind コードを再発行する",
+              "親か人に、node_bindCode で出し直してもらう",
+            )
+          : redeemed.reason === "used"
+            ? failure(
+                "bindCodeUsed",
+                "bind コードは使用済み（別の紐付けですでに使われた）",
+                "bind コードを再発行する",
+                "同じ子が紐付け済みなら、いまのトークンを使う",
+              )
+            : failure("unauthenticated", "bind コードが無効", "bind コードを再発行する");
+      return denied(error, redeemed.reason === "rejected" ? "nodeRejected" : redeemed.reason, {
+        "www-authenticate": "Bearer",
+      });
     }
     let token: string;
     try {

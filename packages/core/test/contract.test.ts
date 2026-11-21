@@ -132,6 +132,7 @@ describe("操作の契約（NFR_004, DC_003）", () => {
   it("部分木の規則の表: 操作ごとに strictDescendant・directChild・selfOrDescendant を決める", () => {
     expect(SUBTREE_RULES).toEqual({
       "node.spawn": "selfOrDescendant", // parentId。自分の子を作れる
+      "node.adopt": "selfOrDescendant", // parentId。自分の子として、既存の作業ツリーを採用できる（#163）
       "node.send": "strictDescendant",
       "node.stop": "strictDescendant", // 自分の停止は、親か人間だけができる
       "node.confirmStopped": "strictDescendant", // 停止の宣言は、祖先の統合ノードか人間だけ

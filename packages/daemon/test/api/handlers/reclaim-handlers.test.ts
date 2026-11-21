@@ -31,6 +31,8 @@ const rig = (
     facts?: Record<string, WorktreeFacts | undefined>;
     processes?: readonly ProcessInfo[] | null;
     failLastCommit?: boolean;
+    /** 古い項目の解決（inbox.resolved）の追記だけを失敗させる。 */
+    failResolve?: boolean;
     /** 強制の回収で失われるもの。指定すると、ポートが `lossFor` を持つ。"throw" は、取得の失敗。 */
     loss?: Record<string, LossFacts | "throw" | undefined>;
     /** 強制のとき、ポートが `onTip` に渡す先端（判定のあとに動いた先端の模擬）。 */
@@ -112,13 +114,19 @@ const rig = (
         }),
   };
   const failures: string[] = [];
+  const failsAppend = (body: EventBody): boolean =>
+    (over.failLastCommit === true && body.type === "node.lastCommit") ||
+    (over.failResolve === true && body.type === "inbox.resolved");
   const handlerLog: LogPort =
-    over.failLastCommit === true
+    over.failLastCommit === true || over.failResolve === true
       ? {
           state: () => log.state(),
-          append: (r) => log.append(r),
+          append: (r) =>
+            failsAppend(r.body)
+              ? { ok: false, error: failure("storeFailed", "書けない", "もう一度試す") }
+              : log.append(r),
           appendAll: (rs) =>
-            rs.some((r) => r.body.type === "node.lastCommit")
+            rs.some((r) => failsAppend(r.body))
               ? { ok: false, error: failure("storeFailed", "書けない", "もう一度試す") }
               : log.appendAll(rs),
         }
@@ -1008,6 +1016,62 @@ describe("未整備の操作（reclaimInstruct・purge・purgePreview）", () =>
       expect((await r.call(op, { nodeId: "a" })).error?.code, op).toBe("notSupported");
     }
     expect(r.s().lastSeq).toBe(before);
+  });
+});
+
+describe("回収で、古い停止未完了・失敗の項目を解決にする（settle）", () => {
+  const seedItem = (
+    r: ReturnType<typeof rig>,
+    nodeId: string,
+    kind: "failure" | "stopIncomplete",
+  ) => {
+    const id = `${kind}-${nodeId}`;
+    const appended = r.log.append({
+      requestId: `stale-seed-${id}`,
+      actor: SYS,
+      body: { type: "inbox.added", payload: { id, kind, nodeId, summary: `${kind} ${nodeId}` } },
+    });
+    expect(appended.ok).toBe(true);
+    return id;
+  };
+  const resolvedOf = (r: ReturnType<typeof rig>, id: string) =>
+    r.s().inbox.find((i) => i.id === id)?.resolved;
+
+  it("回収可能にした直後（mark-stale）と、archive した直後（archive-stale）に、そのノードの項目だけを解決にする。ほかのノードの項目は残す", async () => {
+    const r = rig();
+    const beforeMark = [seedItem(r, "a", "failure"), seedItem(r, "a", "stopIncomplete")];
+    const other = seedItem(r, "b", "failure");
+    // 削除に失敗させる: 回収可能にした（mark-stale）ところまでが記録され、archive には進まない
+    r.state.removeFailsFor.add("a");
+    expect((await r.call("node.reclaim", { nodeId: "a" })).ok).toBe(false);
+    expect(stateOf(r.s(), "a")).toBe("reclaimable");
+    for (const id of beforeMark) expect(resolvedOf(r, id)?.by, id).toEqual(SYS);
+    // 回収可能のまま新しく出た項目は、再試行の archive のあと（archive-stale）に解決になる
+    const late = r.log.append({
+      requestId: "stale-seed-late",
+      actor: SYS,
+      body: {
+        type: "inbox.added",
+        payload: { id: "failure-a-late", kind: "failure", nodeId: "a", summary: "late" },
+      },
+    });
+    expect(late.ok).toBe(true);
+    expect(resolvedOf(r, "failure-a-late")).toBeUndefined();
+    r.state.removeFailsFor.delete("a");
+    expect((await r.call("node.reclaim", { nodeId: "a" })).ok).toBe(true);
+    expect(stateOf(r.s(), "a")).toBe("archived");
+    expect(resolvedOf(r, "failure-a-late")?.by).toEqual(SYS);
+    expect(resolvedOf(r, other)).toBeUndefined();
+  });
+
+  it("解決の追記に失敗しても、回収は進む。原因を onFailure に残す（起動時の整合があとで拾う）", async () => {
+    const r = rig({ failResolve: true });
+    const id = seedItem(r, "a", "failure");
+    const res = await r.call("node.reclaim", { nodeId: "a" });
+    expect(res.ok).toBe(true);
+    expect(stateOf(r.s(), "a")).toBe("archived");
+    expect(resolvedOf(r, id)).toBeUndefined();
+    expect(r.failures.some((f) => f.startsWith("a: 古い項目を解決にできない"))).toBe(true);
   });
 });
 

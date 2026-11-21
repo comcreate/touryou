@@ -23,12 +23,14 @@ import {
   commandWords,
   entryWords,
   evaluateScope,
+  isPathUnder,
   ownMcpToolOf,
   type Scope,
   type ScopeViolationReason,
+  type SearchStage,
 } from "@touryou/core";
 import { commandEntryProblem } from "./child-permissions.js";
-import { isReadOnlySearch } from "./read-only-search.js";
+import { diagnoseReadOnlySearch } from "./read-only-search.js";
 
 /** パスの実パス化（書き込み先の判定用）。解決できなければ reject する。 */
 export type ResolvePath = (absPath: string) => Promise<string>;
@@ -37,6 +39,8 @@ export interface ToolViolation {
   readonly reason: ScopeViolationReason;
   /** 違反した場所またはコマンド（記録用）。 */
   readonly subject: string;
+  /** 拒否の原因の診断（Bash の拒否だけ。子の種別は、記録する側が足す）。 */
+  readonly diagnosis?: { readonly cwdInside: boolean; readonly stage: SearchStage };
 }
 
 export type ToolDecision =
@@ -727,7 +731,9 @@ const WRITE_TOOLS: Readonly<Record<string, string>> = {
 const isRec = (x: unknown): x is Record<string, unknown> =>
   typeof x === "object" && x !== null && !Array.isArray(x);
 
-const deny = (reason: ScopeViolationReason, subject: string): ToolDecision => ({
+type Denied = Extract<ToolDecision, { readonly allow: false }>;
+
+const deny = (reason: ScopeViolationReason, subject: string): Denied => ({
   allow: false,
   violation: { reason, subject },
   reason: `作業範囲の外の操作です（${reason}: ${subject}）。範囲の拡張が必要なら、親へ拡張要求を出してください。`,
@@ -736,7 +742,7 @@ const deny = (reason: ScopeViolationReason, subject: string): ToolDecision => ({
 const denyUnknown = (tool: string): ToolDecision => ({
   allow: false,
   unknownTool: tool,
-  reason: `ツール ${tool} は、このノードでは使えない。`,
+  reason: `ツール ${tool} は、このノードでは使えない。自分で原因を探したり、別の手を試したりしない。\n- touryou の道具（report_progress など）が使えるなら、この拒否の文を親に知らせて待つ。\n- 使えない（紐付けが外れている）なら、画面を見ている人に「親の統合セッションに、この子の紐付けの出し直し（node_bindCode）を頼んでください」と頼んで待つ。`,
 });
 
 /** scope の場所（writable・forbidden）を実パスにする。解決できない writable は落とし、forbidden は絶対パスのまま残す。 */
@@ -836,18 +842,26 @@ export async function decideToolUse(
     if (input.dangerouslyDisableSandbox === true)
       return deny("commandNotAllowed", `${command}（dangerouslyDisableSandbox）`);
     // 作業ツリーの中を探す読み取りだけのコマンド（ls・find・grep・git ls-files・git grep）は、範囲によらず許す（#92）
-    if (
-      await isReadOnlySearch(
-        command,
-        toolCwd,
-        cwd,
-        resolve,
-        protectedPaths?.roots.map((r) => r.path),
-      )
-    )
-      return ALLOW;
+    const stage = await diagnoseReadOnlySearch(
+      command,
+      toolCwd,
+      cwd,
+      resolve,
+      protectedPaths?.roots.map((r) => r.path),
+    );
+    if (stage === undefined) return ALLOW;
     const d = evaluateScope(scope, cwd, { kind: "command", command });
-    return d.allowed ? ALLOW : deny(d.reason, d.subject);
+    if (d.allowed) return ALLOW;
+    // 落ちた段と、cwd が作業ツリーの中だったか（cwd の判定が先頭なので、ほかの段で落ちたなら中）を、記録に残す（パスは出さない）
+    const denied = deny(d.reason, d.subject);
+    return {
+      ...denied,
+      violation: {
+        reason: d.reason,
+        subject: d.subject,
+        diagnosis: { cwdInside: stage !== "cwdOutside", stage },
+      },
+    };
   }
 
   // 自分の mcp の道具は、子のロールの道具だけを、2 つの名前の形（直に入れた形・plugin から入れた形）で許す。ほかのロールの道具は拒む
@@ -889,33 +903,175 @@ export function grantedOnlyByExtension(
   if (toolName !== "Bash") return false;
   const command = (toolInput as { command?: unknown } | null)?.command;
   if (typeof command !== "string") return false;
+  // パスを足す形（`mkdir`・`cp` など）は、実パスの照らしが要る（非同期の `grantedBashByExtension`）ので、ここでは真にしない
+  const uses = classifyExtensionBash(brief, effective, command);
+  return uses !== undefined && uses.length === 0;
+}
+
+/** 承認済みの拡張だけにある項目（ブリーフにない項目）の語。区切り・裏起動を含む項目と、許可に入れてはいけない形は外す。 */
+function extensionEntries(brief: Scope, effective: Scope): string[][] {
+  return (
+    effective.allowedCommands
+      .filter((e) => !brief.allowedCommands.includes(e))
+      // 区切り（`;`・`|` など）を含む項目は、承認した形そのものと意味が違う語の並びになるので外す
+      // 裏で動かす項目（`x &`）も、`entryWords` が空白で分けるだけの形に戻るので外す（解析した語と同じ項目だけを残す）
+      .filter((e) => {
+        const segs = commandWords(e)?.filter((s) => s.length > 0);
+        const words = entryWords(e);
+        return (
+          segs?.length === 1 &&
+          segs[0]?.length === words.length &&
+          words.every((w, i) => segs[0]?.[i] === w)
+        );
+      })
+      .map(entryWords)
+      .filter((w) => extensionEntryProblem(w) === undefined)
+  );
+}
+
+/**
+ * 命令の各区切りが、承認済みの拡張だけで通るかを見る（#91・#130・#135）。通らなければ `undefined`。通るとき、パスを足した区切り
+ * （`ARGS_OK_COMMANDS` の `paths` つき）の、パスの使い方を返す（パスのない区切りは含まない）。実パスの照らしは呼び出し側がする。
+ */
+function classifyExtensionBash(
+  brief: Scope,
+  effective: Scope,
+  command: string,
+): PathUse[] | undefined {
   const segments = commandWords(command)?.filter((s) => s.length > 0);
-  if (segments === undefined || segments.length === 0) return false;
-  const granted = effective.allowedCommands
-    .filter((e) => !brief.allowedCommands.includes(e))
-    // 区切り（`;`・`|` など）を含む項目は、承認した形そのものと意味が違う語の並びになるので外す
-    // 裏で動かす項目（`x &`）も、`entryWords` が空白で分けるだけの形に戻るので外す（解析した語と同じ項目だけを残す）
-    .filter((e) => {
-      const segs = commandWords(e)?.filter((s) => s.length > 0);
-      const words = entryWords(e);
-      return (
-        segs?.length === 1 &&
-        segs[0]?.length === words.length &&
-        words.every((w, i) => segs[0]?.[i] === w)
-      );
-    })
-    .map(entryWords)
-    .filter((w) => commandEntryProblem(w) === undefined);
-  // 一覧のコマンド（`ARGS_OK_COMMANDS`）の承認だけは、うしろに安全な引数を足した形も真（#130）。
+  if (segments === undefined || segments.length === 0) return undefined;
+  const granted = extensionEntries(brief, effective);
+  // 一覧のコマンド（`ARGS_OK_COMMANDS`）の承認だけは、うしろに安全な引数を足した形も通す（#130）。
   // リダイレクト・展開の字があれば、語の外で何が起きるか分からないので、完全一致だけにする
   const plain = !/[<>`$]/.test(command);
-  return segments.every((seg) =>
-    granted.some(
-      (w) =>
-        (w.length === seg.length && w.every((x, i) => seg[i] === x)) ||
-        (plain && extendsWithSafeArgs(w, seg)),
-    ),
-  );
+  const uses: PathUse[] = [];
+  for (const seg of segments) {
+    const exact = granted.find((w) => w.length === seg.length && w.every((x, i) => seg[i] === x));
+    if (exact !== undefined) {
+      // 承認した形そのものでも、パスを足すコマンド（`touch`・`cp` など）は、そのパスを実パスで照らす
+      const hasPathRule = ARGS_OK_COMMANDS.some(
+        (c) =>
+          c.paths !== undefined &&
+          c.head.every((x, i) => exact[i] === x) &&
+          exact.length > c.head.length,
+      );
+      if (!hasPathRule) continue;
+      const u = extendsWithSafeArgs(exact, seg, true);
+      if (u === undefined) return undefined;
+      if (u.writes.length > 0) uses.push(u);
+      continue;
+    }
+    if (!plain) return undefined;
+    let extended: PathUse | undefined;
+    for (const w of granted) {
+      extended = extendsWithSafeArgs(w, seg);
+      if (extended !== undefined) break;
+    }
+    if (extended === undefined) return undefined;
+    if (extended.writes.length > 0) uses.push(extended);
+  }
+  // 区切りの前の区切り（`git mv`・`cp` など）が、あとの区切りのパスの指す先（リンク）を変えうるので、パスを書く区切りは 1 つだけにする
+  if (uses.length > 1) return undefined;
+  return uses;
+}
+
+/** `grantedBashByExtension` が、パスを実パスにして照らすのに使うもの。 */
+export interface ExtensionBashContext {
+  /** 有効な範囲を `resolveScope` で実パスにしたもの。 */
+  readonly scope: Scope;
+  /** 作業ツリー（実パス）。範囲の判定の基準。 */
+  readonly worktree: string;
+  /** フック入力の cwd（実パス）。相対パスの基準。 */
+  readonly here: string;
+  readonly resolve: ResolvePath;
+  /** `git rm`・`git mv` が、木ごと消す・動かしてはいけない場所（実パス。範囲の禁止の場所は、これとは別に見る）。 */
+  readonly guardTrees: readonly string[];
+}
+
+export type ExtensionBashGrant =
+  | { readonly granted: true }
+  | {
+      readonly granted: false;
+      /** 承認済みの形で、パスだけが範囲の外のとき。明示の拒否（違反の記録つき）にする。 */
+      readonly denied?: Denied;
+    };
+
+/**
+ * 承認済みの拡張に、Bash の明示の許可を返してよいか（`grantedOnlyByExtension` の Bash の分の、実パスの照らしつき。#135）。
+ * 区切りがすべて承認済みの拡張だけで通るうえで、足したパス（`mkdir`・`touch`・`cp`・`git rm`・`git mv`）が、すべて有効な範囲の
+ * 書き込める場所の中を、実パスで指すときだけ許可する（リンクを通った先で比べる。Write の道具と同じ手順）。
+ * 外を指すときは `denied` を付ける（形は承認されているので、理由を子に伝え、範囲の違反として記録する）。
+ */
+export async function grantedBashByExtension(
+  brief: Scope,
+  effective: Scope,
+  command: string,
+  ctx: ExtensionBashContext,
+): Promise<ExtensionBashGrant> {
+  const uses = classifyExtensionBash(brief, effective, command);
+  if (uses === undefined) return { granted: false };
+  for (const use of uses) {
+    const bad = await checkPathUse(use, ctx);
+    if (bad !== undefined) return { granted: false, denied: deny(bad.reason, bad.subject) };
+  }
+  return { granted: true };
+}
+
+/** パスの使い方 1 つ（1 つの区切り）を、実パスで照らす。範囲の外なら、その違反。 */
+async function checkPathUse(
+  use: PathUse,
+  ctx: ExtensionBashContext,
+): Promise<ToolViolation | undefined> {
+  const resolveWord = async (word: string): Promise<string | undefined> => {
+    try {
+      return await ctx.resolve(word.startsWith("/") ? word : `${ctx.here}/${word}`);
+    } catch {
+      return undefined;
+    }
+  };
+  const judge = async (word: string, abs: string): Promise<ToolViolation | undefined> => {
+    let target: string;
+    try {
+      target = await ctx.resolve(abs);
+    } catch {
+      return { reason: "invalidPath", subject: `${word}（実パスを解決できない）` };
+    }
+    const d = evaluateScope(ctx.scope, ctx.worktree, { kind: "write", path: target });
+    if (!d.allowed) return { reason: d.reason, subject: d.subject };
+    // 作業ツリーの .git など、守る場所の中には、どのコマンドも書けない
+    if (ctx.guardTrees.some((x) => isPathUnder(target, x)))
+      return { reason: "forbiddenLocation", subject: `${word}（守る場所の中）` };
+    // 木ごと消す・動かすコマンドは、禁じる場所を含む場所を指せない（`git rm -r docs` が `docs/secret` を消さない）
+    if (use.guardTree) {
+      const g = [...ctx.scope.forbiddenLocations, ...ctx.guardTrees];
+      if (g.some((x) => isPathUnder(x, target)))
+        return { reason: "forbiddenLocation", subject: `${word}（禁じる場所を含む）` };
+    }
+    return undefined;
+  };
+  for (const w of use.writes) {
+    const v = await judge(w, w.startsWith("/") ? w : `${ctx.here}/${w}`);
+    if (v !== undefined) return v;
+  }
+  // 宛先が今あるディレクトリなら、元ごとに `宛先/元の名前` に書く。そこが外へのリンクなら、リンクの先に書かれる
+  if (use.intoDir !== undefined) {
+    const dir = await resolveWord(use.intoDir);
+    const isDir =
+      dir !== undefined &&
+      (await stat(dir).then(
+        (s) => s.isDirectory(),
+        () => false,
+      ));
+    if (dir !== undefined && isDir) {
+      for (const s of use.members) {
+        const name = s.replace(/\/+$/, "").split("/").pop() ?? "";
+        if (name === "") return { reason: "invalidPath", subject: `${s}（名前を取れない）` };
+        const v = await judge(`${use.intoDir}/${name}`, `${dir}/${name}`);
+        if (v !== undefined) return v;
+      }
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -926,13 +1082,20 @@ export function grantedOnlyByExtension(
  * - `git add`: インデックスに載せるだけで、作業ツリーのファイルは変えない。git は作業ツリーの外・リンクの先のパスを断る。
  *   エディタ・対話を始める `-e`・`-p`・`-i`、ファイルからパスを読む `--pathspec-from-file`、無視したファイルも載せる `-f` は許さない。
  * - `git status`・`git ls-files`: 読み取りだけ。`--exclude-from`・`-X`（ファイルを読む）は許さない。
- * 入れないもの: `git rm`・`git mv`（作業ツリーのファイルを消す・動かすので、書き込みの範囲を越えられる）、
- * `git log`・`git diff`・`git show`（`--output`・`--ext-diff`・`--textconv`）、`git commit`（フックが動く）、`git grep`（`-O`）、
- * `cp`・`mv`・`mkdir`・`touch`（作業ツリーの中のリンクを通って外へ書ける）。
+ * `paths` つきの行（`mkdir`・`touch`・`cp`・`git rm`・`git mv`。#135）は、作業ツリーのファイルを書く・消す・動かす。足した位置の引数
+ * （パス）を、実パスにして（リンクを通った先で）、有効な範囲の書き込める場所の中にあるときだけ許可する（`grantedBashByExtension`）。
+ * 旗は、値を取るもの（`mkdir -m`・`touch -r`・`cp -t`）、リンクを作る・リンクの扱いを変えるもの（`cp -l -s -L -H -P`・`touch -h`）、
+ * 木ごと写すもの（`cp -r -R -a`）、対話で止まるもの（`-i`）、ファイルからパスを読むもの（`git rm --pathspec-from-file`）を許さない。
+ * 位置の引数は、最初の 1 つより後ろに `-` で始まる語（`--` を含む）があれば断る（BSD の getopt は並べ替えず、それ以降をファイル名にする）。
+ * 字は控えめな集まりだけ（空白・引用符・glob・`~`・展開は断る）。`git rm`・`git mv` は、先頭が `:` の語（pathspec の魔法）も断る。
+ * 1 語の承認（`mkdir`・`touch`・`cp`）は、この一覧の拡張にだけ通す（`extensionEntryProblem`。起動のときの許可の一覧には入れない）。
+ * 入れないもの: `git log`・`git diff`・`git show`（`--output`・`--ext-diff`・`--textconv`）、`git commit`（フックが動く）、`git grep`（`-O`）、
+ * `mv`・`ln`（`git mv` で足りる）、`cp -r`（木の中のリンクの扱いが OS で違う）、glob・空白を含むパス。
  */
 const ARGS_OK_COMMANDS: readonly {
   readonly head: readonly string[];
   readonly flags: ReadonlySet<string>;
+  readonly paths?: PathRule;
 }[] = [
   {
     head: ["git", "add"],
@@ -1021,7 +1184,87 @@ const ARGS_OK_COMMANDS: readonly {
       "--sparse",
     ]),
   },
+  {
+    head: ["mkdir"],
+    flags: new Set(["-p", "--parents", "-v", "--verbose"]),
+    paths: { min: 1, writes: "all", intoDir: false, guardTree: false, pathspec: false },
+  },
+  {
+    head: ["touch"],
+    flags: new Set(["-a", "-m", "-c", "--no-create"]),
+    paths: { min: 1, writes: "all", intoDir: false, guardTree: false, pathspec: false },
+  },
+  {
+    // 単一ファイルの形。最後が宛先（書き込み先）で、残りは元（読むだけ）
+    head: ["cp"],
+    flags: new Set(["-n", "--no-clobber", "-v", "--verbose", "-f", "--force"]),
+    paths: { min: 2, writes: "last", intoDir: true, guardTree: false, pathspec: false },
+  },
+  {
+    head: ["git", "rm"],
+    flags: new Set([
+      "-n",
+      "--dry-run",
+      "-q",
+      "--quiet",
+      "--cached",
+      "-r",
+      "-f",
+      "--force",
+      "--ignore-unmatch",
+      "--sparse",
+    ]),
+    paths: { min: 1, writes: "all", intoDir: false, guardTree: true, pathspec: true },
+  },
+  {
+    head: ["git", "mv"],
+    flags: new Set(["-f", "--force", "-k", "-n", "--dry-run", "-v", "--verbose"]),
+    paths: { min: 2, writes: "all", intoDir: true, guardTree: true, pathspec: true },
+  },
 ];
+
+/** `paths` つきの行の、位置の引数（パス）の決まり。 */
+interface PathRule {
+  /** 位置の引数の最小の数。足りなければ許可しない。 */
+  readonly min: number;
+  /** 書き込み先にする位置の引数: すべて、または最後の 1 つだけ（残りは元。読むだけ）。 */
+  readonly writes: "all" | "last";
+  /** 最後の引数が今あるディレクトリのとき、残りの元ごとに `宛先/元の名前` も書き込み先として照らす。 */
+  readonly intoDir: boolean;
+  /** 木ごと消す・動かすコマンド。禁じる場所を含む場所を指せない。 */
+  readonly guardTree: boolean;
+  /** git の pathspec。先頭が `:` の語（魔法）を断る。 */
+  readonly pathspec: boolean;
+}
+
+/** 位置の引数の使い方（1 つの区切り）。語は、シェルが渡す語（引用符を外したもの）。 */
+interface PathUse {
+  /** 書き込み先（実パスにして、範囲の書き込める場所の中かを照らす）。 */
+  readonly writes: readonly string[];
+  /** `intoDir` のとき、最後の引数（宛先）。 */
+  readonly intoDir: string | undefined;
+  /** `intoDir` のとき、宛先に入れる元の語。 */
+  readonly members: readonly string[];
+  readonly guardTree: boolean;
+}
+
+const NO_PATHS: PathUse = { writes: [], intoDir: undefined, members: [], guardTree: false };
+
+/**
+ * 承認済みの拡張だけが使う、許可の項目の検査。`commandEntryProblem` に加えて、`paths` つきの 1 語のコマンド（`mkdir`・`touch`・`cp`）は
+ * 許す（前方一致で任意の引数が通るが、明示の許可は、パスを照らして通ったときだけ付く）。起動のときの一覧（`childAllowList`）は、これを使わない。
+ */
+function extensionEntryProblem(words: readonly string[]): string | undefined {
+  if (
+    words.length === 1 &&
+    ARGS_OK_COMMANDS.some(
+      (c) => c.paths !== undefined && c.head.length === 1 && c.head[0] === words[0],
+    )
+  ) {
+    return undefined;
+  }
+  return commandEntryProblem(words);
+}
 
 /** 旗 1 つ（`--x`・`-x`・まとめ書きの `-xyz`）が、許す表にあるか。 */
 function flagAllowed(flag: string, allowed: ReadonlySet<string>): boolean {
@@ -1036,24 +1279,49 @@ function safePositional(a: string): boolean {
   return /^[A-Za-z0-9._/:@+,%=-]+$/.test(a) && !a.startsWith("/") && !a.split("/").includes("..");
 }
 
-/** `entry`（承認した形）が一覧のコマンドで始まり、`seg` が entry と同じ語で始まり、そのうしろが安全な引数だけか。 */
-function extendsWithSafeArgs(entry: readonly string[], seg: readonly string[]): boolean {
-  if (seg.length <= entry.length || !entry.every((x, i) => seg[i] === x)) return false;
+/** `paths` つきの行の、位置の引数 1 つの字。`safePositional` と同じ字の表で、絶対パス・`..` は実パスで照らすので断らない。 */
+function pathWordOk(rule: PathRule, a: string): boolean {
+  if (!/^[A-Za-z0-9._/:@+,%=-]+$/.test(a)) return false;
+  return !(rule.pathspec && a.startsWith(":"));
+}
+
+/**
+ * `entry`（承認した形）が一覧のコマンドで始まり、`seg` が entry と同じ語で始まり、そのうしろが安全な引数だけなら、パスの使い方を返す
+ * （`paths` のない行は `NO_PATHS`）。そうでなければ `undefined`。
+ */
+function extendsWithSafeArgs(
+  entry: readonly string[],
+  seg: readonly string[],
+  exact = false,
+): PathUse | undefined {
+  if (seg.length < entry.length || (!exact && seg.length === entry.length)) return undefined;
+  if (!entry.every((x, i) => seg[i] === x)) return undefined;
   const cmd = ARGS_OK_COMMANDS.find((c) => c.head.every((x, i) => entry[i] === x));
-  if (cmd === undefined) return false;
+  if (cmd === undefined) return undefined;
+  const rule = cmd.paths;
+  const positionals: string[] = [];
   let afterDashes = false;
   for (const a of seg.slice(cmd.head.length)) {
-    if (!afterDashes && a === "--") {
-      afterDashes = true;
+    if (!afterDashes && (a === "--" || a.startsWith("-"))) {
+      // 書き込むコマンドは、最初の位置の引数のうしろの `-` 始まりの語（`--` を含む）を断る。BSD の getopt は並べ替えず、
+      // それ以降を（`-p` や `--` という名前の）ファイル名にするため、旗と見なして許可すると、別の場所に書かれる
+      if (rule !== undefined && positionals.length > 0) return undefined;
+      if (a === "--") afterDashes = true;
+      else if (!flagAllowed(a, cmd.flags)) return undefined;
       continue;
     }
-    if (!afterDashes && a.startsWith("-")) {
-      if (!flagAllowed(a, cmd.flags)) return false;
-      continue;
-    }
-    if (!safePositional(a)) return false;
+    if (rule === undefined ? !safePositional(a) : !pathWordOk(rule, a)) return undefined;
+    positionals.push(a);
   }
-  return true;
+  if (rule === undefined) return NO_PATHS;
+  if (positionals.length < rule.min) return undefined;
+  const last = positionals[positionals.length - 1] as string;
+  return {
+    writes: rule.writes === "all" ? positionals : [last],
+    intoDir: rule.intoDir ? last : undefined,
+    members: rule.intoDir ? positionals.slice(0, -1) : [],
+    guardTree: rule.guardTree,
+  };
 }
 
 /**

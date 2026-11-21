@@ -65,6 +65,7 @@ import {
   writeIdentityFile,
 } from "./api/identity.js";
 import {
+  type AdoptPorts,
   type ApiLogger,
   type BindCodes,
   createApiServer,
@@ -122,8 +123,10 @@ import { latestLaunch, ParentRequestCliAdapter } from "./sdk/cli-adapter.js";
 import { DesktopRuntimeAdapter, touryouChildCommands } from "./sdk/desktop-adapter.js";
 import {
   decideToolUse,
+  grantedBashByExtension,
   grantedOnlyByExtension,
   resolveScope,
+  type ToolViolation,
   withRealWritePath,
 } from "./sdk/hook-policy.js";
 import { createLsofProbe, nodeExec, type ProcessProbe } from "./sdk/lsof-probe.js";
@@ -189,6 +192,12 @@ export interface WorktreePorts {
   cwdOf(nodeId: string): Promise<string | undefined>;
   /** 子のブランチを親のブランチへ fast-forward で統合する。省略すると `node.integrate` は `notSupported`。 */
   integrate?: GitPorts["integrate"];
+  /** 既存の作業ツリーの採用（#163）の口。4 つそろって省略されたときは、`node.adopt` は無効（501）。 */
+  inspectAdoption?: GitPorts["inspectAdoption"];
+  markAdopted?: GitPorts["markAdopted"];
+  unmarkAdopted?: GitPorts["unmarkAdopted"];
+  /** 採用したノードの作業ツリーとブランチを引く関数を差し込む（記録は、口より後に作られるため）。 */
+  useAdopted?: GitPorts["useAdopted"];
 }
 
 export interface DaemonDeps {
@@ -839,7 +848,10 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           clock,
           bind,
           writeCodeFile: (worktree, code) => {
-            writeBindCodeFile(worktree, code);
+            // 書いた daemon の公開 ID も入れる（子の mcp が、接続先違いを見分ける）。起動の前（身元がまだない）なら、コードだけ
+            writeBindCodeFile(worktree, code, {
+              ...(currentIdentity === undefined ? {} : { daemonId: currentIdentity.daemonId }),
+            });
           },
           removeCodeFile: (worktree) => {
             removeBindCodeFile(worktree);
@@ -859,8 +871,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
         const prev = seen.get(n.id);
         seen.set(n.id, n.state);
         if (prev === n.state || !TOKEN_REVOKE_ON_ENTER.has(n.state)) continue;
-        const launch = latestLaunch(st, n.id);
-        if (launch !== undefined) parentAdapter.discardCode(n.id, launch.worktree, true);
+        const worktree = latestLaunch(st, n.id)?.worktree ?? n.adopted?.worktree;
+        if (worktree !== undefined) parentAdapter.discardCode(n.id, worktree, true);
       }
       // 人間が破棄を決めたノードで、削除（claude rm）が拒まれたままなら、旗つきの削除を依頼し直す
       // 追記の通知の中では追記しない（入れ子を避ける）。次の小さな仕事で、その時点の記録から決め直す
@@ -907,10 +919,10 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     const st = log.state();
     const node = st.nodes.find((n) => n.id === nodeId);
     const launch = latestLaunch(st, nodeId);
-    if (node === undefined || launch === undefined) return;
+    if (node === undefined || (launch === undefined && node.adopted === undefined)) return;
     if (node.state !== "running" && node.state !== "waiting") return;
     rebindNoticedAt.set(nodeId, nowMs);
-    const key = `rebind/${nodeId}/${launch.requestRef}/${st.lastSeq}`;
+    const key = `rebind/${nodeId}/${launch?.requestRef ?? `adopted-${node.adopted?.seq}`}/${st.lastSeq}`;
     const r = appendAtomically(log, clock, key, { system: true }, [
       {
         type: "inbox.added",
@@ -933,6 +945,13 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       if (removeBindCodeFile(r.worktree)) {
         note("staleBindCodeFileRemoved", { nodeId: r.nodeId });
         noticeRebind(r.nodeId);
+      }
+    }
+    // 採用した既存の作業ツリー（#163）の、残ったコードのファイルも同じに片付ける
+    for (const n of log.state().nodes) {
+      if (n.adopted !== undefined && removeBindCodeFile(n.adopted.worktree)) {
+        note("staleBindCodeFileRemoved", { nodeId: n.id });
+        noticeRebind(n.id);
       }
     }
   }
@@ -1155,6 +1174,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     rawSubject: string,
     /** session_id で引いた要求の記録なら、その印（行為者に写す）。 */
     trust?: "sessionIdOnly",
+    /** 拒否の原因の診断（cwd の内外・落ちた段）と、子の種別。診断があるときだけ記録に載せる。 */
+    diagnosis?: { diagnosis: ToolViolation["diagnosis"]; runtime: "cli" | "desktop" },
   ): void => {
     // 件名は長さを切り、トークン・Bearer を含むものは伏せる
     const subject = /bearer|token/i.test(rawSubject) ? "（伏せた）" : rawSubject.slice(0, 200);
@@ -1175,7 +1196,14 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     const key = `${reason}\0${subject}`;
     const count = v.keys.get(key) ?? 0;
     if (count >= 10 || v.total >= 200) return;
-    const bodies: EventBody[] = [{ type: "scope.violation", payload: { nodeId, reason, subject } }];
+    const found = diagnosis?.diagnosis;
+    const recorded =
+      found === undefined || diagnosis === undefined
+        ? {}
+        : { diagnosis: { runtime: diagnosis.runtime, ...found } };
+    const bodies: EventBody[] = [
+      { type: "scope.violation", payload: { nodeId, reason, subject, ...recorded } },
+    ];
     const requestId = `desktop-violation-${randomBytes(8).toString("hex")}-${++violationSeq}`;
     let item = false;
     let overflow = false;
@@ -1523,7 +1551,10 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     if (d.allow) return { allow: true };
     // CLI の子と同じく、範囲違反として記録する（受信箱にも出す）
     if (d.violation !== undefined)
-      recordDesktopViolation(nodeId, d.violation.reason, d.violation.subject);
+      recordDesktopViolation(nodeId, d.violation.reason, d.violation.subject, undefined, {
+        diagnosis: d.violation.diagnosis,
+        runtime: "desktop",
+      });
     return { allow: false, reason: d.reason };
   };
 
@@ -1672,6 +1703,30 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
         return { allow: true, permit: "readOnlySearch" };
       }
       const brief = log.state().nodes.find((n) => n.id === nodeId)?.scope;
+      // Bash: 承認済みの拡張で通る形。足したパス（mkdir・touch・cp・git rm・git mv。#135）は、実パスで書き込める場所の中かを照らす。
+      // 形は承認されているのにパスだけが外のときは、許可なしで通す（Claude Code が理由なく断る）のでなく、理由つきで拒否して記録する
+      if (toolName === "Bash" && typeof command === "string") {
+        if (brief === undefined) return { allow: true };
+        const grant = await grantedBashByExtension(brief, scope, command, {
+          scope: resolved,
+          worktree: wt,
+          here,
+          resolve: resolveHookPath,
+          guardTrees: gitDir === undefined ? [join(wt, ".git")] : [gitDir, join(wt, ".git")],
+        });
+        if (grant.granted) return { allow: true, permit: "extension" };
+        if (grant.denied !== undefined) {
+          if (grant.denied.violation !== undefined)
+            recordDesktopViolation(
+              nodeId,
+              grant.denied.violation.reason,
+              grant.denied.violation.subject,
+              trust,
+            );
+          return { allow: false, reason: grant.denied.reason };
+        }
+        return { allow: true };
+      }
       const input = await withRealWritePath(toolName, toolInput, here, resolveHookPath);
       if (brief !== undefined && grantedOnlyByExtension(brief, scope, toolName, input, wt)) {
         return { allow: true, permit: "extension" };
@@ -1680,7 +1735,10 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     }
     // session_id で引いた要求の記録は、行為者に印（trust: sessionIdOnly）を写す
     if (d.violation !== undefined)
-      recordDesktopViolation(nodeId, d.violation.reason, d.violation.subject, trust);
+      recordDesktopViolation(nodeId, d.violation.reason, d.violation.subject, trust, {
+        diagnosis: d.violation.diagnosis,
+        runtime: "cli",
+      });
     return { allow: false, reason: d.reason };
   };
 
@@ -1722,6 +1780,30 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
   };
   const onFailure = (nodeId: string, cause: string): void =>
     note("handlerFailure", { nodeId, cause });
+  // 採用した既存の作業ツリー（#163）: ノードの作業ツリーとブランチは、記録（node.adopted）から引く。
+  deps.worktree.useAdopted?.((id) => {
+    const a = log.state().nodes.find((n) => n.id === id)?.adopted;
+    return a === undefined ? undefined : { worktree: a.worktree, branch: a.branch };
+  });
+  const { inspectAdoption, markAdopted, unmarkAdopted } = deps.worktree;
+  // CLI の子（親への依頼の形）だけ採用できる。紐付けのコードは、起動の代わりに採用の時点で出す。
+  const adopt: AdoptPorts | undefined =
+    inspectAdoption === undefined ||
+    markAdopted === undefined ||
+    unmarkAdopted === undefined ||
+    desktopAdapter !== undefined ||
+    parentAdapter === undefined
+      ? undefined
+      : {
+          cwdOf,
+          inspectAdoption: (r) => inspectAdoption.call(deps.worktree, r),
+          markAdopted: (id, path) => markAdopted.call(deps.worktree, id, path),
+          unmarkAdopted: (path) => unmarkAdopted.call(deps.worktree, path),
+          issueBindCode: (id, path) => {
+            parentAdapter.issueCodeFile(id, path);
+          },
+          discardBindCode: (id, path) => parentAdapter.discardCode(id, path, true),
+        };
   const purgeDeps: PurgeHandlerDeps = {
     log,
     nowMs: () => Date.parse(clock()),
@@ -1786,6 +1868,9 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     {
       ports: spawn,
       credentials,
+      // 子の `node.created` に記録する実行環境（設定 childRuntime と同じ値。記録だけで、振り分けには使わない。#159）
+      runtime: config.childRuntime === "desktop" ? "desktop" : "cli",
+      ...(adopt === undefined ? {} : { adopt }),
       rootScope: config.rootScope,
       onFailure,
       ...(config.startLimits === undefined ? {} : { startLimits: config.startLimits }),
@@ -1966,6 +2051,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     stopDelegated: stopDelegatedOf(adapter),
     // 画面の claude attach を打つ場所（#136）
     attachDir: config.repoRoot,
+    // 統合ノードの whoami に出す daemon の場所（#164）
+    daemonInfo: { rootCwd: config.rootCwd, repoRoot: config.repoRoot },
     ...(confirmGate === undefined
       ? {}
       : {
@@ -1991,9 +2078,12 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
         ...(desktopAdapter === undefined && parentAdapter !== undefined
           ? {
               cliIssueFile: (nodeId: string) => {
-                const launch = latestLaunch(log.state(), nodeId);
-                if (launch === undefined) throw new Error("起動の依頼がない");
-                const issued = parentAdapter.issueCodeFile(nodeId, launch.worktree);
+                const st = log.state();
+                const worktree =
+                  latestLaunch(st, nodeId)?.worktree ??
+                  st.nodes.find((n) => n.id === nodeId)?.adopted?.worktree;
+                if (worktree === undefined) throw new Error("起動の依頼も、採用の記録もない");
+                const issued = parentAdapter.issueCodeFile(nodeId, worktree);
                 rebindNoticedAt.delete(nodeId);
                 return issued;
               },
@@ -2049,7 +2139,12 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     bind,
     // CLI の子の紐付けは、そのノードの作業ツリーの中のセッションだけ（FR_006）
     ...(desktopAdapter === undefined
-      ? { bindWorktreeOk: createBindWorktreeCheck({ cwdOf: (id) => deps.worktree.cwdOf(id) }) }
+      ? {
+          bindWorktreeOk: createBindWorktreeCheck({ cwdOf: (id) => deps.worktree.cwdOf(id) }),
+          // attach で mcp が入れ替わった CLI の子の、コードなしのつなぎ直し（#145）。Desktop の木には渡さない
+          rebindOk: (nodeId: string, sessionId: string) =>
+            sessionBindings.matches(nodeId, sessionId),
+        }
       : {}),
     bindSessionOk: (nodeId, sessionId) => {
       if (!sessionBindings.conflicts(nodeId, sessionId)) return true;
@@ -2059,8 +2154,11 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     onBindSucceeded: (nodeId, info) => {
       if (!sessionBindings.bound(nodeId, info)) note("sessionBindFailed", { nodeId });
       // 使われたコードのファイルを消す（コードは、もうメモリにない）
-      const launch = latestLaunch(log.state(), nodeId);
-      if (launch !== undefined) parentAdapter?.discardCode(nodeId, launch.worktree, false);
+      const st = log.state();
+      const worktree =
+        latestLaunch(st, nodeId)?.worktree ??
+        st.nodes.find((n) => n.id === nodeId)?.adopted?.worktree;
+      if (worktree !== undefined) parentAdapter?.discardCode(nodeId, worktree, false);
     },
     ...(desktopAdapter === undefined ? { onBindInvalid: noticeRebind } : {}),
     clock,
