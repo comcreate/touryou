@@ -12,7 +12,7 @@ allowed-tools: Read
 - **`--yes` は、利用者が定型文の問いにチャットで「はい」と答えたあとにだけ付ける。承認ダイアログの許可だけでは付けない**。`restart`・`stop` も、チャットの「はい」のあとだけ実行する。
 - `root-token` の中身は、読まない・出さない。
 - `--org` を、`/setup` のときと変えていなければ、付けない（省略すると Label は `touryou.daemon`）。
-- **複数の daemon（設定ごと。#165）**: root ごとに daemon を分けているとき（`touryou launchd init --config <設定>` で作った別名の daemon。Label は `touryou.daemon-<8 文字>`）は、**どの daemon を対象にするかを、実行の前に利用者に聞く**。選び方は 3 つ: 既定の設定（`$HOME/.touryou/config.json`。引数を付けない）／ある設定（コマンドの最後に `--config <設定ファイルの絶対パス>` を付ける）／別名の daemon すべて（`--others` を付ける）。どれかが分からなければ、`"$HOME/.touryou/current/bin/touryou" ui --list` で設定の一覧（既定と別名の設定。repoRoot つき）を出して、利用者に選んでもらう。**聞かずに、すべてを対象にしない**。選んだ `--config <設定>`・`--others` は、`status`・`restart`・`stop`・`uninstall`・`apply` のコマンドの最後にそのまま付ける。定型文（再開・起動し直し・止める・外す）は、対象の daemon の設定（またはすべて）を添えて尋ねる。`uninstall-all` は、既定の設定に加えて、別名の daemon も外す（既定の設定の分を 1 回、別名があるときだけ `--others` 付きで続けて 1 回。合計で最大 2 回）。
+- **複数の daemon（設定ごと。#165）**: root ごとに daemon を分けているとき（`touryou launchd init --config <設定>` で作った、ほかのリポジトリ用に分けた daemon〔2 つ目以降〕。Label の決め方・`--others` の細かい規則は `docs/launchd.md`）は、**どの daemon を対象にするかを、実行の前に利用者に聞く**。選び方は 3 つ: 既定の設定（`$HOME/.touryou/config.json`。引数を付けない）／ある設定（コマンドの最後に `--config <設定ファイルの絶対パス>` を付ける）／ほかのリポジトリ用に分けた daemon すべて（`--others` を付ける）。どれかが分からなければ、`"$HOME/.touryou/current/bin/touryou" ui --list` で設定の一覧（既定と別名の設定。repoRoot つき）を出して、利用者に選んでもらう。**聞かずに、すべてを対象にしない**。選んだ `--config <設定>`・`--others` は、`status`・`restart`・`stop`・`uninstall`・`apply` のコマンドの最後にそのまま付ける。定型文（再開・起動し直し・止める・外す）は、対象の daemon の設定（またはすべて）を添えて尋ねる。`uninstall-all` は、既定の設定に加えて、ほかのリポジトリ用に分けた daemon も外す（既定の設定の分を 1 回、分けた daemon があるときだけ `--others` 付きで続けて 1 回。合計で最大 2 回）。
 
 ## 引数ごとの手順
 
@@ -29,9 +29,9 @@ allowed-tools: Read
   「はい」のあと、**1 回だけ**実行する: `"$HOME/.touryou/current/bin/touryou" launchd uninstall --yes`。
   結果の伝え方: 終了コード 0 なら、消したものを伝える。**終了コード 1 で、出力に「残した」の行があるときは、失敗ではない**（TouRyou が生成したものと判定できない〔手で直した・リンクなど〕ので残した）。残したものと理由を伝えて終える（やり直さない。消すかは、利用者が自分で決める）。終了コード 1 で「何も消していない」のとき（止めるのに失敗）・終了コード 2 は、出力を伝えて止まる。
   外したあと、手で起動するときは、`/setup` の手順 3-B。
-- **uninstall-all**: TouRyou をまとめて外す（常駐・plugin・marketplace・`$HOME/.touryou`）。**実行の前に、次の定型文で尋ねる**。はっきり「はい」でなければ、何もせずに終わる。
-  定型文（まとめて外す）: 「TouRyou をまとめて外します。いま、常駐（daemon）を止めて外します。plugin・marketplace・$HOME/.touryou（ログと daemon の状態を含む）は、この会話を終えたあとに、ターミナルで消すコマンドを出します。動いている子のセッション（claude）は止まりませんが、daemon がなくなるので、子の道具は届かなくなります。よいですか（はい／いいえ）」
-  「はい」のあと、実行するのは**合計で最大 2 回**: まず `"$HOME/.touryou/current/bin/touryou" launchd uninstall --yes`（1 回）。別名の daemon があるときだけ、続けて `"$HOME/.touryou/current/bin/touryou" launchd uninstall --yes --others`（もう 1 回）。同じコマンドを繰り返さない。常駐にしていなかったときも、同じものを実行する（消すものがなければ、何も消さずに終わる）。
+- **uninstall-all**: TouRyou をまとめて外す（常駐・plugin・marketplace・`$HOME/.touryou`）。**先に**、ほかのリポジトリ用に分けた daemon があるかを、読み取りだけの `"$HOME/.touryou/current/bin/touryou" launchd status --others` で確かめ、出力から件数 N を数える（分けた daemon がなければ N は 0。出力から数えられないときは、書き換えず、出力を伝えて止まる）。**実行の前に、次の定型文で尋ねる**。はっきり「はい」でなければ、何もせずに終わる。
+  定型文（まとめて外す）: 「TouRyou をまとめて外します。いま、常駐（daemon）を止めて外します。{N が 1 以上のときだけ: ほかのリポジトリ用に分けた daemon（N 件）も止めて外します。}plugin・marketplace・$HOME/.touryou（ログと daemon の状態を含む）は、この会話を終えたあとに、ターミナルで消すコマンドを出します。動いている子のセッション（claude）は止まりませんが、daemon がなくなるので、子の道具は届かなくなります。{N が 1 以上のときだけ: このあと、コマンドの承認の確認が最大 2 回出ます（既定の daemon の分と、分けた daemon の分）。}よいですか（はい／いいえ）」（`{…}` は文面に出さない。N が 0 のときは、その部分を丸ごと省く）
+  「はい」のあと、実行するのは**合計で最大 2 回**: まず `"$HOME/.touryou/current/bin/touryou" launchd uninstall --yes`（1 回）。N が 1 以上のときだけ、続けて `"$HOME/.touryou/current/bin/touryou" launchd uninstall --yes --others`（もう 1 回）。同じコマンドを繰り返さない。常駐にしていなかったときも、同じものを実行する（消すものがなければ、何も消さずに終わる）。
   結果: 終了コード 0、または終了コード 1 で「残した」の行があるときは、消したもの・残したもの（理由）を伝えて、次へ進む。終了コード 1 で「何も消していない」（止めるのに失敗）・終了コード 2 は、出力を伝えて止まる（次のブロックは出さない）。
   続けて、次のことを伝え、ブロックを出す（**会話の中では実行しない**）。
   - 手で起動した daemon（`/setup` の手順 3-B）があれば、先にそのターミナルで Ctrl-C で止める。
