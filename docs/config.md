@@ -43,7 +43,7 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 | `desktopRequireVerifiedHooks` | `true` | Desktop の子で、フックの確認前の起動を拒否する |
 | `touryouCommand` | なし | Desktop の子が `touryou` を起動する語（Desktop の子で必要） |
 | `hookFreshSeconds` | `30` | Desktop の子のフックの鮮度の窓（秒） |
-| `cliWatch` | `{ "stallMinutes": 30, "unreadMinutes": 30, "unboundMinutes": 3, "intervalSec": 60 }` | CLI の子の見張り。`unboundMinutes` 分、親の起動の報告（done）のあとも紐付け（`child_bind`）がない子を、子ごとに 1 回だけ受信箱に出す（TouRyou の plugin が子の設定の置き場にない見込み。`--plugin-dir` だけでは子に付かない）。`stallMinutes` 分、報告も道具の使用の記録もない子を「止まっているかもしれない」として受信箱に出す。`unreadMinutes` 分、子が受け取らない指示も受信箱に出す。`intervalSec` は見回りの間隔 |
+| `cliWatch` | `{ "stallMinutes": 30, "unreadMinutes": 30, "unboundMinutes": 3, "intervalSec": 60 }` | CLI の子の見張り。`unboundMinutes` 分、親の起動の報告（done）のあとも紐付け（`child_bind`）がない子を、子ごとに 1 回だけ受信箱に出す（TouRyou の plugin が子の設定の置き場にない見込み。`--plugin-dir` だけでは子に付かない）。`stallMinutes` 分、報告・道具の使用・指示のやり取り（送った時刻も受け取った時刻も）の記録がない子を「止まっているかもしれない」として受信箱に出す。`unreadMinutes` 分、子が受け取らない指示も受信箱に出す。`intervalSec` は見回りの間隔 |
 | `hookSettingsCheckSeconds` | `2` | Desktop の子の見張りの間隔（秒） |
 | `hookFirstSeenMinutes` | `5` | Desktop の子でフックが来ないときに知らせるまでの時間（分） |
 | `claudeConfigDirs` | なし | 見張りが守る設定のディレクトリに足す場所（`~/.claude` と `CLAUDE_CONFIG_DIR` に加えて） |

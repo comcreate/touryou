@@ -84,7 +84,7 @@ export interface UiNode {
   readonly bindExpired?: "idle" | "absolute";
   /** 題: 目的（objective）の先頭を整えて `UI_TITLE_MAX` で切ったもの。目的がなければ、なし。 */
   readonly title?: string;
-  /** そのノードの最後の動き（報告・受信箱の項目・指示と受け取り・判断と拡張の要求）の時刻。記録がなければ、なし。 */
+  /** そのノードの最後の動き（報告・範囲違反・道具の拒否・指示・親の依頼の報告・判断と拡張の要求と答え。受信箱の項目は数えない）の時刻。記録がなければ、なし。 */
   readonly lastActivityAt?: string;
   /**
    * 人の操作が要る数: 未回答の判断・未判定の拡張要求・未解決の「止まっているかも」と停止未完了の項目。
@@ -519,7 +519,7 @@ export function humanCounts(state: OrchState): Map<string, number> {
   return m;
 }
 
-/** ノードごとの最後の動きの時刻（ISO 8601）。数え方は、見張りと同じ `lastActivityMs`（#195）。動きの記録がないノードは載せない。 */
+/** ノードごとの最後の動きの時刻（ISO 8601）。数え方は、見張りと同じ `lastActivityAt`・`lastActivityMs`（core の activity.ts。#195）。動きの記録がないノードは載せない。 */
 function lastActivity(state: OrchState): Map<string, string> {
   const m = new Map<string, string>();
   for (const n of state.nodes) {
