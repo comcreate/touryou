@@ -1827,12 +1827,22 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       return reject(res, hooksNotActive(), CLOSE);
     }
     // つなぎ直し（コードなし。#145）: 記録にあるそのノードの session_id と作業ツリーが合い、かつ今も有効な紐付けの
-    // トークンを持つときだけ、トークンを出し直す。失敗の文・数え方はコードが無効なときと同じ（onBindInvalid は呼ばない）。
+    // トークンを持つときだけ、トークンを出し直す。失敗の文・数え方はコードが無効なときと同じ。
+    // 失敗は、作業ツリーの確認を通ったあと（別の場所・別のノードの申告ではない）なので、受信箱に「紐付けをやり直して」を出す（#186。
+    // コードのファイルがない子は、親に知らせる道具を持たない）。出すのは onBindInvalid の側で、ノードごとに 1 回。応答は変えない
+    const rebindLost = (): void => {
+      try {
+        deps.onBindInvalid?.(nodeId);
+      } catch {
+        // 記録の失敗で、応答を変えない
+      }
+    };
     if (b?.bindCode === undefined) {
       const ok =
         deps.rebindOk?.(nodeId, b?.sessionId as string) === true &&
         checkPrincipal({ role: "child", nodeId }, deps.getState()).ok;
       if (!ok) {
+        rebindLost();
         return denied(
           failure("unauthenticated", "bind コードが無効", "bind コードを再発行する"),
           "rebindRejected",
@@ -1848,6 +1858,7 @@ export function createApiServer(deps: ApiDeps): ApiServer {
         return internalError(res, "bind", "bind", error);
       }
       if (rebound === undefined) {
+        rebindLost();
         return denied(
           failure("unauthenticated", "bind コードが無効", "bind コードを再発行する"),
           "rebindRejected",
