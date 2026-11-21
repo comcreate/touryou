@@ -17,7 +17,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
+
+// script を実際に走らせる（tar の作成・展開を含む）重い試験が多く、並列の実行では 5 秒を超えることがある
+vi.setConfig({ testTimeout: 30_000 });
 
 const SCRIPT = fileURLToPath(
   new URL("../../../plugin/scripts/install-runtime.sh", import.meta.url),
@@ -40,7 +43,7 @@ const sha = (f: string): string => createHash("sha256").update(readFileSync(f)).
  * 引数の並び（「;」区切り。`v<版> ` を付けない）と一致する呼び出しだけ終了コード 1 にする。
  * 偽の touryou-daemon は、--config の値に `bad` を含むときだけ --check-config が通らない。
  */
-const makeTarball = (ver: string): string => {
+const makeTarball = (ver: string, opts: { daemonReadsStdin?: boolean } = {}): string => {
   const d = tmp();
   const bin = join(d, "touryou-darwin-arm64", "bin");
   mkdirSync(bin, { recursive: true });
@@ -49,6 +52,7 @@ const makeTarball = (ver: string): string => {
     `#!/bin/sh
 [ "$1" = "--help" ] && { echo "usage: touryou-daemon"; exit 0; }
 if [ "$1" = "--check-config" ]; then
+${opts.daemonReadsStdin === true ? "  cat >/dev/null" : "  :"}
   echo "$3" >> "$HOME/checked.log"
   case "$3" in *bad*) echo "失敗 [invalidConfig]: 設定が通らない" >&2; exit 1 ;; esac
   exit 0
@@ -243,9 +247,56 @@ describe("版上げ（別名の daemon がある。#165）", () => {
     expect(lines(join(h, "checked.log"))).toEqual(["/cfg/a.json"]);
     // 既定の daemon はないので、引数なしの init・stop・apply は呼ばない
     expect(lines(join(h, "calls.log"))).toEqual([
+      "v0.9.0 launchd init --others",
       "v0.9.0 launchd stop --others",
       "v1.0.0 launchd init --others",
       "v1.0.0 launchd apply --yes --others",
+    ]);
+  });
+  it("別名が 2 つ以上: 2 つ目以降も、止める前に新しい版の --check-config で検査する（子が標準入力を奪わない）", () => {
+    const h = homeWith({
+      "touryou.daemon-11111111.plist": "/cfg/a.json",
+      "touryou.daemon-22222222.plist": "/cfg/b.json",
+      "touryou.daemon-33333333.plist": "/cfg/c.json",
+    });
+    // 偽の touryou-daemon が標準入力を読み切る（本物の子が標準入力を奪う場面）
+    const tb = makeTarball("1.0.0", { daemonReadsStdin: true });
+    const r = run(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"]);
+    expect(r.status, out(r)).toBe(0);
+    expect(lines(join(h, "checked.log")).sort()).toEqual(["/cfg/a.json", "/cfg/b.json", "/cfg/c.json"]);
+  });
+  it("別名が 2 つ以上で、2 つ目の設定が検査を通らない: 標準入力を奪われても見逃さず、止める前に die する", () => {
+    const h = homeWith({
+      "touryou.daemon-11111111.plist": "/cfg/ok.json",
+      "touryou.daemon-22222222.plist": "/cfg/bad.json",
+    });
+    const tb = makeTarball("1.0.0", { daemonReadsStdin: true });
+    const r = run(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"]);
+    expect(r.status, out(r)).toBe(1);
+    expect(r.stdout).toMatch(/設定が、v1\.0\.0 の daemon の設定の検査を通らない/);
+    expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
+    expect(lines(join(h, "calls.log"))).toEqual([]);
+  });
+  it("今の版の init --others が通らない（生成物の食い違い）: 何も止めず、current も変えずに終わる", () => {
+    const h = homeWith({ [PLIST_ALIAS]: "/cfg/a.json" });
+    const r = upgrade(h, { FAIL_ON: "v0.9.0 launchd init --others" });
+    expect(r.status, out(r)).toBe(1);
+    expect(r.stdout).toMatch(/RESULT: failed/);
+    expect(r.stdout).toMatch(/v0\.9\.0 の launchd init --others が通らない/);
+    expect(r.stdout).toMatch(/daemon は止めていない（v0\.9\.0 のまま動いている）/);
+    expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
+    // stop・apply は 1 つも呼んでいない
+    expect(lines(join(h, "calls.log"))).toEqual(["v0.9.0 launchd init --others"]);
+  });
+  it("既定と別名の両方で、別名の init --others が通らない: 既定の daemon も止めない", () => {
+    const h = homeWith({ [PLIST_ALIAS]: "/cfg/a.json" }, { defaultPlist: true });
+    writeFileSync(join(h, ".touryou", "config.json"), "{}\n");
+    const r = upgrade(h, { FAIL_ON: "v0.9.0 launchd init --others" });
+    expect(r.status, out(r)).toBe(1);
+    expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
+    expect(lines(join(h, "calls.log"))).toEqual([
+      "v0.9.0 launchd init",
+      "v0.9.0 launchd init --others",
     ]);
   });
   it("既定と別名の両方: 既定の分も呼び、別名の分は --others で続ける", () => {
@@ -255,6 +306,7 @@ describe("版上げ（別名の daemon がある。#165）", () => {
     expect(r.status, out(r)).toBe(0);
     expect(lines(join(h, "calls.log"))).toEqual([
       "v0.9.0 launchd init",
+      "v0.9.0 launchd init --others",
       "v0.9.0 launchd stop",
       "v0.9.0 launchd stop --others",
       "v1.0.0 launchd init",
@@ -300,6 +352,7 @@ describe("restore_old（別名の daemon の分岐）", () => {
     expect(r.stdout).toMatch(/v0\.9\.0 で動いている/);
     expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
     expect(lines(join(h, "calls.log"))).toEqual([
+      "v0.9.0 launchd init --others",
       "v0.9.0 launchd stop --others",
       "v0.9.0 launchd apply --yes --others",
     ]);
@@ -312,6 +365,7 @@ describe("restore_old（別名の daemon の分岐）", () => {
     expect(r.stdout).toMatch(/v0\.9\.0 で動いている/);
     expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
     expect(lines(join(h, "calls.log"))).toEqual([
+      "v0.9.0 launchd init --others",
       "v0.9.0 launchd stop --others",
       "v1.0.0 launchd init --others",
       "v0.9.0 launchd init --others",
@@ -337,6 +391,7 @@ describe("restore_old（別名の daemon の分岐）", () => {
     expect(r.stdout).toMatch(/常駐の daemon は止まっている/);
     expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
     expect(lines(join(h, "calls.log"))).toEqual([
+      "v0.9.0 launchd init --others",
       "v0.9.0 launchd stop --others",
       "v1.0.0 launchd init --others",
       "v1.0.0 launchd apply --yes --others",

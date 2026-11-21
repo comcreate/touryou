@@ -552,14 +552,15 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
 
 async function restart(ctx: Ctx): Promise<CommandResult> {
   const out: string[] = [];
+  // 先に全部の読み込み状態を確かめる（一部が停止中なら、先の unit だけ起動し直してから失敗しないように、何も起動し直さない）
+  const notLoaded = ctx.units.filter((u) => !info(ctx, u).loaded);
+  if (notLoaded.length > 0) {
+    return fail(
+      `${notLoaded.map((u) => u.label).join("・")} が読み込まれていない。何も起動し直していない。先に ${cmd(ctx, "apply", " --yes")} を実行する`,
+      1,
+    );
+  }
   for (const u of ctx.units) {
-    if (!info(ctx, u).loaded) {
-      return fail(
-        `${u.label} が読み込まれていない。先に ${cmd(ctx, "apply", " --yes")} を実行する`,
-        1,
-        `${out.join("\n")}\n`,
-      );
-    }
     const r = ctx.deps.run("launchctl", ["kickstart", "-k", `${ctx.domain}/${u.label}`]);
     if (r.status !== 0) {
       return fail(
@@ -587,22 +588,35 @@ async function restart(ctx: Ctx): Promise<CommandResult> {
   };
 }
 
-function stopUnits(ctx: Ctx, out: string[]): string | undefined {
+/**
+ * すべての unit を止める。1 つの bootout が失敗しても打ち切らず、残りも試す（残りが動いたままにならないように）。
+ * 止められなかった unit と、まとめた失敗の文を返す（失敗がなければ、failed は空・err は undefined）。
+ */
+function stopUnits(
+  ctx: Ctx,
+  out: string[],
+): { readonly failed: ReadonlySet<Unit>; readonly err: string | undefined } {
+  const failed = new Set<Unit>();
+  const errs: string[] = [];
   for (const u of [...ctx.units].reverse()) {
     if (!info(ctx, u).loaded) {
       out.push(`${u.label}: 読み込まれていない（そのまま）`);
       continue;
     }
     const r = ctx.deps.run("launchctl", ["bootout", `${ctx.domain}/${u.label}`]);
-    if (r.status !== 0) return `launchctl bootout ${u.label} に失敗: ${r.stderr.trim()}`;
+    if (r.status !== 0) {
+      failed.add(u);
+      errs.push(`launchctl bootout ${u.label} に失敗: ${r.stderr.trim()}`);
+      continue;
+    }
     out.push(`${u.label}: 止めた`);
   }
-  return undefined;
+  return { failed, err: errs.length === 0 ? undefined : errs.join("\n") };
 }
 
 function stop(ctx: Ctx): CommandResult {
   const out: string[] = [];
-  const err = stopUnits(ctx, out);
+  const { err } = stopUnits(ctx, out);
   if (err !== undefined) return fail(err, 1, `${out.join("\n")}\n`);
   out.push(
     "",
@@ -627,9 +641,15 @@ function remainingPlists(ctx: Ctx): string[] {
 
 function uninstall(ctx: Ctx): CommandResult {
   const out: string[] = [];
-  const err = stopUnits(ctx, out);
-  if (err !== undefined) return fail(`${err}\n何も消していない`, 1, `${out.join("\n")}\n`);
+  const { failed, err } = stopUnits(ctx, out);
   const kept: string[] = [];
+  if (err !== undefined) {
+    // 止められなかった unit は、動いたまま plist がなくならないように、何も消さない。止められた unit は、後始末を進める
+    kept.push(
+      ...err.split("\n"),
+      ...[...failed].map((u) => `${u.plistDest}（${u.label} を止められなかったので、消さずに残した）`),
+    );
+  }
   /** 消したか、もともとなければ true。判定できずに残したら false。 */
   const remove = (p: string, ok: (text: string) => boolean, why?: string): boolean => {
     const st = lstatOr(p);
@@ -646,6 +666,7 @@ function uninstall(ctx: Ctx): CommandResult {
     return true;
   };
   for (const u of ctx.units) {
+    if (failed.has(u)) continue;
     // LaunchAgents の plist は、.touryou/launchd の plist とバイト単位で同じとき（apply が置いたもの）だけ消す。
     // 古い形（v0.1.0 まで）を apply が置いたまま、init だけ新しい形にした場面では、同じ PATH の古い形も消す（#64）
     const src = readOr(u.plistSrc);

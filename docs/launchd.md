@@ -85,7 +85,7 @@ macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動か�
 
 別名の daemon（設定ごと。下の「複数の daemon を常駐させる」）があるときは、既定の daemon と同じ順で、すべてを止めて（`stop --others`）・起動し直します（`apply --yes --others`）。
 
-**止める → `/setup` → 起動し直す**の順です（`/setup` の「版を上げる」が、この順で案内します）。`/setup` の `--restart-daemon` の道は、古い版の `launchd init`（生成物が同じかの確かめ）→ `stop` → `current` の付け替え → 新しい版の `launchd init`（古い形なら、新しい形に置き換える）→ 新しい版の `apply --yes` です。新しい版の `init`・`apply` が失敗したときは、新しい版の `uninstall --yes` で新しい形を外し、`current` を戻し、古い版の `init`・`apply --yes` で、古い形のまま起動し直します。
+**止める → `/setup` → 起動し直す**の順です（`/setup` の「版を上げる」が、この順で案内します）。`/setup` の `--restart-daemon` の道は、古い版の `launchd init`（生成物が同じかの確かめ。別名の daemon があれば `init --others` も）→ `stop` → `current` の付け替え → 新しい版の `launchd init`（古い形なら、新しい形に置き換える）→ 新しい版の `apply --yes` です。新しい版の `init`・`apply` が失敗したときは、新しい版の `uninstall --yes` で新しい形を外し、`current` を戻し、古い版の `init`・`apply --yes` で、古い形のまま起動し直します。
 
 ### 複数の daemon を常駐させる（root ごとに分ける。#165）
 
@@ -102,8 +102,8 @@ root（`repoRoot`）ごとに daemon を分けるとき、設定ファイルご�
 - **`--others`**: 別名の plist（`[<org>.]touryou.daemon-<8 文字>.plist`）すべてを対象にします（`init`・`apply`・`status`・`restart`・`stop`・`uninstall`。対象の集合は下の 3 つ目の項目）。plist の `--config` の次の値が、設定のパスです。`--config` と同時には指定できません（終了コード 2）。plist 1 つの設定が読めない（`--config` がない・設定の `stateDir` が読めない）ときは、ほかの daemon の操作は続けて、その daemon だけ警告して飛ばしますが、**`apply`・`status`・`restart`・`stop` は、飛ばしたものがあれば、終了コード 1 で終わります**（版上げの script が成功と言いません）。`uninstall` は後始末なので、飛ばしても終了コードを変えず、飛ばしたものを標準出力に挙げます（`stateDir` が読めなくても、plist とログは外します）。
   - `--org` を付けると、その組織の Label のものだけを対象にします（付けないときは、すべての組織のもの）。
   - `init --others` は、`<H>/Library/LaunchAgents` に置いた別名の plist それぞれを、その plist の設定・組織・`PATH` のままで、現在の版の形に作り直します（ほかの引数は付けられません）。`<H>/.touryou/launchd` にあるだけの、使っていない plist は、壊れていても見ません。元の plist（`.touryou/launchd`）が消えていれば、LaunchAgents の plist から読み戻して作り直します。**先に全部を検査してから書きます**: 1 つでも作り直せなければ（生成物と違う内容の plist・設定が読めない・`stateDir` の共有など）、何も書かずに止まり（終了コード 1）、作り直せなかった設定を結果に挙げます。新旧の plist は混ざりません。
-  - `apply`・`status`・`restart`・`stop` は、`<H>/Library/LaunchAgents` に置いた（`apply --config` で常駐にした）ものだけを対象にします。`init` しただけの plist を、`--others` で常駐にしません。`uninstall --others` は、置いていない plist（`init` の出力）も外します。LaunchAgents に plist が残り、元の plist（`.touryou/launchd`）が消えているときも、`stop`・`uninstall` の `--others` で止めて・外せます（LaunchAgents の plist が `init` の生成するものとバイト単位で同じときだけ外します）。対象がなければ、何もせずに成功します。`stop` のあとの案内の `apply --yes` には、実際の `--org`・`--config <設定>`・`--others` を含めます。
-  - 版上げ（`/setup` の `--restart-daemon`。`plugin/scripts/install-runtime.sh`）は、`<H>/Library/LaunchAgents` に別名の plist があるとき（`--others` の対象と同じ場所）に、既定の daemon に加えて、別名の daemon を、`stop --others` で止めて・`current` の付け替えのあとに `init --others` で plist を作り直し・`apply --yes --others` で起動し直します（`init --others` が失敗したら、`current` を前の版に戻し、別名の daemon も、前の版の `init --others` で plist を前の版の形にしてから `apply --yes --others` で起動し直します）。止める前に、別名の設定も新しい版の `touryou-daemon --check-config` で検査し、通らなければ、何も止めずに終わります。
+  - `apply`・`status`・`restart`・`stop` は、`<H>/Library/LaunchAgents` に置いた（`apply --config` で常駐にした）ものだけを対象にします。`init` しただけの plist を、`--others` で常駐にしません。`uninstall --others` は、置いていない plist（`init` の出力）も外します。LaunchAgents に plist が残り、元の plist（`.touryou/launchd`）が消えているときも、`stop`・`uninstall` の `--others` で止めて・外せます（LaunchAgents の plist が `init` の生成するものとバイト単位で同じときだけ外します）。対象がなければ、何もせずに成功します。`restart` は、先にすべての daemon の読み込み状態を確かめ、1 つでも読み込まれていなければ、どれも起動し直さずに失敗します。`stop`・`uninstall` は、1 つの `launchctl bootout` が失敗しても打ち切らず、残りの daemon も止めて、最後に失敗をまとめて返します（`uninstall` は、止められなかった daemon の plist を残し、止められた daemon の plist と後始末は進めます）。`stop` のあとの案内の `apply --yes` には、実際の `--org`・`--config <設定>`・`--others` を含めます。
+  - 版上げ（`/setup` の `--restart-daemon`。`plugin/scripts/install-runtime.sh`）は、`<H>/Library/LaunchAgents` に別名の plist があるとき（`--others` の対象と同じ場所）に、既定の daemon に加えて、別名の daemon を、止める前に今の版の `init --others` で生成物を確かめ（食い違いなら、何も止めずに終わります）、`stop --others` で止めて・`current` の付け替えのあとに `init --others` で plist を作り直し・`apply --yes --others` で起動し直します（`init --others` が失敗したら、`current` を前の版に戻し、別名の daemon も、前の版の `init --others` で plist を前の版の形にしてから `apply --yes --others` で起動し直します）。止める前に、別名の設定も新しい版の `touryou-daemon --check-config` で検査し、通らなければ、何も止めずに終わります。
 - 複数の daemon の窓口の応答は、並べて待ちます（待ち時間は、daemon の数に比例しません）。
 - 古い形の起動スクリプト `bin/run-daemon.sh` は、既定の daemon の `apply`・`uninstall` だけが消します（別名の daemon は、既定と共有するこのファイルに触りません）。
 - 設定は、daemon ごとに、`stateDir`・`repoRoot`・`worktreeRoot`・ポートを別にします（同じ `stateDir` を 2 つの daemon が使うと、`storeLocked` で失敗します。上の「同じ `stateDir`」）。
@@ -113,13 +113,13 @@ root（`repoRoot`）ごとに daemon を分けるとき、設定ファイルご�
 **どの daemon につなぐか（環境変数の渡し方）**:
 
 - 統合セッションの `touryou-mcp --stdio` は、`TOURYOU_DAEMON_CONFIG`（なければ `<H>/.touryou/config.json`）の `stateDir` の `root-token`・`port` を読みます。別の daemon につなぐときは、統合セッション（`claude`）を起動する端末で `export TOURYOU_DAEMON_CONFIG=<設定の絶対パス>` してから起動します。
-- `touryou ui` は、`--config <絶対パス>` ＞ `TOURYOU_DAEMON_CONFIG` ＞ 複数の候補があるときは実行した場所（cwd）が `repoRoot` の中にあるもの（いちばん深い root）＞ 既定の設定、の順で選びます。`touryou ui --list` で、設定のパスと `repoRoot` の一覧を見られます（`docs/ui.md`）。
+- `touryou ui` は、`--config <絶対パス>` ＞ `TOURYOU_DAEMON_CONFIG` ＞ 候補が 2 つ以上あるときは実行した場所（cwd）が `repoRoot` か `worktreeRoot` の中にあるもの（いちばん深い root）＞ 既定の設定、の順で選びます。候補は、既定の設定と、`<H>/Library/LaunchAgents` に置いた別名の plist の設定です（`--others` と同じ集合。`init` しただけの plist は候補にしません）。`touryou ui --list` で、設定のパスと `repoRoot` の一覧を見られます（`docs/ui.md`）。
 
 **できないこと**:
 
 - 1 つの統合セッションから、複数の daemon を同時に扱うこと（セッションは、1 つの daemon につながる）。
 - 設定を、TouRyou が自動で作ること（設定ファイルは、利用者が作る。`docs/config.md`）。
-- 同じ設定の daemon を、別の Label で 2 つ動かすこと（名前は設定のパスから決まる）。
+- 別名の設定（`--config`）の daemon を、別の `--org`（Label）で 2 つ並べること（同じ `stateDir` を使う別の daemon として、`init`・`apply` が止まります。名前は設定のパスから決まる）。例外は既定の設定（`<H>/.touryou/config.json`）だけで、別の `--org` の plist を並べて作れますが（`stateDirSharedWith` が、既定の設定どうしの同じ `stateDir` は止めない）、同じ `stateDir` を 2 つの daemon が同時に使うと `storeLocked` で失敗するので、同時に動かさないでください。
 - 設定のパスを変えると、別の daemon になる（古い名前の plist は、`uninstall --others` で外す）。
 - 常駐の daemon には制御端末がないので、Desktop の木の取り消せない操作は、daemon ごとに、上の「取り消せない操作の確認」のとおり。
 

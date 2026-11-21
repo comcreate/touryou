@@ -696,4 +696,103 @@ describe("複数の daemon（--config）", () => {
     expect(daemonNameOf(w.base, w.defaultConfig)).toBe("daemon");
     expect(daemonNameOf(w.base, w.otherConfig)).toMatch(/^daemon-[0-9a-f]{8}$/);
   });
+
+  /** 別名の daemon を 2 つ（other・third）常駐にした世界。bootout の失敗は、失敗させる Label を fails に入れて起こす。 */
+  async function twoOthers() {
+    const w = makeWorld();
+    const third = join(w.base, "third", "config.json");
+    const thirdState = join(w.base, "third", "state");
+    mkdirSync(thirdState, { recursive: true });
+    writeFileSync(third, JSON.stringify({ stateDir: thirdState }), { mode: 0o600 });
+    const thirdLabel = `touryou.${daemonNameOf(w.base, third)}`;
+    w.states[thirdLabel] = thirdState;
+    w.ports[thirdLabel] = "4323";
+    for (const c of [w.otherConfig, third]) {
+      expect((await bin(w, ["init", "--config", c])).exitCode).toBe(0);
+      expect((await bin(w, ["apply", "--yes", "--config", c])).exitCode).toBe(0);
+    }
+    const fails = new Set<string>();
+    const launchd = {
+      ...w.launchd,
+      run: (cmd: string, args: readonly string[]): RunResult =>
+        args[0] === "bootout" && [...fails].some((l) => (args[1] ?? "").endsWith(`/${l}`))
+          ? { status: 5, stdout: "", stderr: "Input/output error" }
+          : w.launchd.run(cmd, args),
+    };
+    const through = (args: string[]) =>
+      runBin(["launchd", ...args], {
+        env: { HOME: w.home },
+        isTTY: { stdin: false, stdout: false },
+        sleep: async () => undefined,
+        launchd,
+      });
+    return { w, thirdLabel, fails, through };
+  }
+
+  it("restart --others は、一部が停止中なら、どの daemon も起動し直さずに失敗する", async () => {
+    const { w, thirdLabel, through } = await twoOthers();
+    // 片方だけ止める（もう片方は読み込んだまま）
+    expect((await bin(w, ["stop", "--config", w.otherConfig])).exitCode).toBe(0);
+    expect(w.loaded.has(thirdLabel)).toBe(true);
+    w.calls.length = 0;
+    const r = await through(["restart", "--others"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain(w.otherLabel);
+    expect(r.stderr).toContain("何も起動し直していない");
+    expect(w.calls.filter((c) => c[1] === "kickstart")).toEqual([]);
+  });
+
+  it("restart --others は、停止中の daemon が後ろの並びでも、先の daemon を起動し直さない", async () => {
+    const { w, thirdLabel, through } = await twoOthers();
+    expect((await bin(w, ["stop", "--config", w.otherConfig])).exitCode).toBe(0);
+    w.loaded.add(w.otherLabel);
+    w.loaded.delete(thirdLabel);
+    w.calls.length = 0;
+    const r = await through(["restart", "--others"]);
+    expect(r.exitCode).toBe(1);
+    expect(w.calls.filter((c) => c[1] === "kickstart")).toEqual([]);
+  });
+
+  it("stop --others は、途中の bootout が失敗しても残りの daemon を止め、最後にまとめて失敗を返す", async () => {
+    const { w, thirdLabel, fails, through } = await twoOthers();
+    // 先に処理される側（並びの逆順）を失敗させ、後ろの daemon が止まるかを見る
+    const labels = [w.otherLabel, thirdLabel].sort();
+    const first = labels[1] as string;
+    const second = labels[0] as string;
+    fails.add(first);
+    const r = await through(["stop", "--others"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain(`launchctl bootout ${first} に失敗`);
+    expect(w.loaded.has(first)).toBe(true);
+    expect(w.loaded.has(second)).toBe(false);
+    // 両方失敗なら、両方の失敗を 1 回の結果にまとめる
+    w.loaded.add(second);
+    fails.add(second);
+    const both = await through(["stop", "--others"]);
+    expect(both.exitCode).toBe(1);
+    expect(both.stderr).toContain(`launchctl bootout ${first} に失敗`);
+    expect(both.stderr).toContain(`launchctl bootout ${second} に失敗`);
+  });
+
+  it("uninstall --others は、止められなかった daemon の plist は残し、止められた daemon の plist と後始末は進める", async () => {
+    const { w, thirdLabel, fails, through } = await twoOthers();
+    const labels = [w.otherLabel, thirdLabel].sort();
+    const first = labels[1] as string;
+    const second = labels[0] as string;
+    fails.add(first);
+    const r = await through(["uninstall", "--yes", "--others"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("消せなかったものがある");
+    expect(r.stdout).toContain(`launchctl bootout ${first} に失敗`);
+    // 止められなかった daemon: plist（LaunchAgents と init の出力）を残す。まだ動いている
+    expect(existsSync(join(w.agents, `${first}.plist`))).toBe(true);
+    expect(existsSync(join(w.base, "launchd", `${first}.plist`))).toBe(true);
+    expect(w.loaded.has(first)).toBe(true);
+    // 止められた daemon: 止めて、plist も消した
+    expect(w.loaded.has(second)).toBe(false);
+    expect(existsSync(join(w.agents, `${second}.plist`))).toBe(false);
+    expect(existsSync(join(w.base, "launchd", `${second}.plist`))).toBe(false);
+    // 残った plist があるので、TouRyou.app の登録は解かない
+    expect(w.ls.filter((x) => x.startsWith("-u"))).toEqual([]);
+  });
 });

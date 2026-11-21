@@ -13,6 +13,7 @@
 #   7. 置き場の中の一時ディレクトリに展開し、シンボリックリンクが外を指さないこと・quarantine がないことを確かめる → ${HOME}/.touryou/v<版> に移す
 #   8. 新しい版の touryou-daemon --help が動くことを確かめる（current を付け替える前）
 #   9. 常駐（launchd の plist がある）で、版が変わるときだけ: 同意（--restart-daemon）があれば、止める → 付け替え → 新しい版で init → 起動し直す
+#      止める前に、今の版の launchd init（別名があれば init --others も）で生成物を確かめ、食い違いなら何も止めずに終わる。
 #      同意がなければ、付け替えずに終わる（終了コード 3）。常駐は、既定の設定の daemon と、設定ごとの別名の daemon
 #      （touryou launchd init --config で作り、LaunchAgents に置いたもの。[<org>.]touryou.daemon-<小文字の 16 進 8 文字>.plist。--others の対象と同じ）。
 #      登録されたすべてを、起動し直す（#165）
@@ -104,7 +105,8 @@ die() {
 run_masked() {
   # コマンドの出力（標準出力・標準エラー）を、HOME を伏せて出す。終了コードを返す。
   local out rc=0
-  out="$("$@" 2>&1)" || rc=$?
+  # 子の標準入力は /dev/null にする（while read の heredoc の中から呼ばれても、子が入力を奪わない）
+  out="$("$@" 2>&1 </dev/null)" || rc=$?
   if [ -n "${out}" ]; then
     while IFS= read -r l; do mask "  | ${l}"; done <<EOF
 ${out}
@@ -466,6 +468,10 @@ EOF
     say "常駐の daemon（v${old}）を止めます"
     if [ "${hasdef}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd init; then
       die "v${old} の launchd init が通らない（上の出力。生成物が、引数なしの launchd init と違う〔--org・--path-prefix を手で付けた、など〕か、v${old} の設定の検査が通らない）" "docs/launchd.md の手作業の手順で版を上げる" "daemon は止めていない（v${old} のまま動いている）。v${ver} は \$HOME/.touryou/v${ver} に置いたが、current は v${old} のまま"
+    fi
+    # 別名の daemon も、止める前に、今の版（v${old}）の init --others で、生成物の食い違いを確かめる（食い違いなら、何も止めずに終わる）
+    if [ "${hasext}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd init --others; then
+      die "v${old} の launchd init --others が通らない（上の出力。別名の daemon の生成物が、init が作るものと違う〔PATH を手で直した、など〕か、設定の検査が通らない）" "docs/launchd.md の手作業の手順で版を上げる" "daemon は止めていない（v${old} のまま動いている）。v${ver} は \$HOME/.touryou/v${ver} に置いたが、current は v${old} のまま"
     fi
     if [ "${hasdef}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd stop; then
       restore_old "常駐の daemon を止められなかった"

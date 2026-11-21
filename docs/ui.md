@@ -187,7 +187,7 @@ daemon の窓口が、状態を見るための HTML 画面を配る。**状態�
 
 1. `--config <絶対パス>`（絶対パスでなければ終了コード 2）
 2. 環境変数 `TOURYOU_DAEMON_CONFIG`（空は無視）
-3. 実行した場所（cwd）が、候補の設定の `repoRoot` か `worktreeRoot` の中にあるもの（いちばん深い root）。`repoRoot` の名前の前半だけが同じ別のフォルダは、中として数えません。候補は、既定の設定（`<H>/.touryou/config.json`）と、`<H>/Library/LaunchAgents` に置いた（常駐にした）別名の plist（`--config` の値）の設定です（`--others`・版上げと同じ集合。init しただけの plist は候補にしません。元の plist が消えて LaunchAgents にだけ残るものは候補にします）。1・2 で設定が決まるときは、使わない候補は読みません
+3. 実行した場所（cwd）が、候補の設定の `repoRoot` か `worktreeRoot` の中にあるもの（いちばん深い root）。`repoRoot` の名前の前半だけが同じ別のフォルダは、中として数えません。候補は、既定の設定（`<H>/.touryou/config.json`）と、`<H>/Library/LaunchAgents` に置いた（常駐にした）別名の plist（`--config` の値）の設定です（`--others`・版上げと同じ集合。init しただけの plist は候補にしません。元の plist が消えて LaunchAgents にだけ残るものは候補にします）。`touryou ui --list` は、これに `TOURYOU_DAEMON_CONFIG` の設定も加えて並べます。1・2 で設定が決まるときは、使わない候補は読みません
 4. 既定の設定
 
 - 開いたときの標準出力の先頭に、`開いた設定: <設定のパス>` を出します（環境変数・`--config` が優先されたときも、どの設定を開いたかが分かります）。トークン・チケット・URL は、これまでどおり出しません。

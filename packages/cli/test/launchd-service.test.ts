@@ -416,13 +416,15 @@ describe("launchd の操作の回帰", () => {
     expect(lstatSync(join(agents, `${DAEMON}.plist`)).isSymbolicLink()).toBe(true);
   });
 
-  it("uninstall: bootout が失敗したら、何も消さずに終了コード 1", async () => {
+  it("uninstall: bootout が失敗したら、止められなかった daemon の plist は消さずに終了コード 1", async () => {
     const { home, base, f, agents } = await initHome();
     await bin(home, f, ["apply", "--yes", "--org", ORG]);
     f.failOn = "bootout";
     const r = await bin(home, f, ["uninstall", "--yes", "--org", ORG]);
     expect(r.exitCode).toBe(1);
-    expect(r.stderr).toMatch(/何も消していない/);
+    expect(r.stderr).toMatch(/消せなかったものがある/);
+    expect(r.stdout).toMatch(/launchctl bootout .* に失敗/);
+    expect(r.stdout).toMatch(/止められなかったので、消さずに残した/);
     expect(existsSync(join(agents, `${DAEMON}.plist`))).toBe(true);
     expect(existsSync(join(base, "launchd", `${DAEMON}.plist`))).toBe(true);
   });
