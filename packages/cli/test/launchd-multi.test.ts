@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runBin } from "../src/bin.js";
-import { daemonNameOf, LSREGISTER } from "../src/launchd.js";
+import { daemonNameOf, LSREGISTER, legacyScriptPath, runDaemonScript } from "../src/launchd.js";
 import type { RunResult } from "../src/launchd-service.js";
 
 // 設定ごとに別の daemon（#165）。launchctl と窓口は偽物に差し替える。
@@ -199,6 +199,23 @@ describe("複数の daemon（--config）", () => {
     expect((await bin(w, ["status", "--others", "--config", w.otherConfig])).exitCode).toBe(2);
     expect((await bin(w, ["status", "--config", "relative.json"])).exitCode).toBe(2);
     expect((await bin(w, ["init", "--config", "relative.json"])).exitCode).toBe(2);
+  });
+
+  it("別名の daemon の apply・uninstall は、既定と共有する古い形の起動スクリプトを消さない", async () => {
+    const w = makeWorld();
+    await bin(w, ["init"]);
+    await bin(w, ["init", "--config", w.otherConfig]);
+    const script = legacyScriptPath(w.base);
+    mkdirSync(join(w.base, "bin"), { recursive: true });
+    writeFileSync(script, runDaemonScript(w.base), { mode: 0o755 });
+    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+    expect(existsSync(script)).toBe(true);
+    expect((await bin(w, ["uninstall", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+    expect(existsSync(script)).toBe(true);
+    // 既定の daemon を外すときは、これまでどおり消す
+    expect((await bin(w, ["apply", "--yes"])).exitCode).toBe(0);
+    expect((await bin(w, ["uninstall", "--yes"])).exitCode).toBe(0);
+    expect(existsSync(script)).toBe(false);
   });
 
   it("--config が既定の設定と同じなら、既定の daemon として扱う", () => {

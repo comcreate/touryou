@@ -498,7 +498,9 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
   for (const u of ctx.units) {
     const dest = readOr(u.plistDest);
     const script = readOr(u.legacyScript);
+    // 古い形の起動スクリプトは、既定の設定の daemon のものだけ（別名の daemon が、既定と共有するスクリプトを消さない）
     if (
+      u.isDefault &&
       dest !== undefined &&
       isGeneratedPlist(ctx, u, dest) &&
       script !== undefined &&
@@ -634,6 +636,8 @@ function uninstall(ctx: Ctx): CommandResult {
         : undefined,
     );
     remove(u.plistSrc, (t) => isGeneratedPlist(ctx, u, t) || isLegacyPlist(ctx, u, t));
+    // 古い形の起動スクリプトは、既定の設定の daemon のもの。別名の daemon は、既定と共有するスクリプトに触れない
+    if (!u.isDefault) continue;
     if (destKept) {
       // 残した plist が古い形なら、次のログインで、もうない起動スクリプトを指さないように、対のスクリプトも残す
       if (lstatOr(u.legacyScript) !== undefined) {
