@@ -15,11 +15,21 @@
  * - 件数には上限がある（`UI_LIMITS`）。切ったときは、`truncated` に種類を入れる。
  */
 
-import { type Actor, isSessionRef, type NodeRuntime, type OrchState } from "./events.js";
+import {
+  type Actor,
+  isPrefaceInstruction,
+  isSessionRef,
+  type NodeRuntime,
+  type OrchState,
+} from "./events.js";
 import { ID_PATTERN } from "./ids.js";
 import { isResolvedByHuman } from "./inbox.js";
 import { isStallSummary, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
-import { copyInboxMessage, type InboxMessage } from "./inbox-messages.js";
+import {
+  copyInboxMessage,
+  type InboxMessage,
+  NON_ACTIVITY_NOTICE_KEYS,
+} from "./inbox-messages.js";
 import type { NodeRole, NodeState } from "./index.js";
 
 export const UI_TEXT_MAX = 200;
@@ -526,10 +536,13 @@ function lastActivity(state: OrchState): Map<string, string> {
     if (cur === undefined || at > cur) m.set(id, at);
   };
   for (const r of state.reports) see(r.nodeId, r.at);
-  for (const i of state.inbox) see(i.nodeId, i.at);
+  for (const i of state.inbox) {
+    // daemon の前置きの知らせ（#189）は、子の動きではない
+    if (i.msg === undefined || !NON_ACTIVITY_NOTICE_KEYS.has(i.msg.key)) see(i.nodeId, i.at);
+  }
   for (const i of state.instructions) {
-    // daemon の前置き（#189）は、子の動きではない。記録した時刻では動かさず、子が受け取った時刻だけを数える
-    if (i.kind !== "tokenIdleSoon") see(i.nodeId, i.at);
+    // daemon の前置き（#189）も、記録した時刻では動かさず、子が受け取った時刻だけを数える
+    if (!isPrefaceInstruction(i)) see(i.nodeId, i.at);
     see(i.nodeId, i.deliveredAt);
   }
   for (const d of state.decisions) see(d.nodeId, d.requestedAt);

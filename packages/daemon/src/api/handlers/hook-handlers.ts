@@ -12,6 +12,7 @@
 import {
   type Failure,
   type InboxMessageKey,
+  isPrefaceInstruction,
   isStrictDescendant,
   type OperationMap,
   type OrchState,
@@ -295,7 +296,9 @@ export function reportNeedsInput(
 
 /** 子に届いていない知らせ（配送の記録がない追加の指示）の数。 */
 export const pendingForChild = (state: OrchState, nodeId: string): number =>
-  state.instructions.filter((i) => i.nodeId === nodeId && i.deliveredSeq === undefined).length;
+  state.instructions.filter(
+    (i) => i.nodeId === nodeId && i.deliveredSeq === undefined && !isPrefaceInstruction(i),
+  ).length;
 
 export type StopOutcome =
   | { readonly decision: "allow" }

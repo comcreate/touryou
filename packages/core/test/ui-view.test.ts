@@ -834,13 +834,44 @@ describe("uiViewOf の #89 の値（題・最後の動き・人の要対応・�
     expect(v.nodes.find((x) => x.id === "a")?.lastActivityAt).toBe("2026-10-20T06:00:00Z");
   });
 
-  it("追加指示の種類が知らないものなら、記録を拒む", () => {
-    const r = foldEvents([
+  it("前置きの知らせ（指示と tokenIdleSoonBind の受信箱の項目の対）を記録しても、最後の動きは記録した時刻で進まない（#189）", () => {
+    const evs = [
+      ...base(),
+      start("a"),
+      report("r1", "a", "progress", "2026-10-20T01:00:00Z"),
+      ev(
+        {
+          type: "inbox.added",
+          payload: {
+            id: "i-soon",
+            kind: "info",
+            nodeId: "a",
+            summary: "もうすぐ切れる",
+            msg: { key: "tokenIdleSoonBind", args: { node: "a", minutes: 10 } },
+          },
+        } as never,
+        "2026-10-20T05:00:00Z",
+      ),
+      ev(
+        {
+          type: "node.instructed",
+          payload: { nodeId: "a", text: "前置き", kind: "tokenIdleSoon" },
+        } as never,
+        "2026-10-20T05:00:00Z",
+      ),
+    ];
+    const v = uiViewOf(must(evs));
+    expect(v.nodes.find((x) => x.id === "a")?.lastActivityAt).toBe("2026-10-20T01:00:00Z");
+  });
+
+  it("追加指示の種類が知らないもの（新しい版が足した種類）は、記録を拒まず、種類のないふつうの指示として読む（前向きの互換）", () => {
+    const state = must([
       ...base(),
       start("a"),
       ev({ type: "node.instructed", payload: { nodeId: "a", text: "x", kind: "other" } } as never),
     ]);
-    expect(r.ok).toBe(false);
+    expect(state.instructions).toHaveLength(1);
+    expect(state.instructions[0]).not.toHaveProperty("kind");
   });
 
   it("やり取り: 子 → 親は届いたかは分からない。判断の頼みは答えで done、答えは子の次の報告で done（推定）", () => {
