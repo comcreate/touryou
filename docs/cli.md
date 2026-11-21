@@ -43,7 +43,8 @@ touryou reclaim <nodeId>
 
 - トークン・チケット・URL は、標準出力・標準エラーに出さない。`open` の引数（`ps` に出る）は、使い捨てのチケットだけ。
 - 失敗（設定・`port`・`human-token` が読めない、daemon に届かない、身元が合わない、チケットをもらえない、ブラウザを開けない）は、原因と次の操作を出して終了コード 1。ブラウザを開けない（macOS でない・`open` が失敗した）ときは、「Mac のターミナルで `touryou ui` を実行してください」と出す。上で挙げた以外の引数を付けたら終了コード 2。
-- **複数の daemon（設定ごと。#165）**: どの daemon の画面を開くかは、`--config <絶対パス>` ＞ `TOURYOU_DAEMON_CONFIG` ＞ 候補が 2 つ以上のとき、実行した場所（cwd）が設定の `repoRoot` の中にあるもの（いちばん深い root）＞ `$HOME/.touryou/config.json` の順で決める。候補は、既定の設定と、`$HOME/.touryou/launchd` の別名の plist（`touryou.daemon-<8 文字>.plist`）の `--config` の設定。`touryou ui --list` は、候補の設定のパスと `repoRoot` の一覧だけを出す（トークン・ポートは出さず、開かない）。`--config` が絶対パスでない・ほかの引数は終了コード 2。
+- **複数の daemon（設定ごと。#165）**: どの daemon の画面を開くかは、`--config <絶対パス>` ＞ `TOURYOU_DAEMON_CONFIG` ＞ 候補が 2 つ以上のとき、実行した場所（cwd）が設定の `repoRoot` か `worktreeRoot` の中にあるもの（いちばん深い root）＞ `$HOME/.touryou/config.json` の順で決める。候補は、既定の設定と、`$HOME/.touryou/launchd` の別名の plist（`touryou.daemon-<8 文字>.plist`）の `--config` の設定と、`TOURYOU_DAEMON_CONFIG` の設定。開いたときは、標準出力の先頭に `開いた設定: <設定のパス>` を出す。`touryou ui --list` は、候補の設定のパスと `repoRoot`・`worktreeRoot` の一覧だけを出す（トークン・ポートは出さず、開かない）。`HOME` が空のときは、既定の設定と別名の plist は候補に入らず、`--list` は環境変数の設定だけを出す（なければ理由を出して終了コード 1）。`--config` が絶対パスでない・ほかの引数は終了コード 2。
+- **`touryou launchd`（#165）**: `--config <絶対パス>`（実パスにそろえて名前を決める）と `--others`（`init`・`apply`・`status`・`restart`・`stop`・`uninstall`。`--org` を付ければ、その組織の Label のものだけ。`apply`・`status`・`restart`・`stop` は、LaunchAgents に置いたものだけ）を受け取る。くわしくは `docs/launchd.md` の「複数の daemon を常駐させる」。
 - plugin の `/touryou:ui` は、これを 1 回実行するだけ（複数の daemon から選ぶときは、`--list` で一覧を出して利用者に選んでもらい、`--config` を付ける）。
 
 ## 受信箱の項目を片付ける `touryou inbox resolve` / `touryou inbox reopen`（#99）

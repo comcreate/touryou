@@ -98,7 +98,14 @@ root（`repoRoot`）ごとに daemon を分けるとき、設定ファイルご�
 
 - `init`・`apply`・`status`・`restart`・`stop`・`uninstall` は、`--config <絶対パス>` を受け取ります（絶対パスでなければ終了コード 2）。名前は、既定の設定なら `daemon`、それ以外は **`daemon-<設定パスの sha256 の先頭 8 文字>`** で、同じ設定からは、いつも同じ名前になります。
 - 設定ごとに別になるもの: Label（`touryou.daemon-<8 文字>`。`--org` を付ければ `<org>.touryou.daemon-<8 文字>`）・plist（`launchd/<Label>.plist`）・ログ（`logs/daemon-<8 文字>.log`）・設定の検査（その設定で `--check-config`）・窓口の応答の確認（その設定の `stateDir` の `port`）。`apply` は、その daemon の窓口が応答するまで待ちます。
-- **`--others`**: `<H>/.touryou/launchd` にある、別名の plist（`touryou.daemon-<8 文字>.plist`）すべてを対象にします（`apply`・`status`・`restart`・`stop`・`uninstall`）。plist の `--config` の次の値が、設定のパスです。`--config` と同時には指定できません（終了コード 2）。別名がなければ、何もせずに成功します。版上げ（`/setup` の `--restart-daemon`。`plugin/scripts/install-runtime.sh`）は、既定の daemon に加えて、登録されたすべての別名の daemon を、`stop --others` で止めて `apply --yes --others` で起動し直します。
+- **設定のパスは実パスにそろえる**: `--config` がシンボリックリンクでも、実パスにしてから名前（sha256）・plist・窓口の確認を決めます。リンク経由でも実パスでも、同じ daemon になります。別の設定が、すでに登録された設定（既定を含む）と同じ `stateDir`（実パス）を使うときは、`init` が、何も作らずに止まります（終了コード 1）。
+- **`--others`**: `<H>/.touryou/launchd` にある、別名の plist（`[<org>.]touryou.daemon-<8 文字>.plist`）すべてを対象にします（`init`・`apply`・`status`・`restart`・`stop`・`uninstall`）。plist の `--config` の次の値が、設定のパスです。`--config` と同時には指定できません（終了コード 2）。
+  - `--org` を付けると、その組織の Label のものだけを対象にします（付けないときは、すべての組織のもの）。
+  - `init --others` は、登録済みの別名の plist それぞれを、その plist の設定・組織・`PATH` のままで、現在の版の形に作り直します（ほかの引数は付けられません。生成物と違う内容の plist は、`init` と同じく黙って上書きせず、止まります）。
+  - `apply`・`status`・`restart`・`stop` は、`<H>/Library/LaunchAgents` に置いた（`apply --config` で常駐にした）ものだけを対象にします。`init` しただけの plist を、`--others` で常駐にしません。`uninstall --others` は、置いていない plist（`init` の出力）も外します。対象がなければ、何もせずに成功します。
+  - 版上げ（`/setup` の `--restart-daemon`。`plugin/scripts/install-runtime.sh`）は、`<H>/.touryou/launchd` に別名の plist があるときに、既定の daemon に加えて、別名の daemon を、`stop --others` で止めて・`current` の付け替えのあとに `init --others` で plist を作り直し・`apply --yes --others` で起動し直します（`init --others` が失敗したら、`current` を前の版に戻します）。
+- 複数の daemon の窓口の応答は、並べて待ちます（待ち時間は、daemon の数に比例しません）。
+- 古い形の起動スクリプト `bin/run-daemon.sh` は、既定の daemon の `apply`・`uninstall` だけが消します（別名の daemon は、既定と共有するこのファイルに触りません）。
 - 設定は、daemon ごとに、`stateDir`・`repoRoot`・`worktreeRoot`・ポートを別にします（同じ `stateDir` を 2 つの daemon が使うと、`storeLocked` で失敗します。上の「同じ `stateDir`」）。
 - `uninstall` で、ほかの daemon の plist が残っているときは、TouRyou.app の LaunchServices の登録（`lsregister -u`）を解きません（残った daemon のログイン項目を保つため）。最後の 1 つを外したときに解きます。
 - 前の形（v0.1.0・v0.1.1）からの引っ越しは、既定の設定にだけ適用します。
