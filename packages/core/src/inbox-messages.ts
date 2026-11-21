@@ -97,7 +97,7 @@ export const INBOX_MESSAGES = {
   },
   bindLostSuspect: {
     ja: "子 {node} の紐付けが外れているかも。いまの状態: トークンは有効だが、{minutes} 分、知らせを受け取る接続がない。次にすること: node_send で「touryou の child_bind を引数なしで呼んで」と送る（切れていたら先に node_bindCode）",
-    en: "Child {node} may be unbound. State: token valid, but no notice connection for {minutes} min. Next: node_send \"call touryou's child_bind with no arguments\" (node_bindCode first if expired)",
+    en: 'Child {node} may be unbound. State: token valid, but no notice connection for {minutes} min. Next: node_send "call touryou\'s child_bind with no arguments" (node_bindCode first if expired)',
   },
   hookNotSeen: {
     ja: "子 {node} が始まってから {minutes} 分たっても、見張り（フック）が 1 度も通っていない。Desktop で daemon の作業ツリーを「ローカル」で始めたかを確かめる（チップや「ワークツリー」で始めた子には、見張りが効かず、報告もできない）",

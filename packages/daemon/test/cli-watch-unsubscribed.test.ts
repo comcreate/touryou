@@ -27,9 +27,7 @@ const SPEC: WatchSpec = { stallMs: 600 * MIN, unreadMs: 600 * MIN, unsubscribedM
 const stateWith = (nodeState: string, inbox: unknown[] = []): OrchState =>
   ({
     nodes: [{ id: "a", state: nodeState }],
-    parentRequests: [
-      { nodeId: "a", kind: "launch", report: { outcome: "done", at: iso(T0) } },
-    ],
+    parentRequests: [{ nodeId: "a", kind: "launch", report: { outcome: "done", at: iso(T0) } }],
     instructions: [],
     reports: [],
     violations: [],
@@ -58,17 +56,94 @@ describe("watchFindings: 紐付けが外れているかも（表）", () => {
     token: boolean;
     out: boolean;
   }[] = [
-    { name: "起動の直後（猶予の中。見始めたばかり）", nodeState: "running", afterMin: 0, absent: true, token: true, out: false },
-    { name: "N 分の手前（14 分 59 秒）", nodeState: "running", afterMin: 14.98, absent: true, token: true, out: false },
-    { name: "ちょうど N 分（超えていない）", nodeState: "running", afterMin: 15, absent: true, token: true, out: false },
-    { name: "N 分を超えた（15 分 1 秒）", nodeState: "running", afterMin: 15.02, absent: true, token: true, out: true },
-    { name: "waiting（判断待ち）も対象", nodeState: "waiting", afterMin: 60, absent: true, token: true, out: true },
-    { name: "止めた子（stopped）は出さない", nodeState: "stopped", afterMin: 60, absent: true, token: true, out: false },
-    { name: "回収できる子（reclaimable）は出さない", nodeState: "reclaimable", afterMin: 60, absent: true, token: true, out: false },
-    { name: "アーカイブした子は出さない", nodeState: "archived", afterMin: 60, absent: true, token: true, out: false },
-    { name: "受理した子（verified）は出さない", nodeState: "verified", afterMin: 60, absent: true, token: true, out: false },
-    { name: "紐付けのトークンがない・切れている子は出さない", nodeState: "running", afterMin: 60, absent: true, token: false, out: false },
-    { name: "購読がある子（観測なし）は出さない", nodeState: "running", afterMin: 60, absent: false, token: true, out: false },
+    {
+      name: "起動の直後（猶予の中。見始めたばかり）",
+      nodeState: "running",
+      afterMin: 0,
+      absent: true,
+      token: true,
+      out: false,
+    },
+    {
+      name: "N 分の手前（14 分 59 秒）",
+      nodeState: "running",
+      afterMin: 14.98,
+      absent: true,
+      token: true,
+      out: false,
+    },
+    {
+      name: "ちょうど N 分（超えていない）",
+      nodeState: "running",
+      afterMin: 15,
+      absent: true,
+      token: true,
+      out: false,
+    },
+    {
+      name: "N 分を超えた（15 分 1 秒）",
+      nodeState: "running",
+      afterMin: 15.02,
+      absent: true,
+      token: true,
+      out: true,
+    },
+    {
+      name: "waiting（判断待ち）も対象",
+      nodeState: "waiting",
+      afterMin: 60,
+      absent: true,
+      token: true,
+      out: true,
+    },
+    {
+      name: "止めた子（stopped）は出さない",
+      nodeState: "stopped",
+      afterMin: 60,
+      absent: true,
+      token: true,
+      out: false,
+    },
+    {
+      name: "回収できる子（reclaimable）は出さない",
+      nodeState: "reclaimable",
+      afterMin: 60,
+      absent: true,
+      token: true,
+      out: false,
+    },
+    {
+      name: "アーカイブした子は出さない",
+      nodeState: "archived",
+      afterMin: 60,
+      absent: true,
+      token: true,
+      out: false,
+    },
+    {
+      name: "受理した子（verified）は出さない",
+      nodeState: "verified",
+      afterMin: 60,
+      absent: true,
+      token: true,
+      out: false,
+    },
+    {
+      name: "紐付けのトークンがない・切れている子は出さない",
+      nodeState: "running",
+      afterMin: 60,
+      absent: true,
+      token: false,
+      out: false,
+    },
+    {
+      name: "購読がある子（観測なし）は出さない",
+      nodeState: "running",
+      afterMin: 60,
+      absent: false,
+      token: true,
+      out: false,
+    },
   ];
   for (const c of table) {
     it(c.name, () => {
@@ -84,8 +159,14 @@ describe("watchFindings: 紐付けが外れているかも（表）", () => {
   it("設定（unsubscribedMs）がない・観測の口がないときは、何も出さず、片付けもしない", () => {
     const s = stateWith("running");
     expect(
-      watchFindings(s, T0 + 60 * MIN, { stallMs: 600 * MIN, unreadMs: 600 * MIN }, undefined, undefined, probeOf(T0))
-        .unsubscribed,
+      watchFindings(
+        s,
+        T0 + 60 * MIN,
+        { stallMs: 600 * MIN, unreadMs: 600 * MIN },
+        undefined,
+        undefined,
+        probeOf(T0),
+      ).unsubscribed,
     ).toEqual([]);
     const f = watchFindings(s, T0 + 60 * MIN, SPEC);
     expect(f.unsubscribed).toEqual([]);
@@ -110,9 +191,24 @@ describe("watchFindings: 片付け（購読の復帰・トークン切れ・子�
       },
     ]);
   const table: { name: string; nodeState: string; probe: BindLostProbe; resolved: boolean }[] = [
-    { name: "まだ購読がない・トークン有効・動いている: 残す", nodeState: "running", probe: probeOf(T0), resolved: false },
-    { name: "購読が戻った: 解決にする", nodeState: "running", probe: probeOf(undefined), resolved: true },
-    { name: "トークンが切れた: 解決にする（切れた知らせが別にある）", nodeState: "running", probe: probeOf(T0, false), resolved: true },
+    {
+      name: "まだ購読がない・トークン有効・動いている: 残す",
+      nodeState: "running",
+      probe: probeOf(T0),
+      resolved: false,
+    },
+    {
+      name: "購読が戻った: 解決にする",
+      nodeState: "running",
+      probe: probeOf(undefined),
+      resolved: true,
+    },
+    {
+      name: "トークンが切れた: 解決にする（切れた知らせが別にある）",
+      nodeState: "running",
+      probe: probeOf(T0, false),
+      resolved: true,
+    },
     { name: "子が止まった: 解決にする", nodeState: "stopped", probe: probeOf(T0), resolved: true },
   ];
   for (const c of table) {
@@ -164,12 +260,17 @@ describe("recordWatchFindings: 受信箱への記録（時計を進める）", (
         absentSinceMs: () => absentSince,
         hasValidBindToken: () => token,
       });
-      return recordWatchFindings(log, () => iso(nowMs), f, spec, counts, nowMs, (id) =>
-        skipped.push(id),
+      return recordWatchFindings(
+        log,
+        () => iso(nowMs),
+        f,
+        spec,
+        counts,
+        nowMs,
+        (id) => skipped.push(id),
       );
     };
-    const lost = (): InboxItem[] =>
-      log.state().inbox.filter((i) => i.msg?.key === BIND_LOST_KEY);
+    const lost = (): InboxItem[] => log.state().inbox.filter((i) => i.msg?.key === BIND_LOST_KEY);
     return {
       log,
       tick,
