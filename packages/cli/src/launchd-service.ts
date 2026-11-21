@@ -30,8 +30,8 @@ import type { CommandResult } from "./commands.js";
 import type { RunResult } from "./launchd.js";
 import {
   appBundlePath,
-  canonicalPath,
   type ConfigChecker,
+  canonicalPath,
   configProblem,
   DEFAULT_PATH,
   daemonNameOf,

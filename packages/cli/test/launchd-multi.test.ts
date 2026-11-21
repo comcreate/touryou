@@ -322,7 +322,8 @@ describe("複数の daemon（--config）", () => {
     w.ports[orgLabel] = "4322";
     // --others は、置いた（常駐にした）ものだけが対象。先に --config で置く
     expect(
-      (await bin(w, ["apply", "--yes", "--config", w.otherConfig, "--org", "com.example"])).exitCode,
+      (await bin(w, ["apply", "--yes", "--config", w.otherConfig, "--org", "com.example"]))
+        .exitCode,
     ).toBe(0);
     expect([...w.loaded]).toEqual([orgLabel]);
     expect((await bin(w, ["apply", "--yes", "--others", "--org", "com.example"])).exitCode).toBe(0);

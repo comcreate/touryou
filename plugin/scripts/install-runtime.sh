@@ -66,7 +66,7 @@ finish() {
   exit "$1"
 }
 has_extra_daemons() {
-  # 設定ごとの別名の daemon（#165）の plist が、あるか。--others が見る場所（launchd init の出力先 $HOME/.touryou/launchd）と同じにする。
+  # 設定ごとの別名の daemon（#165）の plist が、あるか。--others が見る場所（launchd init の出力先 ${HOME}/.touryou/launchd）と同じにする。
   # 名前は [<org>.]touryou.daemon-<8 文字の 16 進>.plist
   local f
   for f in "${HOME}/.touryou/launchd/"touryou.daemon-????????.plist "${HOME}/.touryou/launchd/"*.touryou.daemon-????????.plist; do
