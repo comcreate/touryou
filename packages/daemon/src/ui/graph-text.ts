@@ -51,6 +51,7 @@ export const GRAPH_TEXT = {
   "time.now": { ja: "いま", en: "just now" },
   "flow.other": { ja: "やり取り", en: "exchange" },
   "graph.boxLabel": { ja: "{title}。{status}", en: "{title}. {status}" },
+  "graph.hidden": { ja: "{n} 件隠しています", en: "{n} hidden" },
   "graph.laneAgo": { ja: "{arrow}{label}　{ago}", en: "{arrow}{label}  {ago}" },
   "graph.lineTitle": { ja: "{label}：{stage}", en: "{label}: {stage}" },
   "graph.roleAgo": { ja: "{role}　{ago}", en: "{role} · {ago}" },

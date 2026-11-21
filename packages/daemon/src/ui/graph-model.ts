@@ -103,6 +103,33 @@ export interface GraphLane {
 export interface GraphModel {
   readonly nodes: readonly GraphNode[];
   readonly lanes: readonly GraphLane[];
+  /** 止めた・済んだ子を隠したときの、隠した数（隠していなければ 0）。 */
+  readonly hidden: number;
+}
+
+export interface GraphModelOptions {
+  /** 止めた・済んだ子を隠す（既定は隠さない）。 */
+  readonly hideFinished?: boolean;
+}
+
+/**
+ * 止めた・済んだ子を隠したときに残すノードの ID。
+ * 残すのは、止めた・済んだ（`tier` が over）でないノードと、その祖先すべて（動いている子の線が途中で切れないように）。
+ * 根（親がない）も残す（全部が終わっても、図が空にならない）。
+ */
+export function keptIdsOf(nodes: readonly GraphNode[]): ReadonlySet<string> {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const kept = new Set<string>();
+  for (const n of nodes) {
+    if (n.parentId !== null && n.tier === "over") continue;
+    // 自分から親をたどって入れる（すでに入れたノードに着いたら、その先も入っているので止める。輪でも止まる）
+    let cur: GraphNode | undefined = n;
+    while (cur !== undefined && !kept.has(cur.id)) {
+      kept.add(cur.id);
+      cur = cur.parentId === null ? undefined : byId.get(cur.parentId);
+    }
+  }
+  return kept;
 }
 
 /**
@@ -187,7 +214,11 @@ function flagsOf(
 }
 
 /** 表示モデル（形を信じない）から、描く値だけを作り直す。 */
-export function graphModelOf(view: unknown, lang: Lang = "ja"): GraphModel {
+export function graphModelOf(
+  view: unknown,
+  lang: Lang = "ja",
+  options: GraphModelOptions = {},
+): GraphModel {
   const v = rec(view) ?? {};
   const nodes: GraphNode[] = [];
   const known = new Set<string>();
@@ -285,7 +316,14 @@ export function graphModelOf(view: unknown, lang: Lang = "ja"): GraphModel {
       lanes.push(lane);
     } else lanes[seen] = lane;
   }
-  return { nodes, lanes };
+  if (options.hideFinished !== true) return { nodes, lanes, hidden: 0 };
+  // 残すノードの親は、いつも残る（祖先を残すため）ので、線は、両端が残るものだけを残せばよい
+  const kept = keptIdsOf(nodes);
+  return {
+    nodes: nodes.filter((n) => kept.has(n.id)),
+    lanes: lanes.filter((l) => kept.has(l.parent) && kept.has(l.child)),
+    hidden: nodes.length - kept.size,
+  };
 }
 
 /** やり取りの段の言葉（画面の `stageText` とそろえる）。 */

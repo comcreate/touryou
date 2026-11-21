@@ -194,6 +194,8 @@ export interface DrawOptions {
   readonly onPick?: (nodeId: string) => void;
   /** 図の言葉の言語（#140。画面の設定の言語）。ほかの値・なしは日本語。 */
   readonly lang?: Lang;
+  /** 止めた・済んだ子を隠す（#206）。隠した数は、図の左上に出す。真のとき以外は、すべて出す。 */
+  readonly hideFinished?: boolean;
 }
 
 /**
@@ -263,7 +265,7 @@ export async function draw(
   };
   const none: Drawn = { width: 0, height: 0, ...ctl };
   const now = Date.now();
-  const model = graphModelOf(view, lang);
+  const model = graphModelOf(view, lang, { hideFinished: options.hideFinished === true });
   const L = layoutOf(model.nodes);
   const byId = new Map(model.nodes.map((n) => [n.id, n]));
   const shapes: Shape[] = [];
@@ -299,6 +301,9 @@ export async function draw(
   editor.use(readonly.root);
   editor.use(area);
   area.use(readonly.area);
+  // 隠した数（#206）。図の左上の空き（右上のボタンと同じ、上の空き）に、図の外の飾りとして置く。片付けは器ごと（`teardown`）
+  if (model.hidden > 0)
+    host.append(el("div", "ghidden", graphString(lang, "graph.hidden", { n: model.hidden })));
   // 背景：親の幹（どのノード・つながりにも属さないので、area の中身にじかに置く）
   area.area.content.add(drawBackdrop(trunks, width, height));
 

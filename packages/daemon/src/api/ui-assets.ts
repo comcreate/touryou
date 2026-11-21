@@ -58,7 +58,7 @@ export const UI_HTML = `<!doctype html>
 <section id="view" hidden>
 <section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h2 id="now-title" data-t="now.title">いまあなたがすること</h2><p id="now-lead" class="lead"></p></section>
 <div id="todo" class="todo"></div>
-<section class="sec"><h2 data-t="flows.title">やり取り</h2><p class="lead" data-t="flows.lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span><span data-t="legend.up">← 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">→ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
+<section class="sec"><h2 data-t="flows.title">やり取り</h2><p class="lead" data-t="flows.lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button></div><div id="graph-filter" class="seg" hidden><button id="hide-finished" class="quiet sm" type="button" aria-pressed="false" data-t="view.hideFinished">止めた・済んだ子を隠す</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span><span data-t="legend.up">← 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">→ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
 <section class="sec"><h2 data-t="cards.title">作業ごとのようす</h2><p class="lead" data-t="cards.lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
 <details id="finished" class="finished"><summary id="finished-summary" data-t="cards.finishedTitle">終わった作業</summary><div id="finished-cards" class="cards"></div></details></section>
 <details class="admin"><summary data-t="admin.title">管理（まれに使う操作）</summary><p class="warn" data-t="admin.warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
@@ -194,7 +194,8 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 @keyframes pickA{0%{box-shadow:0 0 0 0 var(--ai)}35%{box-shadow:0 0 0 8px var(--ai-3)}100%{box-shadow:0 0 0 0 transparent}}
 @keyframes pickB{0%{box-shadow:0 0 0 0 var(--ai)}35%{box-shadow:0 0 0 8px var(--ai-3)}100%{box-shadow:0 0 0 0 transparent}}
 @keyframes open{from{opacity:0;transform:translateY(-4px)}}
-.seg{display:inline-flex;gap:4px;margin:0 0 8px}.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.seg{display:inline-flex;gap:4px;margin:0 0 8px}.seg+.seg{margin-left:8px}.seg button[aria-pressed="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.ghidden{position:absolute;left:12px;top:10px;z-index:1;pointer-events:none;font-size:12.5px;line-height:1.8;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:var(--sheet);color:var(--muted)}
 .board{position:relative;height:420px;min-height:180px;max-height:720px;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:var(--sheet);user-select:none;-webkit-user-select:none;touch-action:none}
 .gback{position:absolute;left:0;top:0;pointer-events:none}
 .gnode{box-sizing:border-box;position:relative;width:220px;height:80px;padding:8px 14px 8px 16px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);display:flex;flex-direction:column;justify-content:center;gap:3px;box-shadow:0 1px 2px rgba(0,0,0,.12)}
@@ -247,7 +248,7 @@ const EXTERNAL_CHECK_PREFIXES = JSON.stringify(externalCheckSummaries().map((x) 
 export const UI_JS = `'use strict';
 (function () {
   // 設定の窓（#139）。描く前に当てる（読み込みの一瞬だけ違う明暗で描かないように）。選んだものはブラウザに残す（残せないときも、その場では効く）。
-  // localStorage を使うのは、この 2 つの関数の中だけ（鍵は 1 つ。書くのは still・theme・lang だけ。トークン・チケット・ID は書かない）
+  // localStorage を使うのは、この 2 つの関数の中だけ（鍵は 1 つ。書くのは still・theme・lang・hideFinished だけ。トークン・チケット・ID は書かない）
   var SETTINGS_KEY = 'touryou.ui.settings';
   function browserLang() {
     var b = typeof navigator === 'object' && navigator ? navigator.language : undefined;
@@ -260,6 +261,8 @@ export const UI_JS = `'use strict';
       theme: v.theme === 'light' || v.theme === 'dark' ? v.theme : 'auto',
       // 言語は、言語の欄で選んだときだけ残す（選んでいなければ undefined。JSON に書かれず、そのつどブラウザの言語に合わせる）
       lang: v.lang === 'en' || v.lang === 'ja' ? v.lang : undefined,
+      // 関係図で、止めた・済んだ子を隠すか（#206。既定は出す）
+      hideFinished: v.hideFinished === true,
     };
   }
   function loadSettings() {
@@ -267,7 +270,7 @@ export const UI_JS = `'use strict';
   }
   function saveSettings(x) {
     var v = settingsOf(x);
-    try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ still: v.still, theme: v.theme, lang: v.lang })); } catch (e) { /* 残せなくても動く */ }
+    try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ still: v.still, theme: v.theme, lang: v.lang, hideFinished: v.hideFinished })); } catch (e) { /* 残せなくても動く */ }
   }
   function applySettings(x) {
     var root = document.documentElement;
@@ -1271,6 +1274,8 @@ export const UI_JS = `'use strict';
     document.getElementById('graph').hidden = !on;
     document.getElementById('graph-legend').hidden = !on;
     document.getElementById('graph-zoom').hidden = !on;
+    document.getElementById('graph-filter').hidden = !on;
+    document.getElementById('hide-finished').ariaPressed = settings.hideFinished ? 'true' : 'false';
     document.getElementById('list').hidden = on;
     document.getElementById('show-graph').ariaPressed = on ? 'true' : 'false';
     document.getElementById('show-list').ariaPressed = on ? 'false' : 'true';
@@ -1296,7 +1301,7 @@ export const UI_JS = `'use strict';
     try {
       // 箱を押したら、その子のカードへ移って光らせる（一覧の「詳しく」と同じ）。graph.js から返るのは ID だけ
       var pick = function (id) { if (typeof id === 'string' && ID_RE.test(id)) openCard(id); };
-      Promise.resolve(g.draw(box, view, { onPick: pick, lang: lang })).then(fit, fallback);
+      Promise.resolve(g.draw(box, view, { onPick: pick, lang: lang, hideFinished: settings.hideFinished })).then(fit, fallback);
     } catch (e) {
       fallback();
     }
@@ -2181,6 +2186,13 @@ export const UI_JS = `'use strict';
   document.getElementById('zoom-out').addEventListener('click', function () { zoomGraph('out'); });
   document.getElementById('zoom-fit').addEventListener('click', function () { zoomGraph('fit'); });
   document.getElementById('show-list').addEventListener('click', function () { showGraphMode('list'); });
+  // 止めた・済んだ子を隠す（#206）。選んだ状態はブラウザに残す。図の並びが変わるので、拡大・移動は初めの形に戻して描き直す
+  document.getElementById('hide-finished').addEventListener('click', function () {
+    settings.hideFinished = !settings.hideFinished;
+    saveSettings(settings);
+    dropGraph();
+    if (graphView && lastView) renderGraph(graphView, lastView.seq);
+  });
   var settingsBox = document.getElementById('settings');
   var openSettings = document.getElementById('open-settings');
   var stillBox = document.getElementById('set-still');

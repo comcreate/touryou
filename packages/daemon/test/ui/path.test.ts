@@ -173,7 +173,7 @@ describe("graphModelOf（図に渡す値の作り直し）", () => {
         waiting: false,
       },
     ]);
-    expect(graphModelOf(null)).toEqual({ nodes: [], lanes: [] });
+    expect(graphModelOf(null)).toEqual({ nodes: [], lanes: [], hidden: 0 });
   });
 });
 
