@@ -461,8 +461,7 @@ function laneShape(
   // 新しいほど濃い（a1〜a4）。答え待ちの柿色（wait）と、終わった子の薄い灰（over）は、CSS でこれを上書きする
   const extra = ` ${ageClassOf(l.at, now)}${l.waiting && !finished ? " wait" : ""}${finished ? " over" : ""}`;
   const arrow = l.dir === "up" ? "← " : "→ ";
-  const label =
-    l.at === null ? `${arrow}${l.label}` : laneAgoText(arrow, l.label, l.at, now, lang);
+  const label = l.at === null ? `${arrow}${l.label}` : laneAgoText(arrow, l.label, l.at, now, lang);
   const stageWords = stageText(l, lang);
   return {
     kind: "lane",

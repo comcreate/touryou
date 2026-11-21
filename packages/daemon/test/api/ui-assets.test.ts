@@ -1289,7 +1289,12 @@ describe("画面の使い勝手（#13）", () => {
     UNREACHABLE_TEXT: string;
     timeText(iso: unknown, nowMs: number): string;
     agoText(ms: number): string;
-    whenText(iso: unknown, key: string, vars: Record<string, string> | undefined, nowMs: number): string;
+    whenText(
+      iso: unknown,
+      key: string,
+      vars: Record<string, string> | undefined,
+      nowMs: number,
+    ): string;
     refreshTimes(nowMs: number): void;
     stageText(f: Record<string, unknown>): string;
     attachCommand(n: unknown): string;
@@ -1435,7 +1440,9 @@ describe("画面の使い勝手（#13）", () => {
 
   it("(#204) 相対時刻の要素は、基準の時刻を持つ。interval・前面に戻った瞬間・focus で計算し直す", () => {
     expect(UI_JS).toContain("e.dataset.at = ");
-    expect(UI_JS).toContain("window.setInterval(function () { refreshTimes(Date.now()); }, TIME_TICK_MS)");
+    expect(UI_JS).toContain(
+      "window.setInterval(function () { refreshTimes(Date.now()); }, TIME_TICK_MS)",
+    );
     const visible = UI_JS.slice(UI_JS.indexOf("document.addEventListener('visibilitychange'"));
     expect(visible.slice(0, visible.indexOf("window.addEventListener('focus'"))).toContain(
       "refreshTimes(Date.now())",

@@ -8,8 +8,8 @@ import {
   agoText,
   graphModelOf,
   laneAgoText,
-  roleAgoText,
   RUN_TEXT,
+  roleAgoText,
   STATUS_TEXT,
   stageText,
 } from "../../src/ui/graph-model.js";
