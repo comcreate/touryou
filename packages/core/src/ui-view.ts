@@ -3,7 +3,8 @@
  *
  * - **含めるもの**: ノードの識別子・役割・親・状態・依存、未解決の受信箱の項目、未回答の判断、未判定の拡張要求。
  * - **含めないもの**: トークン・秘密・パス（作業ツリーの絶対パス・作業範囲の場所・最終コミットなど）。ただし、拡張要求の対象は、`uiTargetOf` の規則を満たすものだけ載せる。
- *   ブリーフは、目的（objective）の先頭を `UI_TITLE_MAX` で切った題（`title`）だけ載せる（#89）。受け入れ基準・目的の全文・セッションの識別子は含めない。
+ *   ブリーフは、目的（objective）の先頭を `UI_TITLE_MAX` で切った題（`title`）だけ載せる（#89）。受け入れ基準・目的の全文は含めない。
+ *   CLI の子のセッション番号（`sessionRef`）だけは、止まった子を `claude attach` で開くために、この応答にだけ載せる（#150。記録には残さない）。
  * - やり取りの段（`flows`。#89）: 記録から、種類・向き・相手・段（`sent`・`delivered`・`done`）・時刻を導く。利用者の決めで、短い本文（`text`。
  *   上限 `UI_FLOW_TEXT_MAX`）を載せる。載せるのは、画面のほかの所で、いま見える文、またはかつて見えた文だけ（報告〔受信箱の要約〕・判断の問い・範囲の頼みの理由）。
  *   追加指示・判断の答えの文は載せない（画面のどこにも出したことがないため）。
@@ -14,7 +15,7 @@
  * - 件数には上限がある（`UI_LIMITS`）。切ったときは、`truncated` に種類を入れる。
  */
 
-import type { Actor, NodeRuntime, OrchState } from "./events.js";
+import { type Actor, isSessionRef, type NodeRuntime, type OrchState } from "./events.js";
 import { ID_PATTERN } from "./ids.js";
 import { isResolvedByHuman } from "./inbox.js";
 import { isStallSummary, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
@@ -63,6 +64,11 @@ export interface UiNode {
    * `claude attach` のコマンドを出し、Desktop の子の文は、CLI の子でない停止の代行のノードにだけ出す。
    */
   readonly cli?: true;
+  /**
+   * CLI の子のセッション番号（起動の報告の `sessionRef`。#150）。子のプロセスが止まっていると、名前では `claude attach` で
+   * 開けないので、画面は番号の形も出す。表示モデルの応答にだけ載せ、記録（イベント・ログ）には残さない。形が合わないものは付けない。
+   */
+  readonly sessionRef?: string;
   /**
    * 子の実行環境（`node.created` の `runtime`。#159）。記録のない古いノードは、CLI の子と分かるもの（`cli`）だけ `cli`、
    * ほかは付けない（記録のないものを、画面で推し量らない）。画面は、実行環境の札と、開き方・安全面の注記を出す。
@@ -328,10 +334,18 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       .filter((r) => r.kind === "launch" && r.report?.outcome === "done")
       .map((r) => r.nodeId),
   );
+  // 起動の報告の sessionRef（新しい報告を優先）。停止・削除の報告の sessionRef は読まない
+  const sessionRefs = new Map<string, string>();
+  for (const r of state.parentRequests) {
+    if (r.kind === "launch" && r.report?.outcome === "done" && isSessionRef(r.report.sessionRef)) {
+      sessionRefs.set(r.nodeId, r.report.sessionRef);
+    }
+  }
   const nodes = cap("nodes", state.nodes, UI_LIMITS.nodes).map((n): UiNode => {
     const title = titleOf(n.objective);
     const needsHuman = human.get(n.id) ?? 0;
     const at = last.get(n.id);
+    const sessionRef = sessionRefs.get(n.id);
     const runtime = n.runtime ?? (cliChildren.has(n.id) ? "cli" : undefined);
     return {
       id: idOf(n.id),
@@ -343,6 +357,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       discarded: n.discarded !== undefined,
       ...(options.stopDelegated?.(n.id) === true ? { stopDelegated: true as const } : {}),
       ...(cliChildren.has(n.id) ? { cli: true as const } : {}),
+      ...(sessionRef === undefined ? {} : { sessionRef }),
       ...(runtime === undefined ? {} : { runtime }),
       ...(title === "" ? {} : { title }),
       ...(at === undefined ? {} : { lastActivityAt: uiText(at) }),

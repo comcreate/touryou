@@ -224,7 +224,7 @@ describe("つなぎ直し（POST /v1/bind。コードなし）", () => {
     expect(res.status).toBe(401);
     expect(res.json.error?.cause).toBe("bind コードが無効");
     expect(r.logs).toContainEqual(
-      expect.objectContaining({ event: "bindFailed", reason: "rejected" }),
+      expect.objectContaining({ event: "bindFailed", reason: "rebindRejected" }),
     );
     expect(r.invalid()).toBe(1);
   });
