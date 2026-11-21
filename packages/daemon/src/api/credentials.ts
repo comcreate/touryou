@@ -157,9 +157,15 @@ export function createCredentialStore(options: {
   readonly idleWarnMs?: number;
   /**
    * 「もうすぐ切れる」を出したあと、そのトークンが使われて（または判断待ち・done で時計が止まって）切れなくなったとき、
-   * 見回りで 1 回呼ぶ（#189。出した知らせを解決にする）。認証の経路では呼ばない（記録の書き込みを、認証に持ち込まない）。
+   * 見回りで呼ぶ（#189。出した知らせを解決にする）。認証の経路では呼ばない（記録の書き込みを、認証に持ち込まない）。
+   * 戻り値は、解決にできたか。`true` のときだけ「出した」印を外す（できなかった・例外のときは、次の見回りで、もう一度呼ぶ）。
    */
-  readonly onIdleRecovered?: (nodeId: string) => void;
+  readonly onIdleRecovered?: (nodeId: string) => boolean;
+  /**
+   * そのノードに、未解決の「もうすぐ切れる」の知らせがあるか（記録から引く）。印はメモリだけなので、daemon を起動し直したあとも、
+   * 再起動の前に出した知らせを、復帰で解決にし、同じ知らせを二重に出さないために使う。省略すると、メモリの印だけで決める。
+   */
+  readonly hasOpenIdleSoon?: (nodeId: string) => boolean;
   /**
    * ノードのトークンを発行したあとに呼ぶ（`issueNodeToken`・`rebindNodeToken` の成功のあと）。紐付けが結び直された・再開で
    * 出し直されたことを知るのに使う（#189。失効・もうすぐ切れるの知らせを解決にする）。例外は発行を止めない。
@@ -298,21 +304,37 @@ export function createCredentialStore(options: {
     const m = meta.get(nodeId);
     if (warn === undefined || options.onIdleSoon === undefined || m === undefined) return;
     if (m.kind !== "bind" || nodeId === options.exemptNodeId) return;
-    if (m.warnedFor === m.lastUsedMs) return;
-    // 出したあとに時計が進んだ（使われた・判断待ちで止まった）: もう切れないので、出した知らせを解決にする
-    if (m.warnedFor !== undefined) {
-      m.warnedFor = undefined;
+    const idleAt = m.lastUsedMs + expiry.bindIdleMs;
+    const remainingMs = idleAt - now;
+    // 使えば延びると言えるのは、発行からの絶対の期限が、idle の期限より前の窓（`warn`）を過ぎても来ないとき。
+    // 絶対の期限が先（同時・窓の中）に来るなら、使っても延びないので知らせない（切れたあとの知らせが出る）
+    const inWindow = m.issuedMs + expiry.bindAbsoluteMs > idleAt + warn && remainingMs <= warn;
+    const hasOpen = (): boolean => options.hasOpenIdleSoon?.(nodeId) === true;
+    // 出したあとに時計が進んだ（使われた・判断待ちで止まった）・窓の外になった: もう切れないので、出した知らせを解決にする。
+    // 印はメモリだけなので、再起動の前に出した知らせも、記録から引いて解決にする。解決できたときだけ印を外す（失敗は次の見回りで）
+    const recover = (): boolean => {
       try {
-        options.onIdleRecovered?.(nodeId);
+        // 結び先がない（解決する先がない）ときは、印だけ外す。`false` は解決にできなかった
+        if (options.onIdleRecovered?.(nodeId) === false) return false;
       } catch {
         // 解決の失敗で、見回り・失効を止めない
+        return false;
       }
+      m.warnedFor = undefined;
+      return true;
+    };
+    if (!inWindow) {
+      if (m.warnedFor !== undefined || hasOpen()) recover();
+      return;
     }
-    const idleAt = m.lastUsedMs + expiry.bindIdleMs;
-    // 発行からの絶対の期限が先（同時）に来るなら、延ばせないので知らせない（切れたあとの知らせが出る）
-    if (m.issuedMs + expiry.bindAbsoluteMs <= idleAt) return;
-    const remainingMs = idleAt - now;
-    if (remainingMs > warn) return;
+    if (m.warnedFor === m.lastUsedMs) return;
+    // 前の止まりで出した知らせが残っているなら、先に解決にする（失敗したら、二重に出さず次の見回りで）
+    if (m.warnedFor !== undefined && !recover()) return;
+    // 再起動の前に出した知らせが、まだ未解決で残っている: 同じ止まりの知らせなので、二重に出さない（印だけ立てる）
+    if (hasOpen()) {
+      m.warnedFor = m.lastUsedMs;
+      return;
+    }
     try {
       // 記録できたときだけ印を立てる（できなかったら、次の見回りで、もう一度出す）
       const sent = options.onIdleSoon({

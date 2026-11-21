@@ -193,6 +193,8 @@ const INSTRUCTION_FLOW: Readonly<Record<string, UiFlowKind | null>> = {
   extensionApproved: "approved",
   extensionRejected: "rejected",
   extensionSplit: "split",
+  // 紐付けの期限の前置き（#189）は、daemon が子へ知らせる system の指示。親子のやり取りではないので、矢印にしない
+  tokenIdleSoon: null,
 };
 function instructionKind(kind: string | undefined): UiFlowKind | null {
   if (kind === undefined || !Object.hasOwn(INSTRUCTION_FLOW, kind)) return "instruction";
@@ -526,7 +528,8 @@ function lastActivity(state: OrchState): Map<string, string> {
   for (const r of state.reports) see(r.nodeId, r.at);
   for (const i of state.inbox) see(i.nodeId, i.at);
   for (const i of state.instructions) {
-    see(i.nodeId, i.at);
+    // daemon の前置き（#189）は、子の動きではない。記録した時刻では動かさず、子が受け取った時刻だけを数える
+    if (i.kind !== "tokenIdleSoon") see(i.nodeId, i.at);
     see(i.nodeId, i.deliveredAt);
   }
   for (const d of state.decisions) see(d.nodeId, d.requestedAt);

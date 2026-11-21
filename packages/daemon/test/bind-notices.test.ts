@@ -123,6 +123,10 @@ describe("createIdleSoonNotifier", () => {
     const soon = d.log.state().inbox.filter((i) => i.msg?.key === "tokenIdleSoonBind");
     expect(soon).toHaveLength(1);
     expect(soon[0]?.nodeId).toBe("a");
+    // 子への指示は、システムの指示（kind）として記録する（読まれていない指示・関係図の矢印・最後の動きの対象にしない）
+    const sent = d.log.state().instructions.filter((i) => i.nodeId === "a");
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.kind).toBe("tokenIdleSoon");
     expect(f(info("a", 2))).toBe(true); // 別の最後に使った時刻は別の知らせ
     expect(d.log.state().inbox.filter((i) => i.msg?.key === "tokenIdleSoonBind")).toHaveLength(2);
     expect(notes).toEqual([]);

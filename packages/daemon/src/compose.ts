@@ -697,9 +697,10 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
   // 失効の前の知らせ（#189。bind のトークンだけ）: 親へは受信箱の info、子へは system の追加指示（bind-notices.ts）。
   const noticeIdleSoon = createIdleSoonNotifier({ log, clock, stateOf: tokenStateOf, note });
   // 紐付けが結び直された・もう切れなくなった・失効した: 期限にまつわる未解決の知らせを、1 回の追記で解決にする
-  const resolveBindNoticesOf = (nodeId: string, keys?: ReadonlySet<string>): void => {
+  const resolveBindNoticesOf = (nodeId: string, keys?: ReadonlySet<string>): boolean => {
     const r = resolveBindNotices(log, clock, nodeId, keys);
     if (!r.ok) note("tokenExpiredResolveFailure", { nodeId, cause: r.code });
+    return r.ok;
   };
   const idleWarn = idleWarnMsOf(minutes(te?.bindIdle, 60));
   let credentials: ReturnType<typeof createCredentialStore>;
@@ -765,6 +766,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       onTokenIssued: (nodeId) => resolveBindNoticesOf(nodeId),
       // 「もうすぐ切れる」を出したあと、使われて切れなくなった: その知らせを解決にする
       onIdleRecovered: (nodeId) => resolveBindNoticesOf(nodeId, IDLE_SOON_KEYS),
+      // 起動し直したあとも、再起動の前に出した知らせを、記録から引く（復帰で解決にする・二重に出さない）
+      hasOpenIdleSoon: (nodeId) => openBindNotices(log.state(), nodeId, IDLE_SOON_KEYS).length > 0,
     });
     // 止まった・役目の終わった子のトークンを、その状態になったその場で失効させる（見回りを待たない。種類を問わない）。
     // 起動時は、いま止まっている子のトークンも失効させる（前回、止まったあとに失効させられなかった分。再開で発行し直す）。

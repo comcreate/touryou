@@ -619,6 +619,7 @@ export const INSTRUCTION_KINDS = [
   "extensionApproved",
   "extensionRejected",
   "extensionSplit",
+  "tokenIdleSoon",
 ] as const;
 export type InstructionKind = (typeof INSTRUCTION_KINDS)[number];
 

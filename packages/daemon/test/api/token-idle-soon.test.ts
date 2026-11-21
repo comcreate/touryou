@@ -11,7 +11,13 @@ const setup = (
     isIdlePaused?: (n: string) => boolean;
     isRetired?: () => boolean;
     onIdleSoon?: (i: { nodeId: string; remainingMs: number; lastUsedMs: number }) => boolean;
-    onIdleRecovered?: (nodeId: string) => void;
+    onIdleRecovered?: (nodeId: string) => boolean;
+    hasOpenIdleSoon?: (nodeId: string) => boolean;
+    repository?: {
+      load: () => unknown[];
+      put: () => void;
+      remove: () => void;
+    };
     onTokenIssued?: (nodeId: string, kind: string) => void;
   } = {},
 ) => {
@@ -112,7 +118,7 @@ describe("失効の前の知らせ（#189）", () => {
 
   it("出したあとに使われて切れなくなったら、見回りで 1 回だけ onIdleRecovered を呼ぶ（認証では呼ばない）", () => {
     const recovered: string[] = [];
-    const { s, soon, advance } = setup({ onIdleRecovered: (n) => recovered.push(n) });
+    const { s, soon, advance } = setup({ onIdleRecovered: (n) => (recovered.push(n), true) });
     const t = s.issueNodeToken("a", "child", "bind");
     advance(52 * MIN);
     s.sweepExpired?.();
@@ -123,11 +129,97 @@ describe("失効の前の知らせ（#189）", () => {
     s.sweepExpired?.();
     expect(recovered).toEqual(["a"]);
     // 出していない子には呼ばない
-    const b = setup({ onIdleRecovered: (n) => recovered.push(n) });
+    const b = setup({ onIdleRecovered: (n) => (recovered.push(n), true) });
     b.s.issueNodeToken("b", "child", "bind");
     b.advance(10 * MIN);
     b.s.sweepExpired?.();
     expect(recovered).toEqual(["a"]);
+  });
+
+  it("解決にできなかった（false・例外）ときは印を残し、次の見回りでもう一度 onIdleRecovered を呼ぶ。できたら呼ばない", () => {
+    const results = [false, "throw", true] as const;
+    let calls = 0;
+    const { s, advance } = setup({
+      onIdleRecovered: () => {
+        const r = results[Math.min(calls++, results.length - 1)];
+        if (r === "throw") throw new Error("解決の失敗");
+        return r === true;
+      },
+    });
+    const t = s.issueNodeToken("a", "child", "bind");
+    advance(52 * MIN);
+    s.sweepExpired?.(); // 出す
+    expect(s.authenticate(t)).toBeDefined(); // 使われて復帰
+    s.sweepExpired?.();
+    s.sweepExpired?.();
+    s.sweepExpired?.();
+    expect(calls).toBe(3);
+    s.sweepExpired?.(); // 解決できたので、もう呼ばない
+    expect(calls).toBe(3);
+  });
+
+  /** 再起動の前に保存された bind のトークン（発行から 10 分）を読み戻して始めるストア。 */
+  const restarted = (over: Parameters<typeof setup>[0]) =>
+    setup({
+      repository: {
+        load: () => [
+          {
+            tokenHash: "a".repeat(64),
+            role: "child",
+            nodeId: "a",
+            issuedAt: new Date(T0 - 10 * MIN).toISOString(),
+            lastUsedAt: new Date(T0 - 10 * MIN).toISOString(),
+            kind: "bind",
+          },
+        ],
+        put: () => {},
+        remove: () => {},
+      },
+      ...over,
+    });
+
+  it("再起動のあと、未解決の知らせが残っていて切れなくなっていれば、見回りで解決にする（メモリの印がなくても）", () => {
+    let open = true;
+    const recovered: string[] = [];
+    const { s, soon, advance } = restarted({
+      hasOpenIdleSoon: () => open,
+      onIdleRecovered: (n) => {
+        recovered.push(n);
+        open = false;
+        return true;
+      },
+    });
+    // 起動から使われなかった時間は数え直す（切れるまで 60 分）ので、前置きの窓の外。残っていた知らせを解決にする
+    s.sweepExpired?.();
+    s.sweepExpired?.();
+    expect(recovered).toEqual(["a"]);
+    expect(soon).toEqual([]);
+    advance(5 * MIN);
+    s.sweepExpired?.();
+    expect(recovered).toEqual(["a"]);
+  });
+
+  it("再起動のあと、窓の中で、同じ知らせが未解決で残っていれば、二重に出さない。そのあと復帰すれば解決にする", () => {
+    let open = true;
+    const recovered: string[] = [];
+    const { s, soon, advance } = restarted({
+      hasOpenIdleSoon: () => open,
+      onIdleRecovered: (n) => {
+        recovered.push(n);
+        open = false;
+        return true;
+      },
+    });
+    advance(52 * MIN); // 起動から 52 分使われない: 窓の中
+    s.sweepExpired?.();
+    s.sweepExpired?.();
+    expect(soon).toEqual([]);
+    expect(recovered).toEqual([]);
+    // 使われて切れなくなる（印は上の見回りで立っている）
+    s.touchNode?.("a");
+    s.sweepExpired?.();
+    expect(recovered).toEqual(["a"]);
+    expect(soon).toEqual([]);
   });
 
   it("onTokenIssued は、発行（つなぎ直しを含む）のたびに、ノードと種類つきで呼ぶ。例外は発行を止めない", () => {
@@ -157,5 +249,30 @@ describe("失効の前の知らせ（#189）", () => {
     s.sweepExpired?.();
     // 絶対の期限（24 時間）まで残りわずか: idle の期限（最後に使ってから 60 分）より先に来る
     expect(soon).toEqual([]);
+  });
+
+  it("絶対の期限が、idle の期限より少し後（窓の中）に来るときも出さない。窓の外なら出す", () => {
+    const { s, soon, advance } = setup();
+    const t = s.issueNodeToken("a", "child", "bind");
+    for (let i = 0; i < 23; i++) {
+      advance(59 * MIN);
+      s.authenticate(t);
+    }
+    // 発行から 22 時間 37 分。絶対の期限（24 時間）は、idle の期限（ここから 60 分後）の 23 分後で、窓（10 分）の外
+    advance(52 * MIN);
+    s.sweepExpired?.();
+    expect(soon).toHaveLength(1);
+
+    const b = setup();
+    const tb = b.s.issueNodeToken("b", "child", "bind");
+    for (let i = 0; i < 23; i++) {
+      b.advance(59 * MIN);
+      b.s.authenticate(tb);
+    }
+    b.advance(18 * MIN);
+    b.s.authenticate(tb); // 発行から 22 時間 55 分。絶対の期限は idle の期限の 5 分後で、窓の中
+    b.advance(52 * MIN);
+    b.s.sweepExpired?.();
+    expect(b.soon).toEqual([]);
   });
 });

@@ -805,6 +805,35 @@ describe("uiViewOf の #89 の値（題・最後の動き・人の要対応・�
     expect(kinds.sort()).toEqual(["approved", "instruction", "instruction", "rejected", "split"]);
   });
 
+  it("紐付けの期限の前置き（kind: tokenIdleSoon）は、矢印にならず、最後の動きも進めない。子が受け取った時刻だけが動きになる（#189）", () => {
+    const evs = [
+      ...base(),
+      start("a"),
+      report("r1", "a", "progress", "2026-10-20T01:00:00Z"),
+      ev(
+        {
+          type: "node.instructed",
+          payload: { nodeId: "a", text: "前置き", kind: "tokenIdleSoon" },
+        } as never,
+        "2026-10-20T05:00:00Z",
+      ),
+    ];
+    const seq = evs.length;
+    const sent = uiViewOf(must(evs));
+    expect(sent.flows.filter((f) => f.dir === "down")).toEqual([]);
+    expect(sent.nodes.find((x) => x.id === "a")?.lastActivityAt).toBe("2026-10-20T01:00:00Z");
+    const received = [
+      ...evs,
+      ev(
+        { type: "node.instructionDelivered", payload: { instructedSeq: seq } } as never,
+        "2026-10-20T06:00:00Z",
+      ),
+    ];
+    const v = uiViewOf(must(received));
+    expect(v.flows.filter((f) => f.dir === "down")).toEqual([]);
+    expect(v.nodes.find((x) => x.id === "a")?.lastActivityAt).toBe("2026-10-20T06:00:00Z");
+  });
+
   it("追加指示の種類が知らないものなら、記録を拒む", () => {
     const r = foldEvents([
       ...base(),

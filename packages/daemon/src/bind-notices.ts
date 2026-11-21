@@ -118,7 +118,7 @@ export function createIdleSoonNotifier(
       },
       {
         type: "node.instructed",
-        payload: { nodeId, text: idleSoonInstruction(mins) },
+        payload: { nodeId, text: idleSoonInstruction(mins), kind: "tokenIdleSoon" },
       },
     ]);
     if (!r.ok) {

@@ -120,7 +120,13 @@ export function watchFindings(
     }
     if (n.state === "running" || n.state === "waiting") {
       for (const i of state.instructions) {
-        if (i.nodeId === n.id && i.deliveredSeq === undefined && nowMs - ms(i.at) > spec.unreadMs)
+        // daemon の前置き（`tokenIdleSoon`。#189）は、子が読まなくても構わない知らせなので、読まれていない指示にしない
+        if (
+          i.nodeId === n.id &&
+          i.kind !== "tokenIdleSoon" &&
+          i.deliveredSeq === undefined &&
+          nowMs - ms(i.at) > spec.unreadMs
+        )
           unread.push({ nodeId: n.id, seq: i.seq });
       }
     }
