@@ -124,6 +124,50 @@ describe("判断の取り下げ（#196）", () => {
     expect(ans.error?.code).toBe("decisionClosed");
   });
 
+  it("同じ requestId の再送は成功で、resumed は元の要求が記録した値のまま（いまの状態で変わらない）", async () => {
+    const r = rig();
+    const first = await ask(r);
+    const w = r.req("decision.withdraw", { decisionId: first }, A, "w-resend");
+    expect((await r.call("decision.withdraw", w)).value).toEqual({ withdrawn: true, resumed: true });
+    // そのあと別の判断を出して、また waiting になっても、再送の結果は変わらない
+    await ask(r);
+    expect(stateOf(r.state(), "a")).toBe("waiting");
+    const before = r.state().lastSeq;
+    const again = await r.call("decision.withdraw", w);
+    expect(again.ok).toBe(true);
+    expect(again.value).toEqual({ withdrawn: true, resumed: true });
+    expect(r.state().lastSeq).toBe(before);
+  });
+
+  it("未回答の判断が 2 件あるとき、片方だけ取り下げても waiting のまま（resumed は false。再送も false）", async () => {
+    const r = rig();
+    const first = await ask(r);
+    // waiting の子は report.decision を出せないので、2 件目は decision.present（状態は変えない）で出す
+    const presented = await r.call(
+      "decision.present",
+      r.req("decision.present", { question: "もう 1 件", options: ["X", "Y"] }, A),
+    );
+    expect(presented.ok).toBe(true);
+    const second = presented.value.decisionId as string;
+    expect(stateOf(r.state(), "a")).toBe("waiting");
+    const w = r.req("decision.withdraw", { decisionId: first }, A, "w-two");
+    const res = await r.call("decision.withdraw", w);
+    expect(res.value).toEqual({ withdrawn: true, resumed: false });
+    expect(stateOf(r.state(), "a")).toBe("waiting");
+    expect(r.state().decisions.find((x) => x.decisionId === second)?.status).toBe("open");
+    // 完了はまだ報告できない
+    const done = await r.call("report.done", r.req("report.done", { evidence: EVIDENCE }, A));
+    expect(done.ok).toBe(false);
+    // 再送も resumed は false のまま。残りの判断も取り下げると、running に戻る
+    expect((await r.call("decision.withdraw", w)).value).toEqual({ withdrawn: true, resumed: false });
+    const last = await r.call(
+      "decision.withdraw",
+      r.req("decision.withdraw", { decisionId: second }, A, "w-two-b"),
+    );
+    expect(last.value).toEqual({ withdrawn: true, resumed: true });
+    expect(stateOf(r.state(), "a")).toBe("running");
+  });
+
   it("ほかのノードの判断・回答済みの判断は取り下げられない", async () => {
     const r = rig();
     const decisionId = await ask(r);

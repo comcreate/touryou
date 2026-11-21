@@ -28,6 +28,7 @@ import {
   alreadyApplied,
   appendAtomically,
   deriveId,
+  derivedRequestId,
   fail,
   type LogPort,
   notice,
@@ -455,11 +456,22 @@ export function createStateHandlers(deps: StateHandlerDeps) {
           "受信箱の参照 ID（ref）を確認する",
         );
       }
-      // 同じ要求の再送は、記録済みなので成功にする（判断はもう閉じている）。
+      const item = state.inbox.find((i) => i.kind === "decision" && i.ref === d.decisionId);
+      // 追記する順: 取り下げ・info（必ずある）、受信箱の項目の解決（項目があるとき）、再開（必要なとき）。
+      // 必ずあるものの数が、再開の位置になる。
+      const resumeIndex = item === undefined ? 2 : 3;
+      // 同じ要求の再送は、記録済みなので成功にする（判断はもう閉じている）。resumed は、元の要求が再開を記録したかで決める
+      // （いまの状態から決めると、あとで別の判断を出して waiting になった子で、元の結果と食い違う）。
       if (alreadyApplied(state, { nodeId: caller }, req.requestId)) {
         return {
           ok: true,
-          value: { withdrawn: true, resumed: stateOf(state, caller) !== "waiting" },
+          value: {
+            withdrawn: true,
+            resumed: Object.hasOwn(
+              state.requests,
+              derivedRequestId({ nodeId: caller }, req.requestId, resumeIndex),
+            ),
+          },
         };
       }
       if (!ACTIVE.has(stateOf(state, caller) as NodeState)) {
@@ -479,17 +491,8 @@ export function createStateHandlers(deps: StateHandlerDeps) {
         !state.decisions.some(
           (x) => x.nodeId === caller && x.status === "open" && x.decisionId !== d.decisionId,
         );
-      const item = state.inbox.find((i) => i.kind === "decision" && i.ref === d.decisionId);
       const bodies: EventBody[] = [
         { type: "decision.withdrawn", payload: { decisionId: d.decisionId } },
-        ...(item === undefined
-          ? []
-          : ([{ type: "inbox.resolved", payload: { itemId: item.id } }] as const)),
-        ...(resume
-          ? ([
-              { type: "node.stateChanged", payload: { nodeId: caller, event: { type: "resume" } } },
-            ] as const)
-          : []),
         {
           type: "inbox.added",
           payload: {
@@ -499,6 +502,14 @@ export function createStateHandlers(deps: StateHandlerDeps) {
             summary: summarize(`判断を取り下げた（要らなくなった）: ${d.question ?? d.decisionId}`),
           },
         },
+        ...(item === undefined
+          ? []
+          : ([{ type: "inbox.resolved", payload: { itemId: item.id } }] as const)),
+        ...(resume
+          ? ([
+              { type: "node.stateChanged", payload: { nodeId: caller, event: { type: "resume" } } },
+            ] as const)
+          : []),
       ];
       const r = appendAtomically(log, clock, req.requestId, { nodeId: caller }, bodies);
       return r.ok ? { ok: true, value: { withdrawn: true, resumed: resume } } : r;
@@ -558,7 +569,7 @@ export function createStateHandlers(deps: StateHandlerDeps) {
       if (d.status === "closed") {
         return fail(
           "decisionClosed",
-          `この判断は閉じている（理由: ${d.closedReason === "discarded" ? "人が破棄を決めた" : d.closedReason === "withdrawn" ? "出した子が取り下げた（要らなくなった）" : (d.closedReason ?? "不明")}）。答えても届かない`,
+          `この判断は閉じている（理由: ${d.closedReason === "discarded" ? "人が破棄を決めた" : d.closedReason === "withdrawn" ? "出した子が、要らなくなって取り下げた" : (d.closedReason ?? "不明")}）。答えても届かない`,
           d.closedReason === "withdrawn"
             ? "回答は要らない。必要なら、子が新しい判断を出す"
             : "子を作り直すなら、新しい子に聞き直してもらう",

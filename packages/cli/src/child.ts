@@ -177,7 +177,7 @@ const usage = (cause: string): CommandResult =>
     2,
     cause,
     "使い方: touryou child bind --dir <引き出しの絶対パス> --url <窓口の URL>",
-    "        touryou child report --dir <引き出しの絶対パス> --url <窓口の URL> <progress|out-of-scope|decision|done|scope-extend>（本文は、引き出しの report のファイル）",
+    "        touryou child report --dir <引き出しの絶対パス> --url <窓口の URL> <progress|out-of-scope|decision|decision-withdraw|done|scope-extend>（本文は、引き出しの report のファイル）",
   );
 
 class FileCheckError extends Error {
@@ -645,7 +645,7 @@ async function report(args: readonly string[], deps: ChildDeps): Promise<Command
   const [arg, ...extra] = p.positional;
   if (arg === undefined || extra.length > 0 || !Object.hasOwn(REPORT_OPERATIONS, arg)) {
     return usage(
-      "報告の種類を 1 つ指定する（progress・out-of-scope・decision・done・scope-extend）",
+      "報告の種類を 1 つ指定する（progress・out-of-scope・decision・decision-withdraw・done・scope-extend）",
     );
   }
   const kind = arg as ReportArg;

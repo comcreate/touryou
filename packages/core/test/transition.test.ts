@@ -104,6 +104,8 @@ describe("遷移表（表駆動）", () => {
       expect(r.error.cause).toContain("判断への回答待ち");
       expect(r.error.cause).toContain("取り下げる");
       expect(r.error.nextActions.join("\n")).toContain("decision_withdraw");
+      expect(r.error.nextActions.join("\n")).toContain("child report decision-withdraw");
+      expect(r.error.nextActions.join("\n")).toContain("もう一度 report_done");
     }
   });
 

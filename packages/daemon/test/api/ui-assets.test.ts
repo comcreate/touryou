@@ -372,6 +372,8 @@ describe("画面の資産（走査）", () => {
       "sentAt",
       "deliveryUnknown",
       "doneInferred",
+      // 出した子が取り下げた判断のやり取り（#196。表示モデルの値 true）
+      "withdrawn",
       "parse",
       "getHours",
       "getMinutes",

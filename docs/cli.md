@@ -117,7 +117,7 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 | コマンド | すること | 標準出力 |
 | --- | --- | --- |
 | `touryou child bind --dir <引き出し> --url <窓口>` | 子が Write の道具で書いた `code` を確かめて読み、**送る前に消す**。`node`（daemon が書いたノード ID）と一緒に `POST /v1/bind` へ送る。受け取ったトークンを `token`、窓口を `url` に置く（一時ファイル〔O_EXCL・O_NOFOLLOW・0600〕に書いて rename） | `bound`、または失敗の記号 1 行 |
-| `touryou child report --dir <引き出し> --url <窓口> <種類>` | 本文（子が Write の道具で書いた引き出しの `report`。`code` と同じ確かめ方で読み、送る前に消す。64 KiB まで）を送る。種類は `progress`・`out-of-scope`（本文は文）、`decision`・`done`・`scope-extend`（本文は操作の params の JSON）の 5 つだけ（子のロールの操作） | 成功は `{ok, requestId, value}` の JSON。失敗は記号 1 行 |
+| `touryou child report --dir <引き出し> --url <窓口> <種類>` | 本文（子が Write の道具で書いた引き出しの `report`。`code` と同じ確かめ方で読み、送る前に消す。64 KiB まで）を送る。種類は `progress`・`out-of-scope`（本文は文）、`decision`・`decision-withdraw`・`done`・`scope-extend`（本文は操作の params の JSON）の 6 つだけ（子のロールの操作） | 成功は `{ok, requestId, value}` の JSON。失敗は記号 1 行 |
 
 - **コード・トークンは、引数にも、標準出力・標準エラーにも出さない。** 報告の本文は、引き出しの `report` から読む（コマンドの文字列に入らない）が、daemon の記録・受信箱・親の会話に残るので、秘密を書かない。
 - ファイルは、lstat で種類（通常のファイル・リンクでない）・持ち主・リンクの数（1）・権限・大きさを確かめてから O_NOFOLLOW で開き、fstat で同じものかを確かめて読む。`code` は子が Write で書くので 0644 でよい（書き込みの権限がグループ・他者にないこと）。`token`・`url`・`node` は 0600 でなければ読まない。引き出しは、実のディレクトリ・持ち主が自分・0700。

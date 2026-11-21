@@ -37,6 +37,7 @@ export const GRAPH_TEXT = {
     ja: "送った（届いたかは分からない）",
     en: "sent (not known whether it arrived)",
   },
+  "stage.withdrawn": { ja: "取り下げた", en: "withdrawn" },
   "status.done": { ja: "済んだ", en: "done" },
   "status.fail": { ja: "✕ 失敗", en: "✕ failed" },
   "status.run": { ja: "動いている", en: "running" },

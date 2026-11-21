@@ -422,6 +422,7 @@ export const UI_JS = `'use strict';
   }
   // やり取りの段の言葉。届いたかの記録がない（deliveryUnknown）・推定（doneInferred）は、そう言う
   function stageText(f) {
+    if (f.withdrawn === true) return t('stage.withdrawn');
     if (f.stage === 'sent') return t(f.deliveryUnknown ? 'stage.sentUnknown' : 'stage.sent');
     if (f.stage === 'delivered') return t('stage.delivered');
     if (f.stage === 'done') return t(f.doneInferred ? 'stage.doneInferred' : 'stage.done');

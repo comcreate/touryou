@@ -155,10 +155,9 @@ function invalid(state: NodeState, event: NodeEvent): TransitionResult {
     // 判断への回答待ちで完了を報告した子（#196）。回答は人間だけが書くので、要らなくなったときの道を示す。
     return fail(
       "invalidTransition",
-      "判断への回答待ちなので、人の回答を待つ。要らなくなったなら、判断を取り下げるか、親に知らせる",
-      "判断が要らなくなったなら、decision_withdraw で取り下げて作業に戻る",
-      "取り下げずに待つなら、人の回答を待つ",
-      "親に report_progress で知らせる",
+      "判断への回答待ちなので、完了は報告できない。人の回答を待つか、判断が要らなくなったなら取り下げる",
+      "判断が要らなくなったなら、decision_withdraw（CLI の子は `touryou child report decision-withdraw`）で取り下げて作業に戻り、そのあとにもう一度 report_done を呼ぶ",
+      "待つなら、人の回答（追加の指示）を受信箱で待つ。親に report_progress で知らせてもよい",
     );
   }
   return fail(

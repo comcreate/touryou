@@ -227,6 +227,8 @@ export interface UiFlow {
   readonly deliveryUnknown?: true;
   /** 「済んだ」を推定で出した（届いたあとの、相手の最初の報告）。 */
   readonly doneInferred?: true;
+  /** 判断を出した子が取り下げた（`closedReason: "withdrawn"`。#196）。段は `done` だが、人の回答で済んだのではない。画面は「取り下げた」と出す。 */
+  readonly withdrawn?: true;
   /** 短い本文（報告・判断の問い・範囲の頼みの理由だけ。`UI_FLOW_TEXT_MAX` で切る）。空なら、なし。 */
   readonly text?: string;
   /** daemon が書いた報告の文の鍵と値（#149）。画面は、言語を選んで文にし、ないとき（古い記録）は `text` を出す。 */
@@ -557,6 +559,7 @@ const actorOf = (a: Actor | undefined): string =>
  * - 指示（親 → 子）: 受け取りの記録（`deliveredAt`）で `delivered`、そのあとの子の最初の報告で `done`（推定）。
  * - 報告（子 → 親）: 進み具合・範囲外・失敗は、答えを待たないので `done`（届いたかは分からない）。完了の報告は、受理か差し戻しまで `sent`。
  * - 判断・拡張の頼み（子 → 親）: 未回答・未判定は `sent`（届いたかは分からない）、答え・判定・閉じたら `done`。
+ *   出した子が取り下げた判断（#196）は、`done` に `withdrawn` を付け、人の回答で済んだものと区別する。
  * - 答え（人か親 → 子）: そのあとの子の最初の報告で `done`（推定）。それまでは `sent`（届いたかは分からない）。
  */
 export function flowsOf(state: OrchState): UiFlow[] {
@@ -678,6 +681,9 @@ export function flowsOf(state: OrchState): UiFlow[] {
         sentAt: t(d.requestedAt),
         ...delivery,
         ...(doneAt === undefined ? {} : { doneAt: t(doneAt) }),
+        ...(d.status === "closed" && d.closedReason === "withdrawn"
+          ? { withdrawn: true as const }
+          : {}),
         ...body(d.question),
       },
       seq,

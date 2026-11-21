@@ -92,6 +92,8 @@ export interface GraphLane {
   readonly unknown: boolean;
   /** 「済んだ」を推定で出した。 */
   readonly inferred: boolean;
+  /** 出した子が判断を取り下げた（人の回答で済んだのではない）。真のときだけ付く。 */
+  readonly withdrawn?: true;
   readonly label: string;
   /** 送った時刻（ミリ秒。なければ null）。 */
   readonly at: number | null;
@@ -257,6 +259,7 @@ export function graphModelOf(view: unknown, lang: Lang = "ja"): GraphModel {
       stage,
       unknown: f.deliveryUnknown === true,
       inferred: f.doneInferred === true,
+      ...(f.withdrawn === true ? { withdrawn: true as const } : {}),
       label: kind,
       at: timeOf(f.sentAt),
       waiting,
@@ -271,9 +274,10 @@ export function graphModelOf(view: unknown, lang: Lang = "ja"): GraphModel {
 
 /** やり取りの段の言葉（画面の `stageText` とそろえる）。 */
 export function stageText(
-  l: Pick<GraphLane, "stage" | "unknown" | "inferred">,
+  l: Pick<GraphLane, "stage" | "unknown" | "inferred" | "withdrawn">,
   lang: Lang = "ja",
 ): string {
+  if (l.withdrawn === true) return graphString(lang, "stage.withdrawn");
   if (l.stage === "sent") return graphString(lang, l.unknown ? "stage.sentUnknown" : "stage.sent");
   if (l.stage === "delivered") return graphString(lang, "stage.delivered");
   return graphString(lang, l.inferred ? "stage.doneInferred" : "stage.done");

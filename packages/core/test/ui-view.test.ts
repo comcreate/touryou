@@ -977,6 +977,39 @@ describe("uiViewOf の #89 の値（題・最後の動き・人の要対応・�
     });
   });
 
+  it("やり取り: 出した子が取り下げた判断（#196）は、段 done に withdrawn を付けて、人の回答で済んだものと分ける。判断の一覧には載せない", () => {
+    const asked = (id: string) =>
+      ev({
+        type: "decision.requested",
+        payload: { decisionId: id, nodeId: "a", question: "q" },
+      } as never);
+    const s = must([
+      ...base(),
+      start("a"),
+      asked("d-w"),
+      asked("d-a"),
+      ev(
+        { type: "decision.withdrawn", payload: { decisionId: "d-w" } } as never,
+        "2026-10-20T03:00:00Z",
+      ),
+      ev({
+        type: "decision.answered",
+        payload: { decisionId: "d-a", answer: "x" },
+      } as never),
+    ]);
+    const v = uiViewOf(s);
+    const flowsOfDecision = v.flows.filter((f) => f.kind === "decision");
+    expect(flowsOfDecision).toHaveLength(2);
+    const withdrawn = flowsOfDecision.filter((f) => f.withdrawn === true);
+    expect(withdrawn).toHaveLength(1);
+    expect(withdrawn[0]).toMatchObject({ stage: "done", doneAt: "2026-10-20T03:00:00Z" });
+    // 人が答えた判断には、withdrawn は付かない
+    const answered = flowsOfDecision.find((f) => f.withdrawn !== true);
+    expect(answered).toMatchObject({ stage: "done" });
+    expect(answered).not.toHaveProperty("withdrawn");
+    expect(v.decisions.map((d) => d.id)).not.toContain("d-w");
+  });
+
   it("やり取り: 統合が項目を受け取った（inbox.acknowledged）子 → 親は delivered（届いた・返事を待っている）。受け取りを返さない統合は、届いたかは分からないのまま（#102）", () => {
     const evs = [
       ...base(),
