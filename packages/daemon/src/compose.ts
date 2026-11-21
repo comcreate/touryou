@@ -761,9 +761,9 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           resolveBindNoticesOf(nodeId, IDLE_SOON_KEYS);
         }
       },
-      // 結び直し・つなぎ直し・再開で、トークンが出し直された: 期限にまつわる未解決の知らせを解決にする（状態画面のカードから消す）。
-      // 新しい子の最初の発行（sdk。知らせがない）では、何も書かない。
-      onTokenIssued: (nodeId) => resolveBindNoticesOf(nodeId),
+      // 期限にまつわる未解決の知らせの解決は、トークンの発行では行わない（発行のあとに起動・紐付けが失敗してトークンを失効させても、
+      // 知らせだけが消えてしまう）。結び直しが成功したとき（`onBindSucceeded`・`onRebindSucceeded`）と、再開が成功したとき
+      // （`onResumed`）に行う。
       // 「もうすぐ切れる」を出したあと、使われて切れなくなった: その知らせを解決にする
       onIdleRecovered: (nodeId) => resolveBindNoticesOf(nodeId, IDLE_SOON_KEYS),
       // 起動し直したあとも、再起動の前に出した知らせを、記録から引く（復帰で解決にする・二重に出さない）
@@ -1904,6 +1904,10 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       rootScope: config.rootScope,
       onFailure,
       ...(config.startLimits === undefined ? {} : { startLimits: config.startLimits }),
+      // 再開が成功した（起動して、再開の記録まで済んだ）: 期限にまつわる知らせを解決にする。トークンの発行では解決にしない
+      onResumed: (nodeId: string) => {
+        resolveBindNoticesOf(nodeId);
+      },
     },
     purgeDeps,
   );
@@ -2181,11 +2185,17 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       note("bindSessionConflict", { nodeId });
       return false;
     },
+    // コードなしのつなぎ直し（#145）が成功した: コードでの紐付けと同じく、期限にまつわる知らせを解決にする
+    onRebindSucceeded: (nodeId) => {
+      resolveBindNoticesOf(nodeId);
+    },
     onBindSucceeded: (nodeId, info) => {
       if (!sessionBindings.bound(nodeId, info)) note("sessionBindFailed", { nodeId });
       // 使われたコードのファイルを消す（コードは、もうメモリにない）
       const st = log.state();
-      // 「紐付けが切れた」「もうすぐ切れる」の知らせの解決は、トークンの発行（credentials の onTokenIssued）で済んでいる
+      // 結び直しが成功した: 「紐付けが切れた」「もうすぐ切れる」の知らせを解決にする（状態画面のカードから消す）。
+      // トークンの発行ではなく、ここ（成功のあと）で行う。発行のあとに失敗してトークンを失効させたときは、知らせを残す。
+      resolveBindNoticesOf(nodeId);
       const worktree =
         latestLaunch(st, nodeId)?.worktree ??
         st.nodes.find((n) => n.id === nodeId)?.adopted?.worktree;

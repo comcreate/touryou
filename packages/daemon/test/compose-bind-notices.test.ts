@@ -1,8 +1,9 @@
 /**
  * 紐付けの期限の知らせの結線（#189）。daemon を組み立て、単調時計を進めて見回りを回し、
  * - 失効の前（前置き）に入ると、親の受信箱の info と、子への追加指示が 1 回ずつ記録される
- * - 子が結び直す（トークンの発行）と、失効の知らせ・前置きの知らせが解決になる
+ * - 子が結び直すのに成功する（トークンの発行ではなく、成功のあと）と、失効の知らせ・前置きの知らせが解決になる。失敗では解決にならない
  * - 使われて切れなくなる・失効する と、前置きの知らせが解決になる
+ * - 前置きを読むだけの呼び出し（child.inbox・購読）は、使わなければ切れる時計を延ばさず、作業の呼び出しは延ばす
  * ことを確かめる。
  */
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
@@ -114,11 +115,38 @@ const boot = async () => {
   };
   const whoami = (token: string) =>
     fetch(`${run.url}/v1/whoami`, { headers: { authorization: `Bearer ${token}` } });
+  /** 子のトークンで、操作を呼ぶ。 */
+  const asChild = (token: string, operation: string, params: unknown) =>
+    post("/v1/request", token, {
+      requestId: `c-${Math.random()}`.replace(".", ""),
+      operation,
+      params,
+    });
+  /** 子のトークンで、ノードの購読（`/v1/events?node=`）を張って、すぐ閉じる（接続の確かめだけ）。 */
+  const subscribe = async (token: string, nodeId: string): Promise<number> => {
+    const ac = new AbortController();
+    const res = await fetch(`${run.url}/v1/events?node=${nodeId}`, {
+      headers: { authorization: `Bearer ${token}` },
+      signal: ac.signal,
+    });
+    ac.abort();
+    return res.status;
+  };
+  /** 誤った bind コードで紐付けを試みる（失敗する）。 */
+  const bindWrong = (nodeId: string) =>
+    post("/v1/bind", undefined, {
+      nodeId,
+      bindCode: "wrong-code-0000",
+      cwd: join(worktreeRoot, nodeId),
+    });
   return {
     daemon,
     spawnAndBind,
     bindAgain,
+    bindWrong,
     whoami,
+    asChild,
+    subscribe,
     advance: (ms: number) => {
       mono += ms;
     },
@@ -176,5 +204,58 @@ describe("紐付けの期限の知らせの結線（#189）", () => {
     await r.bindAgain(nodeId);
     expect(openOf(r.daemon, nodeId, "tokenExpiredIdleBind")).toHaveLength(0);
     expect(noticesOf(r.daemon, nodeId, "tokenExpiredIdleBind")).toHaveLength(1);
+  });
+
+  it("結び直しが失敗したときは、知らせを解決にしない（成功したときだけ解決にする）", async () => {
+    const r = await boot();
+    const { nodeId } = await r.spawnAndBind();
+    r.advance(61 * MIN);
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenExpiredIdleBind")).toHaveLength(1);
+    // 誤ったコードでの紐付けは失敗する。トークンは出ず、知らせはそのまま残る
+    const failed = await r.bindWrong(nodeId);
+    expect(failed.json.ok).toBe(false);
+    expect(openOf(r.daemon, nodeId, "tokenExpiredIdleBind")).toHaveLength(1);
+    // 成功したときに、はじめて解決になる
+    await r.bindAgain(nodeId);
+    expect(openOf(r.daemon, nodeId, "tokenExpiredIdleBind")).toHaveLength(0);
+  });
+
+  it("前置きの知らせを読むだけの呼び出し（child.inbox・購読の接続）は、使わなければ切れる時計を延ばさない", async () => {
+    const r = await boot();
+    const { nodeId, token } = await r.spawnAndBind();
+    r.advance(52 * MIN);
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenIdleSoonBind")).toHaveLength(1);
+    // 前置きを読む（受信箱の読み出し・購読の張り直し）。何度読んでも、時計は延びない
+    for (let i = 0; i < 3; i++) {
+      const inbox = await r.asChild(token, "child.inbox", {});
+      expect(inbox.json.ok, JSON.stringify(inbox.json)).toBe(true);
+      expect(await r.subscribe(token, nodeId)).toBe(200);
+    }
+    r.daemon.sweepTokens();
+    // 復帰とは扱われず（解決にならず）、前置きは残ったまま
+    expect(openOf(r.daemon, nodeId, "tokenIdleSoonBind")).toHaveLength(1);
+    // そのまま使われずに 60 分たてば、切れる（前置きを読んだだけでは、生き続けない）
+    r.advance(9 * MIN);
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenExpiredIdleBind")).toHaveLength(1);
+    expect((await r.whoami(token)).status).toBe(401);
+  });
+
+  it("実際の作業の呼び出し（report.progress）は、時計を延ばす", async () => {
+    const r = await boot();
+    const { nodeId, token } = await r.spawnAndBind();
+    r.advance(52 * MIN);
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenIdleSoonBind")).toHaveLength(1);
+    const progress = await r.asChild(token, "report.progress", { text: "進めている" });
+    expect(progress.json.ok, JSON.stringify(progress.json)).toBe(true);
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenIdleSoonBind")).toHaveLength(0); // 復帰して解決になる
+    r.advance(9 * MIN); // 最初の idle の期限（60 分）を過ぎても、延びているので切れない
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenExpiredIdleBind")).toHaveLength(0);
+    expect((await r.whoami(token)).status).toBe(200);
   });
 });

@@ -51,7 +51,13 @@ export type ExpiryReason = "absolute" | "idle" | "retired";
 export type TokenKind = "sdk" | "bind";
 
 export interface CredentialStore {
-  authenticate(token: unknown): Principal | undefined;
+  /**
+   * トークンを確かめる。`touch` が真（既定）なら、使ったものとして数える（使わなければ切れる時計を延ばす）。
+   * 偽なら、確かめるだけで時計を延ばさない（期限切れ・役目の終わりの失効は、どちらでも行う）。daemon が子へ知らせを送る・
+   * 子が知らせを読むだけの呼び出し（購読の heartbeat・購読の接続・`child.inbox`）は、偽にする（#189。
+   * 無人のセッションが、前置きを読むだけで生き続けないように）。
+   */
+  authenticate(token: unknown, touch?: boolean): Principal | undefined;
   /** 直近に期限切れ・役目の終わりで失効させたトークンか（応答の失敗の記号を tokenExpired にするため。メモリだけ）。 */
   wasExpired?(token: unknown): boolean;
   /**
@@ -142,7 +148,8 @@ export function createCredentialStore(options: {
   ) => void;
   /**
    * 紐付け（`bind`）のトークンが、使われないまま `idleWarnMs` 以内に切れるとき、見回りで 1 回だけ呼ぶ（#189。失効の前の知らせ）。
-   * 同じ「最後に使った時刻」には 1 回だけ（使われて時計が進めば、また出せる）。`lastUsedMs` は、その止まりを見分ける印。
+   * 同じ idle 期間（最後に使った時刻を秒に丸めた値が同じ間）には 1 回だけ（使われて時計が進めば、また出せる）。`issuedAt`・`lastUsedMs` は、
+   * その止まりを見分ける印（呼び出し側が、冪等キーに使う）。
    * 判断待ち・done・役目の終わりの子と、発行からの絶対の期限が先に来るトークンには呼ばない。
    * 戻り値は、知らせを記録できたか。`true` のときだけ「出した」印を立てる（記録できなかった・出さなかったときは `false` か例外で、
    * 次の見回りで、もう一度呼ぶ）。
@@ -166,11 +173,6 @@ export function createCredentialStore(options: {
    * 再起動の前に出した知らせを、復帰で解決にし、同じ知らせを二重に出さないために使う。省略すると、メモリの印だけで決める。
    */
   readonly hasOpenIdleSoon?: (nodeId: string) => boolean;
-  /**
-   * ノードのトークンを発行したあとに呼ぶ（`issueNodeToken`・`rebindNodeToken` の成功のあと）。紐付けが結び直された・再開で
-   * 出し直されたことを知るのに使う（#189。失効・もうすぐ切れるの知らせを解決にする）。例外は発行を止めない。
-   */
-  readonly onTokenIssued?: (nodeId: string, kind: TokenKind) => void;
 }): CredentialStore {
   if (typeof options.humanToken !== "string" || options.humanToken.length < MIN_HUMAN_TOKEN) {
     throw new RangeError(`人間のトークンは ${MIN_HUMAN_TOKEN} 文字以上が必要`);
@@ -191,7 +193,10 @@ export function createCredentialStore(options: {
       issuedMs: number;
       lastUsedMs: number;
       writtenMs: number;
-      /** 失効の前の知らせを出した、そのときの `lastUsedMs`（メモリだけ。使われて時計が進めば、また出せる）。 */
+      /**
+       * 失効の前の知らせを出した、その idle 期間の印（`lastUsedMs` を秒に丸めた値。メモリだけ。使われて時計が進めば、また出せる）。
+       * ミリ秒の小数のままだと、同じ期間なのに値がずれうるので、知らせの冪等キー（`idleSoonKeyOf`）と同じく秒に丸める。
+       */
       warnedFor?: number | undefined;
     }
   >();
@@ -327,12 +332,13 @@ export function createCredentialStore(options: {
       if (m.warnedFor !== undefined || hasOpen()) recover();
       return;
     }
-    if (m.warnedFor === m.lastUsedMs) return;
+    const period = Math.floor(m.lastUsedMs / 1000);
+    if (m.warnedFor === period) return;
     // 前の止まりで出した知らせが残っているなら、先に解決にする（失敗したら、二重に出さず次の見回りで）
     if (m.warnedFor !== undefined && !recover()) return;
     // 再起動の前に出した知らせが、まだ未解決で残っている: 同じ止まりの知らせなので、二重に出さない（印だけ立てる）
     if (hasOpen()) {
-      m.warnedFor = m.lastUsedMs;
+      m.warnedFor = period;
       return;
     }
     try {
@@ -343,7 +349,7 @@ export function createCredentialStore(options: {
         lastUsedMs: m.lastUsedMs,
         remainingMs,
       });
-      if (sent === true) m.warnedFor = m.lastUsedMs;
+      if (sent === true) m.warnedFor = period;
     } catch {
       // 知らせの失敗で、見回り・失効を止めない
     }
@@ -370,7 +376,7 @@ export function createCredentialStore(options: {
   };
 
   const store: CredentialStore = {
-    authenticate(token) {
+    authenticate(token, touchClock = true) {
       if (typeof token !== "string" || token === "") return undefined;
       const h = sha256(token);
       if (timingSafeEqual(h, humanHash)) return { role: "human" };
@@ -383,7 +389,7 @@ export function createCredentialStore(options: {
         expire(p.nodeId, reason);
         return undefined;
       }
-      touch(p.nodeId, hex, now);
+      if (touchClock) touch(p.nodeId, hex, now);
       return p;
     },
     wasExpired(token) {
@@ -444,11 +450,6 @@ export function createCredentialStore(options: {
       const now = nowMs();
       meta.set(nodeId, { kind, role, issuedAt, issuedMs: now, lastUsedMs: now, writtenMs: now });
       options.onNodeTokenChanged?.(nodeId);
-      try {
-        options.onTokenIssued?.(nodeId, kind);
-      } catch {
-        // 知らせの解決の失敗で、発行を止めない
-      }
       return token;
     },
     nodeIds: () => [...byNode.keys()],

@@ -18,7 +18,6 @@ const setup = (
       put: () => void;
       remove: () => void;
     };
-    onTokenIssued?: (nodeId: string, kind: string) => void;
   } = {},
 ) => {
   let now = T0;
@@ -222,18 +221,33 @@ describe("失効の前の知らせ（#189）", () => {
     expect(soon).toEqual([]);
   });
 
-  it("onTokenIssued は、発行（つなぎ直しを含む）のたびに、ノードと種類つきで呼ぶ。例外は発行を止めない", () => {
-    const issued: string[] = [];
-    const { s } = setup({
-      onTokenIssued: (n, k) => {
-        issued.push(`${n}:${k}`);
-        throw new Error("解決の失敗");
-      },
+  describe("使ったものとして数えない確かめ（authenticate の touch = false。#189）", () => {
+    it("touch = false の確かめは、使わなければ切れる時計を延ばさない（切れる期限も、そのまま効く）", () => {
+      const { s, advance } = setup();
+      const t = s.issueNodeToken("a", "child", "bind");
+      advance(52 * MIN);
+      expect(s.authenticate(t, false)).toBeDefined(); // 確かめるだけ
+      advance(9 * MIN); // 最後に使ってから 61 分
+      expect(s.authenticate(t, false)).toBeUndefined();
+      expect(s.wasExpired?.(t)).toBe(true);
     });
-    expect(typeof s.issueNodeToken("a", "child", "bind")).toBe("string");
-    expect(typeof s.rebindNodeToken?.("a")).toBe("string");
-    s.issueNodeToken("b", "child");
-    expect(issued).toEqual(["a:bind", "a:bind", "b:sdk"]);
+
+    it("touch = false を繰り返しても、前置きは出続け、時計は延びない。使えば（既定・touchNode）延びる", () => {
+      const { s, soon, advance } = setup();
+      const t = s.issueNodeToken("a", "child", "bind");
+      for (let i = 0; i < 52; i++) {
+        advance(MIN);
+        s.authenticate(t, false); // heartbeat・知らせの読み出しに相当する
+      }
+      s.sweepExpired?.();
+      expect(soon).toHaveLength(1); // 時計が延びていないので、窓に入っている
+      s.authenticate(t); // 使った
+      advance(9 * MIN);
+      expect(s.authenticate(t, false)).toBeDefined(); // 延びたので、まだ切れない
+      s.touchNode?.("a");
+      advance(59 * MIN);
+      expect(s.authenticate(t, false)).toBeDefined(); // touchNode でも延びる
+    });
   });
 
   it("発行からの絶対の期限が先に来るときは出さない", () => {

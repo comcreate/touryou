@@ -293,6 +293,11 @@ export interface ApiDeps {
     info: { readonly sessionId?: string; readonly cwd?: string },
   ) => void;
   /**
+   * コードなしのつなぎ直し（#145）が成功した（トークンを出し直した）あとにだけ呼ぶ。「紐付けが切れた」「もうすぐ切れる」の知らせを
+   * 解決にするのに使う（#189。トークンの発行ではなく、結び直しの成功で解決にする）。例外は応答を変えない。
+   */
+  readonly onRebindSucceeded?: (nodeId: string) => void;
+  /**
    * 紐付けのコードが無効だった（形は正しいノード ID で、コードが合わない・期限切れ・daemon の再起動で失われた）。紐付けの
    * やり直しの流れ（受信箱に「紐付けをやり直して」を出す）に使う。応答は変えない（理由を外に出さない）。
    */
@@ -384,6 +389,11 @@ const UI_ASSETS: Readonly<Record<string, UiAsset>> = {
 /** 本文を読まずに返す応答には、接続を閉じさせる（読んでいない本文が、次の要求と混ざらない。遅い本文で接続を占有されない）。 */
 const CLOSE = { connection: "close" } as const;
 const DEFAULT_MAX_BODY = 1024 * 1024;
+/**
+ * ノードのトークンを「使った」と数えない操作（知らせを読むだけのもの）。前置きの知らせ（#189）は、受信箱の読み出しで子に届くので、
+ * 読み出しが時計を延ばすと、使われないトークンが切れなくなる。
+ */
+const PASSIVE_OPERATIONS: ReadonlySet<DaemonOperation> = new Set<DaemonOperation>(["child.inbox"]);
 /** `POST /v1/hook` の、主体ごとの bucket の重み（ほかの要求は 1）。 */
 const HOOK_WEIGHT = 0.5;
 /** bind の本文は { nodeId, bindCode } だけなので小さく。 */
@@ -494,8 +504,12 @@ export function createApiServer(deps: ApiDeps): ApiServer {
   let port = 0;
   const uiSessions = deps.uiSessions ?? createUiSessionStore();
   /** 認証。人間のトークン・ノードのトークンに加えて、画面のセッションのトークンを、人間として通す。 */
-  const authenticate = (token: string | undefined, touch = true): Principal | undefined =>
-    deps.credentials.authenticate(token) ??
+  const authenticate = (
+    token: string | undefined,
+    touch = true,
+    touchNodeToken = touch,
+  ): Principal | undefined =>
+    deps.credentials.authenticate(token, touchNodeToken) ??
     (token !== undefined && uiSessions.isSession(token, touch)
       ? { role: "human" as const, via: "uiSession" as const }
       : undefined);
@@ -698,7 +712,8 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       });
     }
     const token = parseBearer(req.headers.authorization);
-    const principal = authenticate(token);
+    // ノードのトークンの「使った」印は、操作がわかってから付ける（`processBody`。知らせを読むだけの `child.inbox` は付けない。#189）
+    const principal = authenticate(token, true, false);
     if (principal === undefined) {
       return authFailed(req, res, failReason(token));
     }
@@ -779,6 +794,12 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       ...(env.value.claimedCaller === undefined ? {} : { claimedCaller: env.value.claimedCaller }),
     });
     if (!role.ok) return reject(res, role.error);
+    // ノードのトークンを、使ったものとして数える（使わなければ切れる時計を延ばす）。ただし、受信箱を読むだけの `child.inbox` は数えない:
+    // 前置き（「もうすぐ切れる」の追加指示）は、これで子に届くので、読むたびに延びると、無人のセッションが切れなくなる（#189）。
+    // 実際の作業の呼び出し（report.*・scope.extend など）は、これまでどおり延ばす。
+    if (principal.role !== "human" && !PASSIVE_OPERATIONS.has(operation)) {
+      deps.credentials.touchNode?.(principal.nodeId);
+    }
     // 同じ主体・同じ requestId の要求が処理中なら、実行せず、最初の結果を待って、同じ結果を返す（relay の再送で、操作が重なって
     // 実行されないように）。重い操作の追加の重みより前に判定する（重複が、重みを重ねて使わない）。枠も、判明した時点で返す。
     const dupKey = `${key}\u0000${requestId}`;
@@ -1530,7 +1551,8 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     nodeFeed: (nodeId, afterSeq) => nodeFeedOf(deps.getState(), nodeId, afterSeq),
     // 購読中の失効: heartbeat ごとに、接続のときと同じ確かめ（失効・ノードの停止・役割）と、ノードの一致を見る。
     isNodeTokenValid: (token, nodeId) => {
-      const p = verifyNodeToken(deps, `Bearer ${token}`);
+      // 確かめるだけで、時計は延ばさない（heartbeat は子が動いていなくても続く。前置きを読むだけで切れなくならないように。#189）
+      const p = verifyNodeToken(deps, `Bearer ${token}`, false);
       return p !== undefined && p.role !== "human" && p.nodeId === nodeId;
     },
     isTokenRetired: (token) => deps.credentials.wasRetired?.(token) === true,
@@ -1591,7 +1613,8 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       );
       return;
     }
-    const principal = verifyNodeToken(deps, req.headers.authorization);
+    // 購読の接続は、使ったものとして数えない（張り直しの連打で、無人のセッションが切れなくならないように。#189）
+    const principal = verifyNodeToken(deps, req.headers.authorization, false);
     if (principal === undefined || token === undefined) {
       authFailed(req, res, failReason(token));
       return;
@@ -1866,6 +1889,11 @@ export function createApiServer(deps: ApiDeps): ApiServer {
         );
       }
       log({ event: "bindSucceeded", nodeId, at: now(), route: "rebind" });
+      try {
+        deps.onRebindSucceeded?.(nodeId);
+      } catch {
+        // 記録の失敗で、紐付けの応答を変えない
+      }
       return send(res, 200, { ok: true, value: { nodeId, token: rebound } });
     }
     // 結び付いたノードが、子ロールで、トークンを持てる状態か（統合ノード・木にない・停止後などは不可）を先に確かめ、

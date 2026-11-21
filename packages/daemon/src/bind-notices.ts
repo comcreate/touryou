@@ -3,7 +3,7 @@
  *
  * - 失効の知らせ（`tokenExpiredIdleBind`・`tokenExpiredAbsoluteBind`）と、失効の前の知らせ（`tokenIdleSoonBind`）は、受信箱の info。
  *   状態画面のカードの札は、未解決の失効の知らせから導く。紐付けが結び直されたら、どれも解決にする（`resolveBindNotices`）。
- * - 失効の前の知らせは、親へは受信箱の info、子へは system の追加指示。同じ「最後に使った時刻」には 1 回だけ（要求 ID で冪等）。
+ * - 失効の前の知らせは、親へは受信箱の info、子へは system の追加指示。同じ idle 期間（`idleSoonKeyOf`）には 1 回だけ（要求 ID で冪等）。
  */
 
 import {
@@ -94,18 +94,31 @@ export interface IdleSoonDeps {
 }
 
 /**
+ * 前置きの冪等キー（要求 ID の元）。トークンの発行の時刻（`issuedAt`）と、その idle 期間の始まり（最後に使った時刻）を秒に丸めた値。
+ * 最後に使った時刻はミリ秒の小数なので、そのまま使うと、同じ期間なのに見回りや再読み込みで値がずれ、前置きが 2 重に出うる。
+ * 秒に丸めれば、同じ期間は同じキーになる（再試行・手動の解決のあとの見回りでも、記録の側で重複として扱われる）。
+ */
+export const idleSoonKeyOf = (nodeId: string, issuedAt: string, lastUsedMs: number): string =>
+  `token-idle-soon/${nodeId}/${issuedAt}/${Math.floor(lastUsedMs / 1000)}`;
+
+/**
  * 失効の前の知らせを書く。running の子だけ（判断待ち・done は時計が止まる）。戻り値は、記録できたか
  * （`credentials` が、出した印を立てるかを決める。running でない・記録の失敗は `false`＝次の見回りで、もう一度）。
- * 同じ「最後に使った時刻」への再試行は、要求 ID が同じなので重複せず、`true` を返す。
+ * 同じ idle 期間（発行の時刻と、最後に使った時刻の秒）への再試行は、要求 ID が同じなので重複せず、`true` を返す。
  */
 export function createIdleSoonNotifier(
   deps: IdleSoonDeps,
-): (info: { nodeId: string; lastUsedMs: number; remainingMs: number }) => boolean {
+): (info: {
+  nodeId: string;
+  issuedAt: string;
+  lastUsedMs: number;
+  remainingMs: number;
+}) => boolean {
   return (info) => {
-    const { nodeId, lastUsedMs } = info;
+    const { nodeId, issuedAt, lastUsedMs } = info;
     if (deps.stateOf(nodeId) !== "running") return false;
     const mins = Math.max(1, Math.ceil(info.remainingMs / 60_000));
-    const key = `token-idle-soon/${nodeId}/${lastUsedMs}`;
+    const key = idleSoonKeyOf(nodeId, issuedAt, lastUsedMs);
     const r = appendAtomically(deps.log, deps.clock, key, SYSTEM, [
       {
         type: "inbox.added",

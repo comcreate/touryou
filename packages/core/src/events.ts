@@ -1918,9 +1918,14 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
     case "node.instructed": {
       const { nodeId, text, kind } = p;
       if (!isId(nodeId)) return invalid(seq, "node.instructed の nodeId");
-      // 知らない kind（新しい版の daemon が足したもの）は、記録を拒まず、種類のないふつうの指示として読む。
+      // kind は、ない（ふつうの指示）か、文字列。文字列でないもの（数値・オブジェクトなど）は、記録の形が壊れているので拒む。
+      if (kind !== undefined && typeof kind !== "string") {
+        return invalid(seq, "node.instructed の kind（文字列）");
+      }
+      // 知らない文字列の kind（新しい版の daemon が足したもの）は、記録を拒まず、種類のないふつうの指示として読む。
       // kind を足すたびに、古い版が新しいログを読めなくなるのを避ける（前向きの互換）
-      const knownKind = (INSTRUCTION_KINDS as readonly unknown[]).includes(kind);
+      const knownKind =
+        typeof kind === "string" && (INSTRUCTION_KINDS as readonly string[]).includes(kind);
       if (!isBoundedText(text, LIMITS.reportText) || text.trim() === "") {
         return invalid(seq, `node.instructed の text（空でない ${LIMITS.reportText} 文字以下）`);
       }

@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import {
   createIdleSoonNotifier,
   idleSoonInstruction,
+  idleSoonKeyOf,
   idleWarnMsOf,
   openBindNotices,
   resolveBindNotices,
@@ -103,10 +104,63 @@ describe("resolveBindNotices", () => {
 });
 
 describe("createIdleSoonNotifier", () => {
-  const info = (nodeId: string, lastUsedMs = 1) => ({
+  const info = (nodeId: string, lastUsedMs = 1_000, issuedAt = "2026-10-20T00:00:00.000Z") => ({
     nodeId,
+    issuedAt,
     lastUsedMs,
     remainingMs: 9 * 60_000,
+  });
+  const notifierOf = (d: ReturnType<typeof seeded>["d"]) =>
+    createIdleSoonNotifier({
+      log: d.log,
+      clock,
+      stateOf: (id) => d.log.state().nodes.find((x) => x.id === id)?.state,
+      note: () => {},
+    });
+  const soonItems = (d: ReturnType<typeof seeded>["d"]) =>
+    d.log.state().inbox.filter((i) => i.msg?.key === "tokenIdleSoonBind");
+
+  it("同じ idle 期間なら、最後に使った時刻のミリ秒（小数）がずれても、前置きは 1 回だけ（#189）", () => {
+    const { d } = seeded();
+    const f = notifierOf(d);
+    // 再起動・見回りで、同じ期間の最後に使った時刻が、1 秒未満だけずれる
+    expect(f(info("a", 5_000.25))).toBe(true);
+    expect(f(info("a", 5_000.75))).toBe(true);
+    expect(f(info("a", 5_999.5))).toBe(true);
+    expect(soonItems(d)).toHaveLength(1);
+    expect(d.log.state().instructions.filter((i) => i.nodeId === "a")).toHaveLength(1);
+    // 秒が変われば（使われて、また止まった）別の期間、発行し直されたトークンも別
+    expect(f(info("a", 6_000))).toBe(true);
+    expect(f(info("a", 5_000, "2026-10-20T01:00:00.000Z"))).toBe(true);
+    expect(soonItems(d)).toHaveLength(3);
+  });
+
+  it("手動で解決にしたあとも、同じ idle 期間には、前置きを出し直さない（#189）", () => {
+    const { d } = seeded();
+    const f = notifierOf(d);
+    expect(f(info("a", 5_000.25))).toBe(true);
+    const item = soonItems(d)[0];
+    expect(item).toBeDefined();
+    const r = d.log.append({
+      requestId: "manual-resolve",
+      actor: { system: true },
+      body: { type: "inbox.resolved", payload: { itemId: item?.id ?? "" } },
+    });
+    expect(r.ok).toBe(true);
+    const before = d.log.state().lastSeq;
+    // 解決にしたあと、見回りがもう一度呼んでも（時刻が少しずれていても）、新しい記録は増えない
+    expect(f(info("a", 5_400.5))).toBe(true);
+    expect(d.log.state().lastSeq).toBe(before);
+    expect(soonItems(d)).toHaveLength(1);
+    expect(d.log.state().instructions.filter((i) => i.nodeId === "a")).toHaveLength(1);
+  });
+
+  it("idleSoonKeyOf は、発行の時刻と、最後に使った時刻の秒で決まる", () => {
+    const k = idleSoonKeyOf("a", "2026-10-20T00:00:00.000Z", 5_999.9);
+    expect(k).toBe("token-idle-soon/a/2026-10-20T00:00:00.000Z/5");
+    expect(idleSoonKeyOf("a", "2026-10-20T00:00:00.000Z", 5_000)).toBe(k);
+    expect(idleSoonKeyOf("a", "2026-10-20T00:00:00.000Z", 6_000)).not.toBe(k);
+    expect(idleSoonKeyOf("a", "2026-10-20T01:00:00.000Z", 5_000)).not.toBe(k);
   });
 
   it("running の子には、親の info と子への追加指示を 1 回ずつ。同じ時刻への再試行は増えない", () => {
@@ -127,7 +181,7 @@ describe("createIdleSoonNotifier", () => {
     const sent = d.log.state().instructions.filter((i) => i.nodeId === "a");
     expect(sent).toHaveLength(1);
     expect(sent[0]?.kind).toBe("tokenIdleSoon");
-    expect(f(info("a", 2))).toBe(true); // 別の最後に使った時刻は別の知らせ
+    expect(f(info("a", 2_000))).toBe(true); // 別の最後に使った時刻（秒が違う）は別の知らせ
     expect(d.log.state().inbox.filter((i) => i.msg?.key === "tokenIdleSoonBind")).toHaveLength(2);
     expect(notes).toEqual([]);
   });

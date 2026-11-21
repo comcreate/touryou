@@ -15,9 +15,16 @@ export interface NodeAuthDeps {
   readonly getState: () => OrchState;
 }
 
-/** `Authorization` のヘッダの値から、主体を確かめる。トークンが無効・ノードの状態が許さないときは `undefined`。 */
-export function verifyNodeToken(deps: NodeAuthDeps, authorization: unknown): Principal | undefined {
-  const principal = deps.credentials.authenticate(parseBearer(authorization));
+/**
+ * `Authorization` のヘッダの値から、主体を確かめる。トークンが無効・ノードの状態が許さないときは `undefined`。
+ * `touch` を偽にすると、使ったものとして数えない（使わなければ切れる時計を延ばさない。購読の接続・heartbeat の確かめ用）。
+ */
+export function verifyNodeToken(
+  deps: NodeAuthDeps,
+  authorization: unknown,
+  touch = true,
+): Principal | undefined {
+  const principal = deps.credentials.authenticate(parseBearer(authorization), touch);
   if (principal === undefined) return undefined;
   return checkPrincipal(principal, deps.getState()).ok ? principal : undefined;
 }
