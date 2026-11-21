@@ -809,7 +809,13 @@ export async function runLaunchdService(
   const warnings: string[] = [];
   // 飛ばした unit があるのに成功と言わない: uninstall 以外は非 0 で終わる（版上げの script が成功と見なさない）。
   // uninstall は後始末なので、終了コードは変えず、飛ばしたものを出力（標準出力）にも明示する
-  const withWarnings = (r: CommandResult): CommandResult => {
+  // stop --others が、設定を読めないまま Label から止めた daemon。止められたので成功のまま、読めなかったことだけを標準エラーに残す
+  const stopNotes: string[] = [];
+  const withWarnings = (res: CommandResult): CommandResult => {
+    const r =
+      stopNotes.length === 0
+        ? res
+        : { ...res, stderr: `${stopNotes.map((w) => `注意: ${w}`).join("\n")}\n${res.stderr}` };
     if (warnings.length === 0) return r;
     const stderr = `${warnings.map((w) => `警告: ${w}`).join("\n")}\n${r.stderr}`;
     if (sub === "uninstall") {
@@ -838,20 +844,34 @@ export async function runLaunchdService(
       const file = readOr(srcFile) !== undefined ? srcFile : join(agentsDir, n);
       const text = readOr(file);
       const cfg = text === undefined ? undefined : plistConfigOf(text);
+      // stop は、Label だけで止められる（plist の名前から決まる。設定・stateDir は要らない）。設定を読めない daemon も止めて、
+      // 読めないことは注意として残す（止められたので、終了コードは変えない）。版上げが毎回失敗しないようにする
       if (cfg === undefined || !usableConfigPath(cfg)) {
-        warnings.push(
-          `${file} の設定（--config）を読めないので、この daemon は飛ばした。手で外すか、${TOURYOU} launchd init --config <設定> で作り直す`,
-        );
+        if (sub === "stop") {
+          stopNotes.push(
+            `${file} の設定（--config）を読めなかったが、Label（${m[1] as string}）から止めた。手で外すか、${TOURYOU} launchd init --config <設定> で作り直す`,
+          );
+          units.push(unit(m[1] as string, `daemon-${m[2] as string}`, file, undefined));
+        } else {
+          warnings.push(
+            `${file} の設定（--config）を読めないので、この daemon は飛ばした。手で外すか、${TOURYOU} launchd init --config <設定> で作り直す`,
+          );
+        }
         continue;
       }
       const sd = stateDirOf(cfg);
       const stateDir = sd !== undefined && plainPath(sd) ? sd : undefined;
-      // stateDir を読めなくても、uninstall は plist・ログを後始末できる（設定を消したあとの片づけ）。ほかは、窓口を確かめられないので飛ばす
-      if (stateDir === undefined && sub !== "uninstall") {
+      // stateDir を読めなくても、uninstall は plist・ログを後始末でき、stop は Label だけで止められる。ほかは、窓口を確かめられないので飛ばす
+      if (stateDir === undefined && sub !== "uninstall" && sub !== "stop") {
         warnings.push(
           `${file} の設定（${cfg}）の stateDir を読めないので、この daemon は飛ばした（設定がない・他の人が書ける・stateDir が絶対パスでない）。設定を直すか、${TOURYOU} launchd uninstall --yes --others で外す`,
         );
         continue;
+      }
+      if (stateDir === undefined && sub === "stop") {
+        stopNotes.push(
+          `${file} の設定（${cfg}）の stateDir を読めなかったが、Label（${m[1] as string}）から止めた（設定がない・他の人が書ける・stateDir が絶対パスでない）`,
+        );
       }
       units.push(unit(m[1] as string, `daemon-${m[2] as string}`, cfg, stateDir));
     }

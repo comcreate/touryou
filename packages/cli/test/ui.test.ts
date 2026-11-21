@@ -72,6 +72,73 @@ const run = async (opts: {
   return { r, opened, all: r.stdout + r.stderr };
 };
 
+describe("touryou ui: 読めない設定・ポートの案内が、選ばれた設定を指す（#165）", () => {
+  const UI = '"$HOME/.touryou/current/bin/touryou" ui';
+  const STATUS = '"$HOME/.touryou/current/bin/touryou" launchd status';
+  const altFiles = (over: Record<string, string | undefined> = {}) =>
+    files({
+      "/alt/config.json": JSON.stringify({ stateDir: "/alt-state" }),
+      "/alt-state/port": undefined,
+      ...over,
+    });
+  const runWith = async (
+    argv: string[],
+    read: (p: string) => string,
+    env: Record<string, string> = {},
+  ) => {
+    const r = await runBin(argv, {
+      env: { HOME: "/home/u", ...env },
+      isTTY: TTY,
+      fetch: ticketFetch().f,
+      ui: { readFile: read, verifierFor: verifier("ok"), openUrl: () => true },
+    });
+    return r.stdout + r.stderr;
+  };
+
+  it("既定の設定: 文面に既定のパスを出し、launchd status に --config を付けない", async () => {
+    const noConfig = await runWith(
+      ["ui"],
+      files({ "/home/u/.touryou/config.json": undefined }),
+    );
+    expect(noConfig).toContain("/home/u/.touryou/config.json");
+    expect(noConfig).toContain("/touryou:setup");
+    const noPort = await runWith(["ui"], files({ "/state/port": undefined }));
+    expect(noPort).toContain(`${STATUS} で確かめる`);
+    expect(noPort).toContain(`もう一度 ${UI} を実行する`);
+    expect(noPort).not.toContain("--config");
+  });
+
+  it("--config の設定を読めない: そのパスを出し、/touryou:setup（既定の設定の案内）にしない", async () => {
+    const all = await runWith(["ui", "--config", "/alt/config.json"], files());
+    expect(all).toContain("/alt/config.json");
+    expect(all).not.toContain("/touryou:setup");
+  });
+
+  it("--config の daemon のポートが分からない: launchd status と再実行に、同じ --config を付ける", async () => {
+    const all = await runWith(["ui", "--config", "/alt/config.json"], altFiles());
+    expect(all).toContain("/alt/config.json");
+    expect(all).toContain(`${STATUS} --config "/alt/config.json" で確かめる`);
+    expect(all).toContain(`もう一度 ${UI} --config "/alt/config.json" を実行する`);
+  });
+
+  it("TOURYOU_DAEMON_CONFIG の設定でも、同じ --config を案内する", async () => {
+    const all = await runWith(["ui"], altFiles(), { TOURYOU_DAEMON_CONFIG: "/alt/config.json" });
+    expect(all).toContain(`${STATUS} --config "/alt/config.json" で確かめる`);
+    expect(all).toContain(`もう一度 ${UI} --config "/alt/config.json" を実行する`);
+  });
+
+  it("launchd が受け付けない書き方（相対パス）の設定: --config を付けず、その旨を出す", async () => {
+    const read = files({
+      "alt/config.json": JSON.stringify({ stateDir: "/alt-state" }),
+      "/alt-state/port": undefined,
+    });
+    const all = await runWith(["ui"], read, { TOURYOU_DAEMON_CONFIG: "alt/config.json" });
+    expect(all).toContain("alt/config.json");
+    expect(all).toContain("使える書き方");
+    expect(all).not.toContain('--config "alt/config.json"');
+  });
+});
+
 describe("touryou ui", () => {
   it("human-token でチケットをもらい、#ticket= の URL を開く。トークン・チケットを出さない", async () => {
     const { f, seen } = ticketFetch();

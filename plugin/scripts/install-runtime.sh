@@ -76,12 +76,20 @@ has_extra_daemons() {
 extra_daemon_plists() {
   # 別名の daemon の plist（LaunchAgents に置いたもの）を 1 行に 1 つ出す
   # 末尾は、TS 側（launchd.ts の OTHER_PLIST）と同じ、小文字の 16 進 8 文字だけ。[a-f] はロケールで変わるので、1 字ずつ並べる
-  local f h pat
+  # 組織の部分（末尾の touryou.daemon-... より前）も、TS 側と同じ範囲だけ。小文字の英数字とハイフンのラベルを、ドットでつないだもの
+  # （空のラベル・先頭のドット・連続したドット・大文字・下線を含むものは、対象にしない）。範囲外の plist では、同意を求めない
+  local f h pat b org
   h="[0123456789abcdef]"
   pat="${h}${h}${h}${h}${h}${h}${h}${h}"
   # shellcheck disable=SC2231
   for f in "${HOME}/Library/LaunchAgents/"touryou.daemon-${pat}.plist "${HOME}/Library/LaunchAgents/"*.touryou.daemon-${pat}.plist; do
-    [ -f "${f}" ] && printf '%s\n' "${f}"
+    [ -f "${f}" ] || continue
+    b="${f##*/}"
+    org="${b%touryou.daemon-????????.plist}"
+    case "${org}" in
+      *[!abcdefghijklmnopqrstuvwxyz0123456789.-]* | .* | *..*) continue ;;
+    esac
+    printf '%s\n' "${f}"
   done
   return 0
 }
@@ -181,6 +189,10 @@ restore_old() {
   # main の local（prev・old・ver・BASE・CONTACT）を、bash の動的スコープで読む。
   # 新しい版の launchd init のあと（migrated=1）は、生成物が新しい形。前の版の apply では扱えないので、新しい版の uninstall で外し、
   # 前の版の init で前の形を作り直してから、前の版で apply する（#64）
+  # 別名の daemon（hasext）は、新しい版の uninstall --others を挟まない。前の版の init --others・apply --yes --others は、
+  # LaunchAgents に置いた plist だけを対象にするので、先に外すと、どちらも何もせずに成功し、別名の daemon が戻らない。
+  # 前の版の init --others は、init の出力先にある新しい形の plist から、設定・組織・PATH を読み戻して、前の形を作り直す。
+  # 作り直せなければ（手で直した plist など）、init --others が失敗して、下の「起動にも失敗した」の道に進む（別名の巻き戻しは、失敗として出す）
   local why="$1" state
   if [ "${migrated:-0}" = 1 ] && [ "${hasdef:-0}" = 1 ] && ! run_masked "${VDIR}/${DIST_DIR}/bin/touryou" launchd uninstall --yes; then
     die "${why}（v${ver} の生成物を外せず、v${old} に戻せなかった）" "/touryou:service status で確かめ、docs/launchd.md の手作業の手順で戻す。${CONTACT} に相談する" "current は v${ver} のまま、常駐の daemon は止まっている"
@@ -454,10 +466,13 @@ main() {
     fi
     # 別名の daemon（--config）の設定も、止める前に、新しい版の daemon で検査する（止めたあとで通らないと、巻き戻しになる）
     if [ "${hasext}" = 1 ]; then
-      local extra_plist extra_cfg
+      local extra_plist extra_src extra_cfg
       while IFS= read -r extra_plist; do
         [ -n "${extra_plist}" ] || continue
-        extra_cfg="$(plist_config_of "${extra_plist}")"
+        # 設定の読み方は、launchd 側（init・stop・apply の --others）と同じ。init の出力先の plist があればそれを、なければ LaunchAgents のものを読む
+        extra_src="${HOME}/.touryou/launchd/${extra_plist##*/}"
+        [ -f "${extra_src}" ] || extra_src="${extra_plist}"
+        extra_cfg="$(plist_config_of "${extra_src}")"
         if [ -z "${extra_cfg}" ] || ! run_masked "${VDIR}/${DIST_DIR}/bin/touryou-daemon" --check-config --config "${extra_cfg}"; then
           die "別名の daemon（${extra_plist}）の設定が、v${ver} の daemon の設定の検査を通らない（設定を読めない、または repoRoot・rootCwd・worktreeRoot などの誤り。上の「失敗」の行）" "その設定を直すか、touryou launchd uninstall --yes --config <設定> で外してから、もう一度 /touryou:setup" "daemon は止めていない（v${old} のまま）。v${ver} は \$HOME/.touryou/v${ver} に置いたが、current は v${old} のまま"
         fi

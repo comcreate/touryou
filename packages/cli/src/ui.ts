@@ -19,6 +19,7 @@ import {
   otherPlistNames,
   plistConfigOf,
   plistDirOf,
+  usableConfigPath,
 } from "./launchd.js";
 
 export interface UiDeps {
@@ -220,8 +221,10 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
     stateDir = j.stateDir.replace(/\/+$/, "");
   } catch {
     return fail(
-      "daemon の設定ファイル（~/.touryou/config.json）を読めない、または stateDir が絶対パスでない",
-      "/touryou:setup で設定を作る（または確かめる）",
+      `daemon の設定ファイル（${configPath}）を読めない、または stateDir が絶対パスでない`,
+      configPath === defaultConfig
+        ? "/touryou:setup で設定を作る（または確かめる）"
+        : `設定ファイル（${configPath}）を直す（--config・TOURYOU_DAEMON_CONFIG・実行した場所で選ばれた設定。別の daemon を開くなら --config で指す）`,
     );
   }
   let port: number;
@@ -231,10 +234,20 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
       throw new Error("port");
     port = Number(text);
   } catch {
+    // 選ばれた設定の daemon を指す（既定の設定のときは、--config を付けない）。launchd が受け付けない書き方の設定は、付けられない
+    const target =
+      configPath === defaultConfig
+        ? ""
+        : usableConfigPath(configPath)
+          ? ` --config "${configPath}"`
+          : undefined;
+    const uiCmd = `"$HOME/.touryou/current/bin/touryou" ui${target ?? ""}`;
     return fail(
-      "daemon のポートが分からない（daemon が動いていない・起動の途中）",
-      'daemon を起動する（/touryou:start、常駐なら "$HOME/.touryou/current/bin/touryou" launchd status で確かめる）',
-      '起動したら、もう一度 "$HOME/.touryou/current/bin/touryou" ui を実行する',
+      `daemon のポートが分からない（設定 ${configPath} の daemon が動いていない・起動の途中）`,
+      target === undefined
+        ? `daemon を起動する（/touryou:start。設定 ${configPath} のパスが launchd の --config に使えない書き方なので、常駐の確かめは、使える書き方の設定を指して行う）`
+        : `daemon を起動する（/touryou:start、常駐なら "$HOME/.touryou/current/bin/touryou" launchd status${target} で確かめる）`,
+      `起動したら、もう一度 ${uiCmd} を実行する`,
     );
   }
   let token: string;

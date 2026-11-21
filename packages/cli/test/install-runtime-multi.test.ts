@@ -65,6 +65,8 @@ exit 0
     `#!/bin/sh
 echo "v${ver} $*" >> "$HOME/calls.log"
 args="$*"
+# FAIL_REPEAT に書いた引数の並びは、同じ版での 2 回目以降の呼び出しだけ失敗にする（restore_old の呼び出しだけを失敗させる）
+if [ "\${FAIL_REPEAT:-}" = "$args" ] && [ "$(grep -c -x "v${ver} $args" "$HOME/calls.log")" -ge 2 ]; then exit 1; fi
 old_ifs="$IFS"; IFS=";"
 for f in \${FAIL_ON:-}; do
   if [ "$f" = "$args" ] || [ "$f" = "v${ver} $args" ]; then IFS="$old_ifs"; exit 1; fi
@@ -200,6 +202,33 @@ describe("別名の daemon の plist の検出（extra_daemon_plists・has_extra
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe("NONE");
   });
+  it("組織の部分は、TS 側の OTHER_PLIST と同じ範囲（小文字の英数字とハイフンのラベルを、ドットでつないだもの）だけを拾う", () => {
+    const inRange = [
+      "a.touryou.daemon-0123abcd.plist",
+      "a.b-c.touryou.daemon-0123abcd.plist",
+      "0-9.x.touryou.daemon-0123abcd.plist",
+    ];
+    const outOfRange = [
+      "Com.example.touryou.daemon-0123abcd.plist",
+      "a_b.touryou.daemon-0123abcd.plist",
+      ".touryou.daemon-0123abcd.plist",
+      ".x.touryou.daemon-0123abcd.plist",
+      "a..b.touryou.daemon-0123abcd.plist",
+      "a b.touryou.daemon-0123abcd.plist",
+    ];
+    const h = homeOnly([...inRange, ...outOfRange]);
+    const r = detect(h);
+    expect(r.status).toBe(0);
+    const [first, ...found] = r.stdout.trim().split("\n");
+    expect(first).toBe("HAS");
+    expect(found.sort()).toEqual(
+      inRange.map((n) => join(h, "Library", "LaunchAgents", n)).sort(),
+    );
+  });
+  it("範囲外の名前の plist だけなら、別名の daemon なしとして数える", () => {
+    const h = homeOnly(["A.touryou.daemon-0123abcd.plist", "a_b.touryou.daemon-0123abcd.plist"]);
+    expect(detect(h).stdout.trim()).toBe("NONE");
+  });
   it("LaunchAgents にない（~/.touryou/launchd に init しただけの）plist は数えない", () => {
     const h = join(tmp(), "home");
     mkdirSync(join(h, ".touryou", "launchd"), { recursive: true });
@@ -237,6 +266,25 @@ describe("版上げ（別名の daemon がある。#165）", () => {
     expect(r.stdout).toMatch(/RESULT: need-restart-consent/);
     expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
     expect(lines(join(h, "calls.log"))).toEqual([]);
+  });
+  it("範囲外の名前の plist だけなら、同意を求めない（need-restart-consent にならず、そのまま版を上げる）", () => {
+    const h = homeWith({ "A.touryou.daemon-0123abcd.plist": "/cfg/a.json" });
+    const tb = makeTarball("1.0.0");
+    const r = run(makePlugin("1.0.0", tb), h, tb);
+    expect(r.status, out(r)).toBe(0);
+    expect(r.stdout).not.toMatch(/need-restart-consent/);
+    expect(r.stdout).toMatch(/RESULT: upgraded/);
+    expect(readlinkSync(join(h, ".touryou", "current"))).toBe(NEW(h));
+    expect(lines(join(h, "calls.log"))).toEqual([]);
+  });
+  it("事前検査は、init の出力先の plist があればそれを読む（launchd の --others と同じ設定を検査する）", () => {
+    const h = homeWith({ [PLIST_ALIAS]: "/cfg/stale.json" });
+    // init の出力先には、新しい設定を書いた plist がある（LaunchAgents のものは古いまま）
+    mkdirSync(join(h, ".touryou", "launchd"), { recursive: true });
+    writeFileSync(join(h, ".touryou", "launchd", PLIST_ALIAS), aliasPlist("/cfg/fresh.json"));
+    const r = upgrade(h);
+    expect(r.status, out(r)).toBe(0);
+    expect(lines(join(h, "checked.log"))).toEqual(["/cfg/fresh.json"]);
   });
   it("--restart-daemon: 止める前に別名の設定を新しい版で検査 → stop --others → 付け替え → init --others → apply --yes --others", () => {
     const h = homeWith({ [PLIST_ALIAS]: "/cfg/a.json" });
@@ -375,6 +423,27 @@ describe("restore_old（別名の daemon の分岐）", () => {
       "v0.9.0 launchd init --others",
       "v0.9.0 launchd apply --yes --others",
     ]);
+  });
+  it("巻き戻しで、前の版の init --others が止まる（作り直せない plist など）: uninstall を挟まず、別名の daemon は止まっていると出す", () => {
+    const h = homeWith({ [PLIST_ALIAS]: "/cfg/a.json" });
+    // 新しい版の init --others が失敗して巻き戻しに入り、前の版の 2 回目の init --others（巻き戻しの分）も失敗する
+    const r = upgrade(h, {
+      FAIL_ON: "v1.0.0 launchd init --others",
+      FAIL_REPEAT: "launchd init --others",
+    });
+    expect(r.status, out(r)).toBe(1);
+    expect(r.stdout).toMatch(/v0\.9\.0 での起動し直しにも失敗した/);
+    expect(r.stdout).toMatch(/常駐の daemon は止まっている/);
+    expect(readlinkSync(join(h, ".touryou", "current"))).toBe(OLD(h));
+    const calls = lines(join(h, "calls.log"));
+    expect(calls).toEqual([
+      "v0.9.0 launchd init --others",
+      "v0.9.0 launchd stop --others",
+      "v1.0.0 launchd init --others",
+      "v0.9.0 launchd init --others",
+    ]);
+    // 前の版の init --others・apply --others は LaunchAgents の plist を対象にするので、別名では uninstall を挟まない
+    expect(calls.some((c) => c.includes("uninstall"))).toBe(false);
   });
   it("apply --yes --others が新しい版でだけ失敗: current を前の版に戻し、前の版で init --others → apply --yes --others で動いている", () => {
     const h = homeWith({ [PLIST_ALIAS]: "/cfg/a.json" });
