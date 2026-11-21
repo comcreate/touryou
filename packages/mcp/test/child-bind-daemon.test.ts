@@ -19,7 +19,8 @@ const daemon = (daemonId: string, reply: () => Response, seen: unknown[] = []) =
     return res;
   }) as unknown as typeof fetch,
 });
-const okReply = () => new Response(JSON.stringify({ ok: true, value: { nodeId: "a", token: TOKEN } }));
+const okReply = () =>
+  new Response(JSON.stringify({ ok: true, value: { nodeId: "a", token: TOKEN } }));
 const errorReply = (code: string) => () =>
   new Response(JSON.stringify({ ok: false, error: { code } }), { status: 401 });
 
