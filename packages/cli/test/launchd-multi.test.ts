@@ -30,6 +30,7 @@ interface World {
   readonly otherConfig: string;
   readonly otherLabel: string;
   readonly states: Record<string, string>;
+  readonly ports: Record<string, string>;
   readonly loaded: Set<string>;
   readonly calls: string[][];
   readonly ls: string[];
@@ -93,13 +94,14 @@ function makeWorld(): World {
     otherConfig,
     otherLabel,
     states,
+    ports,
     loaded,
     calls,
     ls,
     launchd: {
       run,
       uid: () => uid,
-      probe: async (port: number) => (port === 4321 || port === 4322 ? 401 : undefined),
+      probe: async (port: number) => (port >= 4321 && port <= 4323 ? 401 : undefined),
     },
   };
 }
@@ -199,6 +201,42 @@ describe("複数の daemon（--config）", () => {
     expect((await bin(w, ["status", "--others", "--config", w.otherConfig])).exitCode).toBe(2);
     expect((await bin(w, ["status", "--config", "relative.json"])).exitCode).toBe(2);
     expect((await bin(w, ["init", "--config", "relative.json"])).exitCode).toBe(2);
+  });
+
+  it("窓口の応答は、daemon を並べて待つ（応答しない daemon が 2 つでも、待ち時間は 1 つ分）", async () => {
+    const w = makeWorld();
+    const third = join(w.base, "third", "config.json");
+    const thirdState = join(w.base, "third", "state");
+    mkdirSync(thirdState, { recursive: true });
+    writeFileSync(third, JSON.stringify({ stateDir: thirdState }), { mode: 0o600 });
+    w.states[`touryou.${daemonNameOf(w.base, third)}`] = thirdState;
+    w.ports[`touryou.${daemonNameOf(w.base, third)}`] = "4323";
+    const up = { ...w.launchd, probe: async () => 401 };
+    const run = (args: string[], launchd: typeof w.launchd, sleep: (ms: number) => Promise<void>) =>
+      runBin(["launchd", ...args], {
+        env: { HOME: w.home },
+        isTTY: { stdin: false, stdout: false },
+        sleep,
+        launchd,
+      });
+    for (const c of [w.otherConfig, third]) {
+      expect((await run(["init", "--config", c], up, async () => undefined)).exitCode).toBe(0);
+      expect(
+        (await run(["apply", "--yes", "--config", c], up, async () => undefined)).exitCode,
+      ).toBe(0);
+    }
+    // 偽の時計。sleep が進める（直列なら、2 つ目は 1 つ目の待ちが終わってから始まり、2 倍かかる）
+    let clock = 0;
+    const waitMs = 10_000;
+    const r = await run(
+      ["restart", "--others"],
+      { ...w.launchd, probe: async () => undefined, waitMs, now: () => clock },
+      async (ms) => {
+        clock += ms;
+      },
+    );
+    expect(r.exitCode).toBe(1);
+    expect(clock).toBeLessThanOrEqual(waitMs + 2000);
   });
 
   it("別名の daemon の apply・uninstall は、既定と共有する古い形の起動スクリプトを消さない", async () => {

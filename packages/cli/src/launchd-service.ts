@@ -178,6 +178,12 @@ async function waitDaemon(ctx: Ctx, u: Unit): Promise<boolean> {
   }
 }
 
+/** すべての daemon の窓口を並べて待ち、応答しなかった最初の unit（並びの順）を返す。全部応答したら undefined。 */
+async function firstUnresponsive(ctx: Ctx): Promise<Unit | undefined> {
+  const results = await Promise.all(ctx.units.map((u) => waitDaemon(ctx, u)));
+  return ctx.units.find((_, i) => !results[i]);
+}
+
 /** ログの末尾で読む大きさ（バイト）。 */
 const LOG_TAIL_BYTES = 64 * 1024;
 
@@ -485,14 +491,16 @@ async function apply(ctx: Ctx): Promise<CommandResult> {
       }
       out.push(`${u.label}: 読み込んだ`);
     }
-    if (!(await waitDaemon(ctx, u))) {
-      const st = await statusLines(ctx);
-      return fail(
-        `${u.label} の窓口が応答しない（未認証の whoami が 401 にならない）\n${PARTIAL}`,
-        1,
-        `${[...out, "", ...st.lines].join("\n")}\n`,
-      );
-    }
+  }
+  // 窓口の応答は、全部の daemon を読み込んだあとに、並べて待つ（daemon の数だけ待ち時間が伸びない）
+  const unresponsive = await firstUnresponsive(ctx);
+  if (unresponsive !== undefined) {
+    const st = await statusLines(ctx);
+    return fail(
+      `${unresponsive.label} の窓口が応答しない（未認証の whoami が 401 にならない）\n${PARTIAL}`,
+      1,
+      `${[...out, "", ...st.lines].join("\n")}\n`,
+    );
   }
   // LaunchAgents が新しい形になったら、古い形の起動スクリプトは、もうどこからも起こされない。古い形と同じなら消す（#64）
   for (const u of ctx.units) {
@@ -541,14 +549,15 @@ async function restart(ctx: Ctx): Promise<CommandResult> {
       );
     }
     out.push(`${u.label}: 起動し直した`);
-    if (!(await waitDaemon(ctx, u))) {
-      const st = await statusLines(ctx);
-      return fail(
-        `${u.label} の窓口が応答しない\n${PARTIAL}`,
-        1,
-        `${[...out, "", ...st.lines].join("\n")}\n`,
-      );
-    }
+  }
+  const unresponsive = await firstUnresponsive(ctx);
+  if (unresponsive !== undefined) {
+    const st = await statusLines(ctx);
+    return fail(
+      `${unresponsive.label} の窓口が応答しない\n${PARTIAL}`,
+      1,
+      `${[...out, "", ...st.lines].join("\n")}\n`,
+    );
   }
   const st = await statusLines(ctx);
   return {
