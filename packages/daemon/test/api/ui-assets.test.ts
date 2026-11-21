@@ -1395,7 +1395,9 @@ describe("画面の使い勝手（#13）", () => {
       "cd '/r' && claude attach bg-1234",
     ]);
     // 番号がない・形が不正・CLI の子でないものには、番号の形を出さない（名前の形だけ）
-    expect(api.attachCommands({ id: "n-a1", cli: true })).toEqual(["cd '/r' && claude attach n-a1"]);
+    expect(api.attachCommands({ id: "n-a1", cli: true })).toEqual([
+      "cd '/r' && claude attach n-a1",
+    ]);
     expect(api.attachCommandByRef({ id: "n-a1", cli: true, sessionRef: "a b; rm -rf" })).toBe("");
     expect(api.attachCommandByRef({ id: "n-a1", sessionRef: "bg-1234" })).toBe("");
     expect(api.attachCommands(undefined)).toEqual([]);
