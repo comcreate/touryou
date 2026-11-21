@@ -96,10 +96,7 @@ describe("touryou ui: 読めない設定・ポートの案内が、選ばれた�
   };
 
   it("既定の設定: 文面に既定のパスを出し、launchd status に --config を付けない", async () => {
-    const noConfig = await runWith(
-      ["ui"],
-      files({ "/home/u/.touryou/config.json": undefined }),
-    );
+    const noConfig = await runWith(["ui"], files({ "/home/u/.touryou/config.json": undefined }));
     expect(noConfig).toContain("/home/u/.touryou/config.json");
     expect(noConfig).toContain("/touryou:setup");
     const noPort = await runWith(["ui"], files({ "/state/port": undefined }));

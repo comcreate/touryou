@@ -494,9 +494,9 @@ describe("複数の daemon（--config）", () => {
       (await bin(w, ["init", "--config", w.otherConfig, "--org", org, "--path-prefix", "/opt/x"]))
         .exitCode,
     ).toBe(0);
-    expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig, "--org", org])).exitCode).toBe(
-      0,
-    );
+    expect(
+      (await bin(w, ["apply", "--yes", "--config", w.otherConfig, "--org", org])).exitCode,
+    ).toBe(0);
     const src = join(w.base, "launchd", `${label}.plist`);
     const before = readFileSync(src, "utf8");
     expect((await bin(w, ["stop", "--others"])).exitCode).toBe(0);

@@ -221,9 +221,7 @@ describe("別名の daemon の plist の検出（extra_daemon_plists・has_extra
     expect(r.status).toBe(0);
     const [first, ...found] = r.stdout.trim().split("\n");
     expect(first).toBe("HAS");
-    expect(found.sort()).toEqual(
-      inRange.map((n) => join(h, "Library", "LaunchAgents", n)).sort(),
-    );
+    expect(found.sort()).toEqual(inRange.map((n) => join(h, "Library", "LaunchAgents", n)).sort());
   });
   it("範囲外の名前の plist だけなら、別名の daemon なしとして数える", () => {
     const h = homeOnly(["A.touryou.daemon-0123abcd.plist", "a_b.touryou.daemon-0123abcd.plist"]);
