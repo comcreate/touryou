@@ -33,6 +33,7 @@ import {
   type ConfigChecker,
   configProblem,
   DEFAULT_PATH,
+  daemonNameOf,
   daemonProgramArguments,
   LSREGISTER,
   labelOf,
@@ -46,7 +47,6 @@ import {
   stateDirOf,
   usableConfigPath,
   v011PlistText,
-  daemonNameOf,
 } from "./launchd.js";
 
 export type { RunResult } from "./launchd.js";
@@ -240,7 +240,9 @@ async function statusLines(ctx: Ctx): Promise<{ lines: string[]; ok: boolean }> 
   }
   if (loadedCount === 0) {
     // 止めた後に restart を案内されないように、戻し方をここで出す（restart は読み込まれていないと使えない）
-    const hint = ctx.units.every((u) => u.isDefault) ? "" : " （--config か --others を、止めたときと同じにする）";
+    const hint = ctx.units.every((u) => u.isDefault)
+      ? ""
+      : " （--config か --others を、止めたときと同じにする）";
     lines.push(
       ctx.units.every((u) => lstatOr(u.plistDest) !== undefined)
         ? `読み込まれていない（stop で止めた後）。次のログインで、また動く。すぐ動かすなら "$HOME/.touryou/current/bin/touryou" launchd apply --yes（利用者の同意のあとだけ）。restart は、読み込まれていないので使えない${hint}`
@@ -645,7 +647,9 @@ function uninstall(ctx: Ctx): CommandResult {
   }
   // ほかの daemon の plist が残っているうちは、TouRyou.app の登録を解かない（残った daemon が、同じ app を使う）
   if (remainingPlists(ctx).length > 0) {
-    out.push("ほかの daemon の plist が残っているので、TouRyou.app の LaunchServices の登録は解かなかった");
+    out.push(
+      "ほかの daemon の plist が残っているので、TouRyou.app の LaunchServices の登録は解かなかった",
+    );
   } else {
     out.push(...lsregister(ctx, "-u"));
   }

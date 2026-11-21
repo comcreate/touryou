@@ -8,6 +8,8 @@
  * - 常駐は daemon だけ（子用の HTTP の touryou-mcp の常駐は外した）。
  * - 既存のファイルを黙って上書きしない（同じ内容なら何もしない。違えば、何も書かずに止まる。古い形の生成物と同じものだけは、置き換える）。
  */
+
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -18,7 +20,6 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { createHash } from "node:crypto";
 import { dirname, isAbsolute, join } from "node:path";
 import { readSecureFile } from "@touryou/core/fs";
 import type { CommandResult } from "./commands.js";

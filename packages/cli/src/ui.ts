@@ -54,11 +54,17 @@ interface Candidate {
 }
 
 /** `<home>/.touryou/launchd` の別名の daemon の plist から、設定のパスを集める（絶対パスのものだけ）。 */
-function otherConfigs(home: string, deps: UiDeps, read: (p: string, f: number) => string): string[] {
+function otherConfigs(
+  home: string,
+  deps: UiDeps,
+  read: (p: string, f: number) => string,
+): string[] {
   const dir = `${home}/.touryou/launchd`;
   let names: string[];
   try {
-    names = (deps.readDir ?? ((p: string) => readdirSync(p)))(dir).filter((n) => OTHER_PLIST.test(n));
+    names = (deps.readDir ?? ((p: string) => readdirSync(p)))(dir).filter((n) =>
+      OTHER_PLIST.test(n),
+    );
   } catch {
     return [];
   }
@@ -116,7 +122,8 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
     deps.readFile ??
     ((p: string, forbid: number) => readSecureFile(p, { forbid, maxBytes: MAX_BYTES }));
   const home = deps.env.HOME ?? "";
-  const defaultConfig = home === "" ? undefined : `${home.replace(/\/+$/, "")}/.touryou/config.json`;
+  const defaultConfig =
+    home === "" ? undefined : `${home.replace(/\/+$/, "")}/.touryou/config.json`;
   // 複数の daemon（設定ごと）があるときの候補。既定の設定と、`touryou launchd init --config` で作った別名の設定
   const candidates: Candidate[] = [];
   if (defaultConfig !== undefined) {

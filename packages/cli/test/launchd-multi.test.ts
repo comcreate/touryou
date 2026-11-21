@@ -74,7 +74,10 @@ function makeWorld(): World {
         : { status: 113, stdout: "", stderr: "" };
     }
     if (sub === "bootstrap") {
-      const label = (rest[1] as string).split("/").at(-1)?.replace(/\.plist$/, "") as string;
+      const label = (rest[1] as string)
+        .split("/")
+        .at(-1)
+        ?.replace(/\.plist$/, "") as string;
       loaded.add(label);
       writeFileSync(join(states[label] as string, "port"), `${ports[label]}\n`, { mode: 0o600 });
     } else if (sub === "bootout") {
@@ -160,8 +163,12 @@ describe("複数の daemon（--config）", () => {
     expect(new Set(w.loaded)).toEqual(new Set(["touryou.daemon", w.otherLabel]));
     const rs = await bin(w, ["restart", "--others"]);
     expect(rs.exitCode).toBe(0);
-    expect(w.calls.some((c) => c[1] === "kickstart" && c.at(-1)?.endsWith(w.otherLabel))).toBe(true);
-    expect(w.calls.filter((c) => c[1] === "kickstart" && c.at(-1)?.endsWith("touryou.daemon")).length).toBe(0);
+    expect(w.calls.some((c) => c[1] === "kickstart" && c.at(-1)?.endsWith(w.otherLabel))).toBe(
+      true,
+    );
+    expect(
+      w.calls.filter((c) => c[1] === "kickstart" && c.at(-1)?.endsWith("touryou.daemon")).length,
+    ).toBe(0);
 
     // 削除は、設定ごと。別名を消しても、既定の plist と TouRyou.app の登録は残る
     w.ls.length = 0;
