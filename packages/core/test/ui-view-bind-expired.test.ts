@@ -55,6 +55,22 @@ describe("uiViewOf の bindExpired（#189）", () => {
     expect(nodeOf(resolved, "a")).not.toHaveProperty("bindExpired");
   });
 
+  it("役目の終わった子（verified・archived・stopped・reclaimable）には付けない。動いている子には付ける", () => {
+    const r = foldEvents([...base(), expiredNotice("i1", "a", "tokenExpiredIdleBind")]);
+    if (!r.ok) throw new Error(r.error.cause);
+    const withState = (state: string) =>
+      uiViewOf({
+        ...r.value,
+        nodes: r.value.nodes.map((x) => (x.id === "a" ? { ...x, state } : x)),
+      } as never);
+    for (const s of ["verified", "archived", "stopped", "reclaimable"]) {
+      expect(nodeOf(withState(s), "a"), s).not.toHaveProperty("bindExpired");
+    }
+    for (const s of ["running", "waiting", "done"]) {
+      expect(nodeOf(withState(s), "a")?.bindExpired, s).toBe("idle");
+    }
+  });
+
   it("鍵のない知らせ（文だけ似ているもの）からは導かない", () => {
     const v = viewOf([
       ...base(),

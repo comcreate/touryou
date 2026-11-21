@@ -347,6 +347,12 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       sessionRefs.set(r.nodeId, r.report.sessionRef);
     }
   }
+  const BIND_EXPIRED_HIDDEN_STATES: ReadonlySet<string> = new Set([
+    "verified",
+    "archived",
+    "stopped",
+    "reclaimable",
+  ]);
   // 紐付けが切れた子（#189）: 未解決の失効の知らせの鍵。seq の大きい（新しい）ほうを残す
   const bindExpired = new Map<string, "idle" | "absolute">();
   for (const i of [...unresolved].sort((a, b) => a.seq - b.seq)) {
@@ -359,7 +365,8 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
     const needsHuman = human.get(n.id) ?? 0;
     const at = last.get(n.id);
     const sessionRef = sessionRefs.get(n.id);
-    const expired = bindExpired.get(n.id);
+    // 役目の終わった子には、次の操作がないので出さない
+    const expired = BIND_EXPIRED_HIDDEN_STATES.has(n.state) ? undefined : bindExpired.get(n.id);
     const runtime = n.runtime ?? (cliChildren.has(n.id) ? "cli" : undefined);
     return {
       id: idOf(n.id),
