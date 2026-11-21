@@ -41,10 +41,10 @@ import {
   uiViewOf,
 } from "@touryou/core";
 import { authorizeRole, authorizeScope, checkPrincipal } from "./authorize.js";
-import { readsOnlyPrefaces } from "./handlers/child-inbox-handlers.js";
 import { type BindCodes, createThrottle, type Throttle } from "./bind.js";
 import { type CredentialStore, type Principal, parseBearer } from "./credentials.js";
 import { fingerprintOf } from "./dedupe.js";
+import { readsOnlyPrefaces } from "./handlers/child-inbox-handlers.js";
 import {
   createSessionBinder,
   type HookDecider,

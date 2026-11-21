@@ -56,14 +56,18 @@ export const unquote = (text: string): string =>
 export function selectInboxInstructions(
   mine: readonly InstructionRecord[],
   params: { readonly all?: boolean | undefined; readonly ackThrough?: number | undefined },
-): { readonly picked: readonly InstructionRecord[]; readonly toMark: readonly InstructionRecord[] } {
+): {
+  readonly picked: readonly InstructionRecord[];
+  readonly toMark: readonly InstructionRecord[];
+} {
   const ack = params.ackThrough;
   return {
     picked:
       ack !== undefined
         ? []
         : mine.filter((i) => params.all === true || i.deliveredSeq === undefined),
-    toMark: ack === undefined ? [] : mine.filter((i) => i.seq <= ack && i.deliveredSeq === undefined),
+    toMark:
+      ack === undefined ? [] : mine.filter((i) => i.seq <= ack && i.deliveredSeq === undefined),
   };
 }
 
