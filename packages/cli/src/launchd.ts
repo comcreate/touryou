@@ -124,6 +124,7 @@ daemon を、launchd で常駐させるための plist を生成する（同梱�
   --path-prefix    plist の PATH の先頭に足す、絶対パスのディレクトリ（git の場所。例: Homebrew の bin）。省略可
   --config         別の daemon の設定ファイル（絶対パス）。省略すると $HOME/.touryou/config.json（今までどおり）。指定すると、設定ごとに
                    別の Label（touryou.daemon-<8 文字>）・plist・ログ（logs/daemon-<8 文字>.log）・stateDir になる（docs/launchd.md の「複数の daemon」）
+  --others         （単独で使う）init 済みの別名の設定（--config で作ったもの）すべてを、同じ --org・--path-prefix・--config で init し直す（版上げが使う）
   -h, --help       この使い方を表示する
 
 常駐の操作（launchctl を実行する。docs/launchd.md）。どれも --config <設定> で対象の daemon を選ぶ（省略すると既定の設定）:
@@ -133,7 +134,8 @@ daemon を、launchd で常駐させるための plist を生成する（同梱�
   touryou launchd stop [--org …] [--config …]          daemon を止める（plist は残るので、次のログインでまた動く）
   touryou launchd uninstall --yes [--org …] [--config …]
                                          止めて、touryou が生成した plist（古い形の run-daemon.sh も）を消す（logs・state は残す）
-  --config の代わりに --others を付けると、init が生成した別名の daemon（--config で作ったもの）すべてが対象（apply・status・restart・stop・uninstall。版上げが使う）
+  --config の代わりに --others を付けると、init が生成した別名の daemon（--config で作ったもの）が対象（apply・status・restart・stop・uninstall。版上げが使う）。
+  apply・status・restart・stop では、LaunchAgents に置いた（常駐にした）ものだけ。uninstall では、init しただけのものも含む。--org を付けると、その組織の Label のものだけ
 
 出力先: <HOME>/.touryou/launchd（plist 0644）・<HOME>/.touryou/logs（0700）。
 古い形（v0.1.0 まで。<HOME>/.touryou/bin/run-daemon.sh を起こす plist）は、生成したものと同じときだけ、新しい形に置き換える。
@@ -365,6 +367,66 @@ function stateDirSharedWith(
   return undefined;
 }
 
+/**
+ * `init --others`: init 済みの別名の設定（--config で作ったもの）すべてを、同じ --org・--path-prefix・--config で init し直す
+ * （版上げのあと、新しい版の形にそろえる。既存と同じなら何もしない）。--org・--path-prefix は、plist の Label・PATH から読み戻す。
+ */
+function initOthers(args: readonly string[], deps: LaunchdDeps): CommandResult {
+  if (args.length !== 1) return fail("--others は、ほかの引数と一緒に指定できない");
+  const home = deps.env.HOME;
+  if (home === undefined || home === "" || !isAbsolute(home) || !plainPath(home)) {
+    return fail("HOME が、絶対パスでない・空・使えない文字を含む");
+  }
+  const plistDir = join(home, ".touryou", "launchd");
+  let names: string[] = [];
+  try {
+    names = readdirSync(plistDir).filter((n) => OTHER_PLIST.test(n));
+  } catch {
+    names = [];
+  }
+  if (names.length === 0) {
+    return {
+      exitCode: 0,
+      stdout: "別名の設定（--config）の daemon は、登録されていない（何もしていない）\n",
+      stderr: "",
+    };
+  }
+  const results: CommandResult[] = [];
+  for (const n of names.sort()) {
+    const file = join(plistDir, n);
+    const text = lstatOrUndefined(file)?.isFile() === true ? readFileSync(file, "utf8") : undefined;
+    const cfg = text === undefined ? undefined : plistConfigOf(text);
+    const pathValue = text?.match(/<key>PATH<\/key><string>([^<]*)<\/string>/)?.[1];
+    const suffix = `:${DEFAULT_PATH}`;
+    const prefix =
+      pathValue === DEFAULT_PATH
+        ? []
+        : pathValue?.endsWith(suffix) === true
+          ? ["--path-prefix", pathValue.slice(0, -suffix.length)]
+          : undefined;
+    const label = n.replace(/\.plist$/, "");
+    const org = label.match(/^(.+)\.touryou\.daemon-[0-9a-f]{8}$/)?.[1];
+    if (cfg === undefined || prefix === undefined) {
+      return fail(
+        `${file} の設定（--config）または PATH を読めない。手で外すか、"$HOME/.touryou/current/bin/touryou" launchd init --config <設定> で作り直す`,
+        1,
+      );
+    }
+    results.push(
+      runLaunchd(
+        ["init", "--config", cfg, ...(org === undefined ? [] : ["--org", org]), ...prefix],
+        deps,
+      ),
+    );
+  }
+  const failed = results.find((r) => r.exitCode !== 0);
+  return {
+    exitCode: failed?.exitCode ?? 0,
+    stdout: results.map((r) => r.stdout).join(""),
+    stderr: results.map((r) => r.stderr).join(""),
+  };
+}
+
 export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandResult {
   if (argv[0] !== "init") {
     return fail(
@@ -375,6 +437,7 @@ export function runLaunchd(argv: readonly string[], deps: LaunchdDeps): CommandR
   if (args.includes("--help") || args.includes("-h")) {
     return { exitCode: 0, stdout: HELP, stderr: "" };
   }
+  if (args.includes("--others")) return initOthers(args, deps);
   let org: string | undefined;
   let pathPrefix = "";
   let prefixGiven = false;

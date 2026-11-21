@@ -756,6 +756,8 @@ export async function runLaunchdService(
     for (const n of names) {
       const m = OTHER_PLIST.exec(n);
       if (m === null) continue;
+      // --org があれば、その組織の Label のものだけ（なければ、すべての組織のもの）
+      if (org !== undefined && m[1] !== labelOf(org, `daemon-${m[2] as string}`)) continue;
       const text = readOr(join(plistDir, n));
       const cfg = text === undefined ? undefined : plistConfigOf(text);
       const stateDir = cfg === undefined || !usableConfigPath(cfg) ? undefined : stateDirOf(cfg);
@@ -767,10 +769,12 @@ export async function runLaunchdService(
       }
       units.push(unit(m[1] as string, `daemon-${m[2] as string}`, cfg, stateDir));
     }
+    // uninstall のほかは、LaunchAgents に置いた（常駐にした）ものだけ。init しただけの plist を、apply・restart で常駐にしない
+    if (sub !== "uninstall") units = units.filter((u) => lstatOr(u.plistDest) !== undefined);
     if (units.length === 0) {
       return {
         exitCode: 0,
-        stdout: "別名の設定（--config）の daemon は、登録されていない（何もしていない）\n",
+        stdout: "別名の設定（--config）の daemon は、常駐にしたものがない（何もしていない）\n",
         stderr: "",
       };
     }

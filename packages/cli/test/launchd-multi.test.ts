@@ -299,6 +299,66 @@ describe("複数の daemon（--config）", () => {
     expect(existsSync(script)).toBe(false);
   });
 
+  it("--others は、init しただけで常駐にしていない別名の daemon を、apply・restart で常駐にしない", async () => {
+    const w = makeWorld();
+    await bin(w, ["init", "--config", w.otherConfig]);
+    for (const args of [["apply", "--yes"], ["restart"], ["status"]]) {
+      const r = await bin(w, [...args, "--others"]);
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain("常駐にしたものがない");
+    }
+    expect(w.calls).toEqual([]);
+    expect(existsSync(join(w.agents, `${w.otherLabel}.plist`))).toBe(false);
+    // uninstall は、置いていない plist（init の出力）も片づける
+    expect((await bin(w, ["uninstall", "--yes", "--others"])).exitCode).toBe(0);
+    expect(existsSync(join(w.base, "launchd", `${w.otherLabel}.plist`))).toBe(false);
+  });
+
+  it("--others は --org の Label のものだけを対象にする", async () => {
+    const w = makeWorld();
+    await bin(w, ["init", "--config", w.otherConfig, "--org", "com.example"]);
+    const orgLabel = `com.example.${w.otherLabel}`;
+    w.states[orgLabel] = w.states[w.otherLabel] as string;
+    w.ports[orgLabel] = "4322";
+    // --others は、置いた（常駐にした）ものだけが対象。先に --config で置く
+    expect(
+      (await bin(w, ["apply", "--yes", "--config", w.otherConfig, "--org", "com.example"])).exitCode,
+    ).toBe(0);
+    expect([...w.loaded]).toEqual([orgLabel]);
+    expect((await bin(w, ["apply", "--yes", "--others", "--org", "com.example"])).exitCode).toBe(0);
+    // 別の組織を指定したら、対象がない
+    w.calls.length = 0;
+    const other = await bin(w, ["restart", "--others", "--org", "org.other"]);
+    expect(other.exitCode).toBe(0);
+    expect(w.calls).toEqual([]);
+    // 指定した組織なら、対象になる
+    expect((await bin(w, ["restart", "--others", "--org", "com.example"])).exitCode).toBe(0);
+    expect(w.calls.some((c) => c[1] === "kickstart" && c.at(-1)?.endsWith(orgLabel))).toBe(true);
+  });
+
+  it("init --others は、登録済みの別名の daemon を、plist の設定で作り直す（手で直した plist は上書きしない）", async () => {
+    const w = makeWorld();
+    await bin(w, ["init", "--config", w.otherConfig]);
+    const plist = join(w.base, "launchd", `${w.otherLabel}.plist`);
+    const before = readFileSync(plist, "utf8");
+    const r = await bin(w, ["init", "--others"]);
+    expect(r.stderr).toBe("");
+    expect(r.exitCode).toBe(0);
+    expect(readFileSync(plist, "utf8")).toBe(before);
+    // 生成した内容と違う plist は、黙って上書きしない
+    writeFileSync(plist, `${before}<!-- 手で足した -->\n`);
+    const edited = await bin(w, ["init", "--others"]);
+    expect(edited.exitCode).toBe(1);
+    expect(edited.stderr).toContain("黙って上書きしない");
+    expect(readFileSync(plist, "utf8")).toContain("手で足した");
+    // 別名の daemon がなければ、何もしない
+    rmSync(plist);
+    expect((await bin(w, ["init", "--others"])).exitCode).toBe(0);
+    expect(existsSync(plist)).toBe(false);
+    // ほかの引数とは同時に指定できない
+    expect((await bin(w, ["init", "--others", "--config", w.otherConfig])).exitCode).toBe(2);
+  });
+
   it("--config が既定の設定と同じなら、既定の daemon として扱う", () => {
     const w = makeWorld();
     expect(daemonNameOf(w.base, w.defaultConfig)).toBe("daemon");
