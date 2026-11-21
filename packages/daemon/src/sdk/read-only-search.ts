@@ -24,7 +24,7 @@
  * そのかわり、CLI の子（dontAsk）のフックは、これで許したときに明示の許可（`permit: "readOnlySearch"`）を返す（compose の decideCliHook）。
  */
 
-import { commandWords } from "@touryou/core";
+import { commandWords, type SearchStage } from "@touryou/core";
 
 export type ResolveReal = (absPath: string) => Promise<string>;
 
@@ -426,16 +426,34 @@ export async function isReadOnlySearch(
   resolve: ResolveReal,
   protectedRoots: readonly string[] = [],
 ): Promise<boolean> {
-  if (!inside(toolCwd, worktree)) return false;
-  if (protectedRoots.some((r) => inside(r, worktree) || inside(worktree, r))) return false;
-  if (hasUnquotedExpansion(command)) return false;
+  return (
+    (await diagnoseReadOnlySearch(command, toolCwd, worktree, resolve, protectedRoots)) === undefined
+  );
+}
+
+/**
+ * `isReadOnlySearch` と同じ判定で、通れば undefined、落ちたらその段（`SearchStage`）を返す。
+ * 段の名前だけを返す（実パス・コマンドの語は含めない）。違反の記録（`scope.violation` の `diagnosis`）に使う。
+ */
+export async function diagnoseReadOnlySearch(
+  command: string,
+  toolCwd: string,
+  worktree: string,
+  resolve: ResolveReal,
+  protectedRoots: readonly string[] = [],
+): Promise<SearchStage | undefined> {
+  if (!inside(toolCwd, worktree)) return "cwdOutside";
+  if (protectedRoots.some((r) => inside(r, worktree) || inside(worktree, r)))
+    return "protectedOverlap";
+  if (hasUnquotedExpansion(command)) return "unquotedExpansion";
   const cmd = stripHarmlessRedirects(command);
   const segs = commandWords(cmd);
-  if (segs === undefined || segs.length === 0 || segs.some((x) => x.length === 0)) return false;
+  if (segs === undefined || segs.length === 0 || segs.some((x) => x.length === 0))
+    return "unparsable";
   // 区切りの種類を見る。`cd` は先頭の `&&` の前だけ、絞るコマンドは `|` の直後だけ。`|&`・`&` は使わない
   const seps = separatorsOf(cmd);
-  if (seps.length !== segs.length - 1) return false;
-  if (seps.some((x) => !["&&", "||", "|", ";"].includes(x))) return false;
+  if (seps.length !== segs.length - 1) return "separator";
+  if (seps.some((x) => !["&&", "||", "|", ";"].includes(x))) return "separator";
   let here = toolCwd;
   let searched = false;
   let prevPiped = false; // 1 つ前の段が、探すコマンドか絞るコマンドで、`|` でつないだか
@@ -444,14 +462,14 @@ export async function isReadOnlySearch(
     // 先頭の 1 つだけの `cd <作業ツリーの中> && …`（Claude Code はこの形でよく送る）。以後の相対パスは、その場所から解く。
     // 2 つ目の cd・`;`・`||`・`|` でつないだ cd は使わない（cd に失敗しても後ろが動く・cd が効かない形）
     if (words[0] === "cd") {
-      if (i !== 0 || seps[0] !== "&&") return false;
+      if (i !== 0 || seps[0] !== "&&") return "cdRejected";
       const next = await cdTarget(words.slice(1), here, worktree, resolve);
-      if (next === undefined) return false;
+      if (next === undefined) return "cdRejected";
       here = next;
       continue;
     }
     if (words[0] !== undefined && words[0] in FILTER_ARG) {
-      if (!(sep === "|" && prevPiped) || !filterOk(words)) return false;
+      if (!(sep === "|" && prevPiped) || !filterOk(words)) return "filterRejected";
       prevPiped = true;
       continue;
     }
@@ -459,15 +477,15 @@ export async function isReadOnlySearch(
     if (words[0] === "find") paths = findStarts(words.slice(1));
     else {
       const hit = SPECS.find(([h]) => h.every((w, k) => words[k] === w));
-      if (hit === undefined) return false;
+      if (hit === undefined) return "notSearchCommand";
       paths = positionalsOf(hit[1], words.slice(hit[0].length));
     }
-    if (paths === undefined) return false;
+    if (paths === undefined) return "optionNotAllowed";
     for (const p of paths) {
-      if (await pointsOutside(p, here, worktree, resolve)) return false;
+      if (await pointsOutside(p, here, worktree, resolve)) return "pathOutside";
     }
     searched = true;
     prevPiped = true;
   }
-  return searched;
+  return searched ? undefined : "noSearchCommand";
 }

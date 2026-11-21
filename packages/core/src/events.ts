@@ -33,7 +33,12 @@ import { INBOX_KINDS, type InboxKind, PRIORITIES, type Priority } from "./inbox-
 import { type InboxMessage, isInboxMessage } from "./inbox-messages.js";
 import type { NodeRole, NodeState } from "./index.js";
 import { isBoundedText, LIMITS } from "./limits.js";
-import type { Scope, ScopeViolationReason } from "./scope.js";
+import {
+  isViolationDiagnosis,
+  type Scope,
+  type ScopeViolationReason,
+  type ViolationDiagnosis,
+} from "./scope.js";
 import {
   COMPLETED_STATES,
   type NodeEvent,
@@ -81,6 +86,8 @@ export type EventBody =
         readonly nodeId: string;
         readonly reason: ScopeViolationReason;
         readonly subject: string;
+        /** 拒否の原因の診断（cwd の内外・落ちた段・子の種別）。古い記録・診断のない拒否では持たない。 */
+        readonly diagnosis?: ViolationDiagnosis;
       };
     }
   | {
@@ -583,6 +590,8 @@ export interface ViolationRecord {
   readonly nodeId: string;
   readonly reason: ScopeViolationReason;
   readonly subject: string;
+  /** 拒否の原因の診断（cwd の内外・落ちた段・子の種別）。古い記録・診断のない拒否では持たない。 */
+  readonly diagnosis?: ViolationDiagnosis;
   readonly actor: Actor;
 }
 
@@ -1502,12 +1511,13 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
     }
 
     case "scope.violation": {
-      const { nodeId, reason, subject } = p;
+      const { nodeId, reason, subject, diagnosis } = p;
       if (
         !isId(nodeId) ||
         typeof reason !== "string" ||
         !SCOPE_VIOLATION_REASONS.has(reason) ||
-        typeof subject !== "string"
+        typeof subject !== "string" ||
+        (diagnosis !== undefined && !isViolationDiagnosis(diagnosis))
       ) {
         return invalid(seq, "scope.violation の payload");
       }
@@ -1519,6 +1529,7 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
           nodeId,
           reason: reason as ScopeViolationReason,
           subject,
+          ...(diagnosis === undefined ? {} : { diagnosis: { ...(diagnosis as ViolationDiagnosis) } }),
           actor,
         }),
       );

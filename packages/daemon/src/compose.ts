@@ -126,6 +126,7 @@ import {
   grantedBashByExtension,
   grantedOnlyByExtension,
   resolveScope,
+  type ToolViolation,
   withRealWritePath,
 } from "./sdk/hook-policy.js";
 import { createLsofProbe, nodeExec, type ProcessProbe } from "./sdk/lsof-probe.js";
@@ -1170,6 +1171,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     rawSubject: string,
     /** session_id で引いた要求の記録なら、その印（行為者に写す）。 */
     trust?: "sessionIdOnly",
+    /** 拒否の原因の診断（cwd の内外・落ちた段）と、子の種別。診断があるときだけ記録に載せる。 */
+    diagnosis?: { diagnosis: ToolViolation["diagnosis"]; runtime: "cli" | "desktop" },
   ): void => {
     // 件名は長さを切り、トークン・Bearer を含むものは伏せる
     const subject = /bearer|token/i.test(rawSubject) ? "（伏せた）" : rawSubject.slice(0, 200);
@@ -1190,7 +1193,14 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     const key = `${reason}\0${subject}`;
     const count = v.keys.get(key) ?? 0;
     if (count >= 10 || v.total >= 200) return;
-    const bodies: EventBody[] = [{ type: "scope.violation", payload: { nodeId, reason, subject } }];
+    const found = diagnosis?.diagnosis;
+    const recorded =
+      found === undefined || diagnosis === undefined
+        ? {}
+        : { diagnosis: { runtime: diagnosis.runtime, ...found } };
+    const bodies: EventBody[] = [
+      { type: "scope.violation", payload: { nodeId, reason, subject, ...recorded } },
+    ];
     const requestId = `desktop-violation-${randomBytes(8).toString("hex")}-${++violationSeq}`;
     let item = false;
     let overflow = false;
@@ -1538,7 +1548,10 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     if (d.allow) return { allow: true };
     // CLI の子と同じく、範囲違反として記録する（受信箱にも出す）
     if (d.violation !== undefined)
-      recordDesktopViolation(nodeId, d.violation.reason, d.violation.subject);
+      recordDesktopViolation(nodeId, d.violation.reason, d.violation.subject, undefined, {
+        diagnosis: d.violation.diagnosis,
+        runtime: "desktop",
+      });
     return { allow: false, reason: d.reason };
   };
 
@@ -1719,7 +1732,10 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     }
     // session_id で引いた要求の記録は、行為者に印（trust: sessionIdOnly）を写す
     if (d.violation !== undefined)
-      recordDesktopViolation(nodeId, d.violation.reason, d.violation.subject, trust);
+      recordDesktopViolation(nodeId, d.violation.reason, d.violation.subject, trust, {
+        diagnosis: d.violation.diagnosis,
+        runtime: "cli",
+      });
     return { allow: false, reason: d.reason };
   };
 
