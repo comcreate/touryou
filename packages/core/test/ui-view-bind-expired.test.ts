@@ -136,7 +136,7 @@ describe("uiViewOf の bindExpired（#189）", () => {
         ...r.value,
         nodes: r.value.nodes.map((x) => (x.id === "a" ? { ...x, state } : x)),
       } as never);
-    for (const s of ["verified", "archived", "stopped", "reclaimable"]) {
+    for (const s of ["verified", "archived", "stopped", "reclaimable", "stopping", "stopIncomplete"]) {
       expect(nodeOf(withState(s), "a"), s).not.toHaveProperty("bindExpired");
     }
     for (const s of ["running", "waiting", "done"]) {

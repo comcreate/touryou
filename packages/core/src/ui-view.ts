@@ -375,7 +375,11 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       sessionRefs.set(r.nodeId, r.report.sessionRef);
     }
   }
+  // daemon が失効の知らせを出す状態（running・waiting・done）以外は、次の操作がないので札を出さない（#198。
+  // 止める途中の stopping・stopIncomplete にも出さない）
   const BIND_EXPIRED_HIDDEN_STATES: ReadonlySet<string> = new Set([
+    "stopping",
+    "stopIncomplete",
     "verified",
     "archived",
     "stopped",
