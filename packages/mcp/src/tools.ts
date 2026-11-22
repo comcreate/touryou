@@ -56,7 +56,7 @@ const DESCRIPTIONS: Readonly<Record<McpOperation, string>> = {
   "node.split":
     "脱線部分を新しい子へ移す。ID は、起動の指示の先頭か tree_list に出たものを、短縮しないでそのまま渡す。引数: nodeId・keep（mainline か stop。元の子を本筋に戻すか停止するか）と、新しい子のブリーフ（objective・acceptanceCriteria・scope・dependsOn）",
   "scope.decide":
-    "子の範囲の拡張要求（extensionId）を承認（approve）・却下（reject）・切り出し（split）のいずれかで判定する。拡張の発生元のノードが自分の子孫のときだけ使える",
+    "子の範囲の拡張要求（extensionId）を承認（approve）・却下（reject）・切り出し（split）のいずれかで判定する。拡張の発生元のノードが自分の子孫のときだけ使える。mcp の承認は、上限（根の permissions.allow）にある完全な名前だけが通り、上限の検査が先に行われる。permissions.deny に当たるものは承認されず、permissions.ask に当たるものは人間だけが承認できる",
   "node.review":
     "子の完了報告を受理（accept）するか差し戻す（reject）。reject には feedback（理由）が必須で、accept では任意",
   "node.reclaimPreview":

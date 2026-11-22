@@ -1949,6 +1949,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       ...(adopt === undefined ? {} : { adopt }),
       rootScope,
       denyRules: rootPolicy.deny,
+      askRules: rootPolicy.ask,
       ...(config.maxTreeDepth === undefined ? {} : { maxTreeDepth: config.maxTreeDepth }),
       onFailure,
       ...(config.startLimits === undefined ? {} : { startLimits: config.startLimits }),

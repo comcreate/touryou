@@ -769,8 +769,9 @@ export interface McpPolicy {
 
 /** MCP ツールの拒否の文。頼み方（`scope_extend` の `kind: mcp`）と、上限にある名前（最大 20 件）を出す。 */
 function denyMcp(tool: string, upperLimit: readonly string[]): ToolDecision {
-  const shown = upperLimit.filter(isMcpToolName).slice(0, MCP_HINT_MAX);
-  const more = upperLimit.length - shown.length;
+  const valid = upperLimit.filter(isMcpToolName);
+  const shown = valid.slice(0, MCP_HINT_MAX);
+  const more = valid.length - shown.length;
   const names =
     shown.length === 0
       ? "上限に、頼める MCP ツールは設定されていない（人が config.json の permissions.allow に足すまで、頼んでも承認されない）。"
@@ -943,6 +944,8 @@ export function grantedOnlyByExtension(
   toolInput: unknown,
   cwd: string,
 ): boolean {
+  // MCP ツールだけは、ブリーフ（brief）と比べない。ブリーフに書いた MCP ツールも、起動のときの一覧には入らないので、
+  // 承認で入ったものと同じく、有効な範囲にあれば明示の許可が要る（Bash・書き込みの「ブリーフでは断られる」条件は使わない）。
   // MCP ツール: 起動のときの許可の一覧には、自ノードの touryou の道具しか入らない。有効な範囲の allowedMcpTools にあるものは、
   // 明示の許可を返さないと、CLI の子（dontAsk）では Claude Code の側で断られる（#194 PR3。実機で確認済み）。
   // settings の deny に同じ名前があれば、明示の許可のあとも deny が勝つ（道具が一覧から消える）

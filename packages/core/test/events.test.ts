@@ -1523,12 +1523,20 @@ describe("effectiveScope（有効な範囲 = ブリーフ + 承認済みの拡�
     const start = ev(changed("c", { type: "start" }));
     return must(foldEvents([...b, c, start, ...bodies.map((x) => ev(x))]));
   };
-  const request = (extensionId: string, kind: "write" | "command", value: string): EventBody =>
+  const request = (
+    extensionId: string,
+    kind: "write" | "command" | "mcp",
+    value: string,
+  ): EventBody =>
     ({
       type: "scope.extensionRequested",
       payload: { extensionId, nodeId: "c", target: { kind, value }, reason: "r" },
     }) as EventBody;
-  const approve = (extensionId: string, kind: "write" | "command", value: string): EventBody =>
+  const approve = (
+    extensionId: string,
+    kind: "write" | "command" | "mcp",
+    value: string,
+  ): EventBody =>
     ({
       type: "scope.extensionDecided",
       payload: { extensionId, decision: "approve", granted: { kind, value } },
@@ -1583,6 +1591,31 @@ describe("effectiveScope（有効な範囲 = ブリーフ + 承認済みの拡�
       forbiddenLocations: ["w/.git"],
       allowedCommands: ["ls", "git status"],
     });
+  });
+
+  it("#194: 承認した MCP ツールの名前が、有効な範囲の allowedMcpTools に入る（要求だけ・却下・ほかの種類は入らない）", () => {
+    const tool = "mcp__chrome__navigate";
+    const other = "mcp__chrome__click";
+    // MCP の承認がなければ、allowedMcpTools の項目は作らない（既存の形のまま）
+    expect(effectiveScope(run(), "c")).not.toHaveProperty("allowedMcpTools");
+    const s = run(
+      request("x1", "mcp", tool),
+      request("x2", "mcp", other),
+      request("x3", "command", "git status"),
+      approve("x1", "mcp", tool),
+      reject("x2"),
+      approve("x3", "command", "git status"),
+      request("x4", "mcp", tool),
+      approve("x4", "mcp", tool),
+    );
+    expect(effectiveScope(s, "c")).toEqual({
+      writableLocations: ["w"],
+      forbiddenLocations: ["w/.git"],
+      allowedCommands: ["ls", "git status"],
+      allowedMcpTools: [tool],
+    });
+    const before = effectiveScope(run(request("x1", "mcp", tool)), "c");
+    expect(before).not.toHaveProperty("allowedMcpTools");
   });
 
   it("ブリーフのないノード・存在しないノードは undefined", () => {

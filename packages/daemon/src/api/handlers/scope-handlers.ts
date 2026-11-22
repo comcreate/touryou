@@ -58,6 +58,11 @@ export interface ScopeHandlerDeps {
    * （deny は allow・ask・範囲より強い。設計書 § 3.3）。省略すると、deny はない。
    */
   readonly denyRules?: readonly string[];
+  /**
+   * 根の方針の `ask` の規則（`RootPolicy.ask`）。ask に当たる MCP ツールは、人間だけが承認できる（統合ノードの判定では承認しない）。
+   * 省略すると、ask はない。
+   */
+  readonly askRules?: readonly string[];
   /** 応答に出さない原因の記録先。 */
   readonly onFailure?: (nodeId: string, cause: string) => void;
 }
@@ -105,6 +110,7 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
   /** 承認の前の検査。問題があれば失敗を返す。 */
   async function checkApprove(
     ext: ExtensionRecord,
+    human: boolean,
   ): Promise<{ ok: false; error: Failure } | undefined> {
     const state = log.state();
     const node = state.nodes.find((n) => n.id === ext.nodeId);
@@ -132,6 +138,21 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
         `MCP ツール ${ext.target.value} は、設定の permissions.deny に当たるため承認できない`,
         "却下する",
         "許すなら、人に確かめてから config.json の permissions.deny を直し、daemon を起動し直してから、もう一度判定する",
+      );
+    }
+    // MCP ツールは、ask に当たるなら、人間だけが承認できる（統合ノードの判定では、子の頼みを自動で通さない）
+    if (
+      ext.target.kind === "mcp" &&
+      !human &&
+      evaluate(
+        { allow: [], deny: [], ask: deps.askRules ?? [] },
+        { kind: "mcp", tool: ext.target.value },
+      ) === "ask"
+    ) {
+      return fail(
+        "forbidden",
+        `MCP ツール ${ext.target.value} は、設定の permissions.ask に当たるため、人間だけが承認できる`,
+        "人（状態画面）に判定してもらう",
       );
     }
     const grown: Scope =
@@ -267,7 +288,7 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
         // 検査は、記録する直前に取り直す（検査の途中の待ちの間に、範囲が変わっていないか）。
         for (let attempt = 0; ; attempt++) {
           const basis = JSON.stringify(effectiveScope(log.state(), ext.nodeId));
-          const problem = await checkApprove(ext);
+          const problem = await checkApprove(ext, human);
           if (problem) return problem;
           if (JSON.stringify(effectiveScope(log.state(), ext.nodeId)) === basis) break;
           if (attempt >= 1) {

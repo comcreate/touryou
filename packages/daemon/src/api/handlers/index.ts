@@ -90,6 +90,8 @@ export function createHandlersWithScheduler(
     adopt?: AdoptPorts;
     /** 根の方針の deny の規則。MCP ツールの承認で、deny に当たるものを承認しない（#194 PR3）。 */
     denyRules?: readonly string[];
+    /** 根の方針の ask の規則。ask に当たる MCP ツールは、人間だけが承認できる（#194 PR3）。 */
+    askRules?: readonly string[];
     /** 判断待ちの子の再開が成功した（起動して、再開の記録まで済んだ）あとに呼ぶ。期限にまつわる知らせを解決にするのに使う（#189）。 */
     onResumed?: (nodeId: string) => void;
   },
@@ -222,6 +224,7 @@ export function createHandlersWithScheduler(
             cwdOf: spawn.ports.cwdOf,
             ...(spawn.rootScope === undefined ? {} : { rootScope: spawn.rootScope }),
             ...(spawn.denyRules === undefined ? {} : { denyRules: spawn.denyRules }),
+            ...(spawn.askRules === undefined ? {} : { askRules: spawn.askRules }),
             ...onFailure,
           }),
         }),

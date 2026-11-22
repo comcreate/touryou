@@ -141,7 +141,7 @@ SDK による子の起動・子の認証・子の HOME の隔離・子用の HTT
 - `permissions.deny` に当たる MCP ツールは、上限の内側でも承認できず、承認済みでもフックが許しません（deny が最優先）。
 - 承認は、そのツールを、**どんな引数でも使ってよいのと同じ**意味です（Claude Code の規則は、名前だけで、引数を絞れません）。ブラウザなど外部へ届くツールは、承認の前に理由を確かめてください。自動承認（`autoApprove`）は、まだ MCP の依頼につながっていません。
 - 依頼できるのは CLI の子だけです（Desktop の子は v0.2.0 以降）。
-- `permissions.ask` は、MCP の依頼にはまだつながっていません。
+- `permissions.ask` に当たる MCP ツールは、子の依頼を統合ノードの判定（`scope_decide`）で承認できず、人間（状態画面）だけが承認できます（`forbidden`。deny に当たるものは、人間でも承認できません）。
 
 ### 版の組み合わせとダウングレード
 
@@ -149,6 +149,7 @@ SDK による子の起動・子の認証・子の HOME の隔離・子用の HTT
 - 新の daemon は、`permissions`・`autoApprove` のない旧の設定を、そのまま同じ意味で読みます。
 - 新しい版の項目を、古い daemon の設定に書いたときの「未知のキー」の文には、「新しい版の項目なら daemon の版を上げる」と案内が付きます。
 - MCP ツールの依頼（`scope_extend` の `kind: mcp`）を使い始めると、イベント列に、旧の daemon（〜0.1.6）が読めない種類の値（拡張の対象 `mcp`）が入ります。**1 度でも MCP ツールを頼んだら、旧の daemon には戻せません**（状態のスナップショットの版も 15 に上がります）。MCP ツールを頼む前なら、`permissions`・`autoApprove` を消して、旧の daemon に戻せます。
+- 戻したときの記録の扱い（`eventlog.ts`・`events.ts` の読み込みより）: 状態のスナップショットは版（`STATE_VERSION`。今は 15）が合わないと使われず、記録の全体を最初から再生する。再生では、拡張の対象を読む `parseExtensionTarget`（`scope.extensionRequested` の `target`・`scope.extensionDecided` の `granted`）が、旧の daemon の知る種類（`write`・`command`）以外を `invalidPayload` で拒否するので、`kind: mcp` の記録が 1 つでもあると、状態を復元できない（記録は読み飛ばされない）。
 
 ## 例
 
