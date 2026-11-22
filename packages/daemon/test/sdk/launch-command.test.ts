@@ -97,7 +97,9 @@ describe("起動の依頼の文（設計 6.2）", () => {
 
   it("ロールで指示を書き分ける: integrator は integrator の skill を指し、implement・investigate・省略は子の文のまま", () => {
     const instructionOf = (role?: string): string =>
-      argsOf(buildLaunchCommand({ worktree: "/w/a", name: "n", ...(role ? { role } : {}) }))[1] as string;
+      argsOf(
+        buildLaunchCommand({ worktree: "/w/a", name: "n", ...(role ? { role } : {}) }),
+      )[1] as string;
     expect(instructionOf("integrator")).toBe(INTEGRATOR_LAUNCH_INSTRUCTION);
     expect(INTEGRATOR_LAUNCH_INSTRUCTION).toBe(
       "touryou の integrator の skill に従って、最初に child_bind を引数なしで呼んで",
