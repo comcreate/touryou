@@ -16,13 +16,7 @@
  */
 
 import { lastActivityByNode } from "./activity.js";
-import {
-  type Actor,
-  isSessionRef,
-  type NodeRuntime,
-  type OrchState,
-  PREFACE_INSTRUCTION_KINDS,
-} from "./events.js";
+import { type Actor, isSessionRef, type NodeRuntime, type OrchState } from "./events.js";
 
 import { ID_PATTERN } from "./ids.js";
 import { isResolvedByHuman } from "./inbox.js";
@@ -214,10 +208,11 @@ const INSTRUCTION_FLOW: Readonly<Record<string, UiFlowKind | null>> = {
   extensionApproved: "approved",
   extensionRejected: "rejected",
   extensionSplit: "split",
+  // 紐付けの期限の前置き（#189）は、daemon が子へ知らせる system の指示。親子のやり取りではないので、矢印にしない
+  // （`PREFACE_INSTRUCTION_KINDS` と同じ種類。関係図の束（graph.js）が core の events を取り込まないよう、ここに並べる）
+  tokenIdleSoon: null,
 };
 function instructionKind(kind: string | undefined): UiFlowKind | null {
-  // 前置き（#189。紐付けの期限）は、daemon が子へ知らせる system の指示。親子のやり取りではないので、矢印にしない
-  if (kind !== undefined && PREFACE_INSTRUCTION_KINDS.has(kind)) return null;
   if (kind === undefined || !Object.hasOwn(INSTRUCTION_FLOW, kind)) return "instruction";
   return INSTRUCTION_FLOW[kind] ?? null;
 }

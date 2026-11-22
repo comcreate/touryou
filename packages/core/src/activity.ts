@@ -3,18 +3,16 @@
  *
  * 見張り（daemon の cli-watch。「止まっているかも」の判定）と画面（ui-view の `lastActivityAt`）が、
  * 同じ記録から同じ時刻を導くよう、数え方をここ 1 か所に置く（データに近い層）。
- * - 数えるもの: 報告・範囲違反・道具の拒否・指示（送った時刻と受け取った時刻の両方）・親の依頼の報告・
+ * - 数えるもの: 報告・範囲違反・道具の拒否・指示（子が受け取った時刻だけ。送った時刻は数えない）・親の依頼の報告・
  *   判断の頼みと答え・範囲の頼みと判定。
  * - 数えないもの: 受信箱の項目（「止まっているかも」の知らせ自体が動きに見えてしまうため）。
  *   フックの呼び出しの時刻はメモリだけなので、呼び出し側が `extraMs` で足す。
  */
 
-import { type Actor, isPrefaceInstruction, type OrchState } from "./events.js";
+import type { OrchState } from "./events.js";
 
 /** 時刻の文字列をミリ秒にする。読めない・ない時刻は 0（動きに数えない）。 */
 const ms = (iso: string | undefined): number => (iso === undefined ? 0 : Date.parse(iso) || 0);
-
-const bySystem = (a: Actor): boolean => "system" in a;
 
 interface Latest {
   readonly ms: number;
@@ -37,12 +35,9 @@ function scanActivity(state: OrchState, only?: string): Map<string, Latest> {
   for (const x of state.reports) add(x.nodeId, x.at);
   for (const x of state.violations) add(x.nodeId, x.at);
   for (const x of state.toolDenials) add(x.nodeId, x.at);
-  for (const x of state.instructions) {
-    // 指示は、人・親の指示なら送った時刻も数える（子が動いていて、まだ受け取っていない間に「止まっているかも」を出さない）。
-    // daemon が自動で送る指示（actor が system。起こす指示など）と前置き（#189）は、送った時刻では動かさず、子が受け取った時刻だけを数える
-    if (!isPrefaceInstruction(x) && !bySystem(x.actor)) add(x.nodeId, x.at);
-    add(x.nodeId, x.deliveredAt);
-  }
+  // 指示は、子が受け取った時刻だけを数える（#201）。送っただけでは、子が動いたことにならない
+  // （止まっている子に指示を送っても「止まっているかも」を消さない。受け取っていない指示は、見張りの「読まれていない指示」が見る）
+  for (const x of state.instructions) add(x.nodeId, x.deliveredAt);
   for (const x of state.parentRequests) add(x.nodeId, x.report?.at);
   for (const x of state.decisions) {
     add(x.nodeId, x.requestedAt);

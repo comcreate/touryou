@@ -51,12 +51,17 @@ const T3 = "2026-10-20T03:00:00.000Z";
 const withActor = (e: OrchEvent, actor: OrchEvent["actor"]): OrchEvent => ({ ...e, actor });
 
 describe("lastActivityMs（#195。見張りと画面の共通の数え方）", () => {
-  it("人・親の指示は、送った時刻（受け取る前）も動きに数える", () => {
-    const s = must([
+  it("人・親の指示は、送った時刻を数えず、子が受け取った時刻だけ数える（#201）", () => {
+    const sent = [
       ...base(),
       withActor(ev({ type: "node.instructed", payload: { nodeId: "a", text: "x" } }, T2), HUMAN),
+    ];
+    expect(lastActivityMs(must(sent), "a")).toBe(0);
+    const delivered = must([
+      ...sent,
+      ev({ type: "node.instructionDelivered", payload: { instructedSeq: n } }, T3),
     ]);
-    expect(lastActivityMs(s, "a")).toBe(Date.parse(T2));
+    expect(lastActivityMs(delivered, "a")).toBe(Date.parse(T3));
   });
 
   it("daemon が自動で送る指示（actor が system）は、送った時刻を数えず、受け取った時刻だけ数える", () => {
@@ -169,7 +174,7 @@ describe("lastActivityMs（#195。見張りと画面の共通の数え方）", (
   it("画面の lastActivityAt は、同じ関数の値", () => {
     const s = must([
       ...base(),
-      withActor(ev({ type: "node.instructed", payload: { nodeId: "a", text: "x" } }, T2), HUMAN),
+      ev({ type: "node.toolDenied", payload: { nodeId: "a", tool: "t" } }, T2),
     ]);
     const at = uiViewOf(s).nodes.find((x) => x.id === "a")?.lastActivityAt;
     expect(at).toBe(lastActivityAt(s, "a"));
