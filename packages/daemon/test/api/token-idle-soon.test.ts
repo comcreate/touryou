@@ -265,17 +265,30 @@ describe("失効の前の知らせ（#189）", () => {
     expect(soon).toEqual([]);
   });
 
-  it("絶対の期限が、idle の期限より少し後（窓の中）に来るときも出さない。窓の外なら出す", () => {
+  it("絶対の期限が、いま使って延びる先（いま + bindIdle）より前に来るときは出さない。先に来るなら出す（#198）", () => {
     const { s, soon, advance } = setup();
     const t = s.issueNodeToken("a", "child", "bind");
-    for (let i = 0; i < 23; i++) {
+    for (let i = 0; i < 22; i++) {
       advance(59 * MIN);
       s.authenticate(t);
     }
-    // 発行から 22 時間 37 分。絶対の期限（24 時間）は、idle の期限（ここから 60 分後）の 23 分後で、窓（10 分）の外
-    advance(52 * MIN);
+    // 最後に使ったのは発行から 21 時間 38 分。51 分たって 22 時間 29 分（切れるまで 8 分）。
+    // いま使えば 23 時間 29 分まで延び、絶対の期限（24 時間）はその先なので、知らせる
+    advance(51 * MIN);
     s.sweepExpired?.();
     expect(soon).toHaveLength(1);
+
+    // 最後に使ったのが 22 時間 37 分なら、いま（23 時間 29 分）使っても 24 時間 29 分まで延びる前に絶対の期限が来る。
+    // 旧: idle の期限 + 窓（10 分）より先なので出ていた。使っても生き延びないので出さない
+    const c = setup();
+    const tc = c.s.issueNodeToken("c", "child", "bind");
+    for (let i = 0; i < 23; i++) {
+      c.advance(59 * MIN);
+      c.s.authenticate(tc);
+    }
+    c.advance(52 * MIN);
+    c.s.sweepExpired?.();
+    expect(c.soon).toEqual([]);
 
     const b = setup();
     const tb = b.s.issueNodeToken("b", "child", "bind");
