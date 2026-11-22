@@ -81,7 +81,10 @@ test("status・restart: 読み込まれていないときは restart を案内�
 
 test("uninstall-all: 先に status --others で件数を数え、定型文（はいの前）に、分けた daemon の件数と承認が最大 2 回出ることを入れる", () => {
   const u = item("uninstall-all");
-  assert.match(u, /launchd status --others` で確かめ、出力から件数 N を数える/);
+  assert.match(
+    u,
+    /launchd status --others --json` で確かめ、出力の JSON の `count` を件数 N とする/,
+  );
   const formula = /定型文（まとめて外す）:([^\n]*)/.exec(u)?.[1] ?? "";
   assert.match(formula, /ほかのリポジトリ用に分けた daemon（N 件）も止めて外します/);
   assert.match(formula, /承認の確認が最大 2 回出ます/);
