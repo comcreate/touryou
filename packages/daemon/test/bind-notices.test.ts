@@ -155,6 +155,24 @@ describe("createIdleSoonNotifier", () => {
     expect(d.log.state().instructions.filter((i) => i.nodeId === "a")).toHaveLength(1);
   });
 
+  it("同じ idle 期間で、残りの分だけ違う再試行は、失敗にせず、出し直さない（requestIdConflict を記録済みとして扱う）", () => {
+    const { d } = seeded();
+    const notes: string[] = [];
+    const f = createIdleSoonNotifier({
+      log: d.log,
+      clock,
+      stateOf: (id) => d.log.state().nodes.find((x) => x.id === id)?.state,
+      note: (event) => notes.push(event),
+    });
+    expect(f({ ...info("a", 5_000), remainingMs: 9 * 60_000 })).toBe(true);
+    const before = d.log.state().lastSeq;
+    // 同じ期間（鍵が同じ）で、残りが 4 分に減った: 本体が違うので requestIdConflict になるが、true を返し、何も増やさない
+    expect(f({ ...info("a", 5_000), remainingMs: 4 * 60_000 })).toBe(true);
+    expect(d.log.state().lastSeq).toBe(before);
+    expect(soonItems(d)).toHaveLength(1);
+    expect(notes).toEqual([]);
+  });
+
   it("idleSoonKeyOf は、発行の時刻と、最後に使った時刻の秒で決まる", () => {
     const k = idleSoonKeyOf("a", "2026-10-20T00:00:00.000Z", 5_999.9);
     expect(k).toBe("token-idle-soon/a/2026-10-20T00:00:00.000Z/5");

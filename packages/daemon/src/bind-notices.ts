@@ -140,6 +140,9 @@ export function createIdleSoonNotifier(
       },
     ]);
     if (!r.ok) {
+      // 同じ idle 期間の知らせは記録済み。残りの分が前回と違うだけで本体が食い違い（再起動・手動の解決のあとの見回り）、
+      // requestIdConflict になる。出し直さず、記録済みとして扱う（毎回の見回りで失敗にしない）
+      if (r.error.code === "requestIdConflict") return true;
       deps.note("tokenIdleSoonNoticeFailure", { nodeId, cause: r.error.code });
       return false;
     }
