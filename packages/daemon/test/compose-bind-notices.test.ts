@@ -320,7 +320,10 @@ describe("紐付けの期限の知らせの結線（#189）", () => {
   it("判断待ち（waiting）の子は、bindIdle を超えても、切れる前・切れたの知らせが出ない", async () => {
     const r = await boot();
     const { nodeId, token } = await r.spawnAndBind();
-    const asked = await r.asChild(token, "report.decision", { question: "どうする", options: ["a", "b"] });
+    const asked = await r.asChild(token, "report.decision", {
+      question: "どうする",
+      options: ["a", "b"],
+    });
     expect(asked.json.ok, JSON.stringify(asked.json)).toBe(true);
     expect(r.daemon.log.state().nodes.find((n) => n.id === nodeId)?.state).toBe("waiting");
     for (const m of [52, 10, 10]) {

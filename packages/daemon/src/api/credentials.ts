@@ -313,7 +313,8 @@ export function createCredentialStore(options: {
     const remainingMs = idleAt - now;
     // 使えば延びると言えるのは、いま使ったとき（いま + bindIdle まで延びる）の先に、発行からの絶対の期限があるとき（#198）。
     // 絶対の期限が先（同時を含む）に来るなら、使っても生き延びないので知らせない（切れたあとの知らせが出る）
-    const inWindow = m.issuedMs + expiry.bindAbsoluteMs > now + expiry.bindIdleMs && remainingMs <= warn;
+    const inWindow =
+      m.issuedMs + expiry.bindAbsoluteMs > now + expiry.bindIdleMs && remainingMs <= warn;
     const hasOpen = (): boolean => options.hasOpenIdleSoon?.(nodeId) === true;
     // 出したあとに時計が進んだ（使われた・判断待ちで止まった）・窓の外になった: もう切れないので、出した知らせを解決にする。
     // 印はメモリだけなので、再起動の前に出した知らせも、記録から引いて解決にする。解決できたときだけ印を外す（失敗は次の見回りで）

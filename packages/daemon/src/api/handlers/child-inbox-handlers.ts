@@ -66,8 +66,7 @@ export function instructionsFor(
   );
   return state.instructions.filter(
     (i) =>
-      i.nodeId === nodeId &&
-      (soonOpen || i.deliveredSeq !== undefined || !isPrefaceInstruction(i)),
+      i.nodeId === nodeId && (soonOpen || i.deliveredSeq !== undefined || !isPrefaceInstruction(i)),
   );
 }
 
