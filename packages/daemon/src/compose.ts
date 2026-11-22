@@ -2177,15 +2177,19 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     // 設定の窓の規則の一覧と、承認カードの MCP ツールの判定（deny・ask）。読み取りだけ（#194 PR4）
     policyView: (state) => {
       const base = policyHolder.base();
-      const fromConfig = (list: "allow" | "deny" | "ask" | "autoApprove", rules: readonly string[]) =>
-        rules.map((rule) => ({ list, rule, source: "config" as const }));
+      const fromConfig = (
+        list: "allow" | "deny" | "ask" | "autoApprove",
+        rules: readonly string[],
+      ) => rules.map((rule) => ({ list, rule, source: "config" as const }));
       const live = policyHolder.current().policy;
       const mcpGate: Record<string, "deny" | "ask"> = {};
       for (const x of state.extensions) {
         if (x.status !== "open" || x.target.kind !== "mcp") continue;
         const probe = { kind: "mcp", tool: x.target.value } as const;
-        if (evaluate({ allow: [], deny: live.deny, ask: [] }, probe) === "deny") mcpGate[x.extensionId] = "deny";
-        else if (evaluate({ allow: [], deny: [], ask: live.ask }, probe) === "ask") mcpGate[x.extensionId] = "ask";
+        if (evaluate({ allow: [], deny: live.deny, ask: [] }, probe) === "deny")
+          mcpGate[x.extensionId] = "deny";
+        else if (evaluate({ allow: [], deny: [], ask: live.ask }, probe) === "ask")
+          mcpGate[x.extensionId] = "ask";
       }
       return {
         rules: [
@@ -2193,7 +2197,11 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           ...fromConfig("deny", base.permissions.deny),
           ...fromConfig("ask", base.permissions.ask),
           ...fromConfig("autoApprove", base.autoApprove.allow),
-          ...state.policyRules.map((r) => ({ list: r.list, rule: r.rule, source: "runtime" as const })),
+          ...state.policyRules.map((r) => ({
+            list: r.list,
+            rule: r.rule,
+            source: "runtime" as const,
+          })),
         ],
         mcpGate,
       };

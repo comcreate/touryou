@@ -142,7 +142,9 @@ export function createPolicyHandlers(deps: PolicyHandlerDeps) {
       // 実行中に足した規則と合わせた方針が、検査を通ること（通らなければ、今の方針のまま）
       const mixed = policyProblemWith(after, log.state().policyRules);
       if (mixed !== undefined) {
-        const cause = withoutPaths(`実行中に足した規則と合わせると、方針が検査を通らない: ${mixed}`);
+        const cause = withoutPaths(
+          `実行中に足した規則と合わせると、方針が検査を通らない: ${mixed}`,
+        );
         record("failed", notice("configReloadFailed", { cause }), "failure");
         return fail(
           "configInvalid",

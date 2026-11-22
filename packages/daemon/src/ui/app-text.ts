@@ -692,7 +692,10 @@ export const APP_TEXT = {
     en: "How to open: in a terminal, go to the repository directory and run claude attach {id} to open this child's screen.",
   },
   "policy.add": { ja: "足す", en: "Add" },
-  "policy.addNoChange": { ja: "すでにある規則でした（変わりません）", en: "That rule already exists (no change)" },
+  "policy.addNoChange": {
+    ja: "すでにある規則でした（変わりません）",
+    en: "That rule already exists (no change)",
+  },
   "policy.addTitle": { ja: "規則を足す", en: "Add a rule" },
   "policy.addWidenNote": {
     ja: "この規則は、子の権限の上限を広げます。実行中だけの規則で、daemon を起動し直すと、設定ファイルの値に戻ります。",
@@ -701,10 +704,16 @@ export const APP_TEXT = {
   "policy.added": { ja: "規則を足しました", en: "Rule added" },
   "policy.allow": { ja: "allow（許す）", en: "allow (permit)" },
   "policy.ask": { ja: "ask（人に確かめる）", en: "ask (confirm with a human)" },
-  "policy.autoApprove": { ja: "autoApprove（自動で承認）", en: "autoApprove (approve automatically)" },
+  "policy.autoApprove": {
+    ja: "autoApprove（自動で承認）",
+    en: "autoApprove (approve automatically)",
+  },
   "policy.config": { ja: "設定", en: "Config" },
   "policy.deny": { ja: "deny（禁じる）", en: "deny (forbid)" },
-  "policy.empty": { ja: "規則が空です（空白だけは足せません）", en: "The rule is empty (whitespace alone cannot be added)" },
+  "policy.empty": {
+    ja: "規則が空です（空白だけは足せません）",
+    en: "The rule is empty (whitespace alone cannot be added)",
+  },
   "policy.listLabel": { ja: "規則の種類", en: "Rule list" },
   "policy.none": { ja: "規則はありません", en: "No rules" },
   "policy.note": {
@@ -723,14 +732,20 @@ export const APP_TEXT = {
     en: "Config reloaded. Applied: {changed}. Restart required: {restart}. Children over the limit: {over}",
   },
   "policy.remove": { ja: "外す", en: "Remove" },
-  "policy.removeNoChange": { ja: "その規則は、もうありません（変わりません）", en: "That rule no longer exists (no change)" },
+  "policy.removeNoChange": {
+    ja: "その規則は、もうありません（変わりません）",
+    en: "That rule no longer exists (no change)",
+  },
   "policy.removeOne": { ja: "{list} の規則 {rule} を外す", en: "Remove the {list} rule {rule}" },
   "policy.removeTitle": { ja: "規則を外す", en: "Remove a rule" },
   "policy.removed": { ja: "規則を外しました", en: "Rule removed" },
   "policy.ruleLabel": { ja: "足す規則", en: "Rule to add" },
   "policy.runtime": { ja: "実行中", en: "Runtime" },
   "policy.title": { ja: "子の権限の規則", en: "Rules for children's permissions" },
-  "policy.tooLong": { ja: "長すぎます（{max} 文字以下）", en: "Too long ({max} characters or fewer)" },
+  "policy.tooLong": {
+    ja: "長すぎます（{max} 文字以下）",
+    en: "Too long ({max} characters or fewer)",
+  },
   "runtime.openDesktop": {
     ja: "開き方: Claude のデスクトップアプリで、この題の子のタスクを開きます。",
     en: "How to open: in the Claude desktop app, open the task of the child with this title.",

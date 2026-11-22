@@ -462,11 +462,15 @@ describe("画面の資産（走査）", () => {
       "b.disabled = (x.targetHidden && decision !== 'reject') || (denied && decision === 'approve')",
     );
     // 「上限にも足して承認」: approve のときだけ alsoLimit: true を足して送る（確認を挟む。上限の規則は daemon が対象から作る）
-    expect(UI_JS).toContain("[['approve', false], ['approve', true], ['reject', false], ['split', false]]");
+    expect(UI_JS).toContain(
+      "[['approve', false], ['approve', true], ['reject', false], ['split', false]]",
+    );
     expect(UI_JS).toContain("if (also) params.alsoLimit = true;");
     expect(UI_JS).toContain("var denied = gate === 'deny';");
     expect(UI_JS).toContain("if (denied) card.appendChild(el('p', 'error', t('ext.denyNote')));");
-    expect(UI_JS).toContain("else if (gate === 'ask') card.appendChild(el('p', 'desc', t('ext.askNote')));");
+    expect(UI_JS).toContain(
+      "else if (gate === 'ask') card.appendChild(el('p', 'desc', t('ext.askNote')));",
+    );
     // sendPending 以外に fetch がない（確認なしで送る経路がない）
     expect([...UI_JS.matchAll(/\bfetch\(\s*'\/v1\/request'/g)]).toHaveLength(1);
     // granted（許可する対象）を、画面から送らない
@@ -484,7 +488,9 @@ describe("画面の資産（走査）", () => {
     // 窓（モーダル）を閉じてから、確認の欄を出す
     expect(UI_JS).toContain("if (settingsBox.open) settingsBox.close();");
     // 結果の表示は、daemon の応答の値（配列）だけ。規則の本文は、本人が入力した値（と設定の値）だけを出す
-    expect(UI_JS).toContain("t('policy.reloaded', { changed: join(value && value.changed), restart: join(value && value.restartRequired), over: join(value && value.overLimit) })");
+    expect(UI_JS).toContain(
+      "t('policy.reloaded', { changed: join(value && value.changed), restart: join(value && value.restartRequired), over: join(value && value.overLimit) })",
+    );
     expect(UI_HTML).toContain('id="policy-reload"');
     expect(UI_HTML).toContain('id="policy-add"');
   });
