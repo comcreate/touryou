@@ -24,6 +24,8 @@ export interface Scope {
   readonly forbiddenLocations: readonly string[];
   /** 語の並びの前方一致（例: "git status" は `git status -s` に一致、`git push` には一致しない）。 */
   readonly allowedCommands: readonly string[];
+  /** 使ってよい MCP ツールの名前（`mcp__<サーバー>__<道具>` の完全一致）。省略は空（#194）。 */
+  readonly allowedMcpTools?: readonly string[];
 }
 
 export type ScopeOperation =
@@ -324,7 +326,7 @@ export function entryWords(entry: string): string[] {
 }
 
 /** 語の並びの前方一致: `want` の語がすべて `have` の先頭の語に一致する。 */
-const wordsCover = (want: readonly string[], have: readonly string[]): boolean =>
+export const wordsCover = (want: readonly string[], have: readonly string[]): boolean =>
   want.length > 0 && want[0] !== "" && want.every((w, i) => have[i] === w);
 
 function checkCommand(scope: Scope, command: string): ScopeDecision {
@@ -402,6 +404,7 @@ export function isScopeSubset(
     child.allowedCommands.every((cmd) =>
       parent.allowedCommands.some((e) => commandCovers(e, cmd)),
     ) &&
+    (child.allowedMcpTools ?? []).every((t) => (parent.allowedMcpTools ?? []).includes(t)) &&
     child.writableLocations.every((w) =>
       parent.writableLocations.some((pw) => isUnder(c(w), q(pw))),
     ) &&
