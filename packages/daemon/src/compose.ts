@@ -726,10 +726,13 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       // 起動時の基準は壁時計（保存した時刻と比べる）。動いている間の経過は単調時計で数える（巻き戻しで延びない）
       nowMs: () => Date.parse(clock()),
       monoMs: deps.monoMs ?? (() => performance.now()),
-      onNodeTokenChanged: (nodeId) => {
-        // Desktop の子のフック専用のトークンは、bind（ノードのトークンの発行）では変えない（フックは bind より前から動く。
-        // 止まった・役目の終わった・期限切れは、下の revokeEntered と、引き出しの片付けで失効させる）
-        if (nodeRuntimeOf(nodeId) !== "desktop") hookTokens?.revoke(nodeId);
+      onNodeTokenChanged: (nodeId, issuedKind) => {
+        // フック専用のトークンは、bind（紐付けのトークンの発行。コードでも、コードなしの結び直しでも）では変えない。
+        // フックは bind より前から動き（Desktop の子の引き出し・手で開いた CLI の子の hook-env）、bind は同じ子のセッションを
+        // 木に結ぶだけで、別のセッションへ権限を渡さないため（#223）。止まった・再開した・役目の終わった・期限切れ・失効は、
+        // issuedKind が bind でないので、今までどおり失効させる（下の revokeEntered と、引き出しの片付けでも）
+        // Desktop の子は、従来どおり、ここでは失効させない
+        if (issuedKind !== "bind" && nodeRuntimeOf(nodeId) !== "desktop") hookTokens?.revoke(nodeId);
         if (hookSessions.unbind(nodeId)) note("hookUnbound", { reason: "tokenReissued" });
       },
       // トークンの期限。根には付けない。

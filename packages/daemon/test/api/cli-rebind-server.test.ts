@@ -1,6 +1,7 @@
 import { type EventBody, foldEvents, type OrchEvent, type OrchState, ok } from "@touryou/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBindCodes } from "../../src/api/bind.js";
+import { createHookTokens } from "../../src/api/hook.js";
 import { createCredentialStore } from "../../src/api/credentials.js";
 import { createBindWorktreeCheck } from "../../src/api/handlers/cli-bind-check.js";
 import { type ApiLogEvent, type ApiServer, createApiServer } from "../../src/api/server.js";
@@ -122,6 +123,56 @@ const rig = async (opts: { cli?: boolean } = {}) => {
     advance: (ms: number) => (now += ms),
   };
 };
+
+describe("手で開いた CLI の子: bind のあとも、フック専用のトークンは有効（#223）", () => {
+  // compose.ts の onNodeTokenChanged と同じ規則（bind の発行では失効させない。それ以外の変更では失効させる）
+  const hookRig = async () => {
+    const hooks = createHookTokens();
+    const credentials = createCredentialStore({
+      humanToken: "human-token-human-token-human-token-1234",
+      onNodeTokenChanged: (nodeId, kind) => {
+        if (kind !== "bind") hooks.revoke(nodeId);
+      },
+    });
+    const bind = createBindCodes();
+    server = createApiServer({
+      credentials,
+      bind,
+      bindWorktreeOk: createBindWorktreeCheck({
+        cwdOf: async (id) => TREES[id],
+        realpath: (p) => p,
+        gitIsFile: (t) => t.startsWith("/w/trees/"),
+      }),
+      rebindOk: () => true,
+      getState: state,
+      handlers: {},
+    });
+    const { url } = await server.listen(0);
+    const post = (body: unknown) =>
+      fetch(`${url}/v1/bind`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    return { hooks, credentials, bind, post };
+  };
+
+  it("コードでの紐付け・つなぎ直しのあとも、フック専用のトークンは通る。ノードのトークンの発行し直し・失効では無効になる", async () => {
+    const r = await hookRig();
+    const hookToken = r.hooks.issue("a");
+    const body = { nodeId: "a", cwd: "/w/trees/a", sessionId: "s-1" };
+    expect((await r.post({ ...body, bindCode: r.bind.issue("a") })).status).toBe(200);
+    expect(r.hooks.authenticate(hookToken)).toBe("a");
+    expect((await r.post(body)).status).toBe(200);
+    expect(r.hooks.authenticate(hookToken)).toBe("a");
+    // 止めて再開（sdk の発行し直し）・失効では、今までどおり無効になる
+    r.credentials.issueNodeToken("a", "child");
+    expect(r.hooks.authenticate(hookToken)).toBeUndefined();
+    const second = r.hooks.issue("a");
+    r.credentials.revokeNode("a");
+    expect(r.hooks.authenticate(second)).toBeUndefined();
+  });
+});
 
 describe("つなぎ直し（POST /v1/bind。コードなし）", () => {
   it("コードで紐付けたあと、同じ session_id・作業ツリー・ノードなら、トークンを出し直し、報告できる。古いトークンは無効", async () => {

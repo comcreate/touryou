@@ -133,4 +133,17 @@ describe("トークンの発行し直し・失効の通知（フックの結び�
       ["a", undefined],
     ]);
   });
+
+  it("通知には、発行したトークンの種類を渡す（bind・つなぎ直しは bind、既定は sdk、失効は渡さない。#223）", () => {
+    const kinds: (string | undefined)[] = [];
+    const s = createCredentialStore({
+      humanToken: HUMAN,
+      onNodeTokenChanged: (_nodeId, kind) => kinds.push(kind),
+    });
+    s.issueNodeToken("a", "child");
+    s.issueNodeToken("a", "child", "bind");
+    s.rebindNodeToken?.("a");
+    s.revokeNode("a");
+    expect(kinds).toEqual(["sdk", "bind", "bind", undefined]);
+  });
 });

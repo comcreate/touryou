@@ -123,7 +123,7 @@ export function createCredentialStore(options: {
    * 外したあとに結んでしまいうるので、受け口は、結ぶ直前に、もう一度認証する（`server.ts` の `handleHook`）。
    * 両方で、古いトークンの要求は、発行し直したあとに結び付けを作れない。
    */
-  readonly onNodeTokenChanged?: (nodeId: string) => void;
+  readonly onNodeTokenChanged?: (nodeId: string, issuedKind?: TokenKind) => void;
   /** 期限。省略すると既定。 */
   readonly expiry?: TokenExpiry;
   /** 期限を付けないノード（根）。 */
@@ -450,7 +450,8 @@ export function createCredentialStore(options: {
       byNode.set(nodeId, h);
       const now = nowMs();
       meta.set(nodeId, { kind, role, issuedAt, issuedMs: now, lastUsedMs: now, writtenMs: now });
-      options.onNodeTokenChanged?.(nodeId);
+      // 発行したトークンの種類を渡す（紐付け `bind` の発行は、フック専用のトークンを失効させない理由に使う。#223）
+      options.onNodeTokenChanged?.(nodeId, kind);
       return token;
     },
     nodeIds: () => [...byNode.keys()],
