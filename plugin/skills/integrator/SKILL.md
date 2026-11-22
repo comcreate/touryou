@@ -35,7 +35,7 @@ ID は、短縮せずに、そのまま渡します（作業ツリーのディ�
 - `mcp__node__node_hookUnbind`: 子のフック（plugin のファイルで設定するフック）が、`/clear`・`--resume` で session_id が変わって拒否され続けるときに、結び付けを外す。次に来たセッションに結び直す。子のトークンが漏れた疑いがあるときは使わず、人間に知らせる。
 - `mcp__node__node_confirmStopped`: daemon が直接止められない子（能力表の `stopDelegated`。Desktop の子）を、受信箱の停止の代行依頼に従って止めた後に、止めたと宣言する。停止未完了から停止済みに進む。`note` に根拠を書ける。
 - `mcp__node__node_spawn` の `runtime`（`cli` か `desktop`。省略可）: 省略すると設定 `childRuntime`（既定 `cli`）。`desktop` は設定 `allowDesktopChildren` が `true` のときだけ作れる（許可がなければ `desktopChildNotAllowed`）。有効にした木では、CLI の子と Desktop の子を混ぜられる。子ごとに、下の手順（CLI の子は `claude --bg`、Desktop の子は `node_bindCode`）が変わる。
-- `mcp__node__node_bindCode`: Desktop の子（`runtime` が `desktop` の子）を作ったあとに呼び、返った `instruction` を、そのまま Desktop のタスク生成に渡す（仮置き）。呼ぶたびに新しい一度きりの紐付けコードになり、前のコードは無効になる。`instruction` には紐付けコードが入るので、ほかへ書き写さない。何度か呼んだときは、最後に受け取った `instruction` だけを使う（前のものはコードが無効）。Desktop の中間の統合ノードは紐付けできない（仮置き）。
+- `mcp__node__node_bindCode`: Desktop の子（`runtime` が `desktop` の子）を作ったあとに呼び、返った `instruction` を、そのまま Desktop のタスク生成に渡す（仮置き）。呼ぶたびに新しい一度きりの紐付けコードになり、前のコードは無効になる。`instruction` には紐付けコードが入るので、ほかへ書き写さない。何度か呼んだときは、最後に受け取った `instruction` だけを使う（前のものはコードが無効）。Desktop の中間の統合ノードは紐付けできない（仮置き）。CLI のサブ統括は、紐付けできる（上の「サブ統括」。コードの出し直しは、直接の親の統合ノードか人間だけ）。
 - `mcp__node__parent_request`: 親への依頼（CLI の子の起動・停止・削除）の中身を読む。返った `command` を Bash でそのまま実行する（手順は下の「CLI の子（親への依頼）」）。
 - `mcp__node__parent_report`: 依頼を実行した結果（子のセッションの参照・失敗の理由・`claude agents --json` の状態）を報告する。
 - `mcp__node__node_split`: 脱線した部分を、新しい子へ移す。元の子は、`keep` で、本筋に戻す（`mainline`）か止める（`stop`）。
@@ -64,6 +64,18 @@ ID は、短縮せずに、そのまま渡します（作業ツリーのディ�
 - 受理（`node_review` の `accept`）すると、CLI の子の裏のセッションの停止（`claude stop`）の依頼が受信箱に来る。下の「CLI の子」の手順で実行し、続けて来る削除（`claude rm`）の依頼も実行する。子の状態は `verified` のまま変わらない。作業ツリーのプロセスが残っていると言われたら、`node_stop` で依頼を出し直してもらえる。
 - `mcp__node__node_reclaimPreview`: 回収の事前確認。`unmet`（満たしていない条件）と `blockers`（原因のノード・プロセス）を読み、残っているものを先に片付ける。
 - `mcp__node__node_reclaim`: 事前確認で示した対象を回収する。条件は実行時に再判定され、失うものがあるときは拒否される。
+
+## サブ統括（統合ノードの子の統合ノード。#168）
+
+作業のまとまりが大きく、その中でさらに子を立てて束ねたいときは、子の代わりに、サブ統括（親のいる統合ノード）を立てられる。小さな作業は、これまでどおり作業ノード（`child`）の子に任せる。
+
+- **立てる**: `mcp__node__node_spawn` に `role: integrator` を渡す（`parentId` は、自分か、自分の部分木の動作中の統合ノード）。範囲は、親の範囲の内側にする（孫の範囲は、サブ統括の範囲の内側。外だと `scopeNotSubset`）。**CLI の木だけ**（Desktop のサブ統括は未対応）。
+- **起動と紐付け**: 作業ノードと同じ。起動の依頼（`parent_request`）を、親（あなた）が `claude --bg` で実行する。起動の指示の文は、作業ノードと同じ「最初に touryou の child_bind を引数なしで呼んで、受信箱の手順に従って」で、サブ統括の側は、紐付けの結果のロール（統合）に合わせて、統合の道具が出る。サブ統括には、この skill の手順に従うよう、`node_send` や受信箱の指示で伝える。紐付けのやり直しが要るときは、直接の親か人間が `mcp__node__node_bindCode` で出し直す。
+- **深さの上限**: 設定 `maxTreeDepth`（既定 3。根が深さ 0、サブ統括が 1、その下の作業ノードが 2）。新しいノードの深さがこの値以上になる `node_spawn`・`node_adopt` は、`depthExceeded` で断られる。`cause` と `nextActions` を読む。深さの上限は、自分で変えない。必要なら、人に確かめて、`config.json` の `maxTreeDepth` を上げて daemon を起動し直してもらう（設定は `docs/config.md`）。
+- **サブ統括が自分の親へ報告する**: サブ統括は、自分の親に対しては子と同じ。上の「サブ統括だけが…」の 7 つの道具（`report_progress`・`report_decision`・`decision_withdraw`・`report_outOfScope`・`report_done`・`scope_extend`・`child_inbox`）で、進捗・判断・範囲外・完了・範囲の拡張の要求を返し、親の指示・差し戻し・回答を `child_inbox` で読む。サブ統括の完了は、直接の親が `node_review` で受理する。
+- **孫の依頼と範囲の拡張**: 孫（サブ統括の子）の起動・停止・削除の依頼と、範囲の拡張の要求は、まずサブ統括（孫の直接の親）に届く。サブ統括が、この skill の手順で実行・判定する。サブ統括の範囲を超える拡張は、サブ統括が `scope_extend` で自分の親へ求める。
+- **止めるときは、配下が先に止まる（連動停止）**: サブ統括を `node_stop` すると、配下の動作中（`pending`・`running`・`waiting`）の子の停止が先に依頼され、すべて停止が確認されてから、サブ統括自身のセッションの停止が始まる（それまで、サブ統括は `stopping`）。`done` の子は対象にしない（人だけが止められる）。上限（10 分）までに確認できない子がいると、サブ統括は `stopIncomplete` になり、子の ID と状態を理由にした項目が、根の受信箱に出る。サブ統括が応答しなくて、孫の停止の依頼を実行できないときは、親が孫ごとに `claude agents --json` と `claude stop` で止めたことを確かめ、`mcp__node__node_confirmStopped` で宣言してから、サブ統括を `node_stop` で止め直す。孫の作業ツリー・コミットは残るので、回収は後順（孫が先）で行う。
+- **根の受信箱には、サブ統括の要約（`digest`）が出る**: サブ統括の配下の未解決の項目は、根の受信箱に、サブ統括の要約として 1 件にまとまって出る（下の「受信箱の要約（`digest`）」）。孫の文は入らない（件数・状態名・ID だけ）。詳しくは、サブ統括の受信箱（または自分の部分木の `inbox_fetch`）を読む。
 
 ## CLI の子（親への依頼）
 
@@ -100,7 +112,7 @@ CLI の子（`runtime` が `cli` の子）は、TouRyou が起動しません。
 
 ## 受信箱の要約（`digest`）
 
-受信箱の `digest` は、中間統合ノード配下の未解決の項目の要約で、配下の最高の優先度の位置に並ぶ。記録を指さない（`ref` がない）ので、`report_get`・`decision_get` では読めない。詳しくは、配下の項目を受信箱で読む。
+受信箱の `digest` は、中間統合ノード（サブ統括）配下の未解決の項目の要約で（根の受信箱には、サブ統括ごとの「サブ統括の要約」として出る）、配下の最高の優先度の位置に並ぶ。記録を指さない（`ref` がない）ので、`report_get`・`decision_get` では読めない。詳しくは、配下の項目を受信箱で読む。
 
 ## 守ること
 

@@ -85,6 +85,14 @@ TouRyou は、**セッションを起動しません**。**Anthropic の認証�
 
 手順の本文は、skill の `integrator`（親）と `child`（子）にある。
 
+### サブ統括（統合ノードの子の統合ノード。#168。CLI の木だけ）
+
+- **立てる**: 統合ノードが `node_spawn` に `role: integrator` を渡す。起動・紐付け・停止・削除は、作業ノードと同じ流れ（上の 1〜5）。起動の指示の文も同じ（`child_bind` を引数なしで呼ぶ）。紐付けの結果のロールが統合なので、サブ統括には統合の道具（`node_spawn`・`node_review`・`parent_request` など）と、自分の親へ報告する 7 つの道具（`report_progress`・`report_decision`・`decision_withdraw`・`report_outOfScope`・`report_done`・`scope_extend`・`child_inbox`）が出る。bind コードの出し直し（`node_bindCode`）は、直接の親の統合ノードか人間だけ。Desktop のサブ統括は未対応（`docs/desktop-runtime.md`）。
+- **深さの上限**: 設定 `maxTreeDepth`（既定 3。`docs/config.md`）。新しいノードの深さがこの値以上になる `node_spawn`・`node_adopt` は `depthExceeded` で断られる。
+- **孫の依頼**: 孫（サブ統括の子）の起動・停止・削除の依頼と、範囲の拡張の要求は、直接の親のサブ統括に届く。サブ統括の範囲を超える拡張は、サブ統括が自分の親へ `scope_extend` を出す。
+- **連動停止**: 統合ノード（サブ統括）の `node_stop` は、配下の動作中（`pending`・`running`・`waiting`）の子を先に停止の依頼に載せ、その停止がすべて確認されてから、自分のセッションの停止を始める（それまで `stopping`）。`done` の子は対象にしない。待ちの上限（既定 10 分）までに確認できない子がいると、サブ統括は `stopIncomplete` になり、根の受信箱に子の ID と状態を理由にした項目が出る。サブ統括が応答しないときは、根が孫ごとに止めたことを確かめて `node_confirmStopped` で宣言し、サブ統括を止め直す。決定の記録は `.sdd/adr/touryou-168-stop-cascade.md`。
+- **要約**: 根の受信箱には、サブ統括配下の未解決の項目の要約（`digest`）が出る（`docs/digest.md`）。
+
 ## 注意（CLI の子）
 
 - **CLI の子と plugin**: `--plugin-dir` で開いたのは、そのセッションだけ。`--plugin-dir` だけで開いた親の子（`claude --bg`）には plugin が付かず、子は `child_bind` を見つけられないまま止まり、TouRyou のフック（守り）も効かない。そこで TouRyou は、親の mcp の plugin の場所（`CLAUDE_PLUGIN_ROOT`）が確かめを通れば、子の起動の文に `--plugin-dir` を足す（marketplace から入れた plugin と重なっても 1 つにまとまる）。付けられなかったときは、受信箱に理由が出る。そのときは plugin を設定の置き場に入れる（marketplace から入れる）。daemon は、起動の報告のあと所定の時間（`cliWatch.unboundMinutes`。既定 3 分）紐付けのない子を、受信箱に 1 回だけ出す。

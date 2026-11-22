@@ -177,5 +177,5 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 
 ## 済んだと報告した子を、受理せずに片付ける（#115）
 
-`touryou stop <nodeId> --yes`: 完了報告済み（done）の子を、受理せずに止める（猶予なしの即時停止）。止めると受理できなくなる（成果は作業ツリーに残る）。`--yes` がなければ、何も送らずに説明だけを出す。人が止められるのは done の子だけ（動いている子は親の統合が止める）。停止を確かめた（stopped）あとは、`touryou reclaim <nodeId>` の表示を見て、`--yes --expect` で破棄して回収する。作業ツリーもブランチも、もうない子も、同じ手順で破棄して回収できる（記録だけを archived にする）。daemon が作業ツリーの情報を確かめられない子は、`touryou reclaim` が破棄を指示せず、理由と次の操作を出す（終了コード 1。くわしくは [`docs/reclaim-loss.md`](reclaim-loss.md) の「作業ツリーもブランチも、もうないノード」。#137）。
+`touryou stop <nodeId> --yes`: 完了報告済み（done）の子を、受理せずに止める（猶予なしの即時停止）。止めると受理できなくなる（成果は作業ツリーに残る）。`--yes` がなければ、何も送らずに説明だけを出す。人が止められるのは done の子だけ（動いている子は親の統合が止める）。done のサブ統括（統合ノード）を止めるときも、配下の動作中の子が先に止まる（連動停止。`done` の子は対象外。`.sdd/adr/touryou-168-stop-cascade.md`）。停止を確かめた（stopped）あとは、`touryou reclaim <nodeId>` の表示を見て、`--yes --expect` で破棄して回収する。作業ツリーもブランチも、もうない子も、同じ手順で破棄して回収できる（記録だけを archived にする）。daemon が作業ツリーの情報を確かめられない子は、`touryou reclaim` が破棄を指示せず、理由と次の操作を出す（終了コード 1。くわしくは [`docs/reclaim-loss.md`](reclaim-loss.md) の「作業ツリーもブランチも、もうないノード」。#137）。
 
