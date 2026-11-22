@@ -496,7 +496,9 @@ describe("touryou ui（複数の daemon）", () => {
     const r = await goBroken([]);
     expect(r.r.exitCode).toBe(1);
     expect(r.opened).toEqual([]);
-    expect(r.r.stderr).toContain("cwd");
+    // 内部の言葉（cwd）でなく、利用者の言葉で言う
+    expect(r.r.stderr).toContain("コマンドを実行したディレクトリを取得できない");
+    expect(r.r.stderr).not.toContain("cwd");
     expect(r.r.stderr).toContain("次の操作");
     expect(r.r.stderr).toContain("--config");
     expect(r.r.stderr).not.toContain("ENOENT");

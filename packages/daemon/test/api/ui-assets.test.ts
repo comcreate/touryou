@@ -419,6 +419,8 @@ describe("画面の資産（走査）", () => {
       "setInterval",
       // 紐付けが外れているかもしれない子（表示モデルの値 true）
       "bindLost",
+      // どの daemon の画面かを、作業場所の名前で示す（#197）
+      "lastIndexOf",
     ]);
     // 埋め込んだ文字の表（#140。JSON の値で、コードでない）は、走査から除く
     const code = UI_JS.replace(TABLE_LINE, "")
@@ -1494,6 +1496,13 @@ describe("画面の使い勝手（#13）", () => {
     expect(UI_JS).toContain(
       "attachDir = typeof view.attachDir === 'string' ? view.attachDir : '';",
     );
+  });
+
+  it("(#197) ヘッダーに、どの daemon の画面か（作業場所の名前。全体は title）を示す。文は i18n の鍵", () => {
+    expect(UI_HTML).toContain('<span id="daemon-where" class="status" hidden></span>');
+    expect(UI_JS).toContain("document.getElementById('daemon-where')");
+    expect(UI_JS).toContain("where.title = t('page.where') + ': ' + attachDir;");
+    expect(UI_TEXT_TABLE["page.where"]?.ja).toContain("daemon");
   });
 
   it("(#150・#205) セッション番号があるときは、動いていても止まっていても開ける番号の形だけを出す。番号がないときだけ名前の形を出す", () => {

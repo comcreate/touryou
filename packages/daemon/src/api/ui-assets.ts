@@ -32,7 +32,7 @@ export const UI_HTML = `<!doctype html>
 <link rel="stylesheet" href="/ui/app.css">
 </head>
 <body>
-<p id="live" class="sr" aria-live="polite"></p><header class="top"><h1 data-t="page.title">touryou 状態画面</h1><span id="status" class="status" data-t="conn.none">未接続</span><span class="tools"><button id="open-settings" class="quiet sm gear" type="button" data-t-aria="settings.title" data-t-title="settings.title" aria-label="設定" title="設定" aria-haspopup="dialog" aria-controls="settings"><span aria-hidden="true">⚙</span></button></span></header>
+<p id="live" class="sr" aria-live="polite"></p><header class="top"><h1 data-t="page.title">touryou 状態画面</h1><span id="status" class="status" data-t="conn.none">未接続</span><span id="daemon-where" class="status" hidden></span><span class="tools"><button id="open-settings" class="quiet sm gear" type="button" data-t-aria="settings.title" data-t-title="settings.title" aria-label="設定" title="設定" aria-haspopup="dialog" aria-controls="settings"><span aria-hidden="true">⚙</span></button></span></header>
 <dialog id="settings" class="settings" aria-labelledby="settings-title"><h2 id="settings-title" data-t="settings.title">設定</h2>
 <fieldset><legend data-t="settings.a11y">アクセシビリティ</legend>
 <label class="opt"><input id="set-still" type="checkbox"> <span data-t="settings.still">動きを止める</span></label><p class="note" data-t="settings.stillNote">新しい項目の入る動き・線を流れる彗星・光る縁などを止めます。OS の「視差効果を減らす」を入れているときは、ここを切っていても止まります。</p>
@@ -1920,6 +1920,12 @@ export const UI_JS = `'use strict';
 
   function render(view) {
     attachDir = typeof view.attachDir === 'string' ? view.attachDir : '';
+    // どの daemon の画面かを、ヘッダーに示す（作業場所の名前。全体の道筋は title に出す）
+    var where = document.getElementById('daemon-where');
+    var whereName = attachDir.slice(attachDir.lastIndexOf('/') + 1);
+    where.hidden = !whereName;
+    where.textContent = whereName;
+    where.title = t('page.where') + ': ' + attachDir;
     renderApprovals(view.confirmations);
     var flows = Array.isArray(view.flows) ? view.flows : [];
     var v = { nodes: view.nodes, inbox: view.inbox, resolved: Array.isArray(view.resolved) ? view.resolved : [], decisions: view.decisions, extensions: view.extensions, flows: flows };

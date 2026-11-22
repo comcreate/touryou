@@ -957,4 +957,132 @@ describe("複数の daemon（--config）", () => {
       expect(r.stderr).toContain("stateDir が、別の設定");
     },
   );
+
+  // Issue #197
+  describe("失敗の案内は、操作の対象（--config・--others）を付けたコマンドで出す", () => {
+    it("apply: --config の init の生成物がなければ、同じ --config を付けた init を案内する", async () => {
+      const w = makeWorld();
+      const r = await bin(w, ["apply", "--yes", "--config", w.otherConfig]);
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr).toContain(`launchd init --config "${w.otherConfig}"`);
+      expect(r.stderr).not.toContain('touryou" launchd init を実行する');
+    });
+
+    it("apply: --others の元の plist が消えていれば、--others だけの init を案内する（init --others は、ほかの引数を取らない）", async () => {
+      const w = makeWorld();
+      await bin(w, ["init", "--config", w.otherConfig]);
+      await bin(w, ["apply", "--yes", "--config", w.otherConfig]);
+      rmSync(join(w.base, "launchd", `${w.otherLabel}.plist`));
+      const r = await bin(w, ["apply", "--yes", "--others"]);
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr).toMatch(/launchd init --others (の生成物|を実行する)/);
+      expect(r.stderr).not.toContain("init --others --others");
+    });
+
+    it("apply: 置いてある plist が違うときの uninstall の案内にも、同じ --config を付ける", async () => {
+      const w = makeWorld();
+      await bin(w, ["init", "--config", w.otherConfig]);
+      await bin(w, ["apply", "--yes", "--config", w.otherConfig]);
+      writeFileSync(join(w.agents, `${w.otherLabel}.plist`), "手で直した\n");
+      const r = await bin(w, ["apply", "--yes", "--config", w.otherConfig]);
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr).toContain(`launchd uninstall --yes --config "${w.otherConfig}"`);
+    });
+  });
+
+  describe("--config の stop・status は、設定の stateDir を読めなくても動く（--others と同じ）", () => {
+    async function unreadableState(): Promise<World> {
+      const w = makeWorld();
+      await bin(w, ["init", "--config", w.otherConfig]);
+      expect((await bin(w, ["apply", "--yes", "--config", w.otherConfig])).exitCode).toBe(0);
+      writeFileSync(w.otherConfig, JSON.stringify({ stateDir: "relative" }), { mode: 0o600 });
+      return w;
+    }
+
+    it("stop: Label から止め、読めなかったことを注意として残す（終了コード 0）", async () => {
+      const w = await unreadableState();
+      const r = await bin(w, ["stop", "--config", w.otherConfig]);
+      expect(r.exitCode).toBe(0);
+      expect(r.stderr).toContain("注意:");
+      expect(r.stderr).toContain("stateDir を読めなかったが");
+      expect(w.loaded.has(w.otherLabel)).toBe(false);
+    });
+
+    it("status: 状態を出し、窓口は「応答なし」と示す（即失敗しない）", async () => {
+      const w = await unreadableState();
+      const r = await bin(w, ["status", "--config", w.otherConfig]);
+      expect(r.exitCode).toBe(1);
+      expect(r.stdout).toContain(`${w.otherLabel}: 読み込み済み`);
+      expect(r.stdout).toContain("応答なし");
+    });
+
+    it("apply・restart は、窓口の応答を待つので、これまでどおり止める", async () => {
+      const w = await unreadableState();
+      for (const args of [["restart"], ["apply", "--yes"]]) {
+        const r = await bin(w, [...args, "--config", w.otherConfig]);
+        expect(r.exitCode).toBe(1);
+        expect(r.stderr).toContain("stateDir を読めない");
+      }
+    });
+  });
+
+  it("init --others: 下ごしらえの途中で例外が出ても、本物の plist を 1 つも変えない（新旧が混ざらない）", async () => {
+    const w = makeWorld();
+    const third = join(w.base, "third", "config.json");
+    const thirdState = join(w.base, "third", "state");
+    mkdirSync(thirdState, { recursive: true });
+    writeFileSync(third, JSON.stringify({ stateDir: thirdState }), { mode: 0o600 });
+    const thirdLabel = `touryou.${daemonNameOf(w.base, third)}`;
+    w.states[thirdLabel] = thirdState;
+    w.ports[thirdLabel] = "4323";
+    for (const c of [w.otherConfig, third]) {
+      expect((await bin(w, ["init", "--config", c])).exitCode).toBe(0);
+      expect((await bin(w, ["apply", "--yes", "--config", c])).exitCode).toBe(0);
+    }
+    // 元の plist を消す（init --others が、LaunchAgents から作り直す）。あとの Label の一時ファイルの場所を、ディレクトリで塞ぐ
+    const labels = [w.otherLabel, thirdLabel].sort();
+    for (const l of labels) rmSync(join(w.base, "launchd", `${l}.plist`));
+    const blocker = join(w.base, "launchd", `${labels[1]}.plist.new`);
+    mkdirSync(blocker);
+    const r = await bin(w, ["init", "--others"]);
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("下ごしらえに失敗した");
+    // 先の Label の plist も、一時ファイルも残っていない（塞いだものだけが、元のまま残る）
+    expect(readdirSync(join(w.base, "launchd"))).toEqual([`${labels[1]}.plist.new`]);
+    // 塞ぎを外せば、2 つとも作り直せる
+    rmSync(blocker, { recursive: true });
+    expect((await bin(w, ["init", "--others"])).exitCode).toBe(0);
+    expect(readdirSync(join(w.base, "launchd")).sort()).toEqual(
+      labels.map((l) => `${l}.plist`).sort(),
+    );
+  });
+
+  describe("status --json（機械可読。uninstall-all の件数 N は、これの count を使う）", () => {
+    it("--others: 別名の daemon の件数と、各 daemon の状態を JSON 1 行で返す", async () => {
+      const w = makeWorld();
+      const none = await bin(w, ["status", "--others", "--json"]);
+      expect(none.exitCode).toBe(0);
+      expect(JSON.parse(none.stdout)).toEqual({ ok: true, count: 0, daemons: [] });
+      await bin(w, ["init", "--config", w.otherConfig]);
+      await bin(w, ["apply", "--yes", "--config", w.otherConfig]);
+      const r = await bin(w, ["status", "--others", "--json"]);
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout.trim().split("\n")).toHaveLength(1);
+      const j = JSON.parse(r.stdout) as {
+        ok: boolean;
+        count: number;
+        daemons: { label: string; loaded: boolean; whoami: number | null }[];
+      };
+      expect(j.ok).toBe(true);
+      expect(j.count).toBe(1);
+      expect(j.daemons[0]).toMatchObject({ label: w.otherLabel, loaded: true, whoami: 401 });
+      // 秘密・stateDir は出さない
+      expect(r.stdout).not.toContain(w.states[w.otherLabel] as string);
+    });
+
+    it("--json は status だけが取る", async () => {
+      const w = makeWorld();
+      expect((await bin(w, ["restart", "--json"])).exitCode).toBe(2);
+    });
+  });
 });

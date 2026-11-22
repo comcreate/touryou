@@ -13,14 +13,8 @@ import { join } from "node:path";
 import { readSecureFile } from "@touryou/core/fs";
 import { createIdentityVerifier, IDENTITY_FILE, type IdentityVerifier } from "@touryou/mcp/relay";
 import type { CommandResult } from "./commands.js";
-import {
-  agentsDirOf,
-  canonicalPath,
-  otherPlistNames,
-  plistConfigOf,
-  plistDirOf,
-  usableConfigPath,
-} from "./launchd.js";
+import { agentsDirOf, canonicalPath, plistDirOf, usableConfigPath } from "./launchd.js";
+import { daemonPlistNames, plistConfigOf, readDaemonPlist } from "./launchd-plists.js";
 
 export interface UiDeps {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -73,16 +67,10 @@ function otherConfigs(
   const agentsDir = agentsDirOf(home);
   const plistDir = plistDirOf(home);
   const out: string[] = [];
-  for (const n of otherPlistNames(agentsDir, deps.readDir)) {
-    for (const file of [`${plistDir}/${n}`, `${agentsDir}/${n}`]) {
-      try {
-        const cfg = plistConfigOf(read(file, 0o022));
-        if (cfg !== undefined && cfg.startsWith("/")) out.push(cfg);
-        break;
-      } catch {
-        // 読めない plist は、次の置き場のものを試す（どちらも読めなければ、候補にしない）
-      }
-    }
+  for (const n of daemonPlistNames(agentsDir, "others", deps.readDir)) {
+    const plist = readDaemonPlist([plistDir, agentsDir], n.file, read);
+    const cfg = plist === undefined ? undefined : plistConfigOf(plist.text);
+    if (cfg !== undefined && cfg.startsWith("/")) out.push(cfg);
   }
   return out;
 }
@@ -212,7 +200,7 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
       cwd = typeof deps.cwd === "function" ? deps.cwd() : deps.cwd;
     } catch {
       return fail(
-        "実行したディレクトリ（cwd）を取得できない（削除された・入れない）ため、複数の daemon のどれを開くか決められない",
+        "コマンドを実行したディレクトリを取得できない（削除された・入れない）ため、複数の daemon のどれを開くか決められない",
         "存在するディレクトリへ移ってから、もう一度 ui を実行する",
         "または --config <設定ファイルの絶対パス> で開く daemon を指す（候補は ui --list で確かめる）",
       );

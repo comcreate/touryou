@@ -127,7 +127,7 @@ const USAGE = `使い方:
       保管している先端から、新しいブランチを作る（作成だけ。既存のブランチは上書きしない。保管は残る）。既定の名前は touryou/restored/<key>
   touryou discarded drop <nodeId|key> [--yes] [--request-id <id>]
       保管を 1 件消す（取り消せない）。--yes がなければ、対象の表示だけで止まる
-  touryou launchd init [--org <組織の逆ドメイン。省略で Label は touryou.daemon>] [--path-prefix <ディレクトリ>] [--config <絶対パス>]
+  touryou launchd init [--org <組織の逆ドメイン。省略で Label は touryou.daemon>] [--path-prefix <ディレクトリ>] [--config <絶対パス> | --others]
       daemon・touryou-mcp を launchd で常駐させる起動スクリプトと plist を、$HOME/.touryou の下に生成する（窓口・トークンは不要。launchctl は実行しない。
       トークンの値は、生成も表示もしない）。詳しくは docs/launchd.md
   touryou launchd apply --yes | status | restart | stop | uninstall --yes  [--org …] [--config <絶対パス> | --others]

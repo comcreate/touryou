@@ -464,7 +464,10 @@ describe("launchd の操作の回帰", () => {
     const r = await bin(home, f, ["uninstall", "--yes", "--org", ORG]);
     expect(r.exitCode).toBe(1);
     expect(existsSync(join(agents, `${DAEMON}.plist`))).toBe(true);
-    expect(r.stdout).toMatch(/init の生成物.*がないので、apply が置いたものか確かめられない/);
+    // 案内は、操作の対象（--org）を付けた init のコマンド
+    expect(r.stdout).toMatch(
+      /launchd init --org com\.example の生成物.*がないので、apply が置いたものか確かめられない/,
+    );
   });
 
   it("status: stop の後は、次のログインか apply --yes（同意のあと）を案内し、restart は使えないと出す", async () => {
@@ -528,8 +531,9 @@ describe("古い形（v0.1.0 まで。run-daemon.sh を起こす plist）から�
     const h = legacyHome();
     const r = await bin(h.home, h.f, ["apply", "--yes", "--org", ORG]);
     expect(r.exitCode).toBe(1);
+    // 案内は、操作の対象（--org）を付けた init のコマンド
     expect(r.stderr).toMatch(
-      /古い形.*"\$HOME\/\.touryou\/current\/bin\/touryou" launchd init を実行して/,
+      /古い形.*"\$HOME\/\.touryou\/current\/bin\/touryou" launchd init --org com\.example を実行して/,
     );
     expect(h.f.calls).toEqual([]);
     expect(readFileSync(h.dest, "utf8")).toBe(h.text);
@@ -648,7 +652,7 @@ describe("前の形（v0.1.1。current/bin/node を直に起こす plist）か�
     const r = await bin(h.home, h.f, ["apply", "--yes", "--org", ORG]);
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toMatch(
-      /古い形.*"\$HOME\/\.touryou\/current\/bin\/touryou" launchd init を実行して/,
+      /古い形.*"\$HOME\/\.touryou\/current\/bin\/touryou" launchd init --org com\.example を実行して/,
     );
     expect(h.f.calls).toEqual([]);
   });

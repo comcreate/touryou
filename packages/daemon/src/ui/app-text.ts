@@ -505,6 +505,7 @@ export const APP_TEXT = {
     en: "This can be undone. Use it only when you restarted the child's session and its hooks keep being refused. It binds to the next session that arrives.",
   },
   "page.title": { ja: "touryou 状態画面", en: "touryou status" },
+  "page.where": { ja: "この画面の daemon の作業場所", en: "Working directory of this daemon" },
   "priority.blocking": { ja: "要判断", en: "needs decision" },
   "priority.completed": { ja: "完了", en: "completed" },
   "priority.failed": { ja: "失敗", en: "failed" },

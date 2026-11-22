@@ -15,7 +15,6 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
@@ -25,6 +24,15 @@ import {
 import { basename, dirname, isAbsolute, join } from "node:path";
 import { readSecureFile } from "@touryou/core/fs";
 import type { CommandResult } from "./commands.js";
+import {
+  DEFAULT_PATH,
+  daemonPlistNames,
+  pathPrefixArgs,
+  pathValueOf,
+  plainPath,
+  plistConfigOf,
+  readDaemonPlist,
+} from "./launchd-plists.js";
 
 export interface LaunchdDeps {
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -94,19 +102,12 @@ export function configProblem(
   ].join("\n");
 }
 
-/** パスに使える文字（空白は可。シェルの二重引用符・XML で、特別な意味を持つ文字を含まない）。 */
-const SAFE_PATH = /^\/[A-Za-z0-9._/@+ -]*$/;
-/** 使える文字だけで、`..` の要素・`//` を含まない。 */
-export const plainPath = (p: string): boolean =>
-  SAFE_PATH.test(p) && !p.includes("//") && !/(^|\/)\.\.(\/|$)/.test(p);
 /** 組織の逆ドメイン（2 つ以上のラベル。小文字の英数字とハイフン）。 */
 export const REVERSE_DOMAIN = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 
 /** LaunchServices に app を登録する・登録を解く道具（macOS 付属）。 */
 export const LSREGISTER =
   "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister";
-
-export const DEFAULT_PATH = "/usr/bin:/bin:/usr/sbin:/sbin";
 
 /**
  * launchd の Label。`--org` を省略すると、組織のドメインを含まない中立な `touryou.<name>`（例: `touryou.daemon`）。
@@ -117,6 +118,7 @@ export const labelOf = (org: string | undefined, name: string): string =>
   org === undefined ? `touryou.${name}` : `${org}.touryou.${name}`;
 
 const HELP = `touryou launchd init [--org <組織の逆ドメイン>] [--path-prefix <ディレクトリ[:ディレクトリ…]>] [--config <設定ファイルの絶対パス>]
+touryou launchd init --others
 
 daemon を、launchd で常駐させるための plist を生成する（同梱の node で daemon を直に起こす。起動スクリプトは作らない）。\`launchctl\` は実行しない。秘密は扱わない。
 
@@ -228,49 +230,11 @@ export const configPathOf = (base: string, configArg: string | undefined): strin
   return canonical === canonicalPath(def) ? def : canonical;
 };
 
-/** init が生成する、別名の設定（--config）の daemon の plist のファイル名。`[<org>.]touryou.daemon-<8 文字>.plist`。 */
-export const OTHER_PLIST = /^((?:[a-z0-9-]+\.)*touryou\.daemon-([0-9a-f]{8}))\.plist$/;
-
-/** 既定・別名のどちらも含む、touryou の daemon の plist のファイル名。 */
-export const DAEMON_PLIST = /^(?:[a-z0-9-]+\.)*touryou\.daemon(?:-[0-9a-f]{8})?\.plist$/;
-
 /** init の出力先（`<home>/.touryou/launchd`）。 */
 export const plistDirOf = (home: string): string => join(home, ".touryou", "launchd");
 
 /** 常駐にした plist の置き場（`<home>/Library/LaunchAgents`）。`--others`・版上げの対象は、ここに置いたもの。 */
 export const agentsDirOf = (home: string): string => join(home, "Library", "LaunchAgents");
-
-/** plist の置き場にある、既定・別名どちらも含む daemon の plist のファイル名（並べ替え済み）。置き場がない・読めなければ空。 */
-export const daemonPlistNames = (
-  plistDir: string,
-  readDir: (path: string) => string[] = (p) => readdirSync(p),
-): string[] => {
-  try {
-    return readDir(plistDir)
-      .filter((n) => DAEMON_PLIST.test(n))
-      .sort();
-  } catch {
-    return [];
-  }
-};
-
-/** plist の置き場にある、別名の設定の daemon の plist のファイル名（並べ替え済み）。置き場がない・読めなければ空。 */
-export const otherPlistNames = (
-  plistDir: string,
-  readDir: (path: string) => string[] = (p) => readdirSync(p),
-): string[] => {
-  try {
-    return readDir(plistDir)
-      .filter((n) => OTHER_PLIST.test(n))
-      .sort();
-  } catch {
-    return [];
-  }
-};
-
-/** plist の ProgramArguments の `--config` の値。 */
-export const plistConfigOf = (text: string): string | undefined =>
-  text.match(/<string>--config<\/string>\s*<string>([^<]*)<\/string>/)?.[1];
 
 /** `--config` に渡せる設定のパス（絶対パスで、使える文字だけ）。 */
 export const usableConfigPath = (p: string): boolean => isAbsolute(p) && plainPath(p);
@@ -403,50 +367,60 @@ export const describeSharing = (s: StateDirSharing): string =>
     ? s.configPath
     : `${s.configPath}。Label ${s.label} の plist が、同じ設定を使っている`;
 
+/** 入れ済みの daemon（既定の設定と、init 済みの plist）の 1 件。stateDir は実パス（読めなければ undefined）。 */
+export interface DaemonEntry extends StateDirSharing {
+  readonly stateDir: string | undefined;
+}
+
 /**
- * 同じ stateDir（実パスで比べる）を使う、ほかの daemon。既定の設定（`<base>/config.json`）と、init 済みの plist
- * （既定・別名のどちらも。`--org` 違いの Label も）を見る。
+ * 入れ済みの daemon の一覧: 既定の設定（`<base>/config.json`）と、init 済みの plist（既定・別名のどちらも。`--org` 違いの Label も）。
+ * 元の plist（.touryou/launchd）が消えて、LaunchAgents にだけ残る daemon も含める（--others・ui と同じ。両方にあれば元の plist を読む）。
+ * plist と設定を読むのは、ここで 1 回だけ（検査のたびに読み直さない）。読めない plist は飛ばす。
+ */
+export function listDaemons(base: string, plistDir: string, agentsDir: string): DaemonEntry[] {
+  const entry = (configPath: string, label?: string): DaemonEntry => {
+    const sd = stateDirOf(configPath);
+    return {
+      configPath,
+      ...(label === undefined ? {} : { label }),
+      stateDir: sd === undefined ? undefined : canonicalPath(sd),
+    };
+  };
+  const out: DaemonEntry[] = [entry(join(base, "config.json"))];
+  const names = new Map(
+    [...daemonPlistNames(plistDir), ...daemonPlistNames(agentsDir)].map((p) => [p.file, p]),
+  );
+  for (const p of [...names.values()].sort((a, b) => a.file.localeCompare(b.file))) {
+    const cfg = readDaemonPlist([plistDir, agentsDir], p.file);
+    const configPath = cfg === undefined ? undefined : plistConfigOf(cfg.text);
+    if (configPath !== undefined) out.push(entry(configPath, p.label));
+  }
+  return out;
+}
+
+/**
+ * 同じ stateDir（実パスで比べる）を使う、ほかの daemon（`daemons` は listDaemons の値。呼ぶ側が 1 回だけ作る）。
  * 自分の plist（`selfLabel`）だけは、同じ daemon なので飛ばす（同じ --org の init のやり直しを止めない）。
  * 同じ設定でも Label が違う plist（別の --org で 2 回 init した）は、別の daemon として検査し、見つけたら止める。
  * 見つかったら、その設定のパス（と Label）。なければ undefined。
  */
 export function stateDirSharedWith(
+  daemons: readonly DaemonEntry[],
   base: string,
-  plistDir: string,
-  agentsDir: string,
   configPath: string,
   stateDir: string,
   selfLabel: string,
 ): StateDirSharing | undefined {
-  const others: StateDirSharing[] = [{ configPath: join(base, "config.json") }];
-  // 元の plist（.touryou/launchd）が消えて、LaunchAgents にだけ残る daemon も、検査の対象にする（--others・ui と同じ）。
-  // 両方にあれば、元の plist を読む
-  const names = [
-    ...new Set([...daemonPlistNames(plistDir), ...daemonPlistNames(agentsDir)]),
-  ].sort();
-  for (const n of names) {
-    for (const dir of [plistDir, agentsDir]) {
-      try {
-        const text = readSecureFile(join(dir, n), { forbid: 0o022, maxBytes: 1024 * 1024 });
-        const cfg = plistConfigOf(text);
-        if (cfg !== undefined) others.push({ configPath: cfg, label: n.replace(/\.plist$/, "") });
-        break;
-      } catch {
-        // 読めない plist は、飛ばす（その 1 つのために、検出全体をやめない。元の plist が読めなければ LaunchAgents のものを読む）
-      }
-    }
-  }
   const self = canonicalPath(configPath);
   const mine = canonicalPath(stateDir);
   const selfIsDefault = self === canonicalPath(join(base, "config.json"));
-  for (const c of others) {
+  for (const c of daemons) {
     // 自分の plist（同じ Label）は、同じ daemon なので飛ばす。
     // 既定の設定は、--org を変えて並べられる（既存の動き。plist だけが別名になる）ので、同じ設定どうしは飛ばす。
     // 別名の設定（--config）は、Label（--org）が違っても同じ設定なら、同じ stateDir の別の daemon として止める
     if (c.label === selfLabel) continue;
     if (selfIsDefault && canonicalPath(c.configPath) === self) continue;
-    const sd = stateDirOf(c.configPath);
-    if (sd !== undefined && canonicalPath(sd) === mine) return c;
+    if (c.stateDir !== undefined && c.stateDir === mine) return c;
   }
   return undefined;
 }
@@ -465,7 +439,7 @@ function initOthers(args: readonly string[], deps: LaunchdDeps): CommandResult {
   // 対象は、LaunchAgents に置いた（常駐にした）ものだけ（has_extra_daemons・stop/apply --others と同じ集合）。
   // init しただけで使っていない plist は、壊れていても見ない
   const agentsDir = agentsDirOf(home);
-  const names = otherPlistNames(agentsDir);
+  const names = daemonPlistNames(agentsDir, "others");
   if (names.length === 0) {
     return {
       exitCode: 0,
@@ -478,28 +452,22 @@ function initOthers(args: readonly string[], deps: LaunchdDeps): CommandResult {
   const failures: string[] = [];
   for (const n of names) {
     // 元の plist（.touryou/launchd）が消えていれば、LaunchAgents のものから設定・PATH を読み戻す
-    const src = join(plistDir, n);
-    const file = lstatOrUndefined(src)?.isFile() === true ? src : join(agentsDir, n);
-    const text = lstatOrUndefined(file)?.isFile() === true ? readFileSync(file, "utf8") : undefined;
-    const cfg = text === undefined ? undefined : plistConfigOf(text);
-    const pathValue = text?.match(/<key>PATH<\/key><string>([^<]*)<\/string>/)?.[1];
-    const suffix = `:${DEFAULT_PATH}`;
-    const prefix =
-      pathValue === DEFAULT_PATH
-        ? []
-        : pathValue?.endsWith(suffix) === true
-          ? ["--path-prefix", pathValue.slice(0, -suffix.length)]
-          : undefined;
-    const label = n.replace(/\.plist$/, "");
-    const org = label.match(/^(.+)\.touryou\.daemon-[0-9a-f]{8}$/)?.[1];
-    if (cfg === undefined || prefix === undefined) {
+    const plist = readDaemonPlist([plistDir, agentsDir], n.file);
+    const cfg = plist === undefined ? undefined : plistConfigOf(plist.text);
+    const pathValue = plist === undefined ? undefined : pathValueOf(plist.text);
+    if (cfg === undefined || pathValue === undefined) {
       failures.push(
-        `  ${file}: 設定（--config）または PATH を読めない。手で外すか、"$HOME/.touryou/current/bin/touryou" launchd init --config <設定> で作り直す`,
+        `  ${plist?.file ?? join(agentsDir, n.file)}: 設定（--config）または PATH を読めない。手で外すか、"$HOME/.touryou/current/bin/touryou" launchd init --config <設定> で作り直す`,
       );
       continue;
     }
     const planned = planInit(
-      ["--config", cfg, ...(org === undefined ? [] : ["--org", org]), ...prefix],
+      [
+        "--config",
+        cfg,
+        ...(n.org === undefined ? [] : ["--org", n.org]),
+        ...pathPrefixArgs(pathValue),
+      ],
       deps,
     );
     if ("exitCode" in planned) {
@@ -519,7 +487,19 @@ function initOthers(args: readonly string[], deps: LaunchdDeps): CommandResult {
       1,
     );
   }
-  const results = plans.map(writeInit);
+  // 全部の下ごしらえ（一時ファイル）が済んでから、置き換える。下ごしらえの途中で例外が出たら、
+  // 一時ファイルを全部消して止める（本物の plist は、1 つも変わっていない。新旧の plist が混ざらない）
+  const staged: Staged[] = [];
+  try {
+    for (const p of plans) staged.push(stageInit(p));
+  } catch (e) {
+    for (const s of staged) discardStaged(s);
+    return fail(
+      `init --others: plist の下ごしらえに失敗した（${maskValues(e instanceof Error ? e.message : String(e))}）。何も置き換えずに止めた（新旧の plist は混ざらない）。原因を直してから、もう一度実行する`,
+      1,
+    );
+  }
+  const results = plans.map((p, i) => writeInit(p, staged[i] as Staged));
   const failed = results.find((r) => r.exitCode !== 0);
   return {
     exitCode: failed?.exitCode ?? 0,
@@ -643,9 +623,8 @@ function planInit(args: readonly string[], deps: LaunchdDeps): InitPlan | Comman
   // 同じ設定を別の --org で init したもの（Label が違う plist）も、別の daemon として数える
   const daemonLabel = labelOf(org, daemonName);
   const sharing = stateDirSharedWith(
+    listDaemons(base, plistDir, agentsDirOf(home)),
     base,
-    plistDir,
-    agentsDirOf(home),
     configPath,
     stateDir,
     daemonLabel,
@@ -750,21 +729,18 @@ function planInit(args: readonly string[], deps: LaunchdDeps): InitPlan | Comman
   };
 }
 
-/** planInit が確かめた内容を書く。 */
-function writeInit(plan: InitPlan): CommandResult {
-  const {
-    home,
-    base,
-    logsDir,
-    plistDir,
-    daemonLabel,
-    targets,
-    toWrite,
-    toReplace,
-    same,
-    legacyScript,
-    scriptIsLegacy,
-  } = plan;
+/** 書く前の下ごしらえの結果: 権限の注意と、一時ファイル（`<plist>.new`）。 */
+interface Staged {
+  readonly dirNotes: readonly string[];
+  readonly files: readonly { readonly tmp: string; readonly dest: string }[];
+}
+
+/**
+ * 下ごしらえ: ディレクトリを作り、書く内容を、全部一時ファイルに書く。本物の plist は、まだ 1 つも変えない
+ * （ここで例外が出ても、一時ファイルを消して投げ直す。`init --others` が、全部の下ごしらえが済んでから置き換えるため）。
+ */
+function stageInit(plan: InitPlan): Staged {
+  const { logsDir, plistDir, toWrite, toReplace } = plan;
   // ディレクトリ（自分が作るものだけ、権限を設定する。既存のものは、権限を確かめる）
   const dirNotes: string[] = [];
   for (const [dir, mode] of [
@@ -778,19 +754,46 @@ function writeInit(plan: InitPlan): CommandResult {
       dirNotes.push(`${dir} の権限が ${oct(modeOf(dir))}（直す: chmod 700 "${dir}"）`);
     }
   }
-  for (const t of toWrite) {
-    mkdirSync(dirname(t.path), { recursive: true });
-    writeFileSync(t.path, t.content, { flag: "wx", mode: t.mode });
-    chmodSync(t.path, t.mode);
+  const files: { tmp: string; dest: string }[] = [];
+  try {
+    for (const t of [...toWrite, ...toReplace]) {
+      mkdirSync(dirname(t.path), { recursive: true });
+      const tmp = `${t.path}.new`;
+      files.push({ tmp, dest: t.path });
+      rmSync(tmp, { force: true });
+      writeFileSync(tmp, t.content, { flag: "wx", mode: t.mode });
+      chmodSync(tmp, t.mode);
+    }
+  } catch (e) {
+    discardStaged({ dirNotes, files });
+    throw e;
   }
-  // 古い形からの引っ越し: 一時ファイルに書いてから、置き換える（途中で止まっても、古い形か新しい形のどちらかが残る）
-  for (const t of toReplace) {
-    const tmp = `${t.path}.new`;
-    rmSync(tmp, { force: true });
-    writeFileSync(tmp, t.content, { flag: "wx", mode: t.mode });
-    chmodSync(tmp, t.mode);
-    renameSync(tmp, t.path);
-  }
+  return { dirNotes, files };
+}
+
+/** 下ごしらえの一時ファイルを消す（置き換えずにやめるとき）。 */
+function discardStaged(staged: Staged): void {
+  for (const f of staged.files) rmSync(f.tmp, { force: true });
+}
+
+/** planInit が確かめた内容を書く（下ごしらえ → 置き換え）。 */
+function writeInit(plan: InitPlan, staged: Staged = stageInit(plan)): CommandResult {
+  const {
+    home,
+    base,
+    logsDir,
+    plistDir,
+    daemonLabel,
+    targets,
+    toWrite,
+    toReplace,
+    same,
+    legacyScript,
+    scriptIsLegacy,
+  } = plan;
+  const dirNotes = [...staged.dirNotes];
+  // 古い形からの引っ越しも、新しく書くものも、一時ファイルを置き換える（途中で止まっても、古い形か新しい形のどちらかが残る）
+  for (const f of staged.files) renameSync(f.tmp, f.dest);
 
   // 生成後の確認（権限）
   const problems: string[] = [...dirNotes];
