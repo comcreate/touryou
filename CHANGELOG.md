@@ -76,6 +76,10 @@ v0.1.5 を入れている Mac で、次のとおり（細部は `docs/setup-veri
    claude plugin update touryou@touryou --scope user
    ```
 
+   - **公開の直後は、更新が見えないことがある**（#215）: Release のあと、marketplace.json の反映（自動の PR のマージと、`marketplace-v<版>` の tag 付け）が済むまで、`update` は古い版（0.1.5）のままで「already at the latest version」と出る。v0.1.6 では、公開から反映まで約 1 時間 40 分あいた。故障ではないので、反映を待ってから、もう一度実行する。
+   - **marketplace が tag に固定されているとき**（`claude plugin marketplace list` の Source に `@marketplace-v<版>` と出る。#216）: `update` は、その古い tag を取り直すだけで、新しい版に上がらない。user の設定の `extraKnownMarketplaces.touryou.source` に `"ref": "marketplace-v0.1.6"` を足し、`claude plugin marketplace add "comcreate/touryou#marketplace-v0.1.6"` をし直す。手順は [`docs/release.md`](docs/release.md) の「手で marketplace を足した人には、project の固定が効かない」。`claude plugin marketplace remove` は plugin とデータを消すので使わない。
+   - **project スコープで入れた plugin は、`--scope user` の更新では上がらない**（#216）: user スコープの plugin だけが上がる。project スコープの plugin は、その project の中で、`--scope project` を付けて更新する（この `--scope` の値は、`claude plugin update --help` で確かめる。**未確認**）。
+
 2. 新しいセッションで `/touryou:setup` を実行する（本体が v0.1.6 に入れ替わる）。セッションの始まりに、本体と plugin の版の違いの知らせが出ることもあるが、出なくても実行する。
 3. 常駐（launchd）させているときは、`/touryou:setup` が daemon の起動し直しの同意を聞くので、「はい」と答える（「いいえ」なら何も変えずに止まる）。設定ごとに分けた daemon があれば、同じ同意で、ほかのリポジトリ用のものも起動し直される（#165）。
 4. 上げる前から開いている統合セッションは、古い版の `touryou-mcp` のまま動き続ける。`/mcp` で `plugin:touryou:node` を選んで Reconnect する（Reconnect がない画面なら、Claude Code を起動し直す）。そのあと `/touryou:start` で、接続を確かめる。上げる前から動いている CLI の子も、古い版のフックのまま動くので、作業の切れ目で起動し直す。

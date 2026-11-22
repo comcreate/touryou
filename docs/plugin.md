@@ -46,6 +46,10 @@ touryou のリポジトリで開発する人へ: このリポジトリの中で 
 
 - 取得に失敗したとき: ネットワークの接続を確かめる。`404` は、その版の Release がない（plugin と Release の版の食い違い）。plugin を新しい版にしてからやり直す。
 - 新しい版: `claude plugin marketplace update touryou` と `claude plugin update touryou@touryou --scope user` のあとに、`/touryou:setup` をもう一度実行して、配布物も同じ版にする（`--scope user` を付ける。付け忘れて clone の中で update すると、その clone の中だけが新しくなる）。plugin が本体より古いときは、`/touryou:setup` は本体を入れ替えず、`RESULT: plugin-older`（終了コード 4）で止まって、plugin の更新を案内する。
+- 更新が「already at the latest version」のまま上がらないとき（#215・#216）:
+  - **公開の直後**: Release のあと、marketplace.json の反映（自動の PR のマージと `marketplace-v<版>` の tag 付け）が済むまで、新しい版は見えない。v0.1.6 では、公開から反映まで約 1 時間 40 分あいた。反映を待ってから、もう一度実行する（手順は [`docs/release.md`](release.md) の 5・5-a）。
+  - **marketplace が tag に固定されている**: `claude plugin marketplace list` の Source に `@marketplace-v<版>` と出るときは、`update` がその古い tag を取り直すだけで、上がらない。user の設定の `extraKnownMarketplaces.touryou.source` に `"ref": "marketplace-v<新しい版>"` を足し、`claude plugin marketplace add "comcreate/touryou#marketplace-v<新しい版>"` をし直す。手順は [`docs/release.md`](release.md) の「手で marketplace を足した人には、project の固定が効かない」。
+  - **project スコープの plugin**: `--scope user` の更新では上がらない（user スコープの plugin だけが上がる）。project スコープで入れた plugin は、その project の中で、`--scope project` を付けて更新する（この値は、`claude plugin update --help` で確かめる。**未確認**）。
 
 ## 使う順序
 

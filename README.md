@@ -33,6 +33,8 @@ touryou のリポジトリで開発する人へ: このリポジトリの中で 
 
 新しい版が出たら、`claude plugin marketplace update touryou`、`claude plugin update touryou@touryou --scope user` の順に実行し、Claude Code を開き直してから、もう一度 `/touryou:setup` を実行します。
 
+公開の直後は、marketplace の反映（自動の PR のマージと tag 付け）が済むまで、更新が見えない（「already at the latest version」のまま）ことがあります。待ってから、もう一度実行してください。marketplace が tag に固定されている（`claude plugin marketplace list` の Source に `@marketplace-v<版>` と出る）ときも上がりません。手順は [`docs/plugin.md`](docs/plugin.md) の「新しい版」。project スコープの plugin は、`--scope user` の更新では上がりません。
+
 `--scope user` は付けてください。touryou の clone の中で付け忘れると、その clone の中だけが新しくなり、自分のアカウント全体の plugin は古いままになります。本体と plugin の版が違うと、セッションの始まりに知らせが出ます（知らせるだけで、取得や daemon の起動し直しはしません）。本体が新しく plugin が古いときは、`/touryou:setup` は本体を古い版に入れ替えず、plugin の更新を案内して止まります。常駐にしているときは、`/setup` の中で「はい」と答えたときだけ、daemon を止めて新しい版で起動し直します。
 
 ## 手元でビルドして使う（開発する人向け）
