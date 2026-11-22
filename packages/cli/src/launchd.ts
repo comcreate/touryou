@@ -117,7 +117,7 @@ export const LSREGISTER =
 export const labelOf = (org: string | undefined, name: string): string =>
   org === undefined ? `touryou.${name}` : `${org}.touryou.${name}`;
 
-const HELP = `touryou launchd init [--org <組織の逆ドメイン>] [--path-prefix <ディレクトリ[:ディレクトリ…]>] [--config <設定ファイルの絶対パス>]
+const HELP = `touryou launchd init [--org <組織の逆ドメイン>] [--path-prefix <ディレクトリ[:ディレクトリ…]>] [--config <設定ファイルの絶対パス> [--name <MCP の名前>]]
 touryou launchd init --others
 
 daemon を、launchd で常駐させるための plist を生成する（同梱の node で daemon を直に起こす。起動スクリプトは作らない）。\`launchctl\` は実行しない。秘密は扱わない。
@@ -126,6 +126,7 @@ daemon を、launchd で常駐させるための plist を生成する（同梱�
   --path-prefix    plist の PATH の先頭に足す、絶対パスのディレクトリ（git の場所。例: Homebrew の bin）。省略可
   --config         別の daemon の設定ファイル（絶対パス）。省略すると $HOME/.touryou/config.json（今までどおり）。指定すると、設定ごとに
                    別の Label（touryou.daemon-<8 文字>）・plist・ログ（logs/daemon-<8 文字>.log）・stateDir になる（docs/launchd.md の「複数の daemon」）
+  --name           （--config と一緒に使う）MCP の登録名 touryou-<名前> の <名前>（小文字の英数字とハイフン）。省略すると、設定の repoRoot のフォルダ名から作る。init は、登録の命令（claude mcp add）を案内に出すだけで、実行しない
   --others         （単独で使う。ほかの引数は受けない）LaunchAgents に置いた別名の daemon（--config で作ったもの）すべての plist を、その plist の設定・組織（Label）・PATH のままで、現在の版の形に作り直す（版上げが使う）
   -h, --help       この使い方を表示する
 
@@ -338,8 +339,8 @@ const lstatOrUndefined = (path: string): ReturnType<typeof lstatSync> | undefine
 const modeOf = (path: string): number => lstatSync(path).mode & 0o777;
 const oct = (n: number): string => n.toString(8).padStart(4, "0");
 
-/** daemon の設定の `stateDir`（絶対パス）。読めない・形が違えば undefined。 */
-export function stateDirOf(configPath: string): string | undefined {
+/** daemon の設定の、絶対パスの文字列の項目。読めない・形が違えば undefined。 */
+function absolutePathField(configPath: string, key: string): string | undefined {
   try {
     // 他の人が書けない・リンクでない・自分の・ACL のないファイルだけを読む（daemon の loadConfigFile と同じ確かめ）
     const json = JSON.parse(
@@ -347,12 +348,43 @@ export function stateDirOf(configPath: string): string | undefined {
     ) as unknown;
     const dir =
       typeof json === "object" && json !== null
-        ? (json as Record<string, unknown>).stateDir
+        ? (json as Record<string, unknown>)[key]
         : undefined;
     return typeof dir === "string" && isAbsolute(dir) ? dir : undefined;
   } catch {
     return undefined;
   }
+}
+
+/** daemon の設定の `stateDir`（絶対パス）。読めない・形が違えば undefined。 */
+export function stateDirOf(configPath: string): string | undefined {
+  return absolutePathField(configPath, "stateDir");
+}
+
+/** MCP のサーバー名の `<名前>` の形（小文字の英数字とハイフン。先頭・末尾は英数字。claude mcp add の名前に使える） */
+export const MCP_NAME_RE = /^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$/;
+
+/**
+ * 設定ごとの MCP のサーバー名の `<名前>`（登録名は `touryou-<名前>`。#224）。`--name` があればそれ。
+ * なければ設定の `repoRoot` の basename を、小文字の英数字とハイフンにしたもの。作れなければ、daemon 名（`daemon-<8 文字>`）。
+ */
+export function mcpNameOf(
+  nameArg: string | undefined,
+  configPath: string,
+  daemonName: string,
+): string {
+  if (nameArg !== undefined) return nameArg;
+  const repoRoot = absolutePathField(configPath, "repoRoot");
+  const fromRepo =
+    repoRoot === undefined
+      ? ""
+      : basename(repoRoot)
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "")
+          .slice(0, 32)
+          .replace(/-+$/g, "");
+  return MCP_NAME_RE.test(fromRepo) ? fromRepo : daemonName;
 }
 
 /** 同じ stateDir を使う、ほかの daemon。`label` は、その plist の Label（既定の設定の、plist がまだない分は無し）。 */
@@ -536,6 +568,8 @@ interface InitPlan {
   readonly same: readonly string[];
   readonly legacyScript: string;
   readonly scriptIsLegacy: boolean;
+  /** 別名の設定（--config）のときだけ。plugin の node とは別に、この daemon につなぐ MCP の登録の案内（#224） */
+  readonly mcp?: { readonly name: string; readonly configPath: string };
 }
 
 /** init の引数と、書く先の状態を全部確かめる（何も書かない）。書けなければ、止める理由（CommandResult）を返す。 */
@@ -544,13 +578,15 @@ function planInit(args: readonly string[], deps: LaunchdDeps): InitPlan | Comman
   let pathPrefix = "";
   let prefixGiven = false;
   let configArg: string | undefined;
+  let nameArg: string | undefined;
   for (let i = 0; i < args.length; i += 1) {
     const a = args[i] as string;
     const v = args[i + 1];
-    if (a === "--org" || a === "--path-prefix" || a === "--config") {
+    if (a === "--org" || a === "--path-prefix" || a === "--config" || a === "--name") {
       if (v === undefined || v.startsWith("--")) return fail(`${a} には値を指定する`);
       if (a === "--org") org = v;
       else if (a === "--config") configArg = v;
+      else if (a === "--name") nameArg = v;
       else {
         pathPrefix = v;
         prefixGiven = true;
@@ -563,6 +599,16 @@ function planInit(args: readonly string[], deps: LaunchdDeps): InitPlan | Comman
   if (org !== undefined && !REVERSE_DOMAIN.test(org)) {
     return fail(
       "--org は、小文字の英数字とハイフンのラベルを、ドットで 2 つ以上つないだ形（例: com.example）にする",
+    );
+  }
+  if (nameArg !== undefined && !MCP_NAME_RE.test(nameArg)) {
+    return fail(
+      "--name は、小文字の英数字とハイフン（先頭・末尾は英数字。32 文字まで）にする（MCP の登録名は touryou-<名前>）",
+    );
+  }
+  if (nameArg !== undefined && configArg === undefined) {
+    return fail(
+      "--name は、別の daemon の設定（--config）と一緒に使う（既定の設定の MCP は、plugin の node を使う）",
     );
   }
   let pathValue = DEFAULT_PATH;
@@ -726,6 +772,7 @@ function planInit(args: readonly string[], deps: LaunchdDeps): InitPlan | Comman
     same,
     legacyScript,
     scriptIsLegacy,
+    ...(isDefault ? {} : { mcp: { name: mcpNameOf(nameArg, configPath, daemonName), configPath } }),
   };
 }
 
@@ -790,6 +837,7 @@ function writeInit(plan: InitPlan, staged: Staged = stageInit(plan)): CommandRes
     same,
     legacyScript,
     scriptIsLegacy,
+    mcp,
   } = plan;
   const dirNotes = [...staged.dirNotes];
   // 古い形からの引っ越しも、新しく書くものも、一時ファイルを置き換える（途中で止まっても、古い形か新しい形のどちらかが残る）
@@ -832,6 +880,19 @@ function writeInit(plan: InitPlan, staged: Staged = stageInit(plan)): CommandRes
   out.push(`  cp "${join(plistDir, `${daemonLabel}.plist`)}" "${la}/"`);
   out.push(`  "${LSREGISTER}" -f "${appBundlePath(base)}"`);
   out.push(`  launchctl bootstrap "gui/$(id -u)" "${join(la, `${daemonLabel}.plist`)}"`);
+  if (mcp !== undefined) {
+    // 実行はしない（claude の設定は、daemon の常駐の道具の責務の外。#224）。touryou-mcp は、plugin の版に依らない current の下のものを指す
+    out.push("");
+    out.push(
+      `【MCP を登録する】（人が行う。この daemon につなぐ統合セッション用。plugin の node は、既定の設定の daemon につながったまま）`,
+    );
+    out.push(
+      `  claude mcp add touryou-${mcp.name} -- "${join(base, "current", "bin", "touryou-mcp")}" --stdio --config "${mcp.configPath}"`,
+    );
+    out.push(
+      `  登録後、統合セッションで touryou-${mcp.name} の whoami を呼ぶと、daemon の repoRoot・daemonId で、どの daemon か確かめられる。名前を変えるときは --name を付けて init し直す`,
+    );
+  }
   out.push("");
   out.push("【止める】（人が行う）");
   out.push(`  launchctl bootout "gui/$(id -u)/${daemonLabel}"`);

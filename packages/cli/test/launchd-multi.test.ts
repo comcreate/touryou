@@ -140,6 +140,45 @@ describe("複数の daemon（--config）", () => {
     expect(def).toContain("logs/daemon.log");
   });
 
+  describe("MCP の登録の案内（#224）", () => {
+    const registerLine = (w: World, name: string, config: string): string =>
+      `claude mcp add touryou-${name} -- "${join(w.base, "current", "bin", "touryou-mcp")}" --stdio --config "${config}"`;
+
+    it("別名の設定は、repoRoot のフォルダ名から作った名前で、--config 固定の登録の命令を案内に出す（実行しない）", async () => {
+      const w = makeWorld();
+      writeFileSync(
+        w.otherConfig,
+        JSON.stringify({ stateDir: w.states[w.otherLabel], repoRoot: "/work/My_Repo.v2" }),
+        { mode: 0o600 },
+      );
+      const r = await bin(w, ["init", "--config", w.otherConfig]);
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain("【MCP を登録する】");
+      expect(r.stdout).toContain(registerLine(w, "my-repo-v2", w.otherConfig));
+      expect(w.calls).toEqual([]); // launchctl も claude も実行しない
+    });
+
+    it("--name があれば、その名前を使う。形が違う・--config なしは、終了コード 2 で何も作らない", async () => {
+      const w = makeWorld();
+      const r = await bin(w, ["init", "--config", w.otherConfig, "--name", "renga"]);
+      expect(r.exitCode).toBe(0);
+      expect(r.stdout).toContain(registerLine(w, "renga", w.otherConfig));
+      for (const bad of ["Renga", "-a", "a_b", "a".repeat(33)]) {
+        expect((await bin(w, ["init", "--config", w.otherConfig, "--name", bad])).exitCode).toBe(2);
+      }
+      expect((await bin(w, ["init", "--name", "renga"])).exitCode).toBe(2);
+    });
+
+    it("repoRoot がなく名前を作れなければ、daemon 名（daemon-<8 文字>）を使う。既定の設定には案内を出さない", async () => {
+      const w = makeWorld();
+      const r = await bin(w, ["init", "--config", w.otherConfig]);
+      expect(r.stdout).toContain(registerLine(w, w.otherLabel.replace("touryou.", ""), w.otherConfig));
+      const def = await bin(w, ["init"]);
+      expect(def.exitCode).toBe(0);
+      expect(def.stdout).not.toContain("【MCP を登録する】");
+    });
+  });
+
   it("2 つの設定で、それぞれ登録・状態確認・停止・削除ができる", async () => {
     const w = makeWorld();
     await bin(w, ["init"]);
