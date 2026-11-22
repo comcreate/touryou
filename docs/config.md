@@ -18,6 +18,15 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 | `rootCwd` | 根の作業ツリー（`repoRoot` 自身か、その配下） |
 | `rootScope` | 根の範囲（子の権限の上限）。`writableLocations`・`forbiddenLocations`・`allowedCommands` |
 
+### 置き場の重なりの検査（現在の動き）
+
+`stateDir`・`repoRoot`・`worktreeRoot` の 3 つは、**互いに、一方が他方の中にあっても、同じ場所でも、拒否されます**（gitignore 済みかどうかは見ません）。次の 2 か所で調べます（出典: `packages/daemon/src/config.ts` の `parseConfig`、`packages/daemon/src/compose.ts` の `realOverlap`）。
+
+- 設定を読むとき: 書かれたパス（`..` をそろえたもの）で比べる。失敗の文は「stateDir・repoRoot・worktreeRoot は、互いに重なってはならない」（`invalidConfig`）。
+- daemon の起動のとき: リンクを解決した実パス（まだないパスは、あるいちばん深い祖先を解決して残りを足す）で、大文字小文字・Unicode の正規化をそろえて比べる。失敗の文は「stateDir・repoRoot・worktreeRoot が、リンクを解決すると重なる」。
+
+つまり、`stateDir` や `worktreeRoot` を `repoRoot` の中（たとえば `<repoRoot>/.touryou`）に置く設定は、いまは起動できません。`rootCwd` は別で、`repoRoot` 自身かその配下でなければなりません。
+
 ## 任意の項目と既定値
 
 | キー | 既定 | 内容 |
