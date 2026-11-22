@@ -356,6 +356,169 @@ describe("紐付けの前の例外: ToolSearch と touryou の plugin の Skill"
   });
 });
 
+describe("一時的な失敗の再試行（印のある作業ツリーの PreToolUse）", () => {
+  const tree: Record<string, string> = { "/wt/a/.git": "gitdir: /repo/.git/worktrees/a\n" };
+  const both = (p: string): string => {
+    const v = files[p] ?? tree[p];
+    if (v === undefined) throw new Error("ENOENT");
+    return v;
+  };
+  const exists = (p: string) => p === "/repo/.git/worktrees/a/touryou-child" || p in tree;
+  const pre = (cwd = "/wt/a") =>
+    JSON.stringify({ hook_event_name: "PreToolUse", session_id: "s", cwd, tool_name: "Bash" });
+  const refused = async (): Promise<Response> => {
+    throw new TypeError("fetch failed");
+  };
+  const timedOut = async (): Promise<Response> => {
+    throw new DOMException("timeout", "TimeoutError");
+  };
+  /** 仮の時計: sleep と fetch の失敗で進む時間を数える。 */
+  const clock = () => {
+    const c = { t: 0, sleeps: [] as number[] };
+    return {
+      c,
+      now: () => c.t,
+      sleep: async (ms: number) => {
+        c.sleeps.push(ms);
+        c.t += ms;
+      },
+    };
+  };
+  const run = (fetchImpl: typeof fetch, k = clock(), read = both) =>
+    runHook({
+      env: ENV,
+      input: pre(),
+      readFile: read,
+      exists,
+      fetchImpl,
+      now: k.now,
+      sleep: k.sleep,
+    });
+
+  it("接続の失敗のあと成功したら、再試行で通る", async () => {
+    let n = 0;
+    const flaky: typeof fetch = async (u, i) => {
+      n++;
+      if (n === 1) throw new TypeError("fetch failed");
+      return reply({ decision: "allow" })(u, i);
+    };
+    const k = clock();
+    expect(await run(flaky, k)).toEqual({ code: 0, stderr: "" });
+    expect(n).toBe(2);
+    expect(k.c.sleeps).toEqual([300]);
+  });
+
+  it("窓口が分からない失敗のあと成功したら、再試行で通る", async () => {
+    let reads = 0;
+    const flakyRead = (p: string): string => {
+      if (p === "/h/.touryou/config.json" && ++reads === 1) throw new Error("EAGAIN");
+      return both(p);
+    };
+    expect(await run(reply({ decision: "allow" }), clock(), flakyRead)).toEqual({
+      code: 0,
+      stderr: "",
+    });
+    expect(reads).toBe(2);
+  });
+
+  it("再試行しても届かないなら拒否のまま。試みは 2 回だけで、待ちの合計は上限内", async () => {
+    let n = 0;
+    const always: typeof fetch = async () => {
+      n++;
+      throw new TypeError("fetch failed");
+    };
+    const k = clock();
+    const r = await run(always, k);
+    expect(r.code).toBe(2);
+    expect(n).toBe(2);
+    // 最悪: 1 回目 8 秒（窓口 4 + fetch 4）+ 待ち + 2 回目の fetch（残りの予算）は、hooks.json の timeout 10 秒に収まる
+    const worst = 4000 + 4000 + k.c.sleeps.reduce((a, b) => a + b, 0) + 500;
+    expect(worst).toBeLessThanOrEqual(10_000 - 1000 + 500);
+  });
+
+  it("1 回目で予算を使い切ったときは、再試行しない（最悪時間を守る）", async () => {
+    let n = 0;
+    const slow: typeof fetch = async () => {
+      n++;
+      k.c.t += 4000;
+      throw new DOMException("timeout", "TimeoutError");
+    };
+    const k = clock();
+    k.c.t = 1500; // 窓口の確かめが遅かった想定
+    const start = k.c.t;
+    const r = await run(slow, k);
+    expect(r.code).toBe(2);
+    expect(n).toBe(1);
+    expect(k.c.sleeps).toEqual([]);
+    expect(k.c.t - start).toBeLessThanOrEqual(10_000);
+  });
+
+  it("daemon が応答して拒否したとき（200 以外）は、再試行しない", async () => {
+    let n = 0;
+    const denied: typeof fetch = async (u, i) => {
+      n++;
+      return reply({ decision: "allow" }, 500)(u, i);
+    };
+    const k = clock();
+    const r = await run(denied, k);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain("HTTP 500");
+    expect(n).toBe(1);
+    expect(k.c.sleeps).toEqual([]);
+  });
+
+  it("daemon が deny を返したときも、再試行しない", async () => {
+    let n = 0;
+    const deny: typeof fetch = async (u, i) => {
+      n++;
+      return reply({ decision: "deny", reason: "範囲外" })(u, i);
+    };
+    const r = await run(deny);
+    expect(r).toEqual({ code: 2, stderr: "範囲外" });
+    expect(n).toBe(1);
+  });
+
+  it("拒否の文は、原因（窓口・接続・時間切れ）ごとに分かれ、再試行の案内が出る", async () => {
+    const noUrl = await run(refused, clock(), (p) => {
+      if (p.startsWith("/h/")) throw new Error("ENOENT");
+      return both(p);
+    });
+    const connect = await run(refused);
+    const timeout = await run(timedOut);
+    expect(noUrl.stderr).toContain("窓口が分からない");
+    expect(connect.stderr).toContain("接続の失敗");
+    expect(timeout.stderr).toContain("時間切れ");
+    for (const r of [noUrl, connect, timeout]) {
+      expect(r.code).toBe(2);
+      expect(r.stderr).toContain("数十秒あけて 1 回だけ再試行する");
+      expect(r.stderr).toContain("report_progress");
+    }
+    expect(connect.stderr).not.toContain("時間切れ");
+    expect(timeout.stderr).not.toContain("接続の失敗");
+  });
+
+  it("印のない作業ツリーでは、再試行せず、いままでどおり黙って通す", async () => {
+    let n = 0;
+    const counting: typeof fetch = async () => {
+      n++;
+      throw new TypeError("fetch failed");
+    };
+    const k = clock();
+    const r = await runHook({
+      env: ENV,
+      input: pre("/wt/none"),
+      readFile: both,
+      exists,
+      fetchImpl: counting,
+      now: k.now,
+      sleep: k.sleep,
+    });
+    expect(r).toEqual({ code: 0, stderr: "" });
+    expect(n).toBe(1);
+    expect(k.c.sleeps).toEqual([]);
+  });
+});
+
 describe("承認済みの範囲の拡張（#91）", () => {
   const bash = input("PreToolUse", { tool_name: "Bash", tool_input: { command: "git ls-files" } });
   it("permit: extension の許可は、PreToolUse の明示の許可（permissionDecision: allow）を返す", async () => {

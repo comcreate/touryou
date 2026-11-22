@@ -47,6 +47,10 @@ export interface HookInput {
   readonly exists?: (path: string) => boolean;
   /** 設定・port の ACL の確かめ（`readFile` を渡さないときに使う。既定は `defaultAclCheck`）。試験で差し替える。 */
   readonly acl?: AclCheck;
+  /** 現在時刻（ミリ秒。再試行の予算の計算に使う。試験で差し替える）。 */
+  readonly now?: () => number;
+  /** 待つ（再試行の間。試験で差し替える）。 */
+  readonly sleep?: (ms: number) => Promise<void>;
 }
 
 export interface HookResult {
@@ -174,8 +178,30 @@ export function isTouryouWorktree(
   }
   return false;
 }
-/** トークンのない形の時間切れ（daemon が応えないとき、ふつうのセッションを待たせない）。 */
-const SESSION_TIMEOUT_MS = 2000;
+/** トークンのない形の 1 回の fetch の時間切れ（pnpm test のような重い処理と重なっても、1 回の遅れで拒否しない長さ）。 */
+const SESSION_TIMEOUT_MS = 4000;
+/**
+ * 一時的な失敗（窓口が分からない・fetch の失敗）の再試行（印のある作業ツリーの PreToolUse だけ）。
+ * 最悪の合計時間（hooks.json の PreToolUse の timeout 10 秒に収める）:
+ *   1 回目: 窓口の確かめ（readSecureFile が /bin/ls を 2 回、各 2 秒の時間切れ）最悪 4 秒 + fetch 最悪 4 秒 = 8 秒
+ *   再試行は「経過 + 待ち 0.3 秒 + 窓口の確かめの最悪 4 秒 + 最低の fetch 0.5 秒」が予算 9 秒に収まるときだけ行う。
+ *   2 回目の fetch の時間切れは、残りの予算（最大 4 秒）に切り詰める。
+ *   窓口の確かめは中断できない（同期）が、再試行の前に最悪を見込むので、合計は予算 9 秒 + 起動の余裕 1 秒 = 10 秒を超えない。
+ */
+const RETRY_WAIT_MS = 300;
+const RETRY_BUDGET_MS = 9000;
+const STATE_READ_WORST_MS = 4000;
+const MIN_FETCH_MS = 500;
+const MAX_ATTEMPTS = 2;
+/** 一時的な失敗の種類（標準エラーと拒否の文に出す。値・パス・トークンは出さない）。 */
+type TransientCause = "noUrl" | "connect" | "timeout";
+const RETRY_ADVICE =
+  "同じ操作を数十秒あけて 1 回だけ再試行する。直らなければ report_progress で親に知らせる";
+const TRANSIENT_WHY: Record<TransientCause, string> = {
+  noUrl: `届かない（窓口が分からない。一時的な失敗の可能性）。${RETRY_ADVICE}`,
+  connect: `届かない（接続の失敗。一時的な失敗の可能性）。${RETRY_ADVICE}`,
+  timeout: `届かない（時間切れ。一時的な失敗の可能性）。${RETRY_ADVICE}`,
+};
 /** 設定・port のファイルの大きさの上限。 */
 const STATE_MAX_BYTES = 64 * 1024;
 
@@ -216,6 +242,8 @@ async function sessionMode(
     readonly readFile: HookInput["readFile"];
     readonly exists: HookInput["exists"];
     readonly acl?: HookInput["acl"];
+    readonly now: () => number;
+    readonly sleep: (ms: number) => Promise<void>;
   },
   event: unknown,
   parsed: boolean,
@@ -245,35 +273,62 @@ async function sessionMode(
       : SILENT;
   try {
     if (deps.truncated || !parsed) return unreachable("送れない（フック入力が読めない）");
-    let url: string | undefined;
-    try {
-      // 設定・port は、daemon の port-file.ts と同じ確かめ（リンクでない・持ち主・権限・ACL）をしてから読む。
-      // 確かめに失敗したら窓口が分からない扱い（印のある作業ツリーでは拒む。印がなければ黙って通す）。
-      const readState =
-        deps.readFile === undefined
-          ? (path: string, forbid: number) =>
-              readSecureFile(path, {
-                forbid,
-                maxBytes: STATE_MAX_BYTES,
-                ...(deps.acl === undefined ? {} : { acl: deps.acl }),
-              })
-          : (path: string) => read(path);
-      url = daemonUrlFromState(deps.env, readState);
-    } catch {
-      url = undefined;
+    const readState =
+      deps.readFile === undefined
+        ? (path: string, forbid: number) =>
+            readSecureFile(path, {
+              forbid,
+              maxBytes: STATE_MAX_BYTES,
+              ...(deps.acl === undefined ? {} : { acl: deps.acl }),
+            })
+        : (path: string) => read(path);
+    const started = deps.now();
+    // 1 回の試み。窓口が分からない・fetch の失敗だけが一時的な失敗（原因を返す）。daemon が応答したら、200 でなくても応答を返す
+    const attempt = async (): Promise<{ res: Response } | { cause: TransientCause }> => {
+      let url: string | undefined;
+      try {
+        // 設定・port は、daemon の port-file.ts と同じ確かめ（リンクでない・持ち主・権限・ACL）をしてから読む。
+        // 確かめに失敗したら窓口が分からない扱い（印のある作業ツリーでは拒む。印がなければ黙って通す）。
+        url = daemonUrlFromState(deps.env, readState);
+      } catch {
+        url = undefined;
+      }
+      if (url === undefined) return { cause: "noUrl" };
+      const remaining = RETRY_BUDGET_MS - (deps.now() - started);
+      try {
+        const res = await deps.fetchImpl(`${url}/v1/hook`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: deps.input,
+          signal: AbortSignal.timeout(
+            Math.max(MIN_FETCH_MS, Math.min(deps.timeoutMs, SESSION_TIMEOUT_MS, remaining)),
+          ),
+        });
+        return { res };
+      } catch (e) {
+        const name = e instanceof Error ? e.name : "";
+        return { cause: name === "TimeoutError" || name === "AbortError" ? "timeout" : "connect" };
+      }
+    };
+    // 再試行するのは、子の作業ツリーの PreToolUse だけ（ふつうのセッションを待たせない）
+    const retryable = event === "PreToolUse" && childTree();
+    let outcome = await attempt();
+    for (
+      let n = 1;
+      "cause" in outcome &&
+      retryable &&
+      n < MAX_ATTEMPTS &&
+      deps.now() - started + RETRY_WAIT_MS + STATE_READ_WORST_MS + MIN_FETCH_MS <= RETRY_BUDGET_MS;
+      n++
+    ) {
+      await deps.sleep(RETRY_WAIT_MS);
+      outcome = await attempt();
     }
-    if (url === undefined) return unreachable("届かない（窓口が分からない）");
-    let res: Response;
-    try {
-      res = await deps.fetchImpl(`${url}/v1/hook`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: deps.input,
-        signal: AbortSignal.timeout(Math.min(deps.timeoutMs, SESSION_TIMEOUT_MS)),
-      });
-    } catch {
-      return unreachable("届かない");
+    if ("cause" in outcome) {
+      if (retryable) process.stderr.write(`${PREFIX} 一時的な失敗: ${outcome.cause}\n`);
+      return unreachable(TRANSIENT_WHY[outcome.cause]);
     }
+    const res = outcome.res;
     if (res.status !== 200) return unreachable(`拒否された（HTTP ${res.status}）`);
     const j = (await res.json()) as {
       ok?: unknown;
@@ -373,6 +428,8 @@ async function decide(
         readFile: deps.readFile,
         exists: deps.exists,
         acl: deps.acl,
+        now: deps.now ?? Date.now,
+        sleep: deps.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))),
       },
       event,
       parsed,
