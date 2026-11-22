@@ -615,6 +615,20 @@ export interface AdoptResult {
   readonly duplicate: boolean;
 }
 
+/**
+ * 子の操作。子のロールが持つ。サブ統括（親を持つ統合ノード。#168）も、自分の親に対して同じ操作を使う（完了の報告・範囲の拡張・
+ * 自分の受信箱の読み取りなど）ので、統合ロールの操作にも足す。根（親がない）は使えない（`INTEGRATOR_OPERATION_CLASS` の `self`）。
+ */
+const CHILD_OPERATIONS = [
+  "report.progress",
+  "report.decision",
+  "decision.withdraw",
+  "report.outOfScope",
+  "report.done",
+  "scope.extend",
+  "child.inbox",
+] as const;
+
 /** ロールごとに公開する操作（NFR_004）。`node.purge`・`node.purgePreview` は人間のコマンドだけ（DC_003）。 */
 export const ROLE_OPERATIONS = {
   integrator: [
@@ -639,16 +653,9 @@ export const ROLE_OPERATIONS = {
     "report.get",
     "parent.request",
     "parent.report",
+    ...CHILD_OPERATIONS,
   ],
-  child: [
-    "report.progress",
-    "report.decision",
-    "decision.withdraw",
-    "report.outOfScope",
-    "report.done",
-    "scope.extend",
-    "child.inbox",
-  ],
+  child: CHILD_OPERATIONS,
   human: [
     "inbox.fetch",
     "inbox.resolve",
@@ -691,7 +698,7 @@ export const DAEMON_OPERATIONS: readonly RoleOperation<ContractRole>[] = [
 export type SubtreeRule = "strictDescendant" | "directChild" | "selfOrDescendant";
 
 /** 統合ノードの、呼び出し側のノードの部分木では判定しない操作（一覧系は、呼び出し側で絞る）。 */
-type NonSubtreeIntegratorOperation = "inbox.fetch" | "tree.list";
+type NonSubtreeIntegratorOperation = "inbox.fetch" | "tree.list" | (typeof CHILD_OPERATIONS)[number];
 export type SubtreeOperation = Exclude<RoleOperation<"integrator">, NonSubtreeIntegratorOperation>;
 
 /**
@@ -730,11 +737,19 @@ export const SUBTREE_SCOPED_OPERATIONS = Object.keys(SUBTREE_RULES) as readonly 
 /**
  * 統合ノードの操作の分類（型で網羅）。`subtree`: `SUBTREE_RULES` で判定する。`callerFiltered`: 呼び出し側の部分木に
  * 絞った結果だけを返す（ハンドラの責務。`visibleState` を使う）。`denied`: 発生元の記録がまだないので、記録ができる
- * までは統合ロールからの呼び出しを拒否する（`scope.decide`。フェイルクローズ）。
+ * までは統合ロールからの呼び出しを拒否する（`scope.decide`。フェイルクローズ）。`self`: 呼び出したノード自身の分だけを扱う子の操作
+ * （サブ統括が自分の親へ使う。#168）。対象は呼び出し側の資格情報で決まり、親を持たない根は拒否する。
  */
 export const INTEGRATOR_OPERATION_CLASS: Readonly<
-  Record<RoleOperation<"integrator">, "subtree" | "callerFiltered" | "denied">
+  Record<RoleOperation<"integrator">, "subtree" | "callerFiltered" | "denied" | "self">
 > = {
+  "report.progress": "self",
+  "report.decision": "self",
+  "decision.withdraw": "self",
+  "report.outOfScope": "self",
+  "report.done": "self",
+  "scope.extend": "self",
+  "child.inbox": "self",
   "node.spawn": "subtree",
   "node.adopt": "subtree",
   "node.send": "subtree",
@@ -784,13 +799,18 @@ export type DaemonResponse<Op extends DaemonOperation = DaemonOperation> = Resul
 /** touryou の plugin の名前（plugin/.claude-plugin/plugin.json の name。道具・skill の名前空間）。名前を変えるときは、ここを直す。 */
 export const PLUGIN_NAME = "touryou";
 
+/**
+ * mcp の道具の名前（接頭辞なし）。操作名の `.` を `_` にする。`child.inbox` は、子では `inbox_fetch`（統合の `inbox.fetch` と
+ * 同じ名前で、ロールごとに片方だけが出る）、統合（サブ統括）では `child_inbox`（`inbox_fetch` は統合の受信箱）。
+ */
+export const mcpToolName = (op: DaemonOperation, role: "integrator" | "child"): string =>
+  op === "child.inbox" ? (role === "child" ? "inbox_fetch" : "child_inbox") : op.replaceAll(".", "_");
+
 /** 子のセッションに出る touryou の mcp の道具の名前（接頭辞なし）。紐付けの道具と、ROLE_OPERATIONS.child の操作（mcp の toolName と同じ変換）。 */
 export const CHILD_MCP_TOOL_NAMES: readonly string[] = [
   "child_bind",
   "whoami",
-  ...ROLE_OPERATIONS.child.map((op) =>
-    op === "child.inbox" ? "inbox_fetch" : op.replaceAll(".", "_"),
-  ),
+  ...ROLE_OPERATIONS.child.map((op) => mcpToolName(op, "child")),
 ];
 
 /**
@@ -799,7 +819,7 @@ export const CHILD_MCP_TOOL_NAMES: readonly string[] = [
  */
 export const INTEGRATOR_MCP_TOOL_NAMES: readonly string[] = [
   "whoami",
-  ...ROLE_OPERATIONS.integrator.map((op) => op.replaceAll(".", "_")),
+  ...ROLE_OPERATIONS.integrator.map((op) => mcpToolName(op, "integrator")),
 ];
 
 /** ロール別の、セッションに出る touryou の mcp の道具の名前（接頭辞なし）。`human` は mcp の道具を持たない。 */

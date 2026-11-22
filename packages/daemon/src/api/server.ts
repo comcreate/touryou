@@ -790,7 +790,7 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     operation: DaemonOperation,
     params: unknown,
   ): boolean => {
-    if (operation !== "child.inbox" || principal.role !== "child") return false;
+    if (operation !== "child.inbox" || principal.role === "human") return false;
     const mine = instructionsFor(deps.getState(), principal.nodeId);
     return readsOnlyPrefaces(mine, params as { all?: boolean; ackThrough?: number });
   };
@@ -1101,7 +1101,10 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     )
       return p;
     const nodeId = deps.hookTokens?.authenticate(token);
-    return nodeId === undefined ? undefined : { role: "child", nodeId };
+    if (nodeId === undefined) return undefined;
+    // フック専用のトークンのロールは、ノードのロールに合わせる（サブ統括は統合ロール。checkPrincipal が、トークンとノードのロールの一致を見る）
+    const isIntegrator = deps.getState().nodes.find((n) => n.id === nodeId)?.role === "integrator";
+    return { role: isIntegrator ? "integrator" : "child", nodeId };
   };
 
   async function handleHook(
@@ -1130,13 +1133,21 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       req.resume();
       return reject(res, valid.error, { "www-authenticate": "Bearer", ...CLOSE });
     }
-    if (principal.role !== "child") {
+    // 通すのは、子と、親を持つ統合ノード（サブ統括）。人間と、親を持たない根は範囲を持たないので断る
+    const hookNode =
+      principal.role === "human"
+        ? undefined
+        : deps.getState().nodes.find((n) => n.id === principal.nodeId);
+    if (
+      principal.role === "human" ||
+      (principal.role === "integrator" && (hookNode?.parentId ?? null) === null)
+    ) {
       req.resume();
       return reject(
         res,
         failure(
           "forbidden",
-          "フックの受け口は、子のノードのトークンだけが使える",
+          "フックの受け口は、子のノード（サブ統括を含む）のトークンだけが使える",
           "子のノードのトークンで呼び出す",
         ),
         CLOSE,

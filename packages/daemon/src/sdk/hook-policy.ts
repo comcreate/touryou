@@ -30,8 +30,11 @@ import {
   type ScopeViolationReason,
   type SearchStage,
 } from "@touryou/core";
-import { commandEntryProblem, NODE_MCP_SERVER } from "./child-permissions.js";
+import { commandEntryProblem, launchToolNames, NODE_MCP_SERVER } from "./child-permissions.js";
 import { diagnoseReadOnlySearch } from "./read-only-search.js";
+
+/** サブ統括（親を持つ統合ロール）が使える touryou の道具（起動時の許可の一覧と同じ）。 */
+const SUB_INTEGRATOR_TOOL_NAMES: readonly string[] = launchToolNames("integrator");
 
 /** パスの実パス化（書き込み先の判定用）。解決できなければ reject する。 */
 export type ResolvePath = (absPath: string) => Promise<string>;
@@ -789,6 +792,7 @@ export async function decideToolUse(
   resolve: ResolvePath,
   protectedPaths?: ProtectedPaths,
   toolCwd: string = cwd,
+  role: "integrator" | "child" = "child",
 ): Promise<ToolDecision> {
   if (typeof toolName !== "string") return denyUnknown("(ツール名が不正)");
   // 禁じる場所（FR_014 の例外）は、読み取りの道具も含めて、ほかの判定より先に見る。
@@ -868,9 +872,12 @@ export async function decideToolUse(
     };
   }
 
-  // 自分の mcp の道具は、子のロールの道具だけを、2 つの名前の形（直に入れた形・plugin から入れた形）で許す。ほかのロールの道具は拒む
+  // 自分の mcp の道具は、呼び出したノードのロールの道具だけを、2 つの名前の形（直に入れた形・plugin から入れた形）で許す。
+  // 子は子の道具、サブ統括（統合ロール）は統合の道具と、紐付けの道具 `child_bind`（#168）。ほかのロールの道具は拒む
   const own = ownMcpToolOf(toolName);
-  if (own !== undefined && CHILD_MCP_TOOL_NAMES.includes(own)) return ALLOW;
+  if (own !== undefined && (role === "integrator" ? SUB_INTEGRATOR_TOOL_NAMES : CHILD_MCP_TOOL_NAMES).includes(own)) {
+    return ALLOW;
+  }
   return denyUnknown(toolName === "" ? "(ツール名が空)" : toolName);
 }
 

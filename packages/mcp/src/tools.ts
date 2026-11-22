@@ -8,6 +8,7 @@ import {
   type DaemonOperation,
   failure,
   LIMITS,
+  mcpToolName,
   ok,
   type Result,
   ROLE_OPERATIONS,
@@ -111,15 +112,16 @@ export const whoamiDescription = (role: McpRole): string =>
   `${ROLE_GUIDE[role]}自分の nodeId と role を返す（${role === "integrator" ? "{ nodeId, role, daemon: { rootCwd, repoRoot, daemonId } }。daemon は統合だけに付く" : "{ nodeId, role }"}）。起動の指示の先頭に書かれた ID の確認に使える${role === "integrator" ? "（tree_list の self 列でも分かる）" : ""}。引数はない`;
 
 /** 操作名から MCP のツール名への変換（`.` を `_` にする）。ツール名を扱う箇所はすべてこれを使う。 */
-export const toolName = (op: DaemonOperation): string =>
+export const toolName = (op: DaemonOperation, role: "integrator" | "child" = "child"): string =>
   // 子の受信箱は、統合と同じ名前 inbox_fetch で出す（知らせの文・Stop のフックが inbox_fetch を指すため）。
-  op === "child.inbox" ? "inbox_fetch" : op.replaceAll(".", "_");
+  // 統合ロール（サブ統括）では inbox_fetch が統合の受信箱なので、子の受信箱は child_inbox で出す（core の mcpToolName）
+  mcpToolName(op, role);
 
 /** ロールに公開するツールの一覧。MCP のロールでなければ何も公開しない。 */
 export function toolsFor(role: McpRole): readonly ToolDefinition[] {
   if (!isMcpRole(role)) return [];
   return ROLE_OPERATIONS[role].map((op) => ({
-    name: toolName(op),
+    name: toolName(op, role),
     operation: op,
     description: DESCRIPTIONS[op],
   }));

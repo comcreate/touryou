@@ -1,5 +1,6 @@
 import {
   briefProblem,
+  type DaemonOperation,
   isSafeId,
   LIMITS,
   MAX_GRACE_MS,
@@ -57,12 +58,17 @@ const VALID: Record<string, unknown> = {
   },
   report_progress: { text: "進捗" },
   inbox_fetch_child: { all: true },
+  child_inbox: { all: true },
   report_decision: { question: "q", options: ["a"] },
   decision_withdraw: { decisionId: "d1" },
   report_outOfScope: { text: "範囲外" },
   report_done: { evidence: [{ criterion: "基準", evidence: "根拠" }] },
   scope_extend: { target: { kind: "write", value: "docs" }, reason: "必要" },
 };
+
+/** 入力の例の鍵。子の受信箱は、子では inbox_fetch_child、統合（サブ統括）では child_inbox の例を使う（名前が統合の inbox_fetch と重なるため）。 */
+const validKey = (op: DaemonOperation, role: "integrator" | "child"): string =>
+  op === "child.inbox" ? (role === "child" ? "inbox_fetch_child" : "child_inbox") : toolName(op, role);
 
 const run = (role: "integrator" | "child", name: string, input: unknown) =>
   parseToolInput(role, name, input);
@@ -71,11 +77,7 @@ describe("ツール入力の検証（zod）", () => {
   it("公開されているすべてのツールに、受理される入力の例がある", () => {
     for (const role of MCP_ROLES) {
       for (const op of ROLE_OPERATIONS[role]) {
-        const r = run(
-          role,
-          toolName(op),
-          VALID[op === "child.inbox" ? "inbox_fetch_child" : toolName(op)],
-        );
+        const r = run(role, toolName(op, role), VALID[validKey(op, role)]);
         expect(r.ok, `${role}:${op}`).toBe(true);
         if (r.ok) expect(r.value.operation).toBe(op);
       }
@@ -85,11 +87,8 @@ describe("ツール入力の検証（zod）", () => {
   it("未知のキーは、どのツールでも拒否する（strict）", () => {
     for (const role of MCP_ROLES) {
       for (const op of ROLE_OPERATIONS[role]) {
-        const input = {
-          ...(VALID[op === "child.inbox" ? "inbox_fetch_child" : toolName(op)] as object),
-          extra: 1,
-        };
-        const r = run(role, toolName(op), input);
+        const input = { ...(VALID[validKey(op, role)] as object), extra: 1 };
+        const r = run(role, toolName(op, role), input);
         expect(r.ok, `${role}:${op}`).toBe(false);
       }
     }
@@ -284,11 +283,7 @@ describe("ツール入力の検証（zod）", () => {
   it("forward は daemon の validateParams を通る（全ツール）", () => {
     for (const role of MCP_ROLES) {
       for (const op of ROLE_OPERATIONS[role]) {
-        const r = run(
-          role,
-          toolName(op),
-          VALID[op === "child.inbox" ? "inbox_fetch_child" : toolName(op)],
-        );
+        const r = run(role, toolName(op, role), VALID[validKey(op, role)]);
         if (!r.ok) throw new Error("unreachable");
         expect(validateParams(op, r.value.forward).ok, op).toBe(true);
       }

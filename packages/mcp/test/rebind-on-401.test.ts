@@ -56,6 +56,8 @@ const setup = async () => {
         error: { code: "unauthenticated", cause: "トークンが無効", nextActions: ["x"] },
       });
     }
+    // 本物の daemon の whoami は、トークンのロールとノードの ID を返す（child_bind の戻りのロールの切り替えが使う）
+    if (url.pathname === "/v1/whoami") return json(200, { ok: true, value: { role: "child", nodeId: "a" } });
     return json(200, { ok: true, value: { accepted: true } });
   }) as unknown as typeof fetch;
   const server = openPendingStdioSession(

@@ -30,7 +30,7 @@ import {
   type Result,
   SETTLED_STATES,
 } from "@touryou/core";
-import { childAllowList, childToolNames } from "../../sdk/child-permissions.js";
+import { childAllowList, launchToolNames } from "../../sdk/child-permissions.js";
 import { buildLaunchCommand } from "../../sdk/launch-command.js";
 import type { ProcessProbe } from "../../sdk/lsof-probe.js";
 import { checkPluginDir, type PluginDirPorts } from "../../sdk/plugin-dir.js";
@@ -223,7 +223,7 @@ export function createParentRequestHandlers(deps: ParentRequestHandlerDeps) {
       if (r.kind === "launch") {
         const allow = childAllowList(
           node.scope ?? { writableLocations: [], forbiddenLocations: [], allowedCommands: [] },
-          childToolNames(),
+          launchToolNames(node.role === "integrator" ? "integrator" : "child"),
         );
         if (!allow.ok) return allow;
         // plugin の場所: 確かめを通れば --plugin-dir を足す。通らなければ付けず、理由を受信箱に出す（値・パスは出さない）

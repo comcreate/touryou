@@ -2,7 +2,12 @@ import { readFileSync } from "node:fs";
 import { CHILD_MCP_TOOL_NAMES, ownMcpToolOf, ROLE_OPERATIONS } from "@touryou/core";
 import { CHILD_BIND_TOOL, toolName } from "@touryou/mcp";
 import { describe, expect, it } from "vitest";
-import { childAllowList, childToolNames, PLUGIN_NAME } from "../../src/sdk/child-permissions.js";
+import {
+  childAllowList,
+  childToolNames,
+  launchToolNames,
+  PLUGIN_NAME,
+} from "../../src/sdk/child-permissions.js";
 
 const scope = (over: Partial<{ w: string[]; c: string[]; f: string[] }> = {}) => ({
   writableLocations: over.w ?? ["src", "docs/notes"],
@@ -135,7 +140,7 @@ describe("子の許可の一覧（設計 6.2）", () => {
   it("道具の一覧は core の CHILD_MCP_TOOL_NAMES と、mcp が子に出す名前（toolName の変換）の両方と等しい", () => {
     expect([...childToolNames()]).toEqual([...CHILD_MCP_TOOL_NAMES]);
     expect([...CHILD_MCP_TOOL_NAMES].sort()).toEqual(
-      [CHILD_BIND_TOOL, "whoami", ...ROLE_OPERATIONS.child.map(toolName)].sort(),
+      [CHILD_BIND_TOOL, "whoami", ...ROLE_OPERATIONS.child.map((op) => toolName(op, "child"))].sort(),
     );
   });
 
@@ -144,6 +149,45 @@ describe("子の許可の一覧（設計 6.2）", () => {
     for (const n of a.filter((x) => x.startsWith("mcp__"))) {
       expect(CHILD_MCP_TOOL_NAMES).toContain(ownMcpToolOf(n));
     }
+  });
+
+  it("起動の道具の一覧は、子はそのまま・サブ統括は統合の道具に child_bind を足したもの（#168 PR3）", () => {
+    expect([...launchToolNames("child")]).toEqual([...CHILD_MCP_TOOL_NAMES]);
+    const sub = launchToolNames("integrator");
+    expect(sub[0]).toBe("child_bind");
+    expect([...sub].sort()).toEqual(
+      [
+        "child_bind",
+        "whoami",
+        ...ROLE_OPERATIONS.integrator.map((op) => toolName(op, "integrator")),
+      ].sort(),
+    );
+    const a = ok(childAllowList(scope({ w: [], c: [] }), sub)).allow;
+    // 親へ報告する子の操作も入る（完了の報告・範囲の拡張・自分の受信箱。受信箱は統合の inbox_fetch と分けた child_inbox）
+    for (const t of [
+      "child_bind",
+      "whoami",
+      "node_spawn",
+      "node_review",
+      "parent_request",
+      "report_done",
+      "scope_extend",
+      "child_inbox",
+    ]) {
+      expect(a).toContain(`mcp__node__${t}`);
+      expect(a).toContain(`mcp__plugin_${PLUGIN_NAME}_node__${t}`);
+    }
+    // 人間専用の操作は、サブ統括の許可に入らない
+    for (const t of ["node_hookToken", "node_purge", "inbox_resolve", "confirm_approve"]) {
+      expect(a).not.toContain(`mcp__node__${t}`);
+    }
+  });
+
+  it("サブ統括の一覧の mcp の名前も、範囲の許可の検査（1 語コマンド・任意コード）は子と同じ", () => {
+    const sub = launchToolNames("integrator");
+    expect(childAllowList(scope({ c: ["git"] }), sub).ok).toBe(false);
+    expect(childAllowList(scope({ c: ["node x.js"] }), sub).ok).toBe(false);
+    expect(ok(childAllowList(scope({ f: [".env"] }), sub)).deny).toContain("Edit(./.env)");
   });
 
   it("plugin の名前は plugin.json の name と一致する", () => {

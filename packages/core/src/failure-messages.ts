@@ -102,6 +102,10 @@ export const FAILURE_MESSAGES = {
     ja: "対象のノードが、自分の部分木の規則を満たさない",
     en: "The target node does not satisfy the rules for your own subtree",
   },
+  rootHasNoParent: {
+    ja: "操作 {op} は、親を持つ統合ノード（サブ統括）だけが使える。根は親を持たない",
+    en: "Operation {op} can be used only by an integrator that has a parent (a sub-integrator); the root has none",
+  },
   decisionNotFound: { ja: "判断要求が見つからない", en: "The decision request was not found" },
   extensionNotFound: { ja: "拡張要求が見つからない", en: "The scope request was not found" },
   reportNotFound: { ja: "報告が見つからない", en: "The report was not found" },

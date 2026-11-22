@@ -228,7 +228,21 @@ export function createToolServer(init: ToolServerDeps): Server {
     }
     const r = await init.bindChild(a.nodeId, a.bindCode);
     if (!r.ok) return asError(r.error);
-    deps.role = "child";
+    // 紐付けで受け取ったトークンのロール（child・integrator）を、daemon に尋ねて決める（#168 PR3）。サブ統括（統合ノードの子の
+    // 統合ノード）は integrator のトークンを受け取るので、道具の一覧を統合のものに切り替える。ロールを bind の引数や応答の自己申告では決めない。
+    const who = await r.value.whoami();
+    if (!who.ok) return asError(who.error);
+    const boundRole = who.value.role;
+    if (boundRole !== "child" && boundRole !== "integrator") {
+      return asError(
+        failure(
+          "whoami_role_mismatch",
+          "紐付けで受け取ったトークンのロールが、子でも統合でもない",
+          "作業を始めずに、会話で人（親）に紐付けのやり直しを頼む",
+        ),
+      );
+    }
+    deps.role = boundRole;
     deps.relay = r.value;
     deps.bound = true;
     deps.lost = false;
@@ -238,7 +252,7 @@ export function createToolServer(init: ToolServerDeps): Server {
     return asValue({
       bound: true,
       nodeId: boundId,
-      role: "child",
+      role: boundRole,
       note: BOUND_NOTE,
       next: "次に inbox_fetch を呼び、ブリーフ（目的・受け入れ基準・範囲）と指示を読んでから、作業を始める",
     });

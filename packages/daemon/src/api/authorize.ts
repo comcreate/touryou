@@ -151,6 +151,13 @@ export function authorizeScope(
     return forbidden("integratorOperationUnavailable", { op: operation });
   }
   if (cls === "callerFiltered") return OK;
+  if (cls === "self") {
+    // サブ統括が自分の親へ使う子の操作。対象は呼び出し側の資格情報で決まる。親を持たない根は使えない（#168）
+    const self = nodes.find((n) => n.id === principal.nodeId);
+    return self?.parentId === null || self?.parentId === undefined
+      ? forbidden("rootHasNoParent", { op: operation })
+      : OK;
+  }
 
   const caller = principal.nodeId;
   const rule = SUBTREE_RULES[op as SubtreeOperation];

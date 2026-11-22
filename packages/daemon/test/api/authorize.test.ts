@@ -290,9 +290,19 @@ describe("操作表との整合", () => {
       const cls = INTEGRATOR_OPERATION_CLASS[op];
       const r = authorize(m1, op, {} as never, S, {});
       // decision.present は pauseNodeIds が任意（省略なら対象なし）
-      if (cls === "callerFiltered" || op === "decision.present") expect(r.ok, op).toBe(true);
-      else expect(r.ok, op).toBe(false);
+      // self（子の操作）は、親を持つ統合ノード（m1）なら通る
+      if (cls === "callerFiltered" || cls === "self" || op === "decision.present") {
+        expect(r.ok, op).toBe(true);
+      } else expect(r.ok, op).toBe(false);
     }
+  });
+  it("サブ統括は自分の親へ子の操作を使える。親を持たない根は、同じ操作が拒否される（#168）", () => {
+    for (const op of ROLE_OPERATIONS.child) {
+      expect(run(m1, op, {}).ok, `${op} サブ統括`).toBe(true);
+      expect(code(run(root, op, {})), `${op} 根`).toBe("forbidden");
+    }
+    // 子のロールの判定は変わらない
+    expect(run(childA, "report.done", {}).ok).toBe(true);
   });
   it("SUBTREE_SCOPED_OPERATIONS は SUBTREE_RULES のキー", () => {
     expect([...SUBTREE_SCOPED_OPERATIONS].sort()).toEqual(Object.keys(SUBTREE_RULES).sort());

@@ -28,6 +28,14 @@ const EXPECTED: Record<McpRole, readonly string[]> = {
     "report_get",
     "parent_request",
     "parent_report",
+    // サブ統括が自分の親へ使う子の操作（#168）。受信箱は、inbox_fetch が統合の受信箱なので child_inbox
+    "report_progress",
+    "report_decision",
+    "decision_withdraw",
+    "report_outOfScope",
+    "report_done",
+    "scope_extend",
+    "child_inbox",
   ],
   child: [
     "report_progress",
@@ -99,14 +107,24 @@ describe("ロール別のツール公開（NFR_004）", () => {
     expect(CONTRACT_ROLES).toContain("human");
   });
 
-  it("ツール名は（ロールの中で）重複せず、説明がある。ロールをまたいで同じ名前は inbox_fetch だけ（子は child.inbox）", () => {
+  it("ツール名は（ロールの中で）重複せず、説明がある。ロールをまたいで同じ名前は、子の操作（サブ統括も使う。#168）と、別の操作が同名の inbox_fetch", () => {
     for (const r of MCP_ROLES) {
       const tools = toolsFor(r);
       expect(new Set(tools.map((t) => t.name)).size).toBe(tools.length);
     }
     const all = MCP_ROLES.flatMap((r) => toolsFor(r));
     const names = all.map((t) => t.name);
-    expect(names.filter((n, i) => names.indexOf(n) !== i)).toEqual(["inbox_fetch"]);
+    expect(names.filter((n, i) => names.indexOf(n) !== i).sort()).toEqual(
+      [
+        "decision_withdraw",
+        "inbox_fetch",
+        "report_decision",
+        "report_done",
+        "report_outOfScope",
+        "report_progress",
+        "scope_extend",
+      ].sort(),
+    );
     for (const t of all) expect(t.description.length).toBeGreaterThan(0);
   });
 });

@@ -113,10 +113,14 @@ describe("操作の契約（NFR_004, DC_003）", () => {
     expect(preview.nodeIds).toHaveLength(2);
   });
 
-  it("統合ノードの操作を、部分木の規則・呼び出し側で絞る・拒否の 3 つに分類する（表は型で網羅される）", () => {
+  it("統合ノードの操作を、部分木の規則・呼び出し側で絞る・拒否・自分自身（子の操作）の 4 つに分類する（表は型で網羅される）", () => {
     for (const op of ROLE_OPERATIONS.integrator) {
-      expect(["subtree", "callerFiltered", "denied"], op).toContain(INTEGRATOR_OPERATION_CLASS[op]);
+      expect(["subtree", "callerFiltered", "denied", "self"], op).toContain(
+        INTEGRATOR_OPERATION_CLASS[op],
+      );
     }
+    // 子の操作は、サブ統括が自分の親へ使う（#168）。分類は self で、ロールの子と同じ集合
+    for (const op of ROLE_OPERATIONS.child) expect(INTEGRATOR_OPERATION_CLASS[op]).toBe("self");
     expect(Object.keys(INTEGRATOR_OPERATION_CLASS).sort()).toEqual(
       [...ROLE_OPERATIONS.integrator].sort(),
     );

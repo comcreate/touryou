@@ -111,11 +111,14 @@ export function createChildInboxHandlers(deps: ChildInboxHandlerDeps) {
   return {
     "child.inbox": (req: HandlerRequest<"child.inbox">): R<"child.inbox"> => {
       const nodeId = req.caller?.nodeId;
-      if (req.role !== "child" || nodeId === undefined) {
-        return fail("forbidden", "子のロールだけが使える", "子の資格情報で呼ぶ");
-      }
       const state = deps.log.state();
       const node = state.nodes.find((n) => n.id === nodeId);
+      // 子と、親を持つ統合ノード（サブ統括）が使える。親を持たない根は、窓口の authorize に加えて、ここでも拒否する
+      const allowedRole =
+        req.role === "child" || (req.role === "integrator" && (node?.parentId ?? null) !== null);
+      if (!allowedRole || nodeId === undefined) {
+        return fail("forbidden", "子のロールだけが使える", "子の資格情報で呼ぶ");
+      }
       const scope = effectiveScope(state, nodeId);
       if (node === undefined) return fail("notFound", "ノードが見つからない", "whoami で確かめる");
       const mine = instructionsFor(state, nodeId);

@@ -49,6 +49,10 @@ describe("紐付け待ちのセッションで、daemon の 401 のあと bind �
           value: { nodeId: "a", token: `tok-${binds}-${"x".repeat(40)}` },
         });
       }
+      // 本物の daemon の whoami は、トークンのロールとノードの ID を返す（child_bind の戻りのロールの切り替えが使う）。
+      // 失効の確認と、要求の数・トークンの記録の対象にしない（この試験は、紐付けのあとの最初の要求が 401 になる場面）
+      if (url.pathname === "/v1/whoami")
+        return json(200, { ok: true, value: { role: "child", nodeId: "a" } });
       const auth = String(
         (init?.headers as Record<string, string> | undefined)?.authorization ?? "",
       );

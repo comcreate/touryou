@@ -668,6 +668,114 @@ describe("plugin の設定（plugin.json の name・.mcp.json のサーバーの
   });
 });
 
+describe("範囲の階層（#168 PR3）: 孫のフックは、孫自身の範囲で判定する", () => {
+  // サブ統括の範囲（src・docs）の内側に、孫の範囲（src/feature だけ）がある。判定のコードは孫の範囲だけを見る
+  const subIntegrator: Scope = {
+    writableLocations: ["src", "docs"],
+    forbiddenLocations: [".git"],
+    allowedCommands: ["pnpm test", "git status"],
+  };
+  const grandchild: Scope = {
+    writableLocations: ["src/feature"],
+    forbiddenLocations: [".git", "src/feature/secret"],
+    allowedCommands: ["git status"],
+  };
+  const asGrandchild = (tool: string, input: unknown) =>
+    decideToolUse(grandchild, "/wt/grandchild", tool, input, identity);
+  const asSubIntegrator = (tool: string, input: unknown) =>
+    decideToolUse(subIntegrator, "/wt/sub", tool, input, identity);
+
+  it("サブ統括の範囲の内でも、孫自身の範囲の外なら拒否する", async () => {
+    expect((await asSubIntegrator("Write", { file_path: "docs/x.md", content: "x" })).allow).toBe(
+      true,
+    );
+    expect(
+      denied(await asGrandchild("Write", { file_path: "docs/x.md", content: "x" })),
+    ).toBe("outsideWritable");
+    expect(denied(await asGrandchild("Bash", { command: "pnpm test" }))).toBe(
+      "commandNotAllowed",
+    );
+  });
+
+  it("孫自身の範囲の内なら許可し、孫の禁止の場所は拒否する", async () => {
+    expect((await asGrandchild("Write", { file_path: "src/feature/a.ts", content: "x" })).allow).toBe(
+      true,
+    );
+    expect((await asGrandchild("Bash", { command: "git status" })).allow).toBe(true);
+    expect(denied(await asGrandchild("Edit", { file_path: "src/feature/secret/k" }))).toBe(
+      "forbiddenLocation",
+    );
+  });
+
+  it("孫の範囲がサブ統括の範囲の外の場所を含んでも、判定は孫の範囲だけで決まる（範囲の包含は spawn の検査の仕事）", async () => {
+    const wide: Scope = { ...grandchild, writableLocations: ["src/feature", "scripts"] };
+    expect(
+      (await decideToolUse(wide, "/wt/grandchild", "Write", { file_path: "scripts/a.sh" }, identity))
+        .allow,
+    ).toBe(true);
+    expect(denied(await asSubIntegrator("Write", { file_path: "scripts/a.sh" }))).toBe(
+      "outsideWritable",
+    );
+  });
+});
+
+describe("道具の許可は、呼び出したノードのロールで決まる（#168 PR3）", () => {
+  const P = `mcp__plugin_${PLUGIN_NAME}_node__`;
+  const sub = (tool: string) =>
+    decideToolUse(scope, CWD, tool, {}, identity, undefined, CWD, "integrator");
+  const child = (tool: string) => decideToolUse(scope, CWD, tool, {}, identity, undefined, CWD);
+
+  it("サブ統括（統合ロール）は、統合の道具・親への報告の道具・child_bind を、2 つの名前の形で許可する", async () => {
+    for (const t of [
+      "node_spawn",
+      "node_review",
+      "scope_decide",
+      "parent_request",
+      "parent_report",
+      "inbox_fetch",
+      "tree_list",
+      "report_done",
+      "scope_extend",
+      "child_inbox",
+      "child_bind",
+      "whoami",
+    ]) {
+      expect((await sub(`mcp__node__${t}`)).allow, t).toBe(true);
+      expect((await sub(`${P}${t}`)).allow, t).toBe(true);
+    }
+  });
+
+  it("サブ統括でも、人間専用の道具・知らない道具・ほかの plugin は拒否する", async () => {
+    for (const t of [
+      "mcp__node__node_purge",
+      "mcp__node__node_hookToken",
+      "mcp__node__inbox_resolve",
+      "mcp__node__confirm_approve",
+      "mcp__plugin_other_node__node_spawn",
+      "mcp__node__nothing",
+    ]) {
+      expect((await sub(t)).allow, t).toBe(false);
+    }
+  });
+
+  it("子（ロールの指定なし・child）は、統合の道具（node_spawn など）を拒否する。子の道具は許可する", async () => {
+    for (const t of ["node_spawn", "node_review", "scope_decide", "parent_request", "child_inbox"]) {
+      expect((await child(`mcp__node__${t}`)).allow, t).toBe(false);
+      expect((await child(`${P}${t}`)).allow, t).toBe(false);
+    }
+    for (const t of ["report_done", "scope_extend", "inbox_fetch", "child_bind"]) {
+      expect((await child(`mcp__node__${t}`)).allow, t).toBe(true);
+    }
+  });
+
+  it("ロールが変わっても、範囲・禁じる場所の判定は変わらない（道具の許可の一覧だけが変わる）", async () => {
+    const write = (role: "integrator" | "child") =>
+      decideToolUse(scope, CWD, "Write", { file_path: "/etc/passwd", content: "x" }, identity, undefined, CWD, role);
+    expect((await write("integrator")).allow).toBe(false);
+    expect((await write("child")).allow).toBe(false);
+  });
+});
+
 describe("grantedOnlyByExtension（#91: 承認済みの拡張にだけ、明示の許可）", () => {
   const grep = `git grep -n -E "TODO|FIXME|XXX|HACK" -- . ':!pnpm-lock.yaml'`;
   const brief: Scope = {

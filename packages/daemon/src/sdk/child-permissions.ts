@@ -18,7 +18,13 @@
  * 入れないもの: ほかの MCP の道具、WebFetch、範囲の外の Bash、`Bash(cd:*)`。フックの範囲の判定（hook-policy）は、これと別に効く。
  */
 
-import { CHILD_MCP_TOOL_NAMES, PLUGIN_NAME, type Result, type Scope } from "@touryou/core";
+import {
+  CHILD_MCP_TOOL_NAMES,
+  MCP_TOOL_NAMES_BY_ROLE,
+  PLUGIN_NAME,
+  type Result,
+  type Scope,
+} from "@touryou/core";
 
 export { PLUGIN_NAME };
 
@@ -27,6 +33,16 @@ export const NODE_MCP_SERVER = "node";
 
 /** 子のロールの touryou の道具の名前（core の `CHILD_MCP_TOOL_NAMES`。フックの `ownMcpToolOf` と同じ一覧）。 */
 export const childToolNames = (): readonly string[] => CHILD_MCP_TOOL_NAMES;
+
+/**
+ * 起動する CLI のノードのロールに応じた、touryou の道具の名前（#168 PR3）。子は `CHILD_MCP_TOOL_NAMES`。
+ * サブ統括（統合ノードの子の統合ノード）は、統合の道具（`INTEGRATOR_MCP_TOOL_NAMES`）に、紐付けの道具 `child_bind` を足したもの
+ * （サブ統括も、起動した最初の番で `child_bind` を引数なしで呼んで紐付ける。`INTEGRATOR_MCP_TOOL_NAMES` は `child_bind` を含まない）。
+ */
+export const launchToolNames = (role: "integrator" | "child"): readonly string[] =>
+  role === "integrator"
+    ? ["child_bind", ...MCP_TOOL_NAMES_BY_ROLE.integrator]
+    : MCP_TOOL_NAMES_BY_ROLE.child;
 
 const UNSAFE = /[*;&|`$<>"'\\()\n\r]/;
 

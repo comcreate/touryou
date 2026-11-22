@@ -40,7 +40,7 @@ const NEXT_ACTIONS: Readonly<Record<InboxKind, readonly IntegratorOperation[]>> 
 
 /** 次に取るべき操作の候補を、MCP のツール名で返す。 */
 export const nextActionsFor = (kind: InboxKind): readonly string[] =>
-  NEXT_ACTIONS[kind].map(toolName);
+  NEXT_ACTIONS[kind].map((op) => toolName(op));
 
 export type Detail = "brief" | "full";
 

@@ -62,6 +62,44 @@ describe("child_bind の道具", () => {
     );
   });
 
+  it("紐付けで受け取ったトークンのロールが integrator（サブ統括）なら、統合の道具に切り替わる（#168 PR3）", async () => {
+    const calls: string[] = [];
+    const s = await connect(async () => ok(relayAs("integrator", "sub", calls)));
+    const r = await s.call("child_bind", { nodeId: "sub", bindCode: "X" });
+    expect(r.isError).toBe(false);
+    expect(r.body).toMatchObject({ bound: true, nodeId: "sub", role: "integrator" });
+    const after = await s.names();
+    expect(after).not.toContain("child_bind");
+    expect(after).toContain("node_spawn");
+    expect(after).toContain("inbox_fetch");
+    // サブ統括は、自分の親へ完了を報告できる（子の操作を持つ。子の受信箱は child_inbox）
+    expect(after).toContain("report_done");
+    expect(after).toContain("child_inbox");
+    expect((await s.call("whoami")).body).toMatchObject({ nodeId: "sub", role: "integrator" });
+    await s.call("tree_list");
+    expect(calls).toEqual(["sub:tree.list"]);
+  });
+
+  it("受け取ったトークンのロールが、子でも統合でもない・尋ねられないときは、紐付かない（道具は切り替わらない）", async () => {
+    const human = await connect(async () => ok(relayAs("human", "h")));
+    const r1 = await human.call("child_bind", { nodeId: "h", bindCode: "X" });
+    expect(r1.isError).toBe(true);
+    expect(await human.names()).toContain("child_bind");
+    const lost = await connect(async () =>
+      ok({
+        whoami: async () => ({
+          ok: false as const,
+          error: { code: "daemon_unreachable", cause: "x", nextActions: ["y"] },
+        }),
+        request: async () => ok({}),
+      }),
+    );
+    const r2 = await lost.call("child_bind", { nodeId: "a", bindCode: "X" });
+    expect(r2.isError).toBe(true);
+    expect(r2.body.code).toBe("daemon_unreachable");
+    expect(await lost.names()).toContain("child_bind");
+  });
+
   it("失敗したら、ロールは変わらない", async () => {
     const s = await connect(async () => ({
       ok: false,

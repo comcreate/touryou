@@ -199,6 +199,41 @@ describe("parent.request・parent.report", () => {
     expect(f.ok && f.value.command.endsWith("--resume parent-1 --fork-session")).toBe(true);
   });
 
+  it("parent.request: 起動する道具の許可は、ノードのロールで決まる（サブ統括は統合の道具＋child_bind、子は子の道具）（#168 PR3）", async () => {
+    const r = rig();
+    r.add({
+      type: "node.created",
+      payload: { nodeId: "sub", role: "integrator", parentId: "root", dependsOn: [] },
+    });
+    r.ev("sub", { type: "start" });
+    await r.start("a");
+    await r.start("sub");
+    const child = r.call("parent.request", { nodeId: "a" });
+    const sub = r.call("parent.request", { nodeId: "sub" });
+    expect(child.ok && sub.ok).toBe(true);
+    if (!child.ok || !sub.ok) return;
+    // サブ統括: 統合の道具と、親への報告の道具（完了・範囲の拡張・子の受信箱 child_inbox）が入り、人間専用の操作は入らない
+    for (const t of [
+      "child_bind",
+      "whoami",
+      "node_spawn",
+      "node_review",
+      "parent_request",
+      "report_done",
+      "scope_extend",
+      "child_inbox",
+    ]) {
+      expect(sub.value.command, t).toContain(`"mcp__node__${t}"`);
+      expect(sub.value.command, t).toContain(`"mcp__plugin_touryou_node__${t}"`);
+    }
+    for (const t of ["node_hookToken", "node_purge"]) {
+      expect(sub.value.command, t).not.toContain(`"mcp__node__${t}"`);
+    }
+    // 子: 従来どおり、子の道具だけ
+    expect(child.value.command).toContain('"mcp__node__report_done"');
+    expect(child.value.command).not.toContain('"mcp__node__node_spawn"');
+  });
+
   it("parent.request: plugin の場所が確かめを通れば --plugin-dir を足す。通らなければ付けず、受信箱に理由を 1 回だけ出す", async () => {
     const files: Record<string, string> = {
       "/p/good/.claude-plugin/plugin.json": '{"name":"touryou"}',
