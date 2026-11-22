@@ -134,6 +134,7 @@ risk: "high"
   1. `node.runtime` があればそれ。
   2. なければ、起動の報告（`launch` が done）がある子は `cli`。
   3. なければ `undefined`（不明）。
+  - **PR2a の判断（利用者の答え A）**: compose は、不明の子（`runtime` の記録も起動の報告もない）を、設定 `childRuntime`（既定 cli）に従わせる。この規則は compose の `nodeRuntimeOf` の 1 箇所に置き、単一 runtime の木の挙動は今と完全に同じにする（`runtimeOf` 自体は不明を `undefined` のまま返す）。
   - 不明のノードの扱いは、**今の挙動を変えない**（`childRuntime` が desktop の木で作られた古い記録は、`childRuntime` を見て desktop 扱いのまま）。ただし、これは移行期の規則で、`childRuntime` の意味が「既定値」に変わった後（§5.2）は、記録のない子を **`childRuntime` の現在値で推測しない**。推測は、次の 1 点だけ: 木に 1 つも `runtime` の記録がなく、かつ設定が desktop のとき、古い Desktop の木とみなす（再起動の整合が、今と同じ結果になるように）。
 - 状態の版: `node.created.runtime` は 0.1.6 の時点で任意の欄として入っている。**イベントの型は変えない**ので、`STATE_VERSION` は変えず、古い版へ戻せなくなる記録を増やさない。
 

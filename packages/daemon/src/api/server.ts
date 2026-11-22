@@ -265,8 +265,11 @@ export interface ApiDeps {
   readonly hookFresh?: (nodeId: string) => boolean;
   /** PreToolUse のフックを判定して、許可したときに呼ぶ（拒否された呼び出しでは、窓を満たさない）。 */
   readonly onHookSeen?: (nodeId: string) => void;
-  /** フックの受け口で、フック専用のトークンだけを受け付ける（ノードのトークンは拒否。Desktop の木）。 */
-  readonly hookTokensOnly?: boolean;
+  /**
+   * フックの受け口で、フック専用のトークンだけを受け付けるノードか（真なら、ノードのトークンは拒否。Desktop の子）。
+   * 人間のトークンは `nodeId` が undefined（CLI の子がいない木だけ、拒否する）。
+   */
+  readonly hookTokensOnly?: (nodeId: string | undefined) => boolean;
   /** bind の入口の、全体のスロットル（1 秒あたりの失敗）。省略すると 1 秒に 10 回。 */
   readonly bindThrottle?: Throttle;
   /**
@@ -1089,8 +1092,12 @@ export function createApiServer(deps: ApiDeps): ApiServer {
    */
   /** 受け口の主体: ノードのトークンか、フック専用のトークン（子のノードとして扱う。ほかの入口では使えない）。 */
   const hookPrincipal = (token: string | undefined): Principal | undefined => {
-    const p = deps.hookTokensOnly === true ? undefined : deps.credentials.authenticate(token);
-    if (p !== undefined) return p;
+    const p = deps.credentials.authenticate(token);
+    if (
+      p !== undefined &&
+      deps.hookTokensOnly?.(p.role === "human" ? undefined : p.nodeId) !== true
+    )
+      return p;
     const nodeId = deps.hookTokens?.authenticate(token);
     return nodeId === undefined ? undefined : { role: "child", nodeId };
   };

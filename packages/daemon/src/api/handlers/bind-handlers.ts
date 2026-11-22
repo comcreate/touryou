@@ -27,8 +27,13 @@ type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failu
 export interface BindHandlerDeps {
   readonly log: LogPort;
   readonly bind: Pick<BindCodes, "issueWithExpiry">;
-  /** Desktop の子のアダプタ（設定 `childRuntime` が desktop のときだけ）。 */
+  /** Desktop の子のアダプタ（Desktop の子を扱えるときだけ）。 */
   readonly desktop?: Pick<DesktopRuntimeAdapter, "instructionOf">;
+  /**
+   * そのノードの runtime（子ごと。#159）。CLI の子の文面と Desktop の子の文面を、ここで選ぶ。
+   * 省略すると、`desktop` があれば Desktop、なければ CLI（木に runtime が 1 つだけのとき）。
+   */
+  readonly runtimeOf?: (nodeId: string) => "cli" | "desktop";
   /** 窓口の URL（`http://127.0.0.1:<port>`。待ち受けの前は undefined）。 */
   readonly baseUrl: () => string | undefined;
   /** 設定 `touryouCommand`（Desktop の子が touryou を起動する語）。ないと `touryouCommandMissing`。 */
@@ -41,7 +46,7 @@ export interface BindHandlerDeps {
   /** 見張りの設定を置いた、子の作業ツリー（文面の「ローカルで始める」手順に書く）。 */
   readonly worktreeOf?: (nodeId: string) => string | undefined;
   /**
-   * CLI の子の木か（設定 `childRuntime` が cli）。真なら、Desktop の代わりに、CLI の子の紐付けの文面を返す
+   * CLI の子を扱えるか。真なら、CLI の子には、CLI の子の紐付けの文面を返す
    * （親が `claude --bg` の指示の頭に入れる。子の最初の番で、skill が mcp の `child_bind` にコードを渡す）。
    */
   readonly cli?: boolean;
@@ -217,7 +222,8 @@ export function createBindHandlers(deps: BindHandlerDeps) {
           );
         }
       }
-      if (deps.desktop === undefined && deps.cli === true) {
+      const runtime = deps.runtimeOf?.(nodeId) ?? (deps.desktop === undefined ? "cli" : "desktop");
+      if (runtime === "cli" && deps.cli === true) {
         if (!LIVE.has(s)) {
           return fail(
             "notActive",
@@ -252,7 +258,7 @@ export function createBindHandlers(deps: BindHandlerDeps) {
           value: { instruction: cliBindInstruction(nodeId, issued.code, expiresAt), expiresAt },
         };
       }
-      if (deps.desktop === undefined) {
+      if (runtime === "cli" || deps.desktop === undefined) {
         return fail(
           "notDesktop",
           "この木の子は Desktop の子ではない（設定 childRuntime が desktop のときだけ）",

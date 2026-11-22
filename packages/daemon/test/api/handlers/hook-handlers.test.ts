@@ -119,7 +119,9 @@ describe("node.hookUnbind（フックの結び付けを外す）", () => {
 });
 
 describe("node.hookToken（手動の CLI セッション用の、フック専用のトークン）", () => {
-  const setup = (opts: { cli?: boolean; managed?: boolean } = {}) => {
+  const setup = (
+    opts: { cli?: boolean; managed?: boolean; isDesktop?: (nodeId: string) => boolean } = {},
+  ) => {
     const store = createMemoryStore().open();
     const opened = EventLog.open(store, { clock });
     if (!opened.ok) throw new Error(opened.error.code);
@@ -154,6 +156,7 @@ describe("node.hookToken（手動の CLI セッション用の、フック専用
       sessions,
       ...(opts.cli === false ? {} : { hookTokens: tokens }),
       managed: () => opts.managed !== false,
+      ...(opts.isDesktop === undefined ? {} : { isDesktop: opts.isDesktop }),
       baseUrl: () => "http://127.0.0.1:7777",
     });
     const call = (nodeId: string, role = "human", requestId = `q-${++n}`) =>
@@ -166,6 +169,16 @@ describe("node.hookToken（手動の CLI セッション用の、フック専用
       } as unknown as HandlerRequest<"node.hookToken">);
     return { store, log, sessions, tokens, call };
   };
+
+  it("runtime が混在する木: isDesktop が真のノードだけ拒否し、cli の子には発行できる", () => {
+    const r = setup({ isDesktop: (id) => id === "p" });
+    const desktop = r.call("p");
+    expect(desktop.ok).toBe(false);
+    if (desktop.ok) throw new Error("desktop の子に発行できてはいけない");
+    expect(desktop.error.code).toBe("desktopHookEnvNotAllowed");
+    const cli = r.call("a");
+    expect(cli.ok).toBe(true);
+  });
 
   it("人間だけが、動作中の CLI の子に発行できる。トークンはフック用の表で通り、記録にはトークンが入らない", () => {
     const r = setup();

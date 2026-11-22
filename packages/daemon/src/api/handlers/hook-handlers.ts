@@ -44,8 +44,8 @@ export interface HookHandlerDeps {
   readonly managed?: (nodeId: string) => boolean;
   /** 窓口の URL（待ち受けの前は undefined）。 */
   readonly baseUrl?: () => string | undefined;
-  /** Desktop の木か（`node.hookToken` は拒否する。子の引き出しの hook-token を無効にしてしまうため）。 */
-  readonly desktop?: boolean;
+  /** Desktop の子か（`node.hookToken` は拒否する。子の引き出しの hook-token を無効にしてしまうため）。省略すると、どのノードも違う。 */
+  readonly isDesktop?: (nodeId: string) => boolean;
 }
 
 const LIVE = new Set(["running", "waiting"]);
@@ -95,7 +95,7 @@ export function createHookHandlers(deps: HookHandlerDeps) {
           "人間のトークンで呼び出す",
         );
       }
-      if (deps.desktop === true) {
+      if (deps.isDesktop?.(nodeId) === true) {
         return fail(
           "desktopHookEnvNotAllowed",
           "Desktop の木では、touryou hook-env（フック専用のトークンの発行）は使えない（子の引き出しの見張りのトークンを無効にしてしまう）",

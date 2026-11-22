@@ -38,7 +38,9 @@ import {
   failure,
   inboxMessage,
   isPathUnder,
+  type NodeRuntime,
   type Result,
+  runtimeOf,
   type ScopeViolationReason,
 } from "@touryou/core";
 import { createConfirmationGate } from "./api/confirmation-gate.js";
@@ -420,14 +422,14 @@ export const isTokenRetired = (state: string | undefined): boolean =>
  */
 /**
  * CLI の子（SSE の購読で指示を受け取る子）か。トークンの種類（sdk・bind）では見ない: CLI の子も
- * child_bind（`/v1/bind`）で kind "bind" のトークンを受けるため。設定の childRuntime が desktop でなく、木の子（根でない）なら真。
+ * child_bind（`/v1/bind`）で kind "bind" のトークンを受けるため。そのノードの runtime が desktop でなく、木の子（根でない）なら真。
  */
 export const isCliChildOf = (
-  childRuntime: string | undefined,
+  runtime: string | undefined,
   state: { readonly nodes: readonly { readonly id: string; readonly parentId: string | null }[] },
   nodeId: string,
 ): boolean =>
-  childRuntime !== "desktop" && state.nodes.some((n) => n.id === nodeId && n.parentId !== null);
+  runtime !== "desktop" && state.nodes.some((n) => n.id === nodeId && n.parentId !== null);
 
 export const TOKEN_REVOKE_ON_ENTER: ReadonlySet<string> = new Set([
   "stopped",
@@ -637,6 +639,15 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     return rootMismatch(`状態: ${existing.state}`);
   }
 
+  // 子ごとの実行環境（#159 PR2a）。振り分け（アダプタ・整合・引き出し・フック・bind）は、このノードの属性だけで決める。
+  // 記録も起動の報告もない古い子は、設定 `childRuntime`（既定 cli）に従う（単一 runtime の木の挙動を変えないため。ADR 2026-11-22）。
+  const defaultRuntime: NodeRuntime = config.childRuntime === "desktop" ? "desktop" : "cli";
+  const nodeRuntimeOf = (nodeId: string): NodeRuntime =>
+    runtimeOf(log.state(), nodeId) ?? defaultRuntime;
+  // その runtime の子を、この daemon が扱えるか（アダプタを用意するか）。PR2b で、Desktop は opt-in の設定を見る形に直す。
+  const cliEnabled = config.childRuntime !== "desktop";
+  const desktopEnabled = config.childRuntime === "desktop";
+
   // フックの受け口の session_id の結び付け。トークンを発行し直した・失効させたら外す。
   const hookSessions = createSessionBinder();
   // 手動の CLI セッション用の、フック専用のトークン。CLI の子のときだけ。ノードのトークンが変わったら、一緒に無効にする。
@@ -715,7 +726,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       onNodeTokenChanged: (nodeId) => {
         // Desktop の子のフック専用のトークンは、bind（ノードのトークンの発行）では変えない（フックは bind より前から動く。
         // 止まった・役目の終わった・期限切れは、下の revokeEntered と、引き出しの片付けで失効させる）
-        if (config.childRuntime !== "desktop") hookTokens?.revoke(nodeId);
+        if (nodeRuntimeOf(nodeId) !== "desktop") hookTokens?.revoke(nodeId);
         if (hookSessions.unbind(nodeId)) note("hookUnbound", { reason: "tokenReissued" });
       },
       // トークンの期限。根には付けない。
@@ -761,7 +772,6 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     // 止まった・役目の終わった子のトークンを、その状態になったその場で失効させる（見回りを待たない。種類を問わない）。
     // 起動時は、いま止まっている子のトークンも失効させる（前回、止まったあとに失効させられなかった分。再開で発行し直す）。
     const live = credentials;
-    const desktopTree = config.childRuntime === "desktop";
     const lastStates = new Map<string, string>();
     const revokeEntered = (
       nodes: readonly { id: string; state: string; parentId: string | null }[],
@@ -770,8 +780,9 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       for (const n of nodes) {
         const prev = lastStates.get(n.id);
         lastStates.set(n.id, n.state);
+        const desktopChild = nodeRuntimeOf(n.id) === "desktop";
         // Desktop の子の引き出し: 作る・中のファイルを消す・引き出しを消す
-        if (desktopTree && n.parentId !== null) {
+        if (desktopChild && n.parentId !== null) {
           const action = drawerActionFor(prev, n.state, boot);
           try {
             if (action === "create") {
@@ -791,7 +802,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           }
         }
         if (prev === n.state || !TOKEN_REVOKE_ON_ENTER.has(n.state)) continue;
-        if (desktopTree) hookTokens.revoke(n.id);
+        if (desktopChild) hookTokens.revoke(n.id);
         try {
           live.expireNode?.(n.id);
         } catch (e) {
@@ -883,13 +894,14 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
   const cliAdapter: RuntimeAdapter & { has(nodeId: string): boolean } =
     deps.cliAdapter ?? (parentAdapter as ParentRequestCliAdapter);
   // 止まった・役目の終わった CLI の子の、紐付けのコードとファイルを片付ける。
-  if (parentAdapter !== undefined && config.childRuntime !== "desktop") {
+  if (parentAdapter !== undefined && cliEnabled) {
     const seen = new Map<string, string>();
     log.onCommitted((st) => {
       for (const n of st.nodes) {
         const prev = seen.get(n.id);
         seen.set(n.id, n.state);
         if (prev === n.state || !TOKEN_REVOKE_ON_ENTER.has(n.state)) continue;
+        if (nodeRuntimeOf(n.id) !== "cli") continue;
         const worktree = latestLaunch(st, n.id)?.worktree ?? n.adopted?.worktree;
         if (worktree !== undefined) parentAdapter.discardCode(n.id, worktree, true);
       }
@@ -957,10 +969,11 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
   };
   // 起動時: 前の実行の期限のタイマーは消えていて、メモリのコードはもう無効。残ったコードのファイルを消し、
   // 紐付けていない動いている子は、受信箱に「紐付けをやり直して」を出す（子の mcp は、ファイルがないと daemon に送らないため）。
-  if (parentAdapter !== undefined && config.childRuntime !== "desktop") {
+  if (parentAdapter !== undefined && cliEnabled) {
     for (const r of log.state().parentRequests) {
       if (r.kind !== "launch" || latestLaunch(log.state(), r.nodeId)?.requestRef !== r.requestRef)
         continue;
+      if (nodeRuntimeOf(r.nodeId) !== "cli") continue;
       if (removeBindCodeFile(r.worktree)) {
         note("staleBindCodeFileRemoved", { nodeId: r.nodeId });
         noticeRebind(r.nodeId);
@@ -968,7 +981,11 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     }
     // 採用した既存の作業ツリー（#163）の、残ったコードのファイルも同じに片付ける
     for (const n of log.state().nodes) {
-      if (n.adopted !== undefined && removeBindCodeFile(n.adopted.worktree)) {
+      if (
+        n.adopted !== undefined &&
+        nodeRuntimeOf(n.id) === "cli" &&
+        removeBindCodeFile(n.adopted.worktree)
+      ) {
         note("staleBindCodeFileRemoved", { nodeId: n.id });
         noticeRebind(n.id);
       }
@@ -978,9 +995,10 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
   // - 破棄の判断を記録した直後、削除の依頼を追記する前に落ちた場合: 旗つきの削除の依頼を作る。
   // - 猶予の調べの最中（stopping）に落ちた場合: 猶予の調べはメモリの中だけだったので、claude stop の依頼が作られないまま stopping に
   //   残る。親が起動を報告した子で、開いている依頼がなければ、claude stop を依頼して停止未完了にする。
-  if (parentAdapter !== undefined && config.childRuntime !== "desktop") {
+  if (parentAdapter !== undefined && cliEnabled) {
     const st0 = log.state();
     for (const n of st0.nodes) {
+      if (nodeRuntimeOf(n.id) !== "cli") continue;
       const bodies: EventBody[] = [];
       if (n.discarded !== undefined) bodies.push(...discardRemoveBodies(st0, n.id));
       const launch = latestLaunch(st0, n.id);
@@ -1021,8 +1039,9 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
   }
 
   // Desktop の子（daemon の外で動く子）か。起動時の照合と、根の「daemon 再起動後」の依頼の解決で、同じ判定を使う。
-  const isExternal: ((nodeId: string) => boolean) | undefined =
-    config.childRuntime === "desktop" ? () => true : undefined;
+  const isExternal: ((nodeId: string) => boolean) | undefined = desktopEnabled
+    ? (nodeId) => nodeRuntimeOf(nodeId) === "desktop"
+    : undefined;
   // Desktop の子のときは、追記が成功したあとに、動いているかもしれない子がいなくなっていれば、根の依頼を解決済みにする
   // （操作のハンドラと、Desktop のアダプタの記録口に使う。`external-check.ts`）。
   const resolvingLog =
@@ -1031,9 +1050,9 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       : withExternalCheckResolution(log, isExternal, (cause) =>
           note("externalCheckFailure", { cause }),
         );
-  // Desktop の子（設定 childRuntime が desktop。仮置き）。木全体で 1 つのアダプタ。フックのゲートは既定で有効。
+  // Desktop の子のアダプタ（Desktop の子を扱えるときだけ。仮置き）。フックのゲートは既定で有効。
   const desktopAdapter =
-    config.childRuntime === "desktop"
+    desktopEnabled
       ? new DesktopRuntimeAdapter({
           sink: {
             record: (r) => resolvingLog.append(r),
@@ -1047,7 +1066,9 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           prepareWorktree: (nodeId, worktreePath) => prepareDesktopWorktree(nodeId, worktreePath),
         })
       : undefined;
-  const adapter: RuntimeAdapter & { has(nodeId: string): boolean } = desktopAdapter ?? cliAdapter;
+  // そのノードの runtime のアダプタ（子ごと）。Desktop のアダプタがなければ、すべて CLI のアダプタ。
+  const adapterFor = (nodeId: string): RuntimeAdapter & { has(nodeId: string): boolean } =>
+    desktopAdapter !== undefined && nodeRuntimeOf(nodeId) === "desktop" ? desktopAdapter : cliAdapter;
 
   // Desktop の子のフック（`touryou child hook` → POST /v1/hook）。範囲は Desktop のアダプタが持つもの（touryou child の 2 つを
   // 足したもの）、作業ツリーは daemon が作ったもの、禁じる場所は CLI の子と同じ（stateDir・設定ファイル）に、そのノードの
@@ -1810,7 +1831,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     inspectAdoption === undefined ||
     markAdopted === undefined ||
     unmarkAdopted === undefined ||
-    desktopAdapter !== undefined ||
+    !cliEnabled ||
     parentAdapter === undefined
       ? undefined
       : {
@@ -1868,14 +1889,14 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       pluginDir: pluginDirPortsOf(config),
       // CLI の子（SSE の購読で指示を受け取る）か。トークンの種類では見ない（CLI の子も
       // child_bind で kind "bind" のトークンを受けるため）。設定の childRuntime で決める（desktop でなければ CLI の子）。
-      isCliChild: (id: string) => isCliChildOf(config.childRuntime, log.state(), id),
+      isCliChild: (id: string) => isCliChildOf(nodeRuntimeOf(id), log.state(), id),
       // ノードの購読があるか（sse-hub から、あとで結ぶ。未結線のあいだは true とみなして知らせない）。
       hasSubscription: (id: string) => nodeSubscription?.(id) ?? true,
       onFailure,
     },
     {
-      adapterFor: () => adapter,
-      managed: (id) => adapter.has(id),
+      adapterFor,
+      managed: (id) => adapterFor(id).has(id),
       onStopSettled: (nodeId, result) =>
         note("stopSettled", {
           nodeId,
@@ -1999,6 +2020,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
   };
   // 紐付けで結んだ session_id → ノード（フックの受け口が、信頼度の低い報告にだけ使う）
   const sessionBindings = createSessionBindings({ log, cwdOf: (id) => deps.worktree.cwdOf(id) });
+  const cliBindWorktreeOk = createBindWorktreeCheck({ cwdOf: (id) => deps.worktree.cwdOf(id) });
   // 取り消せない操作の確認。Desktop の木だけ（子が人間のトークンを読めてしまうため）。CLI の子だけの木は今までどおり。
   const confirmGate =
     desktopAdapter === undefined
@@ -2025,9 +2047,10 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     // ファイルで設定するフック（plugin の hooks.json）。SDK のコールバックと同じ判定・同じ記録。
     // Desktop の子のフックの継承は、ファイルで設定するフックの経路では未確認。確認までは、受け口では許可しない（仮置き）。
     hook: (nodeId, toolName, toolInput, cwd, transcriptPath, trust) =>
-      desktopAdapter === undefined
-        ? decideCliHook(nodeId, toolName, toolInput, cwd, trust)
-        : decideDesktopHook(nodeId, toolName, toolInput, cwd, transcriptPath),
+      // 受け口の判定は、呼ばれたノードの runtime で選ぶ（CLI の子に Desktop のポリシーを使う取り違えを防ぐ）
+      desktopAdapter !== undefined && nodeRuntimeOf(nodeId) === "desktop"
+        ? decideDesktopHook(nodeId, toolName, toolInput, cwd, transcriptPath)
+        : decideCliHook(nodeId, toolName, toolInput, cwd, trust),
     // Notification・Stop（設計 6.2 の「止まったことの検出」(1)・6.2b の逃げ道）
     onHookNotification: (nodeId, h, trust) => {
       if (h.notificationType === undefined) return;
@@ -2052,6 +2075,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       ? {}
       : {
           hookFresh: (nodeId: string) => {
+            // 見張りの確かめは Desktop の子だけ（CLI の子は、フックが効いているかを見ない）
+            if (nodeRuntimeOf(nodeId) !== "desktop") return true;
             // bind・報告の入口でも、見張りの設定を確かめる
             if (tamperedHooks.has(nodeId)) return false;
             const problem = hookSettingsProblem(nodeId);
@@ -2063,15 +2088,16 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
             return at !== undefined && hookNow() - at <= (config.hookFreshSeconds ?? 30) * 1000;
           },
           onHookSeen: (nodeId: string) => lastHookAt.set(nodeId, hookNow()),
-          // Desktop の子の受け口は、フック専用のトークンだけ（ノードのトークンでは呼べない）
-          hookTokensOnly: true,
+          // Desktop の子の受け口は、フック専用のトークンだけ（ノードのトークンでは呼べない）。CLI の子は、どちらも使える
+          hookTokensOnly: (nodeId: string | undefined) =>
+            nodeId === undefined ? !cliEnabled : nodeRuntimeOf(nodeId) === "desktop",
         }),
     hookSessions,
     ...(hookTokens === undefined ? {} : { hookTokens }),
     getState: () => log.state(),
     // 画面の停止の宣言。ハンドラ（node.confirmStopped）と同じく、能力表の stopDelegated だけで決める（管理しているか
     // は見ない。再起動の後も出す）。childRuntime が desktop のとき、Desktop のアダプタの能力表から真になる。
-    stopDelegated: stopDelegatedOf(adapter),
+    stopDelegated: (nodeId: string) => stopDelegatedOf(adapterFor(nodeId))(nodeId),
     // 画面の claude attach を打つ場所（#136）
     attachDir: config.repoRoot,
     // 統合ノードの whoami に出す daemon の場所（#164）
@@ -2089,16 +2115,19 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
         log,
         sessions: hookSessions,
         ...(hookTokens === undefined ? {} : { hookTokens }),
-        managed: (id) => adapter.has(id),
+        managed: (id) => adapterFor(id).has(id),
         baseUrl: () => running?.url,
-        desktop: desktopAdapter !== undefined,
+        isDesktop: (id) => desktopEnabled && nodeRuntimeOf(id) === "desktop",
       }),
       // Desktop の子の紐付けの文面（仮置き）。コードは記録しない（応答だけ）。
       ...createBindHandlers({
         log,
         bind,
-        ...(desktopAdapter === undefined ? { cli: true } : { desktop: desktopAdapter }),
-        ...(desktopAdapter === undefined && parentAdapter !== undefined
+        // 紐付けの文面と経路は、そのノードの runtime で選ぶ（ハンドラが runtimeOf で振り分ける）
+        runtimeOf: nodeRuntimeOf,
+        ...(cliEnabled ? { cli: true } : {}),
+        ...(desktopAdapter === undefined ? {} : { desktop: desktopAdapter }),
+        ...(cliEnabled && parentAdapter !== undefined
           ? {
               cliIssueFile: (nodeId: string) => {
                 const st = log.state();
@@ -2161,12 +2190,16 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     logger,
     bind,
     // CLI の子の紐付けは、そのノードの作業ツリーの中のセッションだけ（FR_006）
-    ...(desktopAdapter === undefined
+    // どちらも、Desktop の子には効かせない（bindWorktreeOk は確かめずに通し、rebindOk は必ず断る）
+    ...(cliEnabled
       ? {
-          bindWorktreeOk: createBindWorktreeCheck({ cwdOf: (id) => deps.worktree.cwdOf(id) }),
-          // attach で mcp が入れ替わった CLI の子の、コードなしのつなぎ直し（#145）。Desktop の木には渡さない
+          bindWorktreeOk: (nodeId: string, cwd: string | undefined) =>
+            nodeRuntimeOf(nodeId) === "desktop"
+              ? Promise.resolve(true)
+              : cliBindWorktreeOk(nodeId, cwd),
+          // attach で mcp が入れ替わった CLI の子の、コードなしのつなぎ直し（#145）。Desktop の子には効かせない
           rebindOk: (nodeId: string, sessionId: string) =>
-            sessionBindings.matches(nodeId, sessionId),
+            nodeRuntimeOf(nodeId) !== "desktop" && sessionBindings.matches(nodeId, sessionId),
         }
       : {}),
     bindSessionOk: (nodeId, sessionId) => {
@@ -2190,7 +2223,13 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
         st.nodes.find((n) => n.id === nodeId)?.adopted?.worktree;
       if (worktree !== undefined) parentAdapter?.discardCode(nodeId, worktree, false);
     },
-    ...(desktopAdapter === undefined ? { onBindInvalid: noticeRebind } : {}),
+    ...(cliEnabled
+      ? {
+          onBindInvalid: (nodeId: string) => {
+            if (nodeRuntimeOf(nodeId) !== "desktop") noticeRebind(nodeId);
+          },
+        }
+      : {}),
     clock,
     ...apiLimitsOf(config, deps.monotonicMs, deps.summaryScheduler),
   });
@@ -2278,7 +2317,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           cwdOf,
           probe,
           worktreeRoot: config.worktreeRoot,
-          has: (id) => adapter.has(id),
+          has: (id) => adapterFor(id).has(id),
           // Desktop の子は、daemon の外で動くので、プロセスで照合せず、受信箱で人に確かめてもらう。
           ...(isExternal === undefined ? {} : { external: isExternal }),
           onFailure: (nodeId, cause) => note("reconcileFailure", { nodeId, cause }),
@@ -2288,7 +2327,12 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
         try {
           const needed = log
             .state()
-            .nodes.filter((n) => n.parentId !== null && CHILD_DIR_NEEDED[n.state])
+            .nodes.filter(
+              (n) =>
+                n.parentId !== null &&
+                CHILD_DIR_NEEDED[n.state] &&
+                nodeRuntimeOf(n.id) === "desktop",
+            )
             .map((n) => n.id);
           const { removed, failed } = childrenDirs.sweep(needed);
           if (removed > 0) note("childrenDirSwept", { removed });
@@ -2339,7 +2383,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
             note("portSaveFailed", { port: listened.port, cause });
             // Desktop の子は、次の再起動でポートが変わると報告できなくなるので、起動を止める（呼び出し側が stop する）。
             // ほかは、保存できなくても起動は続ける（次回は、また新しいポートになる）。
-            if (config.childRuntime === "desktop") throw portSaveFailed(listened.port, cause);
+            if (desktopEnabled) throw portSaveFailed(listened.port, cause);
           }
         }
         const { port, url } = listened;

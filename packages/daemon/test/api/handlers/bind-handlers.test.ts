@@ -19,6 +19,7 @@ const rig = (
     instructions?: Record<string, string>;
     touryou?: boolean;
     drawerFails?: boolean;
+    runtimeOf?: (nodeId: string) => "cli" | "desktop";
   } = {},
 ) => {
   const opened = EventLog.open(createMemoryStore().open(), { clock });
@@ -47,6 +48,7 @@ const rig = (
     log,
     bind,
     ...(opts.desktop === false ? {} : { desktop: { instructionOf: (id) => instructions[id] } }),
+    ...(opts.runtimeOf === undefined ? {} : { runtimeOf: opts.runtimeOf }),
     baseUrl: () => "http://127.0.0.1:7777",
     ...(opts.touryou === false ? {} : { touryouCommand: TOURYOU }),
     prepareDrawer: (id) => {
@@ -87,6 +89,19 @@ describe("node.bindCode（Desktop の子の紐付けの文面・仮置き）", (
     expect(r.prepared).toContain("a");
     expect(res.value.expiresAt).toBe("2026-10-20T00:10:00.000Z");
     expect(r.call("human", "a").ok).toBe(true);
+  });
+
+  it("runtimeOf で子ごとに振り分ける: desktop の子だけが Desktop の文面を受け取り、cli の子は（CLI が有効でなければ）notDesktop", () => {
+    const r = rig({
+      instructions: { a: "あなたのノード ID: a\n目的: x" },
+      runtimeOf: (id) => (id === "a" ? "desktop" : "cli"),
+    });
+    const a = r.call("m1", "a");
+    expect(a.ok).toBe(true);
+    // p は cli の子。Desktop の入口（desktop あり）があっても、Desktop の文面は出ない
+    const p = r.call("m1", "p");
+    if (p.ok) throw new Error("cli の子に Desktop の文面が出てはいけない");
+    expect(p.error.code).toBe("notDesktop");
   });
 
   it("部分木の外・自分自身は forbidden。Desktop でない木は notDesktop。起動前は notActive。指示がなければ notManaged", () => {

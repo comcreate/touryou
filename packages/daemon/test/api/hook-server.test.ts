@@ -401,6 +401,37 @@ describe("拒否の経路ごとの要求数: received が 1 増え、allowed・d
     expect((await post(url, hookToken, pre("Read", {}, "s-manual"))).status).toBe(401);
   });
 
+  it("hookTokensOnly が関数のとき、runtime が混在する木でも、ノードごとに判定する（desktop の子だけ node トークンが 401。cli の子は通る）", async () => {
+    const credentials = createCredentialStore({ humanToken: HUMAN });
+    const hookTokens = createHookTokens();
+    const st = state();
+    const asked: (string | undefined)[] = [];
+    server = createApiServer({
+      credentials,
+      getState: () => st,
+      handlers: {},
+      hook: async () => ({ allow: true }),
+      hookTokens,
+      // "a" を desktop の子、それ以外（人間は undefined）は cli 側として扱う
+      hookTokensOnly: (nodeId) => {
+        asked.push(nodeId);
+        return nodeId === "a";
+      },
+    });
+    const { url } = await server.listen(0);
+    const desktopNode = credentials.issueNodeToken("a", "child");
+    const cliNode = credentials.issueNodeToken("b", "child");
+    const hookToken = hookTokens.issue("a");
+    const hook = (token: string) => post(url, token, pre("Read", {}, "s-mixed"));
+    expect((await hook(desktopNode)).status).toBe(401);
+    await hook(cliNode); // 木に無いノードなので結果は問わない。判定が子ごとに呼ばれることだけを確かめる
+    await hook(HUMAN);
+    expect((await hook(hookToken)).status).toBe(200);
+    expect(asked).toContain("a");
+    expect(asked).toContain("b");
+    expect(asked).toContain(undefined);
+  });
+
   it("フック専用のトークンの期限切れ: /v1/hook で 401 tokenExpired と、touryou hook-env で出し直す案内", async () => {
     let now = 0;
     const credentials = createCredentialStore({ humanToken: HUMAN });
