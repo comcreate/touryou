@@ -129,7 +129,12 @@ const hasNul = (s: string): boolean => s.includes("\0");
 const hasFormatChar = (s: string): boolean => /\p{Cf}/u.test(s);
 
 export interface ScopeIssue {
-  readonly field: "cwd" | "writableLocations" | "forbiddenLocations" | "allowedCommands";
+  readonly field:
+    | "cwd"
+    | "writableLocations"
+    | "forbiddenLocations"
+    | "allowedCommands"
+    | "allowedMcpTools";
   readonly value: string;
   readonly problem:
     | "empty"
@@ -137,8 +142,12 @@ export interface ScopeIssue {
     | "formatChar"
     | "notAbsolute"
     | "writableIsRoot"
-    | "writableOutsideCwd";
+    | "writableOutsideCwd"
+    | "invalidMcpToolName"; // `mcp__<サーバー>__<道具>` の形でない（#194）
 }
+
+/** `allowedMcpTools` の 1 項目の形（`permissions.ts` の MCP 規則の名前と同じ文字）。 */
+const MCP_TOOL_NAME = /^mcp__[A-Za-z0-9_-]+__[A-Za-z0-9_-]+$/;
 
 /** 範囲の設定を検査する。空の一覧は妥当（何も許可しない）。 */
 export function validateScope(scope: Scope, cwd: string): ScopeIssue[] {
@@ -163,6 +172,15 @@ export function validateScope(scope: Scope, cwd: string): ScopeIssue[] {
   for (const v of scope.allowedCommands) {
     if (v.trim() === "") issues.push({ field: "allowedCommands", value: v, problem: "empty" });
     else if (hasNul(v)) issues.push({ field: "allowedCommands", value: v, problem: "nul" });
+  }
+  for (const v of scope.allowedMcpTools ?? []) {
+    if (v.trim() === "") issues.push({ field: "allowedMcpTools", value: v, problem: "empty" });
+    else if (hasNul(v)) issues.push({ field: "allowedMcpTools", value: v, problem: "nul" });
+    else if (hasFormatChar(v)) {
+      issues.push({ field: "allowedMcpTools", value: v, problem: "formatChar" });
+    } else if (!MCP_TOOL_NAME.test(v)) {
+      issues.push({ field: "allowedMcpTools", value: v, problem: "invalidMcpToolName" });
+    }
   }
   return issues;
 }

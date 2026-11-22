@@ -39,6 +39,8 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 | キー | 既定 | 内容 |
 |:--|:--|:--|
 | `rootNodeId` | `root` | 根のノードの ID |
+| `permissions` | なし（空） | 権限の規則（`allow`・`deny`・`ask`）。Claude Code の `permissions` と同じ書き方の部分集合。下の「権限の規則（`permissions`・`autoApprove`）」 |
+| `autoApprove` | なし（空） | 自動承認してよい規則（`allow` だけ）。読み取りだけのものに限る。下の「権限の規則（`permissions`・`autoApprove`）」 |
 | `port` | `0` | 窓口のポート（127.0.0.1）。0 なら `--port` → 保存した前回のポート → 空いているポート（`docs/plugin.md` の「使う順序」） |
 | `childRuntime` | `cli` | 子の実行環境。`cli` は親のセッションが `claude --bg` で起動する子（TouRyou は起動しない。親への依頼の形。[`plugin.md`](plugin.md) の「親から子を起動する流れ」）。`desktop` は実験的（[`desktop-runtime.md`](desktop-runtime.md)） |
 | `maxTurns` | `100` | 子ごとのターン数の上限 |
@@ -75,6 +77,67 @@ SDK による子の起動・子の認証・子の HOME の隔離・子用の HTT
 子の範囲は、親の範囲（根の子なら `rootScope`）の内側でなければなりません。外にはみ出すと、子の起動（`node_spawn`）や範囲の拡張の承認が `scopeNotSubset` で失敗します。子に `git add`・`git commit` をさせるなら、`rootScope.allowedCommands` に `"git add"`・`"git commit"` を入れておきます。`config.json` は daemon の起動のときだけ読むので、`rootScope` を直したら daemon を起動し直します（常駐なら `/touryou:service` の起動し直し）。
 
 `rootScope.allowedCommands` の一致の規則: 項目を空白で語に分け、命令の先頭の語から順に、すべて一致すれば許可します（語の単位の前方一致。`"cd"` は `cd sub` を通しますが、`cdx sub` は通しません）。出典は `packages/core/src/scope.ts` の `checkCommand` です。
+
+## 権限の規則（`permissions`・`autoApprove`）
+
+> 状態（#194 の PR2）: **読み込みと検査だけ**です。規則は、起動のときに検査され、`rootScope` と合わせて 1 つの方針（`rootPolicyOf`）に畳まれますが、子の許可・承認の判定には**まだつながっていません**（判定は、今までどおり `rootScope` だけで決まります）。判定への接続は、後の版で入ります。
+
+どちらも省略できます（省略は空）。`rootScope` は、今までどおり必須で、意味も変わりません。
+
+```json
+{
+  "rootScope": { "writableLocations": ["src"], "forbiddenLocations": [".git"], "allowedCommands": ["git status"] },
+  "permissions": {
+    "allow": ["Bash(grep -rn:*)", "mcp__playwright__browser_snapshot"],
+    "deny": ["Bash(git push:*)", "mcp__playwright__browser_navigate"],
+    "ask": ["Bash(git commit:*)"]
+  },
+  "autoApprove": { "allow": ["Bash(grep -rn:*)"] }
+}
+```
+
+| キー | 意味 |
+|:--|:--|
+| `permissions.allow` | 子に付与できる範囲の上限に足す規則。`rootScope` と同じ意味（子の許可そのものではなく、**付与できる上限**） |
+| `permissions.deny` | 常に拒否する規則。`allow`・`ask`・`autoApprove` より強い（同じ規則が `allow` と `deny` にあれば `deny` が勝つ） |
+| `permissions.ask` | 承認を人間だけに限る規則（root の AI は承認できず、自動承認もされない） |
+| `autoApprove.allow` | 自動承認してよい規則 |
+
+### 書ける規則の形
+
+| 書き方 | 意味 |
+|:--|:--|
+| `Bash(<語の並び>:*)` | コマンドの前方一致（語の単位。`rootScope.allowedCommands` と同じ）。`Bash(grep -rn:*)` は `grep -rn foo` に当たる |
+| `Bash(<語の並び>)` | コマンドの完全一致（語の数まで同じ） |
+| `Edit(<相対パス>/**)` | 書き込みの場所（作業ツリーからの相対。配下すべて） |
+| `mcp__<サーバー>__<道具>` | MCP のツール 1 つ（名前の完全一致） |
+| `mcp__<サーバー>` | そのサーバーの全ツール（人間が config に書くときだけ。`autoApprove` には書けない） |
+
+**解析できない書き方は、無視せず、起動を拒否します**（理由に、どの一覧のどの規則かを出します）。`Bash(a *)`・`mcp__server__*` のようなワイルドカード、`Write(...)`・`Read(...)` など別の道具名、空白で挟んだ規則、`..` や絶対パスの `Edit(...)`、`;` などでつないだ `Bash(...)` は、いまは書けません（Claude Code の書き方の細部を確かめるまで、入れていません）。1 つの一覧は 200 件以下、規則は 512 文字以下、同じ規則の重複は不可です。
+
+### 追加の検査
+
+- **`allow` と `autoApprove` の `Bash(...)`**: 子の許可と同じ検査を通ります。空・`cd` で始まる・**1 語だけ**（`grep`・`tail` など。前方一致で任意の引数が通る）・任意のコードが動く形（`node -e`・`npm exec`・`find -exec` など）は書けません。`deny`・`ask` は、1 語（`Bash(curl:*)` など）でも書けます。
+- **`autoApprove`**: 読み取りだけで副作用のないものに限ります。
+  - 書き込み（`Edit(...)`）・MCP のサーバー全体（`mcp__<サーバー>`）は書けません（MCP は、道具の名前を 1 つずつ書きます。MCP の注釈は、サーバーの自己申告なので信用しません）。
+  - `Bash(...)` は、先頭の語が、フックが範囲によらず許す読み取り専用のコマンド（`find`・`ls`・`grep`・`git grep`・`git ls-files`）のものだけです。`git add`・`git commit`・`git push`・`curl` や、`pnpm test` のようなものは書けません（`head`・`tail`・`wc`・`cat` は、読み取り専用の表が広がるまで書けません）。
+  - 各規則は、`permissions.allow`（または `rootScope.allowedCommands`・`writableLocations` から変換したもの）の**内側**にあること（上限より広い前方一致は不可）。`permissions.deny`・`permissions.ask` に当たるものは書けません（自動承認より狭い `deny` は書けます。判定では `deny` が勝ちます）。
+
+### `rootScope` との関係（正規化）
+
+読み込みのときに、`rootScope` と `permissions` を 1 つの方針に畳みます。
+
+- `allow` = `rootScope.allowedCommands`（`Bash(<コマンド>:*)`）+ `writableLocations`（`Edit(<場所>/**)`）+ `permissions.allow`
+- `deny` = `rootScope.forbiddenLocations`（`Edit(<場所>/**)`）+ `permissions.deny`
+- 同じ内容は 1 つにまとめます。規則に直せない `rootScope` の項目（作業ツリー全体の `.`・解析できないコマンドなど）は、方針には入りません（`rootScope` としては、今までどおり効きます）。
+- `permissions.allow` の MCP ツール（`mcp__<サーバー>__<道具>`）は、方針の `allowedMcpTools` になります（`Scope.allowedMcpTools` と同じ形）。
+
+### 版の組み合わせとダウングレード
+
+- 旧の daemon（〜0.1.6）は、`permissions`・`autoApprove` を**未知のキーとして起動を拒否します**（権限の設定が黙って無視されるより、安全です）。旧の daemon に戻すときは、`permissions`・`autoApprove` を設定ファイルから消してから起動します。
+- 新の daemon は、`permissions`・`autoApprove` のない旧の設定を、そのまま同じ意味で読みます。
+- 新しい版の項目を、古い daemon の設定に書いたときの「未知のキー」の文には、「新しい版の項目なら daemon の版を上げる」と案内が付きます。
+- イベント列には、この PR では何も足していません（旧の daemon でも読めます）。後の版で足す新しい種類のイベント（MCP の依頼など）を書き始めた後は、旧の daemon に戻せなくなります。そのときに、この文書で知らせます。
 
 ## 例
 

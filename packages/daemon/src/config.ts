@@ -33,6 +33,30 @@ import {
   IN_PROGRESS_BOUNDS,
   RATE_LIMIT_BOUNDS,
 } from "./api/rate-limit.js";
+import {
+  type AutoApproveConfig,
+  buildRootPolicy,
+  type PermissionsConfig,
+  parseAutoApproveConfig,
+  parsePermissionsConfig,
+  policyProblem,
+  type RootPolicy,
+} from "./root-policy.js";
+
+const EMPTY_PERMISSIONS: PermissionsConfig = { allow: [], deny: [], ask: [] };
+const EMPTY_AUTO_APPROVE: AutoApproveConfig = { allow: [] };
+
+/**
+ * 根の権限の方針（`rootScope`・`permissions`・`autoApprove` を畳んだもの）。呼ぶ側が「根は 1 つ」を前提にしないよう、
+ * 方針の取得はこの 1 つの関数に閉じ込める（設計書 § 4.1・確認点 Q3）。
+ */
+export function rootPolicyOf(config: DaemonConfig): RootPolicy {
+  return buildRootPolicy(
+    config.rootScope,
+    config.permissions ?? EMPTY_PERMISSIONS,
+    config.autoApprove ?? EMPTY_AUTO_APPROVE,
+  );
+}
 
 export interface DaemonConfig {
   /** 状態（SQLite・トークン）の置き場。0700 のディレクトリにする。 */
@@ -47,6 +71,17 @@ export interface DaemonConfig {
   readonly rootNodeId: string;
   /** 根の範囲（子の権限の上限）。場所は `rootCwd` からの相対パス。 */
   readonly rootScope: Scope;
+  /**
+   * 権限の規則（Claude Code の `permissions` の書き方の部分集合。`docs/config.md`）。`allow` は子に付与できる範囲の上限に足す規則、
+   * `deny` は常に拒否する規則、`ask` は承認を人間だけに限る規則。省略した一覧は空。解析できない規則は、起動を拒否する（#194 PR2）。
+   * いまは検査と正規化（`rootPolicyOf`）だけで、判定には接続していない。
+   */
+  readonly permissions?: PermissionsConfig;
+  /**
+   * 自動承認してよい規則（`allow` だけ）。読み取りだけのもの（読み取り専用のコマンド・名前を 1 つずつ書いた MCP ツール）に限り、
+   * `permissions.allow` の内側で、`deny`・`ask` に当たらないこと。いまは検査だけで、承認には接続していない（#194 PR2）。
+   */
+  readonly autoApprove?: AutoApproveConfig;
   /**
    * 再生成できるので、残っていても未保存の変更とみなさない gitignore の対象（パスの先頭のディレクトリ名）。省略すると
    * `node_modules`・`dist`・`.turbo`。これ以外の gitignore の対象（`.env` など）が作業ツリーにあれば、回収は拒否される。
@@ -231,6 +266,8 @@ const KEYS = [
   "rootCwd",
   "rootNodeId",
   "rootScope",
+  "permissions",
+  "autoApprove",
   "port",
   "regenerableIgnored",
   "discardedRefsMax",
@@ -302,7 +339,11 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
     (k) =>
       !(KEYS as readonly string[]).includes(k) && !(LEGACY_KEYS as readonly string[]).includes(k),
   );
-  if (unknown.length > 0) return bad(`未知のキー: ${unknown.join("、")}`);
+  if (unknown.length > 0) {
+    return bad(
+      `未知のキー: ${unknown.join("、")}（新しい版の項目なら、daemon の版を上げる。項目の一覧は docs/config.md）`,
+    );
+  }
 
   const paths: Record<"stateDir" | "repoRoot" | "worktreeRoot" | "rootCwd", string> = {
     stateDir: "",
@@ -791,6 +832,26 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
     );
   }
 
+  // 権限の規則（#194 PR2）。形を確かめ、規則の中身（解析・子の許可の形・autoApprove の条件）を起動のときに検査する。
+  let permissions: PermissionsConfig | undefined;
+  if (raw.permissions !== undefined) {
+    const r = parsePermissionsConfig(raw.permissions);
+    if (!r.ok) return bad(r.cause);
+    permissions = r.value;
+  }
+  let autoApprove: AutoApproveConfig | undefined;
+  if (raw.autoApprove !== undefined) {
+    const r = parseAutoApproveConfig(raw.autoApprove);
+    if (!r.ok) return bad(r.cause);
+    autoApprove = r.value;
+  }
+  const policyIssue = policyProblem(
+    scope,
+    permissions ?? EMPTY_PERMISSIONS,
+    autoApprove ?? EMPTY_AUTO_APPROVE,
+  );
+  if (policyIssue !== undefined) return bad(policyIssue);
+
   return {
     ok: true,
     value: {
@@ -804,6 +865,8 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
         forbiddenLocations: [...scope.forbiddenLocations],
         allowedCommands: [...scope.allowedCommands],
       },
+      ...(permissions === undefined ? {} : { permissions }),
+      ...(autoApprove === undefined ? {} : { autoApprove }),
       port,
       ...(ignoredLegacyKeys.length === 0 ? {} : { ignoredLegacyKeys }),
       ...(regenerableIgnored === undefined ? {} : { regenerableIgnored }),

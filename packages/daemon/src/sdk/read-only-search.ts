@@ -28,6 +28,18 @@ import { commandWords, type SearchStage } from "@touryou/core";
 
 export type ResolveReal = (absPath: string) => Promise<string>;
 
+/**
+ * 探すコマンドの、先頭の語の並び（`SPECS` の見出しと `find`）。範囲によらずフックが許す形の入口。
+ * 設定の `autoApprove` が、「読み取りだけのコマンド」かを確かめる基準にする（#194）。表を足すときは、ここも同じ表から決まる。
+ */
+export const READ_ONLY_COMMAND_HEADS: ReadonlyArray<readonly string[]> = [
+  ["find"],
+  ["ls"],
+  ["grep"],
+  ["git", "grep"],
+  ["git", "ls-files"],
+];
+
 interface Spec {
   /** 値を取らない短い旗の文字（束ねてよい）。 */
   readonly flags: string;

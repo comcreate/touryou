@@ -7,6 +7,7 @@ import {
   parseRule,
   ruleErrors,
   type Scope,
+  validateScope,
 } from "../src/index.js";
 
 const parsed = (rule: string): ParsedRule => {
@@ -217,5 +218,23 @@ describe("Scope.allowedMcpTools と isScopeSubset", () => {
     expect(isScopeSubset({ ...base, allowedMcpTools: ["mcp__a__b"] }, parent)).toBe(true);
     expect(isScopeSubset({ ...base, allowedMcpTools: ["mcp__a__c"] }, parent)).toBe(false);
     expect(isScopeSubset({ ...base, allowedMcpTools: ["mcp__a__b"] }, base)).toBe(false);
+  });
+  it("validateScope は allowedMcpTools の形（mcp__<サーバー>__<道具>）を検査する", () => {
+    const issues = (tools: string[]) =>
+      validateScope({ ...base, allowedMcpTools: tools }, "/work").map((i) => i.problem);
+    expect(issues([])).toEqual([]);
+    expect(validateScope(base, "/work")).toEqual([]);
+    expect(issues(["mcp__a__b", "mcp__pw-x__browser_snapshot"])).toEqual([]);
+    expect(issues([""])).toEqual(["empty"]);
+    expect(issues(["mcp__a\0__b"])).toEqual(["nul"]);
+    expect(issues(["mcp__a__b​"])).toEqual(["formatChar"]);
+    // サーバー全体・形の違うもの・空白・ワイルドカードは、範囲に入れられない
+    expect(issues(["mcp__a", "Bash(ls:*)", "mcp__a__b c", "mcp__a__*", "mcp____b"])).toEqual([
+      "invalidMcpToolName",
+      "invalidMcpToolName",
+      "invalidMcpToolName",
+      "invalidMcpToolName",
+      "invalidMcpToolName",
+    ]);
   });
 });
