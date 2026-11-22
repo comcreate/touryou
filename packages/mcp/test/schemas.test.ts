@@ -68,7 +68,11 @@ const VALID: Record<string, unknown> = {
 
 /** 入力の例の鍵。子の受信箱は、子では inbox_fetch_child、統合（サブ統括）では child_inbox の例を使う（名前が統合の inbox_fetch と重なるため）。 */
 const validKey = (op: DaemonOperation, role: "integrator" | "child"): string =>
-  op === "child.inbox" ? (role === "child" ? "inbox_fetch_child" : "child_inbox") : toolName(op, role);
+  op === "child.inbox"
+    ? role === "child"
+      ? "inbox_fetch_child"
+      : "child_inbox"
+    : toolName(op, role);
 
 const run = (role: "integrator" | "child", name: string, input: unknown) =>
   parseToolInput(role, name, input);

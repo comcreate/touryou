@@ -140,7 +140,11 @@ describe("子の許可の一覧（設計 6.2）", () => {
   it("道具の一覧は core の CHILD_MCP_TOOL_NAMES と、mcp が子に出す名前（toolName の変換）の両方と等しい", () => {
     expect([...childToolNames()]).toEqual([...CHILD_MCP_TOOL_NAMES]);
     expect([...CHILD_MCP_TOOL_NAMES].sort()).toEqual(
-      [CHILD_BIND_TOOL, "whoami", ...ROLE_OPERATIONS.child.map((op) => toolName(op, "child"))].sort(),
+      [
+        CHILD_BIND_TOOL,
+        "whoami",
+        ...ROLE_OPERATIONS.child.map((op) => toolName(op, "child")),
+      ].sort(),
     );
   });
 

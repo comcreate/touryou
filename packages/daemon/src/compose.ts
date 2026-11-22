@@ -1723,7 +1723,9 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       },
       here,
       // 道具の許可は、呼び出したノードのロールで決まる（サブ統括は統合の道具。範囲・禁じる場所・固定の守りは同じ。#168）
-      log.state().nodes.find((n) => n.id === nodeId)?.role === "integrator" ? "integrator" : "child",
+      log.state().nodes.find((n) => n.id === nodeId)?.role === "integrator"
+        ? "integrator"
+        : "child",
     );
     if (d.allow) {
       // 起動のときの許可の一覧（ブリーフの範囲から作る。dontAsk）にない、承認済みの拡張でだけ通る Bash は、明示の許可を返す（#91）

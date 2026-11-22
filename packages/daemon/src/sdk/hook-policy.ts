@@ -875,7 +875,10 @@ export async function decideToolUse(
   // 自分の mcp の道具は、呼び出したノードのロールの道具だけを、2 つの名前の形（直に入れた形・plugin から入れた形）で許す。
   // 子は子の道具、サブ統括（統合ロール）は統合の道具と、紐付けの道具 `child_bind`（#168）。ほかのロールの道具は拒む
   const own = ownMcpToolOf(toolName);
-  if (own !== undefined && (role === "integrator" ? SUB_INTEGRATOR_TOOL_NAMES : CHILD_MCP_TOOL_NAMES).includes(own)) {
+  if (
+    own !== undefined &&
+    (role === "integrator" ? SUB_INTEGRATOR_TOOL_NAMES : CHILD_MCP_TOOL_NAMES).includes(own)
+  ) {
     return ALLOW;
   }
   return denyUnknown(toolName === "" ? "(ツール名が空)" : toolName);

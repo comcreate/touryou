@@ -689,18 +689,16 @@ describe("範囲の階層（#168 PR3）: 孫のフックは、孫自身の範囲
     expect((await asSubIntegrator("Write", { file_path: "docs/x.md", content: "x" })).allow).toBe(
       true,
     );
-    expect(
-      denied(await asGrandchild("Write", { file_path: "docs/x.md", content: "x" })),
-    ).toBe("outsideWritable");
-    expect(denied(await asGrandchild("Bash", { command: "pnpm test" }))).toBe(
-      "commandNotAllowed",
+    expect(denied(await asGrandchild("Write", { file_path: "docs/x.md", content: "x" }))).toBe(
+      "outsideWritable",
     );
+    expect(denied(await asGrandchild("Bash", { command: "pnpm test" }))).toBe("commandNotAllowed");
   });
 
   it("孫自身の範囲の内なら許可し、孫の禁止の場所は拒否する", async () => {
-    expect((await asGrandchild("Write", { file_path: "src/feature/a.ts", content: "x" })).allow).toBe(
-      true,
-    );
+    expect(
+      (await asGrandchild("Write", { file_path: "src/feature/a.ts", content: "x" })).allow,
+    ).toBe(true);
     expect((await asGrandchild("Bash", { command: "git status" })).allow).toBe(true);
     expect(denied(await asGrandchild("Edit", { file_path: "src/feature/secret/k" }))).toBe(
       "forbiddenLocation",
@@ -710,8 +708,15 @@ describe("範囲の階層（#168 PR3）: 孫のフックは、孫自身の範囲
   it("孫の範囲がサブ統括の範囲の外の場所を含んでも、判定は孫の範囲だけで決まる（範囲の包含は spawn の検査の仕事）", async () => {
     const wide: Scope = { ...grandchild, writableLocations: ["src/feature", "scripts"] };
     expect(
-      (await decideToolUse(wide, "/wt/grandchild", "Write", { file_path: "scripts/a.sh" }, identity))
-        .allow,
+      (
+        await decideToolUse(
+          wide,
+          "/wt/grandchild",
+          "Write",
+          { file_path: "scripts/a.sh" },
+          identity,
+        )
+      ).allow,
     ).toBe(true);
     expect(denied(await asSubIntegrator("Write", { file_path: "scripts/a.sh" }))).toBe(
       "outsideWritable",
@@ -759,7 +764,13 @@ describe("道具の許可は、呼び出したノードのロールで決まる�
   });
 
   it("子（ロールの指定なし・child）は、統合の道具（node_spawn など）を拒否する。子の道具は許可する", async () => {
-    for (const t of ["node_spawn", "node_review", "scope_decide", "parent_request", "child_inbox"]) {
+    for (const t of [
+      "node_spawn",
+      "node_review",
+      "scope_decide",
+      "parent_request",
+      "child_inbox",
+    ]) {
       expect((await child(`mcp__node__${t}`)).allow, t).toBe(false);
       expect((await child(`${P}${t}`)).allow, t).toBe(false);
     }
@@ -770,7 +781,16 @@ describe("道具の許可は、呼び出したノードのロールで決まる�
 
   it("ロールが変わっても、範囲・禁じる場所の判定は変わらない（道具の許可の一覧だけが変わる）", async () => {
     const write = (role: "integrator" | "child") =>
-      decideToolUse(scope, CWD, "Write", { file_path: "/etc/passwd", content: "x" }, identity, undefined, CWD, role);
+      decideToolUse(
+        scope,
+        CWD,
+        "Write",
+        { file_path: "/etc/passwd", content: "x" },
+        identity,
+        undefined,
+        CWD,
+        role,
+      );
     expect((await write("integrator")).allow).toBe(false);
     expect((await write("child")).allow).toBe(false);
   });

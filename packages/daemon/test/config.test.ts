@@ -499,7 +499,8 @@ describe("parseConfig（設定は厳密に検査し、不正なら起動を失�
     }
     const none = parseConfig(JSON.stringify(base));
     expect(none.ok && none.value.maxTreeDepth).toBeUndefined();
-    for (const v of [0, 1, 11, -1, 2.5, "3", null, [], Number.NaN]) bad({ maxTreeDepth: v }, "maxTreeDepth");
+    for (const v of [0, 1, 11, -1, 2.5, "3", null, [], Number.NaN])
+      bad({ maxTreeDepth: v }, "maxTreeDepth");
   });
 
   it("startLimits（同時に起動する数の上限）は、1〜64 の整数（任意。省略は既定の 4）", () => {

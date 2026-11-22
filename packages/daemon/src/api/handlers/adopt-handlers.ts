@@ -24,7 +24,6 @@ import {
 } from "@touryou/core";
 import type { HandlerRequest } from "../server.js";
 import { childScopeProblem } from "./child-scope-check.js";
-import { depthProblem } from "./depth-check.js";
 import {
   alreadyApplied,
   appendAtomically,
@@ -33,6 +32,7 @@ import {
   fail,
   type LogPort,
 } from "./context.js";
+import { depthProblem } from "./depth-check.js";
 import { createExclusive } from "./inflight.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;

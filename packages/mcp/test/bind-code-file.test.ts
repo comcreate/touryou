@@ -102,7 +102,8 @@ describe("child_bind を引数なしで呼ぶ（紐付け待ちのセッショ�
             });
       }
       // 本物の daemon の whoami は、トークンのロールとノードの ID を返す（child_bind の戻りのロールの切り替えが使う）
-      if (url.pathname === "/v1/whoami") return json(200, { ok: true, value: { role: "child", nodeId: "a" } });
+      if (url.pathname === "/v1/whoami")
+        return json(200, { ok: true, value: { role: "child", nodeId: "a" } });
       return json(200, { ok: true, value: { accepted: true } });
     }) as unknown as typeof fetch;
     const logs: string[] = [];

@@ -7,6 +7,8 @@
 - **状態画面の失敗の帯を、表示言語（日本語・英語）に合わせた**（#141）。daemon は失敗の種類と値（msg）も返し、英語の画面では日英の表から文を作る。CLI・skill・MCP が読む日本語の cause は変えていない。
 - **状態画面のヘッダーに、どの daemon の画面かを出した**（#197）。複数の daemon を使うときに見分けられる。`touryou launchd status --json` を足した。
 - **`stateDir` を `repoRoot` の内側に置けるようにした**（#218）。起動のとき（`touryou-daemon --check-config` も同じ）に、git で ignore 済みかつ未追跡と確かめられたときだけ許し、そうでなければ `invalidConfig` で直し方を出す。`worktreeRoot` は今までどおり `repoRoot` の内側に置けない。詳しくは `docs/config.md`「置き場の重なりの検査」。
+- **木の深さの上限を足した**（#168 PR4）。`node_spawn`・`node_adopt` は、深さが `maxTreeDepth`（既定 3。設定で 2〜10）以上になるノードを、理由と直し方を添えて `depthExceeded` で断る。変えたら daemon を起動し直す（`docs/config.md`）。
+- **`node_spawn` に `runtime` 引数（`cli`・`desktop`）を足した**（#159 PR2b）。設定 `allowDesktopChildren: true`（既定は false）の木だけ、CLI の子と Desktop の子を 1 つの木に混ぜられる。有効にした木では、取り消せない操作（`touryou purge` など）の確認に、端末つきの daemon が要る（launchd 経由では `confirmationUnavailable`）。既定の木と、`runtime` を省略した `node_spawn` の挙動は変わらない。
 
 ### 直したこと
 
@@ -28,6 +30,7 @@
 - daemon の compose が、子ごとの runtime（cli／desktop）で振り分けるようになった。単一 runtime の木の挙動は変わらない。runtime の記録がない子は、設定 `childRuntime` に従う（#159 PR2a）。
 - サブ統括（統合ノードの子の統合ノード）の紐付けを足した: bind コードの引き換えと再紐付けが、ノードのロールに従って統合トークンを発行する。CLI の木のみ。bind コードは直接の親か人間が発行し、根は発行できない（#168 PR2）。
 - config に `permissions`（allow・deny・ask）と `autoApprove` を足した（任意）。解析できない規則・上限の外の自動承認・読み取り専用でない自動承認は、起動時に理由つきで拒否する。判定にはまだつながらない（#194 PR2）。旧の daemon は新しい項目を未知のキーとして拒否するので、戻すときは消す（`docs/config.md`）。
+- サブ統括の許可とフックを足した（#168 PR3）。統合ロールに、子の操作（`report_progress`・`report_decision`・`decision_withdraw`・`report_outOfScope`・`report_done`・`scope_extend` と、子の受信箱の `child_inbox`）を足し、サブ統括が自分の親へ完了・範囲の拡張を報告できるようにした（親を持たない根は拒否）。フックの自分の MCP の道具の許可と、起動時の許可の一覧を、ノードのロールで切り替える（サブ統括は `node_spawn` などの統合の道具を使える。範囲・禁じる場所の判定は同じ）。mcp の `child_bind` は、紐付け後に `whoami` のロールで道具の一覧を切り替える。ADR は `.sdd/adr/touryou-168-*.md`。
 
 ### 注意
 

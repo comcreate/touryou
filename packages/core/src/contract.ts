@@ -698,7 +698,10 @@ export const DAEMON_OPERATIONS: readonly RoleOperation<ContractRole>[] = [
 export type SubtreeRule = "strictDescendant" | "directChild" | "selfOrDescendant";
 
 /** 統合ノードの、呼び出し側のノードの部分木では判定しない操作（一覧系は、呼び出し側で絞る）。 */
-type NonSubtreeIntegratorOperation = "inbox.fetch" | "tree.list" | (typeof CHILD_OPERATIONS)[number];
+type NonSubtreeIntegratorOperation =
+  | "inbox.fetch"
+  | "tree.list"
+  | (typeof CHILD_OPERATIONS)[number];
 export type SubtreeOperation = Exclude<RoleOperation<"integrator">, NonSubtreeIntegratorOperation>;
 
 /**
@@ -804,7 +807,11 @@ export const PLUGIN_NAME = "touryou";
  * 同じ名前で、ロールごとに片方だけが出る）、統合（サブ統括）では `child_inbox`（`inbox_fetch` は統合の受信箱）。
  */
 export const mcpToolName = (op: DaemonOperation, role: "integrator" | "child"): string =>
-  op === "child.inbox" ? (role === "child" ? "inbox_fetch" : "child_inbox") : op.replaceAll(".", "_");
+  op === "child.inbox"
+    ? role === "child"
+      ? "inbox_fetch"
+      : "child_inbox"
+    : op.replaceAll(".", "_");
 
 /** 子のセッションに出る touryou の mcp の道具の名前（接頭辞なし）。紐付けの道具と、ROLE_OPERATIONS.child の操作（mcp の toolName と同じ変換）。 */
 export const CHILD_MCP_TOOL_NAMES: readonly string[] = [

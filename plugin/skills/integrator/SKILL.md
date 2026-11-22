@@ -48,6 +48,16 @@ ID は、短縮せずに、そのまま渡します（作業ツリーのディ�
 - `mcp__node__scope_decide`: 子の範囲の拡張の要求（`extensionId`）を、承認（`approve`）・却下（`reject`）・切り出し（`split`）のどれかにする。必要な分だけを承認する。
 - `mcp__node__decision_present`: 人間の判断が要るときに、選択肢を添えて提示する。判断を待つ間、止める子は `pauseNodeIds` で指定できる。回答は受信箱に届く。
 
+サブ統括（自分に親がいる統合ノード。#168）だけが、自分の親へ報告するときに使う。親を持たない根は、呼ぶと拒否される。使い方は子と同じ（`/touryou:child` の手順）:
+
+- `mcp__node__report_progress`: 節目ごとに、進捗を自分の親へ短く報告する。回数に上限があるので、細かくなりすぎない。
+- `mcp__node__report_decision`: 自分では決められないことを、判断要求として自分の親へ出す（選択肢を添える）。人間へは、親を経由する。
+- `mcp__node__decision_withdraw`: 自分が出した、未回答の判断要求を取り下げる。回答済みの判断は取り下げられない。
+- `mcp__node__report_outOfScope`: 範囲の外にある課題に気づいたら、自分で直さずに、自分の親へ申告する。
+- `mcp__node__report_done`: 受け入れ基準をすべて確かめてから、自分の親へ完了を報告する。基準ごとに根拠を付ける。
+- `mcp__node__scope_extend`: 自分の範囲が足りないときに、範囲の拡張を自分の親へ要求する。自分の範囲が広がるまで、配下の子にはその分を渡せない。
+- `mcp__node__child_inbox`: 自分の親から来た指示・差し戻し・判断の回答を読む（自分の配下の受信箱は `inbox_fetch`）。
+
 統合と回収（作る → 受理 → 統合 → 回収）:
 
 - `mcp__node__node_integrate`: 受理した直接の子（`verified`）のブランチを、あなたのブランチへ **fast-forward だけで**統合する。統合済みなら何もしない（`alreadyIntegrated: true`）。`notFastForward`（あなたのブランチが先に進んでいる）・`targetDirty`（あなたの作業ツリーに未保存の変更がある）のときは何も変わらないので、自分で `git merge`・`git rebase` をせず、`decision_present` で人間に統合のしかたを判断してもらう。
