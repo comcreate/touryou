@@ -1051,24 +1051,25 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           note("externalCheckFailure", { cause }),
         );
   // Desktop の子のアダプタ（Desktop の子を扱えるときだけ。仮置き）。フックのゲートは既定で有効。
-  const desktopAdapter =
-    desktopEnabled
-      ? new DesktopRuntimeAdapter({
-          sink: {
-            record: (r) => resolvingLog.append(r),
-            recordAll: (rs) => resolvingLog.appendAll(rs),
-          },
-          requireVerifiedHooks: config.desktopRequireVerifiedHooks ?? true,
-          onWarning: (nodeId, text) => note("desktopHooksGateDisabled", { nodeId, text }),
-          ...(config.touryouCommand === undefined
-            ? {}
-            : { extraAllowedCommands: touryouChildCommands(config.touryouCommand) }),
-          prepareWorktree: (nodeId, worktreePath) => prepareDesktopWorktree(nodeId, worktreePath),
-        })
-      : undefined;
+  const desktopAdapter = desktopEnabled
+    ? new DesktopRuntimeAdapter({
+        sink: {
+          record: (r) => resolvingLog.append(r),
+          recordAll: (rs) => resolvingLog.appendAll(rs),
+        },
+        requireVerifiedHooks: config.desktopRequireVerifiedHooks ?? true,
+        onWarning: (nodeId, text) => note("desktopHooksGateDisabled", { nodeId, text }),
+        ...(config.touryouCommand === undefined
+          ? {}
+          : { extraAllowedCommands: touryouChildCommands(config.touryouCommand) }),
+        prepareWorktree: (nodeId, worktreePath) => prepareDesktopWorktree(nodeId, worktreePath),
+      })
+    : undefined;
   // そのノードの runtime のアダプタ（子ごと）。Desktop のアダプタがなければ、すべて CLI のアダプタ。
   const adapterFor = (nodeId: string): RuntimeAdapter & { has(nodeId: string): boolean } =>
-    desktopAdapter !== undefined && nodeRuntimeOf(nodeId) === "desktop" ? desktopAdapter : cliAdapter;
+    desktopAdapter !== undefined && nodeRuntimeOf(nodeId) === "desktop"
+      ? desktopAdapter
+      : cliAdapter;
 
   // Desktop の子のフック（`touryou child hook` → POST /v1/hook）。範囲は Desktop のアダプタが持つもの（touryou child の 2 つを
   // 足したもの）、作業ツリーは daemon が作ったもの、禁じる場所は CLI の子と同じ（stateDir・設定ファイル）に、そのノードの

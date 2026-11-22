@@ -25,6 +25,7 @@
 - core に、サブ統括（#168）の土台を足した: `INTEGRATOR_MCP_TOOL_NAMES`・`MCP_TOOL_NAMES_BY_ROLE`・`DEFAULT_MAX_TREE_DEPTH`（3）と、`validateTree` の深さ検査（`depthExceeded`。`maxTreeDepth` を渡したときだけ）（#168 PR1）。
 - 採用した子（`node_adopt`）を runtime 属性で扱い、起動の報告がなくても止まり検知・見張り・画面の開き方・安全面の対象にする（#159 PR1）。runtime の記録がない古い採用の子は不明扱い。
 - 権限の規則（`Bash(...)`・`Edit(...)`・`mcp__...`）の解析・照合・判定（deny > ask > allow）を core に追加した。Scope に `allowedMcpTools`（省略可）を足した。挙動は変わらない（#194 PR1）。
+- daemon の compose が、子ごとの runtime（cli／desktop）で振り分けるようになった。単一 runtime の木の挙動は変わらない。runtime の記録がない子は、設定 `childRuntime` に従う（#159 PR2a）。
 - サブ統括（統合ノードの子の統合ノード）の紐付けを足した: bind コードの引き換えと再紐付けが、ノードのロールに従って統合トークンを発行する。CLI の木のみ。bind コードは直接の親か人間が発行し、根は発行できない（#168 PR2）。
 - config に `permissions`（allow・deny・ask）と `autoApprove` を足した（任意）。解析できない規則・上限の外の自動承認・読み取り専用でない自動承認は、起動時に理由つきで拒否する。判定にはまだつながらない（#194 PR2）。旧の daemon は新しい項目を未知のキーとして拒否するので、戻すときは消す（`docs/config.md`）。
 
