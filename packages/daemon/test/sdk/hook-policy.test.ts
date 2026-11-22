@@ -127,7 +127,16 @@ describe("自ノードの MCP ツールは許可し、未知のツールは拒�
 
   it("別の MCP サーバー、サブエージェント、ウェブ、未知のツールは拒否する。範囲違反ではなく unknownTool（記録先は別。受信箱に載せない）", async () => {
     // 完全な形の MCP 名（mcp__other__do など）は、頼み方つきの別の文になる（下の「MCP ツール」で試す）
-    for (const tool of ["Task", "Agent", "WebFetch", "WebSearch", "KillShell", "Unknown", "", "mcp__node"]) {
+    for (const tool of [
+      "Task",
+      "Agent",
+      "WebFetch",
+      "WebSearch",
+      "KillShell",
+      "Unknown",
+      "",
+      "mcp__node",
+    ]) {
       const d = await decide(tool, {});
       expect(d.allow, tool).toBe(false);
       if (!d.allow) {

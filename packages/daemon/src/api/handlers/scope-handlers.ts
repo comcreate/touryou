@@ -74,7 +74,8 @@ function targetProblem(target: { kind: string; value: string }): string | undefi
   if (CONTROL.test(v)) return "制御文字（改行を含む）は使えない";
   if (target.kind === "mcp") {
     // 子の依頼で付与できるのは、完全な名前の道具 1 つだけ（サーバー全体 mcp__<サーバー> は、人間が config に書くときだけ）
-    if (!isMcpToolName(v)) return "MCP ツールは mcp__<サーバー>__<道具> の完全な名前（サーバー全体は頼めない）";
+    if (!isMcpToolName(v))
+      return "MCP ツールは mcp__<サーバー>__<道具> の完全な名前（サーバー全体は頼めない）";
     // 親の道具（node_spawn など）を、拡張で子に付与できてしまうのを防ぐ
     if (isOwnMcpServerTool(v)) return "touryou 自身の MCP サーバーの道具は頼めない";
     return undefined;
@@ -358,7 +359,11 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
   ): void {
     if (!LIVE.has(stateOf(log.state(), ext.nodeId) ?? "pending")) return;
     const kindLabel =
-      ext.target.kind === "write" ? "書き込み先" : ext.target.kind === "mcp" ? "MCP ツール" : "コマンド";
+      ext.target.kind === "write"
+        ? "書き込み先"
+        : ext.target.kind === "mcp"
+          ? "MCP ツール"
+          : "コマンド";
     const what = `${kindLabel} ${ext.target.value}`;
     const text =
       decision === "approve"
