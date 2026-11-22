@@ -18,6 +18,11 @@ export const GRAPH_TEXT = {
   "flow.sum": { ja: "{dir} {who}　{kind}", en: "{dir} {who}  {kind}" },
   "flow.withText": { ja: "{sum}：{text}", en: "{sum}: {text}" },
   "flow.you": { ja: "あなた", en: "you" },
+  "role.below": { ja: "{role}（配下 {n} 件）", en: "{role} ({n} below)" },
+  "role.belowHuman": {
+    ja: "{role}（配下 {n} 件・あなたの答え {h} 件）",
+    en: "{role} ({n} below, {h} awaiting you)",
+  },
   "role.implement": { ja: "作業", en: "work" },
   "role.integrator": { ja: "統合", en: "integrator" },
   "role.investigate": { ja: "調べ", en: "investigation" },

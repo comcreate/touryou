@@ -245,14 +245,26 @@ export function graphModelOf(
               ? "stall"
               : "run";
     const stopIncomplete = state === "stopIncomplete";
+    const roleName = graphString(
+      lang,
+      roleKey === "" ? "role.implement" : (ROLE_NAMES[roleKey] as GraphTextKey),
+    );
+    // サブ統括（根でない統合）は、役割の名前に配下の数を添える（#168）。数は表示モデル（core）が数えたもの
+    const below = roleKey === "integrator" && idOf(n.parentId) !== null ? rec(n.below) : null;
+    const belowCount = below === null ? 0 : count(below.count);
+    const belowHuman = below === null ? 0 : count(below.needsHuman);
     nodes.push({
       id,
       parentId: idOf(n.parentId),
       title: n.title === undefined ? id : uiText(n.title, 80),
-      role: graphString(
-        lang,
-        roleKey === "" ? "role.implement" : (ROLE_NAMES[roleKey] as GraphTextKey),
-      ),
+      role:
+        below === null
+          ? roleName
+          : graphString(lang, belowHuman > 0 ? "role.belowHuman" : "role.below", {
+              role: roleName,
+              n: belowCount,
+              h: belowHuman,
+            }),
       integrator: roleKey === "integrator",
       status: stopIncomplete && status === "run" ? "fail" : status,
       tier: stopIncomplete ? "turn" : tierOf(status),

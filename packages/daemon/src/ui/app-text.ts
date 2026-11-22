@@ -368,7 +368,7 @@ export const APP_TEXT = {
   "kept.tipLine": { ja: "先端", en: "Tip" },
   "kind.answer": { ja: "答え", en: "answer" },
   "kind.decision": { ja: "判断を求む", en: "decision needed" },
-  "kind.digest": { ja: "まとめ", en: "summary" },
+  "kind.digest": { ja: "サブ統括の要約", en: "sub-integrator summary" },
   "kind.done": { ja: "済んだ", en: "done" },
   "kind.failure": { ja: "うまくいかなかった", en: "did not work" },
   "kind.info": { ja: "知らせ", en: "notice" },

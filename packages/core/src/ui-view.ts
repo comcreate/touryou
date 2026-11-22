@@ -24,6 +24,7 @@ import { isStallSummary, PRIORITIES, type Priority, priorityOf } from "./inbox-k
 import { copyInboxMessage, type InboxMessage } from "./inbox-messages.js";
 import type { NodeRole, NodeState } from "./index.js";
 import { runtimeOf } from "./runtime.js";
+import { descendantsOf } from "./tree.js";
 
 export const UI_TEXT_MAX = 200;
 /** 判断の質問の上限（コードポイント）。人間が、何を聞かれているかを読んで答えるので、ほかより長い。 */
@@ -104,6 +105,11 @@ export interface UiNode {
    * `openItems`（未解決の項目すべて）と違い、進み具合・完了・知らせを数えない。
    */
   readonly needsHuman: number;
+  /**
+   * 配下の数（#168）。サブ統括（根でない統合ノード）だけに付ける。`count`: 配下のノード（自分を含まない。子・孫すべて）の数、
+   * `needsHuman`: そのうち、人の操作が要る数の合計（配下のノードの `needsHuman` の和。サブ統括自身の分は含めない）。
+   */
+  readonly below?: { readonly count: number; readonly needsHuman: number };
   /** 作業の状態の 3 段。`turn`: 人の出番（`needsHuman` が 1 以上・停止未完了・未解決の失敗）、`finished`: 終わった、`running`: 進んでいる。 */
   readonly band: UiBand;
 }
@@ -408,6 +414,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
     const lost =
       !BIND_EXPIRED_HIDDEN_STATES.has(n.state) && expired === undefined && bindLost.has(n.id);
     const runtime = runtimeOf(state, n.id);
+    const below = belowOf(state, n, human);
     return {
       id: idOf(n.id),
       role: n.role,
@@ -426,6 +433,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       ...(title === "" ? {} : { title }),
       ...(at === undefined ? {} : { lastActivityAt: uiText(at) }),
       needsHuman,
+      ...(below === undefined ? {} : { below }),
       band: bandOf(n.state, needsHuman, failing.has(n.id)),
     };
   });
@@ -522,6 +530,19 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
     flows,
     truncated,
   };
+}
+
+/** サブ統括（根でない統合ノード）の配下の数（`UiNode.below`）。サブ統括でなければ、なし。 */
+function belowOf(
+  state: OrchState,
+  n: OrchState["nodes"][number],
+  human: ReadonlyMap<string, number>,
+): UiNode["below"] {
+  if (n.role !== "integrator" || n.parentId === null) return undefined;
+  const below = descendantsOf(state.nodes, n.id);
+  let needsHuman = 0;
+  for (const d of below) needsHuman += human.get(d.id) ?? 0;
+  return { count: below.length, needsHuman };
 }
 
 /** 題: 改行・タブ・続く空白を空白 1 つにまとめ、前後の空白を除いて 1 行にしてから、`UI_TITLE_MAX` で切る。 */

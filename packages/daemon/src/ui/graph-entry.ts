@@ -506,6 +506,8 @@ function drawNode(
     "gs",
     n.lastAt === null ? n.role : roleAgoText(n.role, n.lastAt, now, lang),
   );
+  // 配下の数を添えた役割の名前は長いので、省略されたときに全文を見られるようにする（#168）
+  gs.title = n.role;
   if (n.lastAt !== null) {
     const { role, lastAt } = n;
     ticks.push((t) => {
