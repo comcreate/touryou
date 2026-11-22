@@ -19,7 +19,9 @@
 
 import {
   type DaemonOperation,
-  failure,
+  type failure,
+  type FailureMessageKey,
+  failureMsg,
   INTEGRATOR_OPERATION_CLASS,
   isDirectChild,
   isInSubtree,
@@ -44,22 +46,33 @@ export interface Claims {
 }
 
 const OK = { ok: true, value: undefined } as const;
-const forbidden = (cause: string): { ok: false; error: Failure } => ({
+type Args = Readonly<Record<string, string | number>>;
+const forbidden = (key: FailureMessageKey, args: Args = {}): { ok: false; error: Failure } => ({
   ok: false,
-  error: failure(
+  error: failureMsg(
     "forbidden",
-    cause,
+    key,
+    args,
     "この操作を持つロールで呼び出す",
     "親（統合ノード）に依頼する",
   ),
 });
-const notFound = (cause: string): { ok: false; error: Failure } => ({
+const notFound = (key: FailureMessageKey, args: Args = {}): { ok: false; error: Failure } => ({
   ok: false,
-  error: failure("notFound", cause, "ID を確認する", "受信箱の参照 ID（ref）を確認する"),
+  error: failureMsg("notFound", key, args, "ID を確認する", "受信箱の参照 ID（ref）を確認する"),
 });
-const unauthenticated = (cause: string): { ok: false; error: Failure } => ({
+const unauthenticated = (
+  key: FailureMessageKey,
+  args: Args = {},
+): { ok: false; error: Failure } => ({
   ok: false,
-  error: failure("unauthenticated", cause, "正しい資格情報で呼び出す", "資格情報を再発行する"),
+  error: failureMsg(
+    "unauthenticated",
+    key,
+    args,
+    "正しい資格情報で呼び出す",
+    "資格情報を再発行する",
+  ),
 });
 
 /** トークンを無効にするノードの状態（子のプロセスが止まった後）。stopping は成果の保存の報告のため有効。 */
@@ -73,12 +86,12 @@ const REVOKED_STATES: ReadonlySet<NodeState> = new Set([
 export function checkPrincipal(principal: Principal, state: OrchState): Result<undefined, Failure> {
   if (principal.role === "human") return OK;
   const node = state.nodes.find((n) => n.id === principal.nodeId);
-  if (node === undefined) return unauthenticated(`ノード ${principal.nodeId} は木にない`);
+  if (node === undefined) return unauthenticated("nodeNotInTree", { node: principal.nodeId });
   if ((principal.role === "integrator") !== (node.role === "integrator")) {
-    return unauthenticated("トークンのロールが、ノードのロールと一致しない");
+    return unauthenticated("tokenRoleMismatch");
   }
   if (REVOKED_STATES.has(node.state)) {
-    return unauthenticated(`状態 ${node.state} のノードの資格情報は無効`);
+    return unauthenticated("nodeStateInvalid", { state: node.state });
   }
   return OK;
 }
@@ -89,15 +102,15 @@ export function authorizeRole(
   claims: Claims,
 ): Result<undefined, Failure> {
   if (claims.claimedRole !== undefined && claims.claimedRole !== principal.role) {
-    return forbidden("申告のロールが、認証したロールと一致しない");
+    return forbidden("claimedRoleMismatch");
   }
   if (claims.claimedCaller !== undefined) {
     if (principal.role === "human" || claims.claimedCaller !== principal.nodeId) {
-      return forbidden("申告の caller が、認証したノードと一致しない");
+      return forbidden("claimedCallerMismatch");
     }
   }
   if (!(ROLE_OPERATIONS[principal.role] as readonly string[]).includes(operation)) {
-    return forbidden(`ロール ${principal.role} は操作 ${operation} を持たない`);
+    return forbidden("roleLacksOperation", { role: principal.role, op: operation });
   }
   return OK;
 }
@@ -128,21 +141,21 @@ export function authorizeScope(
   if (principal.role === "human") return OK;
   const nodes = state.nodes;
   if (!nodes.some((n) => n.id === principal.nodeId)) {
-    return forbidden(`ノード ${principal.nodeId} は木にない`);
+    return forbidden("nodeNotInTree", { node: principal.nodeId });
   }
   if (principal.role !== "integrator") return OK;
 
   const op = operation as keyof typeof INTEGRATOR_OPERATION_CLASS;
   const cls = INTEGRATOR_OPERATION_CLASS[op];
   if (cls === undefined || cls === "denied") {
-    return forbidden(`操作 ${operation} は、統合ロールからは（発生元の記録ができるまで）使えない`);
+    return forbidden("integratorOperationUnavailable", { op: operation });
   }
   if (cls === "callerFiltered") return OK;
 
   const caller = principal.nodeId;
   const rule = SUBTREE_RULES[op as SubtreeOperation];
   const p = params as Record<string, unknown>;
-  const outside = forbidden("対象のノードが、自分の部分木の規則を満たさない");
+  const outside = forbidden("outsideSubtree");
   switch (op) {
     case "node.spawn":
       return satisfies(rule, nodes, caller, p.parentId) ? OK : outside;
@@ -155,16 +168,16 @@ export function authorizeScope(
     }
     case "decision.get": {
       const owner = state.decisions.find((d) => d.decisionId === p.decisionId)?.nodeId;
-      return satisfies(rule, nodes, caller, owner) ? OK : notFound("判断要求が見つからない");
+      return satisfies(rule, nodes, caller, owner) ? OK : notFound("decisionNotFound");
     }
     case "scope.decide": {
       // 対象は、拡張の発生元のノード（拡張要求の nodeId）。
       const owner = state.extensions.find((x) => x.extensionId === p.extensionId)?.nodeId;
-      return satisfies(rule, nodes, caller, owner) ? OK : notFound("拡張要求が見つからない");
+      return satisfies(rule, nodes, caller, owner) ? OK : notFound("extensionNotFound");
     }
     case "report.get": {
       const owner = state.reports.find((r) => r.reportId === p.reportId)?.nodeId;
-      return satisfies(rule, nodes, caller, owner) ? OK : notFound("報告が見つからない");
+      return satisfies(rule, nodes, caller, owner) ? OK : notFound("reportNotFound");
     }
     default:
       return satisfies(rule, nodes, caller, p.nodeId) ? OK : outside;

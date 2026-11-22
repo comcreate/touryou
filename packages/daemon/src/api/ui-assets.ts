@@ -13,7 +13,14 @@
  *   交換する。セッションのトークン（または貼り付けた人間のトークン）は、メモリにだけ持つ（storage・cookie には置かない）。`#token=` は受け取らない。
  */
 
-import { INBOX_MESSAGE_LIMITS, INBOX_MESSAGES, LIST_SEPS } from "@touryou/core";
+import {
+  FAILURE_LIST_SEP,
+  FAILURE_MESSAGES,
+  FAILURE_NONE,
+  INBOX_MESSAGE_LIMITS,
+  INBOX_MESSAGES,
+  LIST_SEPS,
+} from "@touryou/core";
 import { externalCheckSummaries } from "../external-check.js";
 import { UI_TEXT } from "../ui/i18n.js";
 
@@ -21,6 +28,12 @@ import { UI_TEXT } from "../ui/i18n.js";
 export const UI_TEXT_JSON = JSON.stringify(UI_TEXT);
 export const INBOX_MESSAGES_JSON = JSON.stringify(INBOX_MESSAGES);
 export const LIST_SEPS_JSON = JSON.stringify(LIST_SEPS);
+// 失敗の原因の文の表（#141）。文・並びの区切り・並びが空のときの文字を、1 つの値にまとめて埋め込む
+export const FAILURES_JSON = JSON.stringify({
+  messages: FAILURE_MESSAGES,
+  sep: FAILURE_LIST_SEP,
+  none: FAILURE_NONE,
+});
 
 export const UI_HTML = `<!doctype html>
 <html lang="ja">
@@ -299,6 +312,7 @@ export const UI_JS = `'use strict';
   var TEXT = ${UI_TEXT_JSON};
   var MESSAGES = ${INBOX_MESSAGES_JSON};
   var SEPS = ${LIST_SEPS_JSON};
+  var FAILURES = ${FAILURES_JSON};
   var MESSAGE_DEPTH_MAX = ${INBOX_MESSAGE_LIMITS.depth};
   var PLACEHOLDER = /[{]([a-z][A-Za-z0-9]*)[}]/g;
   // 覚えた言語がなければ、ブラウザの言語（ja で始まれば日本語、ほかは英語。i18n.ts の pickLang と同じ。試験で照らす）
@@ -340,6 +354,32 @@ export const UI_JS = `'use strict';
   function itemText(i) {
     var s = msgText(i.msg);
     return s !== null ? s : typeof i.summary === 'string' ? i.summary : '';
+  }
+  // 失敗の原因の文（#141）。core の failureMessageText と同じ規則（試験で照らす）。表にない鍵・形の合わないものは null
+  function failMsgText(m) {
+    if (!m || typeof m !== 'object' || typeof m.key !== 'string' || !Object.hasOwn(FAILURES.messages, m.key)) return null;
+    if (!m.args || typeof m.args !== 'object') return null;
+    var args = {};
+    Object.keys(m.args).forEach(function (k) {
+      var v = m.args[k];
+      if (/List$/.test(k) && typeof v === 'string') {
+        var items = v.split(',').filter(function (s) { return s !== ''; });
+        args[k] = items.length === 0 ? FAILURES.none[lang] : items.join(FAILURES.sep[lang]);
+      } else if (/Key$/.test(k) && typeof v === 'string' && Object.hasOwn(FAILURES.messages, v)) {
+        args[k.slice(0, -3)] = FAILURES.messages[v][lang];
+      } else {
+        args[k] = v;
+      }
+    });
+    return FAILURES.messages[m.key][lang].replace(PLACEHOLDER, function (all, nm) { return Object.hasOwn(args, nm) ? String(args[nm]) : all; });
+  }
+  // 失敗の原因を、画面の言語の文にする。日本語は、daemon の cause のまま（これまでと同じ）。英語は、msg（鍵と値）から作る。
+  // msg がない失敗（未対応の失敗・古い daemon）は、英語の汎用の文（code は、呼び出し側が添える）。この画面が作った失敗（local）は、そのまま
+  function failureText(e) {
+    var cause = e && typeof e.cause === 'string' ? e.cause.slice(0, 300) : '';
+    if (lang === 'ja' || (e && e.local)) return cause;
+    var s = failMsgText(e && e.msg);
+    return s !== null ? s : t('fail.generic');
   }
   // やり取りの本文（#149）。daemon が書いた報告（msg つき）は、選んだ言語の文。msg のない記録（古い記録・子や統合が書いた文）は text のまま
   function flowText(f) {
@@ -533,7 +573,7 @@ export const UI_JS = `'use strict';
   }
   function describeFailure(r) {
     var e = r.body && r.body.error;
-    var base = e && typeof e.code === 'string' ? e.code + ': ' + String(e.cause || '').slice(0, 300) : 'HTTP ' + r.status;
+    var base = e && typeof e.code === 'string' ? e.code + ': ' + failureText(e) : 'HTTP ' + r.status;
     if (r.status === 429) base += r.retry > 0 ? t('fail.waitSec', { n: r.retry }) : t('fail.waitAWhile');
     var hint = failureHint(e && e.code);
     // 先端が変わった（または確かめられない）ときは、同じ内容では、何度送っても通らない。確かめ直させる
@@ -644,22 +684,22 @@ export const UI_JS = `'use strict';
   // 読み取りの操作（事前確認・一覧）の結果。{ ok: true, value } か { ok: false, error: { code, cause, status } }（通知は出さない。
   // 失敗の種類（tipMismatch など）を、呼び出し側が区別できる）。ネットワークの失敗は code が 'network'、401 はトークンを破棄して null。
   function readOperationResult(operation, params) {
-    if (!window.crypto || !window.crypto.randomUUID) return Promise.resolve({ ok: false, error: { code: 'unsupported', cause: t('err.noCrypto'), status: 0 } });
+    if (!window.crypto || !window.crypto.randomUUID) return Promise.resolve({ ok: false, error: { code: 'unsupported', cause: t('err.noCrypto'), local: true, status: 0 } });
     return callOperation(operation, params, window.crypto.randomUUID())
       .then(function (r) {
         if (r === null) return null;
         if (r.status === 200 && r.body && r.body.ok === true) return { ok: true, value: r.body.value };
         var e = r.body && r.body.error;
-        return { ok: false, error: { code: e && typeof e.code === 'string' ? e.code : 'http', cause: e ? String(e.cause || '').slice(0, 300) : 'HTTP ' + r.status, status: r.status } };
+        return { ok: false, error: { code: e && typeof e.code === 'string' ? e.code : 'http', cause: e ? String(e.cause || '').slice(0, 300) : 'HTTP ' + r.status, msg: e ? e.msg : undefined, local: !e, status: r.status } };
       })
-      .catch(function () { return { ok: false, error: { code: 'network', cause: t('err.noDaemon'), status: 0 } }; });
+      .catch(function () { return { ok: false, error: { code: 'network', cause: t('err.noDaemon'), local: true, status: 0 } }; });
   }
   // 読み取りの操作。成功なら値、失敗なら通知（赤）に理由を出して null。
   function readOperation(operation, params) {
     return readOperationResult(operation, params).then(function (r) {
       if (r === null) return null;
       if (r.ok) return r.value;
-      notice(t('err.failed', { code: r.error.code, cause: r.error.cause }), true);
+      notice(t('err.failed', { code: r.error.code, cause: failureText(r.error) }), true);
       return null;
     });
   }
@@ -1475,7 +1515,7 @@ export const UI_JS = `'use strict';
   function checkReclaim(nodeId) {
     readOperationResult('node.reclaimPreview', { nodeId: nodeId }).then(function (r) {
       if (r === null) return;
-      if (!r.ok) { notice(t('err.failed', { code: r.error.code, cause: r.error.cause }), true); return; }
+      if (!r.ok) { notice(t('err.failed', { code: r.error.code, cause: failureText(r.error) }), true); return; }
       var v = r.value;
       if (!isReclaimPreview(v)) { notice(t('err.badPreview'), true); return; }
       if (v.reclaimable) { notice(t('reclaimCheck.ok', { id: nodeId })); return; }
@@ -1490,7 +1530,7 @@ export const UI_JS = `'use strict';
   function startReclaim(nodeId) {
     readOperationResult('node.reclaimPreview', { nodeId: nodeId }).then(function (r) {
       if (r === null) return;
-      if (!r.ok) { notice(t('err.failed', { code: r.error.code, cause: r.error.cause }), true); return; }
+      if (!r.ok) { notice(t('err.failed', { code: r.error.code, cause: failureText(r.error) }), true); return; }
       var v = r.value;
       if (!isReclaimPreview(v)) { notice(t('err.badPreview'), true); return; }
       // 見せた先端（tips）を、作り直さずに、そのまま渡す。daemon が、今の先端と照合する（違えば tipMismatch）。

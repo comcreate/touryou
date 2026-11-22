@@ -243,7 +243,7 @@ describe("画面（app.js・HTML・図）の文字は、表から引く（#140�
   it("app.js のコードに、日本語の文字を書かない（表・コメント・古い記録の見分け・日本語の文の言い換えを除く）", () => {
     const cjk = /[぀-ヿ㐀-鿿]/;
     const left = UI_JS.split("\n")
-      .filter((l) => !/^ {2}var (TEXT|MESSAGES|SEPS|EXTERNAL_CHECK_PREFIXES) = /.test(l))
+      .filter((l) => !/^ {2}var (TEXT|MESSAGES|SEPS|FAILURES|EXTERNAL_CHECK_PREFIXES) = /.test(l))
       .map((l) => l.replace(/\/\/.*$/, "").replace(/\/\*.*?\*\//g, ""))
       .filter((l) => cjk.test(l))
       // 日本語の summary（msg のない古い知らせ）の内部の言葉の言い換え（日本語の画面だけ）

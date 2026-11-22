@@ -21,6 +21,8 @@ import {
   type DaemonOperation,
   type Failure,
   failure,
+  failureMsg,
+  type FailureMessageKey,
   type PendingConfirmation,
   type Result,
 } from "@touryou/core";
@@ -90,19 +92,40 @@ const targetOf = (op: ConfirmableOperation, params: unknown): string => {
 };
 
 const required = (shortId: string): Failure =>
-  failure(
+  failureMsg(
     "confirmationRequired",
-    `取り消せない操作なので、確認待ちにした（まだ実行していない。確認 ${shortId}…）`,
+    "confirmationRequired",
+    { short: shortId },
     "画面（/ui）のいちばん上の確認の欄で、daemon を起動した端末に出たコードを打つ",
     "やめるなら、画面の確認の欄で「取り消す」を押す（5 分で自動的に消える）",
   );
 
-const invalid = (cause: string): Failure =>
-  failure(
+/** `confirmationInvalid` の失敗。原因は 4 通り（鍵で分ける）。 */
+const invalid = (
+  key: Extract<
+    FailureMessageKey,
+    | "confirmationTooManyFailures"
+    | "confirmationGone"
+    | "confirmationGoneOnCancel"
+    | "confirmationLocked"
+    | "confirmationWrongCode"
+  >,
+  args: Readonly<Record<string, string | number>> = {},
+): Failure =>
+  failureMsg(
     "confirmationInvalid",
-    cause,
+    key,
+    args,
     "daemon を起動した端末に出たコードを、そのまま打つ（大文字小文字・区切りは問わない）",
     "確認待ちが消えていたら、操作をもう一度呼んで、新しいコードで確認する",
+  );
+
+const idConflict = (): Failure =>
+  failureMsg(
+    "requestIdConflict",
+    "requestIdConflict",
+    {},
+    "新しい requestId で要求する",
   );
 
 export function createConfirmationGate(deps: ConfirmationGateDeps): ConfirmationGate {
@@ -168,21 +191,14 @@ export function createConfirmationGate(deps: ConfirmationGateDeps): Confirmation
       const fingerprint = JSON.stringify(req.params);
       const prior = done.get(key);
       if (prior !== undefined) {
-        if (prior.fingerprint !== fingerprint)
-          return {
-            ok: false,
-            error: failure(
-              "requestIdConflict",
-              "同じ requestId が、別の内容の要求に使われている",
-              "新しい requestId で要求する",
-            ),
-          };
+        if (prior.fingerprint !== fingerprint) return { ok: false, error: idConflict() };
         if (prior.result === "running")
           return {
             ok: false,
-            error: failure(
+            error: failureMsg(
               "inProgress",
-              "同じ要求を、確認して実行している最中",
+              "requestInProgress",
+              {},
               "少し待ってから、同じ要求をもう一度送る（結果が返る）",
             ),
           };
@@ -192,15 +208,7 @@ export function createConfirmationGate(deps: ConfirmationGateDeps): Confirmation
       if (existing !== undefined) {
         const e = entries.get(existing);
         if (e !== undefined) {
-          if (e.fingerprint !== fingerprint)
-            return {
-              ok: false,
-              error: failure(
-                "requestIdConflict",
-                "同じ requestId が、別の内容の要求に使われている",
-                "新しい requestId で要求する",
-              ),
-            };
+          if (e.fingerprint !== fingerprint) return { ok: false, error: idConflict() };
           return { ok: false, error: required(shortOf(e.id)) };
         }
       }
@@ -218,9 +226,10 @@ export function createConfirmationGate(deps: ConfirmationGateDeps): Confirmation
       if (entries.size >= CONFIRMATION_MAX_PENDING) {
         return {
           ok: false,
-          error: failure(
+          error: failureMsg(
             "confirmationLimit",
-            `確認待ちが多すぎる（${CONFIRMATION_MAX_PENDING} 件まで）`,
+            "confirmationLimit",
+            { max: CONFIRMATION_MAX_PENDING },
             "画面の確認の欄で、確認するか取り消してから、もう一度呼ぶ",
           ),
         };
@@ -238,9 +247,10 @@ export function createConfirmationGate(deps: ConfirmationGateDeps): Confirmation
         // 端末に書けない（端末なしで動いている）なら、確認できないので、確認待ちを作らない（フェイルクローズ）。
         return {
           ok: false,
-          error: failure(
+          error: failureMsg(
             "confirmationUnavailable",
-            "daemon に端末がない（launchd などで動いている）ため、確認のコードを出せない。取り消せない操作は実行していない",
+            "confirmationUnavailable",
+            {},
             "端末から daemon を起動し直してから、操作をもう一度呼ぶ",
           ),
         };
@@ -277,28 +287,24 @@ export function createConfirmationGate(deps: ConfirmationGateDeps): Confirmation
       if (req.role !== "human")
         return {
           ok: false,
-          error: failure("forbidden", "確認は人間だけができる", "人が画面で確認する"),
+          error: failureMsg("forbidden", "confirmationHumanOnly", {}, "人が画面で確認する"),
         };
       const wait = throttle.blocked();
       if (wait !== undefined)
-        return { ok: false, error: invalid("確認の失敗が多すぎる（少し待つ）") };
+        return { ok: false, error: invalid("confirmationTooManyFailures") };
       const e = entries.get(req.params.confirmationId);
       if (e === undefined) {
         throttle.fail();
-        return {
-          ok: false,
-          error: invalid(
-            "確認待ちがない（確認済み・取り消し・試行の上限・daemon の再起動で消えた）",
-          ),
-        };
+        return { ok: false, error: invalid("confirmationGone") };
       }
       if (e.expiresAtMs <= nowMs()) {
         drop(e);
         return {
           ok: false,
-          error: failure(
+          error: failureMsg(
             "confirmationExpired",
-            "確認待ちの期限が過ぎた（実行していない）",
+            "confirmationExpired",
+            {},
             "操作をもう一度呼んで、新しいコードで確認する",
           ),
         };
@@ -312,14 +318,12 @@ export function createConfirmationGate(deps: ConfirmationGateDeps): Confirmation
         ver += 1;
         if (e.attemptsLeft <= 0) {
           drop(e);
-          return {
-            ok: false,
-            error: invalid(
-              "コードが違う。試行の上限に達したので、確認待ちを捨てた（実行していない）",
-            ),
-          };
+          return { ok: false, error: invalid("confirmationLocked") };
         }
-        return { ok: false, error: invalid(`コードが違う（残り ${e.attemptsLeft} 回）`) };
+        return {
+          ok: false,
+          error: invalid("confirmationWrongCode", { left: e.attemptsLeft }),
+        };
       }
       drop(e); // 一度きり: 実行の前に消す
       // 実行中の印を先に置く（実行の最中に同じ要求が届いても、新しい確認待ちを作らない）
@@ -328,7 +332,12 @@ export function createConfirmationGate(deps: ConfirmationGateDeps): Confirmation
       if (inner === undefined)
         return {
           ok: false,
-          error: failure("notImplemented", `操作 ${e.operation} は未実装`, "実装の完了を待つ"),
+          error: failureMsg(
+            "notImplemented",
+            "operationNotImplemented",
+            { op: e.operation },
+            "実装の完了を待つ",
+          ),
         };
       let r: AnyResult;
       try {
@@ -366,12 +375,7 @@ export function createConfirmationGate(deps: ConfirmationGateDeps): Confirmation
       out["confirm.cancel"] = (req: HandlerRequest<"confirm.cancel">): AnyResult => {
         const e = entries.get(req.params.confirmationId);
         if (e === undefined)
-          return {
-            ok: false,
-            error: invalid(
-              "確認待ちがない（確認済み・取り消し・期限切れ・daemon の再起動で消えた）",
-            ),
-          };
+          return { ok: false, error: invalid("confirmationGoneOnCancel") };
         drop(e);
         return { ok: true, value: { cancelled: true } };
       };

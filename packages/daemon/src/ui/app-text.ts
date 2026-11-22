@@ -269,6 +269,10 @@ export const APP_TEXT = {
     ja: "まだ実行していません。ページのいちばん上の「確認待ち」の欄に、daemon を起動した端末に出たコードを打って、確認してください。",
     en: 'Not run yet. In the "Waiting for confirmation" box at the top of the page, type the code shown in the terminal where the daemon started, and confirm.',
   },
+  "fail.generic": {
+    ja: "処理を完了できませんでした",
+    en: "The request could not be completed",
+  },
   "fail.resendable": {
     ja: "同じ内容で、もう一度送れます（同じ要求として扱われ、二重には実行されません）。",
     en: "You can send the same thing again (it is treated as the same request and will not run twice).",

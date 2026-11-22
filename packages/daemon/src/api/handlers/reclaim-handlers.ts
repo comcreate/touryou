@@ -20,6 +20,7 @@ import {
   discardedNodeIds,
   type Failure,
   failure,
+  failureMsg,
   formatProcesses,
   isCommitSha,
   isStrictDescendant,
@@ -215,20 +216,43 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
    * 先端の不一致。原因・次の操作・監査のログに出すのは、ノード ID だけ（SHA は出さない）。
    * 何が違ったのかは、再確認（`touryou reclaim`）で人間が見る。
    */
-  const tipUnknown = (ids: readonly string[], when: string) =>
-    fail(
+  // `reclaimed` を渡すと、「回収済み」の付いた版（途中まで回収したあとの失敗）になる。
+  const tipUnknown = (
+    ids: readonly string[],
+    when: "whenBeforeReclaim" | "whenJustBeforeReclaim" | "whenBeforeRecordDecision",
+    reclaimed?: readonly string[],
+  ): { ok: false; error: Failure } => ({
+    ok: false,
+    error: failureMsg(
       "tipUnknown",
-      `${when}、ブランチの先端を取得できない（不明）ノード: ${ids.join("、")}`,
+      reclaimed === undefined ? "tipUnknown" : "tipUnknownDone",
+      {
+        whenKey: when,
+        idsList: ids.join(","),
+        ...(reclaimed === undefined ? {} : { doneList: reclaimed.join(",") }),
+      },
       "git の状態を確認して、もう一度 touryou reclaim で確かめ直す",
-    );
+    ),
+  });
 
-  const tipMismatch = (ids: readonly string[], when: string) =>
-    fail(
+  const tipMismatch = (
+    ids: readonly string[],
+    when: "whenBeforeReclaim" | "whenJustBeforeReclaim" | "whenBeforeRecordDecision",
+    reclaimed?: readonly string[],
+  ): { ok: false; error: Failure } => ({
+    ok: false,
+    error: failureMsg(
       "tipMismatch",
-      `${when}、ブランチの先端が、表示した内容（判断のときに確かめた内容）と違う（または、表示になかった）ノード: ${ids.join("、")}`,
+      reclaimed === undefined ? "tipMismatch" : "tipMismatchDone",
+      {
+        whenKey: when,
+        idsList: ids.join(","),
+        ...(reclaimed === undefined ? {} : { doneList: reclaimed.join(",") }),
+      },
       "もう一度 touryou reclaim で、失われるものを確かめ直す",
       "変わった成果を確かめてから、改めて破棄を指示する",
-    );
+    ),
+  });
 
   /** 1 ノードの判定。事実とプロセスは、注入されたもの（なければ取り直す）。取得の失敗は回収不可（安全側）。 */
   async function assessNode(
@@ -435,8 +459,8 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
         if (tip.kind === "unknown") unknown.push(n.id);
         else if ((tip.kind === "tip" ? tip.sha : undefined) !== expected) mismatched.push(n.id);
       }
-      if (unknown.length > 0) return tipUnknown(unknown, "判断の記録の前に");
-      if (mismatched.length > 0) return tipMismatch(mismatched, "判断の記録の前に");
+      if (unknown.length > 0) return tipUnknown(unknown, "whenBeforeRecordDecision");
+      if (mismatched.length > 0) return tipMismatch(mismatched, "whenBeforeRecordDecision");
       // 常に、先端（expectTip）か、先端がなかったこと（noTip）のどちらかを記録する（照合を、記録のないものに倒さない）。
       const expectTip = expectTips[nodeId];
       const same =
@@ -606,8 +630,8 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
         if (verdict === "mismatch") moved.push(n.id);
         else if (verdict === "unknown") unknown.push(n.id);
       }
-      if (unknown.length > 0) return tipUnknown(unknown, "回収の前に");
-      if (moved.length > 0) return tipMismatch(moved, "回収の前に");
+      if (unknown.length > 0) return tipUnknown(unknown, "whenBeforeReclaim");
+      if (moved.length > 0) return tipMismatch(moved, "whenBeforeReclaim");
     }
 
     const actor = { nodeId: caller };
@@ -650,18 +674,9 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
           if (forceCandidate(rec) && rec.discarded !== undefined) {
             const verdict = checkRecorded(rec.discarded, tipOfFacts(again.facts));
             if (verdict !== "ok") {
-              const f =
-                verdict === "unknown"
-                  ? tipUnknown([n.id], "回収の直前に")
-                  : tipMismatch([n.id], "回収の直前に");
-              return {
-                ok: false,
-                error: failure(
-                  f.error.code,
-                  `${f.error.cause}（回収済み: ${done()}）`,
-                  ...(f.error.nextActions as [string, ...string[]]),
-                ),
-              };
+              return verdict === "unknown"
+                ? tipUnknown([n.id], "whenJustBeforeReclaim", reclaimed)
+                : tipMismatch([n.id], "whenJustBeforeReclaim", reclaimed);
             }
           }
         }
