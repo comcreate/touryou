@@ -6,6 +6,7 @@ import type { EventBody } from "@touryou/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { createCredentialStore } from "../../src/api/credentials.js";
 import { createChildInboxHandlers } from "../../src/api/handlers/child-inbox-handlers.js";
+import { notice } from "../../src/api/handlers/context.js";
 import { type ApiServer, createApiServer, type Handlers } from "../../src/api/server.js";
 import { EventLog } from "../../src/eventlog.js";
 import { createMemoryStore } from "../../src/memory-store.js";
@@ -90,6 +91,18 @@ const setup = async (over: { perPrincipalBurst?: number } = {}) => {
     return credentials.authenticate(token, false) !== undefined;
   };
   const instruct = (text: string, kind?: "tokenIdleSoon"): number => {
+    // 前置きは、本番と同じく、未解決の「もうすぐ切れる」の知らせと一緒に置く（知らせが解決なら、前置きは子に見せない。#198）
+    if (kind === "tokenIdleSoon") {
+      add({
+        type: "inbox.added",
+        payload: {
+          id: `soon-${++n}`,
+          kind: "info",
+          nodeId: "a",
+          ...notice("tokenIdleSoonBind", { node: "a", minutes: 9 }),
+        },
+      });
+    }
     const r = log.append({
       requestId: `seed-${++n}`,
       actor: { system: true },

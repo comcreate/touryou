@@ -271,6 +271,21 @@ describe("紐付けの期限の知らせの結線（#189）", () => {
     expect((await r.whoami(token)).status).toBe(200);
   });
 
+  it("切れなくなって知らせが解決になったあとは、受け取っていない古い前置きを子に見せない（#198）", async () => {
+    const r = await boot();
+    const { nodeId, token } = await r.spawnAndBind();
+    r.advance(52 * MIN);
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenIdleSoonBind")).toHaveLength(1);
+    // 前置きを読まないまま、作業の呼び出しで時計が延び、見回りで知らせが解決になる
+    expect((await r.asChild(token, "report.progress", { text: "進めている" })).json.ok).toBe(true);
+    r.daemon.sweepTokens();
+    expect(openOf(r.daemon, nodeId, "tokenIdleSoonBind")).toHaveLength(0);
+    const inbox = await r.asChild(token, "child.inbox", {});
+    expect(inbox.json.ok, JSON.stringify(inbox.json)).toBe(true);
+    expect(inbox.json.value.instructions).toHaveLength(0);
+  });
+
   it("ふつうの指示も一緒に読む child.inbox は、時計を延ばす（前置きだけのときだけが例外）", async () => {
     const r = await boot();
     const { nodeId, token } = await r.spawnAndBind();

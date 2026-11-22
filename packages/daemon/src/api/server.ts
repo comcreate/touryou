@@ -44,7 +44,7 @@ import { authorizeRole, authorizeScope, checkPrincipal } from "./authorize.js";
 import { type BindCodes, createThrottle, type Throttle } from "./bind.js";
 import { type CredentialStore, type Principal, parseBearer } from "./credentials.js";
 import { fingerprintOf } from "./dedupe.js";
-import { readsOnlyPrefaces } from "./handlers/child-inbox-handlers.js";
+import { instructionsFor, readsOnlyPrefaces } from "./handlers/child-inbox-handlers.js";
 import {
   createSessionBinder,
   type HookDecider,
@@ -786,7 +786,7 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     params: unknown,
   ): boolean => {
     if (operation !== "child.inbox" || principal.role !== "child") return false;
-    const mine = deps.getState().instructions.filter((i) => i.nodeId === principal.nodeId);
+    const mine = instructionsFor(deps.getState(), principal.nodeId);
     return readsOnlyPrefaces(mine, params as { all?: boolean; ackThrough?: number });
   };
 

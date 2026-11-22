@@ -50,6 +50,28 @@ export const unquote = (text: string): string =>
     .join("\n");
 
 /**
+ * そのノードの、子に見せる指示。前置き（`tokenIdleSoon`。#189）は、未解決の「もうすぐ切れる」の知らせがあるときだけ見せる。
+ * 使われて切れなくなった・結び直された・切れたあとは、知らせが解決になっている。そのとき、まだ受け取っていない前置きは古い
+ * （もう切れそうではない）ので、子に見せない（#198）。受け取り済みの前置きは、そのまま。
+ */
+export function instructionsFor(
+  state: {
+    readonly instructions: readonly InstructionRecord[];
+    readonly inbox: readonly { nodeId: string; resolved?: unknown; msg?: { key: string } }[];
+  },
+  nodeId: string,
+): InstructionRecord[] {
+  const soonOpen = state.inbox.some(
+    (i) => i.nodeId === nodeId && i.resolved === undefined && i.msg?.key === "tokenIdleSoonBind",
+  );
+  return state.instructions.filter(
+    (i) =>
+      i.nodeId === nodeId &&
+      (soonOpen || i.deliveredSeq !== undefined || !isPrefaceInstruction(i)),
+  );
+}
+
+/**
  * この呼び出しが読む（`ackThrough` なし）・受け取りにする（`ackThrough` あり）指示。ハンドラと、時計を延ばすかの判定
  * （`readsOnlyPrefaces`）が、同じ選び方を使う。
  */
@@ -97,7 +119,7 @@ export function createChildInboxHandlers(deps: ChildInboxHandlerDeps) {
       const node = state.nodes.find((n) => n.id === nodeId);
       const scope = effectiveScope(state, nodeId);
       if (node === undefined) return fail("notFound", "ノードが見つからない", "whoami で確かめる");
-      const mine = state.instructions.filter((i) => i.nodeId === nodeId);
+      const mine = instructionsFor(state, nodeId);
       const { picked, toMark } = selectInboxInstructions(mine, req.params);
       const instructions: ChildInstructionView[] = picked.map((i) => ({
         seq: i.seq,
