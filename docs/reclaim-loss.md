@@ -49,6 +49,39 @@ touryou reclaim <nodeId> --yes --expect <digest>    # 表示した照合の値�
 - ブランチがあるうちに破棄を決め、そのあとブランチが消えた場合は、先端の照合で止まる（`tipMismatch`）。もう一度 `touryou reclaim` で確かめ直して、決め直す。
 - **daemon が作業ツリーの情報を確かめられないノード（`factsMissing`）は、`touryou reclaim` が破棄を指示しない**（`--yes` でも。終了コード 1。「回収できない」と理由・次の操作を出す）。画面も、同じとき指示させない。破棄を決めても回収できず、「破棄を指示済み」の表示と、統合の事前確認が食い違うため。
 
+## 回収の事前確認の `unmet` の理由と、満たす手順（#235）
+
+`node.reclaimPreview` の `unmet` は、回収できない理由の一覧（判定は `packages/core/src/reclaim.ts`）。回収の対象になる状態は `verified`・`stopped`・`reclaimable` だけ。統合ノード向けの同じ表は `plugin/skills/integrator/SKILL.md`「回収の事前確認の `unmet` の理由」。
+
+| 理由 | 意味 | 満たす手順 |
+| --- | --- | --- |
+| `stateNotEligible` | ノードが `verified`・`stopped`・`reclaimable` のどれでもない | 状態が進むのを待つ。`done` の子は先に受理する。`archived` は回収済み |
+| `discardRequired` | `stopped` のノードで、成果を捨てる判断がない | `touryou reclaim <nodeId>` の表示を見て、人が `--yes --expect` で破棄を決める |
+| `factsMissing` | 作業ツリーが daemon の `worktreeRoot` の外にある、または git に登録されていない（ノードの path とブランチが `git worktree list` にない、git を調べられない、を含む） | 下の「`factsMissing` のとき」 |
+| `notMerged` | 成果が親のブランチに統合されていない | `node_integrate` で統合する。成果を捨てるなら、人が破棄を決める |
+| `dirty` | 作業ツリーに未保存の変更がある | 残すものを取り出し（コミット）、不要な変更を片付ける |
+| `dependentsIncomplete` | 依存するノードが、まだ完了していない | 依存するノードの完了を待つ |
+| `openDecision` | 未回答の判断がある | 判断に答える、または取り下げる |
+| `descendantsNotReclaimable` | 統合ノードで、配下に回収できていないノードがある | 配下を後順（孫から先）に回収する |
+| `processesRunning` | 作業ツリーでプロセスが動いている、またはファイルを開いている | 原因のプロセスを終わらせ（子のセッションを止める）、もう一度確かめる |
+| `processesUnknown` | daemon がプロセスの一覧を取れなかった | 自分で確かめてから、もう一度確かめる |
+
+### `factsMissing` のとき
+
+`factsMissing` になるのは、次のいずれか。
+
+- そのノードの事実がない（作業ツリーを調べられない・登録がない）。
+- 作業ツリーのパスが、絶対パスでない・`/` だけ・NUL を含むなど、不正。
+- 作業ツリーのパスが、daemon の設定 `worktreeRoot` の配下でない（`reclaim.ts` が `worktreeRoot` の配下でないパスを拒否する）。
+
+「登録がない」は、`git worktree list` に、ノードの記録どおりの path とブランチ（既定は `touryou/…`）の組がないこと、または一覧を取れないこと（git がない、など）。
+
+確かめる順: ①作業ツリーの場所が `worktreeRoot` の配下か、②`git worktree list` に、そのノードの path とブランチが載っているか、③git が使えるか。CLI の `touryou reclaim` も、同じ意味で「回収できない: daemon が、このノードの作業ツリーの情報を確かめられない（作業ツリーが daemon の置き場の外にある・別の場所に登録されている・git を調べられない、など）。破棄は指示していない」と出し、次の操作として `git worktree list` で作業ツリーの場所を確かめるよう案内する（終了コード 1）。
+
+`worktreeRoot` を変えると、それまでの作業ツリーが置き場の外になり、`factsMissing` になる**可能性がある**（設定の移し替えとの結びつきは、コードでは確かめていない。上の ① で原因を決める）。
+
+`factsMissing` のノードは、破棄を決めても回収できない。そのため、`touryou reclaim` も画面も、破棄を指示させない。作業ツリーとブランチが、もうない `stopped` のノードは、前の節のとおり `factsMissing` にならず、`discardRequired` になる。
+
 ## 限界
 
 - 入れ子の `node_modules` は、先頭のディレクトリ名だけで判定するので、多めに数える（安全側。数が実際より多く出ることはあっても、少なく出ることはない）。

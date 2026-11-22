@@ -62,8 +62,37 @@ ID は、短縮せずに、そのまま渡します（作業ツリーのディ�
 
 - `mcp__node__node_integrate`: 受理した直接の子（`verified`）のブランチを、あなたのブランチへ **fast-forward だけで**統合する。統合済みなら何もしない（`alreadyIntegrated: true`）。`notFastForward`（あなたのブランチが先に進んでいる）・`targetDirty`（あなたの作業ツリーに未保存の変更がある）のときは何も変わらないので、自分で `git merge`・`git rebase` をせず、`decision_present` で人間に統合のしかたを判断してもらう。
 - 受理（`node_review` の `accept`）すると、CLI の子の裏のセッションの停止（`claude stop`）の依頼が受信箱に来る。下の「CLI の子」の手順で実行し、続けて来る削除（`claude rm`）の依頼も実行する。子の状態は `verified` のまま変わらない。作業ツリーのプロセスが残っていると言われたら、`node_stop` で依頼を出し直してもらえる。
-- `mcp__node__node_reclaimPreview`: 回収の事前確認。`unmet`（満たしていない条件）と `blockers`（原因のノード・プロセス）を読み、残っているものを先に片付ける。
+- `mcp__node__node_reclaimPreview`: 回収の事前確認。`unmet`（満たしていない条件）と `blockers`（原因のノード・プロセス）を読み、残っているものを先に片付ける。各理由の意味と満たす手順は、下の「回収の事前確認の `unmet` の理由」を読む。
 - `mcp__node__node_reclaim`: 事前確認で示した対象を回収する。条件は実行時に再判定され、失うものがあるときは拒否される。
+
+## 回収の事前確認の `unmet` の理由
+
+`node_reclaimPreview` の `unmet` には、次の理由が並ぶ（判定は `packages/core/src/reclaim.ts`）。回収は `verified`・`stopped`・`reclaimable` のノードだけが対象。理由が空なら回収できる。**自分で作業ツリーを消さず、`git` の操作で理由を飛ばさない**。人が決めることは、`decision_present` か `report_decision` で人に渡す。
+
+| 理由 | 意味 | 満たす手順 |
+| --- | --- | --- |
+| `stateNotEligible` | ノードが `verified`・`stopped`・`reclaimable` のどれでもない（動作中・`done`・`archived` など） | 状態が進むのを待つ。`done` の子は先に `node_review` で受理する。`archived` は回収済み |
+| `discardRequired` | `stopped` のノードで、成果を捨てる判断がない | 人が `touryou reclaim <nodeId>` の表示を見て、`--yes --expect` で破棄を決める（`docs/reclaim-loss.md`）。自分では決めない |
+| `factsMissing` | **作業ツリーが daemon の `worktreeRoot` の外にある、または git に登録されていない**（ノードの記録と一致する path・ブランチで `git worktree list` にない、または git を調べられない）。作業ツリーの事実が取れず、ほかの条件（`notMerged`・`dirty`・プロセス）は判定できない | 下の「`factsMissing` のとき」 |
+| `notMerged` | 成果がまだ親のブランチに統合されていない（`reclaimable` で統合済みでない場合も） | `node_integrate` で統合する。`notFastForward`・`targetDirty` のときは `decision_present` で人に聞く。成果を捨てるなら、人が破棄を決める |
+| `dirty` | 作業ツリーに未保存の変更がある | 残すものを子に取り出させ（コミット）、不要な変更は人が片付ける。破棄は人が決める |
+| `dependentsIncomplete` | このノードに依存する別のノードが、まだ完了していない（`verified`・`reclaimable`・`archived` 以外）。`blockers` にそのノードが出る | 依存先のノードの完了（受理）を待つ |
+| `openDecision` | このノードに未回答の判断がある | `decision_get` で見て、答える（人の判断なら人に渡す）。不要なら出した子が `decision_withdraw` で取り下げる |
+| `descendantsNotReclaimable` | 統合ノードで、配下に `reclaimable`・`archived` でないノードがある。`blockers` にそのノードが出る | 配下を後順（孫から先）に回収する |
+| `processesRunning` | 作業ツリーの中で動くプロセスがある、または作業ツリーのファイルを開いている。`blockers` に pid とコマンドの名前が出る | 子のセッションの停止（`claude stop`）を済ませ、原因のプロセスを終わらせてから、もう一度確かめる |
+| `processesUnknown` | daemon がプロセスの一覧を取れなかった（`lsof` が使えない・時間切れ） | 自分で、作業ツリーで動くものがないことを確かめてから、もう一度 `node_reclaimPreview` を呼ぶ |
+
+### `factsMissing` のとき
+
+`factsMissing` は、作業ツリーそのものが回収の対象として確かめられない、という意味。次を、この順に確かめる。
+
+1. 作業ツリーの場所が、daemon の設定 `worktreeRoot` の配下か（`docs/config.md`）。外にあると、git に登録されていても `factsMissing` になる。
+2. `git worktree list` に、そのノードの作業ツリーの path が、ノードのブランチ（既定は `touryou/…`）つきで載っているか。載っていなければ、git に登録されていない。
+3. git が使えるか（`git worktree list` が失敗すると、事実が取れない）。
+
+`worktreeRoot` は、daemon の設定を移すなどして変えると、それまでの作業ツリーが外になり、`factsMissing` になる**可能性がある**（コードでは、設定の移し替えと `factsMissing` の結びつきまでは確かめていない。上の 1 を確かめて原因を決める）。
+
+人が `touryou reclaim` で確かめると、`factsMissing` のときは、破棄を指示せずに「回収できない」と理由・次の操作（`git worktree list` で作業ツリーの場所を確かめる）が出る。**`factsMissing` のノードは、破棄を決めても回収できない**ので、`--yes` で破棄を指示させない。作業ツリーとブランチが、もうないだけの `stopped` のノードは、`factsMissing` にならず、`discardRequired` になる（`docs/reclaim-loss.md`「作業ツリーもブランチも、もうないノード」）。
 
 ## サブ統括（統合ノードの子の統合ノード。#168）
 
