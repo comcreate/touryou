@@ -17,14 +17,10 @@ export interface NodeAuthDeps {
 
 /**
  * `Authorization` のヘッダの値から、主体を確かめる。トークンが無効・ノードの状態が許さないときは `undefined`。
- * `touch` を偽にすると、使ったものとして数えない（使わなければ切れる時計を延ばさない。購読の接続・heartbeat の確かめ用）。
+ * 使ったものとして数える（使わなければ切れる時計を延ばす）。数えない確かめは、窓口の `authenticate`（`touch` 引数）が行う。
  */
-export function verifyNodeToken(
-  deps: NodeAuthDeps,
-  authorization: unknown,
-  touch = true,
-): Principal | undefined {
-  const principal = deps.credentials.authenticate(parseBearer(authorization), touch);
+export function verifyNodeToken(deps: NodeAuthDeps, authorization: unknown): Principal | undefined {
+  const principal = deps.credentials.authenticate(parseBearer(authorization));
   if (principal === undefined) return undefined;
   return checkPrincipal(principal, deps.getState()).ok ? principal : undefined;
 }
