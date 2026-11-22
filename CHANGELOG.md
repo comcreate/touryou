@@ -14,6 +14,7 @@
 - **状態画面の関係図で、サブ統括の箱に配下の件数と「あなたの答え」の件数を出した**（#168 PR6）。受信箱の digest は「サブ統括の要約」と表示する。
 - **サブ統括の使い方を、`integrator` の skill と `docs/plugin.md` に書いた**（#168 PR7）。立て方・サブ統括の道具・連動停止・深さの上限。サブ統括の起動の指示の文は、integrator の skill に従うよう指す文にした。
 - **子が MCP ツールを頼めるようにした**（#194 PR3）。`scope_extend` の `kind: mcp`（値は `mcp__<サーバー>__<道具>` の完全な名前）で頼み、人間（または親）が承認すると、フックが明示の許可を返して使える（CLI の子だけ）。承認は「そのツールを、どんな引数でも使ってよい」と同じ意味で、状態画面の承認カードにもそう出る。サーバー全体（`mcp__<サーバー>`）と touryou 自身の道具は頼めない。上限は config.json の `permissions.allow` の MCP ツールで、`permissions.deny` に当たるものは承認も許可もされない。`permissions.ask` に当たるものは、統合ノードの判定（`scope_decide`）では承認できず、人間（状態画面）だけが承認できる。使えない MCP ツールの拒否の文に、頼み方と上限にある MCP ツールの名前（最大 20 件）が出る。**この種類のイベントを書き始めたあとは、旧の daemon（〜0.1.6）に戻せない**（スナップショットの版を 15 に上げた）。詳しくは `docs/config.md`・`docs/plugin.md`。
+- **実行中に権限の規則を変えられるようにした**（#194 PR4。人間だけの操作）。`touryou config reload`（`policy.ruleChange`・`config.reload`）で、設定ファイルの `rootScope`・`permissions`・`autoApprove` だけを、daemon を起動し直さずに読み込み直す（全部通ったときだけ入れ替える。再起動が要る項目は反映せず、名前を知らせる。子の範囲は縮めない）。`touryou policy add|remove` で、実行中の allow・deny・ask の規則を足し引きする（`policy.ruleChanged` として記録し、再起動しても残る。deny がいつも最優先で、次のフックから効く）。`touryou scope decide … --also-limit` で、MCP ツールを承認しながら、上限にも足せる。スナップショットを版 16 に上げた（古い版は記録から作り直す。古い daemon に戻すことはできない）。
 
 ### 直したこと
 

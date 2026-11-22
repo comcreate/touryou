@@ -3,8 +3,8 @@ import {
   type Failure,
   failure,
   ok,
-  ROLE_OPERATIONS,
   type Result,
+  ROLE_OPERATIONS,
   type Scope,
 } from "@touryou/core";
 import { describe, expect, it } from "vitest";
@@ -50,7 +50,10 @@ const rig = (initial: DaemonConfig = cfg()) => {
     const r = log.append({ requestId: `seed-${++n}`, actor: SYS, body });
     if (!r.ok) throw new Error(`${r.error.code} ${r.error.cause}`);
   };
-  add({ type: "node.created", payload: { nodeId: "root", role: "integrator", parentId: null, dependsOn: [] } });
+  add({
+    type: "node.created",
+    payload: { nodeId: "root", role: "integrator", parentId: null, dependsOn: [] },
+  });
   add({ type: "node.stateChanged", payload: { nodeId: "root", event: { type: "start" } } });
   add({
     type: "node.created",
@@ -143,7 +146,10 @@ describe("policy.ruleChange（実行中の規則の追加・取り消し）", ()
     const res = r.log.append({
       requestId: "x-1",
       actor: { nodeId: "root" },
-      body: { type: "policy.ruleChanged", payload: { list: "allow", rule: "Bash(git status:*)", op: "add" } },
+      body: {
+        type: "policy.ruleChanged",
+        payload: { list: "allow", rule: "Bash(git status:*)", op: "add" },
+      },
     });
     expect(res.ok).toBe(false);
     expect(r.s().policyRules).toEqual([]);

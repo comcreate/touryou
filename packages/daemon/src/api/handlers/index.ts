@@ -4,12 +4,12 @@ import { createReadHandlers } from "../read-handlers.js";
 import type { Handlers } from "../server.js";
 import { type AdoptPorts, createAdoptHandlers } from "./adopt-handlers.js";
 import { createChildInboxHandlers } from "./child-inbox-handlers.js";
+import type { Live } from "./context.js";
 import { createInboxResolveHandlers } from "./inbox-resolve-handlers.js";
 import { createInstructionDelivery } from "./instruction-delivery.js";
 import { createParentRequestHandlers } from "./parent-request-handlers.js";
 import { createPauseHandlers } from "./pause-handlers.js";
 import { createPolicyHandlers, type PolicyHandlerDeps } from "./policy-handlers.js";
-import type { Live } from "./context.js";
 
 export {
   createDiscardedHandlers,
@@ -27,6 +27,7 @@ import { createStateHandlers, type StateHandlerDeps } from "./state-handlers.js"
 export type { AdoptPorts } from "./adopt-handlers.js";
 export type { LogPort } from "./context.js";
 export { createPauseHandlers, type PauseHandlerDeps } from "./pause-handlers.js";
+export { createPolicyHandlers, type PolicyHandlerDeps } from "./policy-handlers.js";
 export {
   createPurgeHandlers,
   type PurgeHandlerDeps,
@@ -43,7 +44,6 @@ export {
   operationsFor,
   type RuntimeHandlerDeps,
 } from "./runtime-handlers.js";
-export { createPolicyHandlers, type PolicyHandlerDeps } from "./policy-handlers.js";
 export { createScopeHandlers, type ScopeHandlerDeps } from "./scope-handlers.js";
 export {
   createSpawner,

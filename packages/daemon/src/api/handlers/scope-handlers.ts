@@ -31,6 +31,7 @@ import {
   stateOf,
   validateScope,
 } from "@touryou/core";
+import { growScope, ruleOfExtension } from "../../root-policy.js";
 import type { RuntimeAdapter } from "../../sdk/runtime.js";
 import type { HandlerRequest } from "../server.js";
 import { unquote } from "./child-inbox-handlers.js";
@@ -44,7 +45,6 @@ import {
   live,
   notice,
 } from "./context.js";
-import { growScope, ruleOfExtension } from "../../root-policy.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;
 
@@ -138,10 +138,8 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
     // MCP ツールは、deny に当たるなら、上限の内側でも承認しない（人間が deny したものを、承認で通さない）
     if (
       ext.target.kind === "mcp" &&
-      evaluate(
-        { allow: [], deny: denyRules, ask: [] },
-        { kind: "mcp", tool: ext.target.value },
-      ) === "deny"
+      evaluate({ allow: [], deny: denyRules, ask: [] }, { kind: "mcp", tool: ext.target.value }) ===
+        "deny"
     ) {
       return fail(
         "scopeDenied",
@@ -154,10 +152,8 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
     if (
       ext.target.kind === "mcp" &&
       !human &&
-      evaluate(
-        { allow: [], deny: [], ask: askRules },
-        { kind: "mcp", tool: ext.target.value },
-      ) === "ask"
+      evaluate({ allow: [], deny: [], ask: askRules }, { kind: "mcp", tool: ext.target.value }) ===
+        "ask"
     ) {
       return fail(
         "forbidden",

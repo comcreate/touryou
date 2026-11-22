@@ -10,8 +10,8 @@
  */
 
 import {
-  effectiveScope,
   type EventBody,
+  effectiveScope,
   type Failure,
   failure,
   isScopeSubset,
@@ -134,7 +134,11 @@ export function createPolicyHandlers(deps: PolicyHandlerDeps) {
       );
       holder.replace(after);
       // 反映した項目だけ、次の比較の基準に取り込む（再起動が要る項目は、起動時のまま残す）
-      deps.onReloaded({ ...deps.runningConfig(), ...next, ...restrictToRunning(deps, restartRequired) });
+      deps.onReloaded({
+        ...deps.runningConfig(),
+        ...next,
+        ...restrictToRunning(deps, restartRequired),
+      });
 
       // 新しい上限からはみ出す子（親が根のもの）を見つける。子の範囲は縮めない
       const state = log.state();
@@ -147,7 +151,8 @@ export function createPolicyHandlers(deps: PolicyHandlerDeps) {
         if (scope === undefined) continue;
         const cwd = await deps.cwdOf(n.parentId).catch(() => undefined);
         if (cwd === undefined) continue;
-        if (!isScopeSubset(scope, live.rootScope, { child: cwd, parent: cwd })) overLimit.push(n.id);
+        if (!isScopeSubset(scope, live.rootScope, { child: cwd, parent: cwd }))
+          overLimit.push(n.id);
       }
 
       record(

@@ -1189,7 +1189,11 @@ export async function runCommand(
     );
     if (res.kind === "failure") return failed(res.failure);
     if (res.kind === "unconfirmed") {
-      return unconfirmed(res.reason, `"$HOME/.touryou/current/bin/touryou" ${argv.join(" ")} --request-id ${id}`, id);
+      return unconfirmed(
+        res.reason,
+        `"$HOME/.touryou/current/bin/touryou" ${argv.join(" ")} --request-id ${id}`,
+        id,
+      );
     }
     const verb = command === "policy-add" ? "足した" : "外した";
     return {
@@ -1205,7 +1209,9 @@ export async function runCommand(
       more.length !== 0 ||
       (decision !== "approve" && decision !== "reject" && decision !== "split")
     ) {
-      return usageError("touryou scope decide <拡張要求の ID> <approve|reject|split> [--also-limit]");
+      return usageError(
+        "touryou scope decide <拡張要求の ID> <approve|reject|split> [--also-limit]",
+      );
     }
     const alsoLimit = flags.has("--also-limit");
     if (alsoLimit && decision !== "approve") {
@@ -1221,7 +1227,11 @@ export async function runCommand(
     );
     if (res.kind === "failure") return failed(res.failure);
     if (res.kind === "unconfirmed") {
-      return unconfirmed(res.reason, `"$HOME/.touryou/current/bin/touryou" ${argv.join(" ")} --request-id ${id}`, id);
+      return unconfirmed(
+        res.reason,
+        `"$HOME/.touryou/current/bin/touryou" ${argv.join(" ")} --request-id ${id}`,
+        id,
+      );
     }
     return {
       exitCode: 0,

@@ -118,12 +118,12 @@ import {
 } from "./children-dir.js";
 import { boundInState, recordWatchFindings, type WatchCounts, watchFindings } from "./cli-watch.js";
 import { type DaemonConfig, loadConfigFile, policyBaseOf } from "./config.js";
-import { createPolicyHolder } from "./policy-holder.js";
 import { createDigestIssuer } from "./digest-issuer.js";
 import { ownedBy } from "./discarded-keys.js";
 import { EventLog } from "./eventlog.js";
 import { withExternalCheckResolution } from "./external-check.js";
 import type { GitPorts, LossFacts } from "./git-ports.js";
+import { createPolicyHolder } from "./policy-holder.js";
 import {
   choosePort,
   PORT_FILE,
