@@ -62,7 +62,7 @@ const rig = () => {
       ok: boolean;
       // biome-ignore lint/suspicious/noExplicitAny: テスト用に緩く扱う
       value?: any;
-      error?: { code: string; cause: string };
+      error?: { code: string; cause: string; nextActions?: readonly string[] };
     };
   return { log, h, req, call, state: () => log.state() };
 };
