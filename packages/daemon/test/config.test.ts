@@ -60,8 +60,16 @@ describe("parseConfig（設定は厳密に検査し、不正なら起動を失�
   it("置き場が重なる（状態の置き場が作業ツリーの置き場の中、など）設定は拒否する", () => {
     bad({ stateDir: "/work/worktrees/state" }, "重な");
     bad({ worktreeRoot: "/work/repo/wt" }, "重な");
-    bad({ stateDir: "/work/repo/.touryou" }, "重な");
     bad({ worktreeRoot: "/var/touryou/state/wt" }, "重な"); // 子の作業ツリーが stateDir の中
+    bad({ stateDir: "/work/repo" }, "重な"); // repoRoot と同じ場所
+    bad({ stateDir: "/work" }, "重な"); // stateDir が repoRoot を囲む
+    bad({ stateDir: "/work/repo/.touryou", worktreeRoot: "/work/repo/.touryou/wt" }, "重な");
+    bad({ stateDir: "/work/repo/.touryou", worktreeRoot: "/work/repo/wt" }, "重な"); // worktreeRoot は内側に置けない
+  });
+
+  it("stateDir は、repoRoot の内側に置ける（gitignore 済みかは、起動時に git で確かめる）", () => {
+    const r = parseConfig(JSON.stringify({ ...base, stateDir: "/work/repo/.touryou" }));
+    expect(r.ok && r.value.stateDir).toBe("/work/repo/.touryou");
   });
 
   it("port は 0〜65535 の整数、rootNodeId は識別子", () => {

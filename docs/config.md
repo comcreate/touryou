@@ -18,14 +18,21 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 | `rootCwd` | 根の作業ツリー（`repoRoot` 自身か、その配下） |
 | `rootScope` | 根の範囲（子の権限の上限）。`writableLocations`・`forbiddenLocations`・`allowedCommands` |
 
-### 置き場の重なりの検査（現在の動き）
+### 置き場の重なりの検査
 
-`stateDir`・`repoRoot`・`worktreeRoot` の 3 つは、**互いに、一方が他方の中にあっても、同じ場所でも、拒否されます**（gitignore 済みかどうかは見ません）。次の 2 か所で調べます（出典: `packages/daemon/src/config.ts` の `parseConfig`、`packages/daemon/src/compose.ts` の `realOverlap`）。
+`stateDir`・`repoRoot`・`worktreeRoot` は、互いに重なってはいけません。ただし次の 1 つだけは許します。
 
-- 設定を読むとき: 書かれたパス（`..` をそろえたもの）で比べる。失敗の文は「stateDir・repoRoot・worktreeRoot は、互いに重なってはならない」（`invalidConfig`）。
-- daemon の起動のとき: リンクを解決した実パス（まだないパスは、あるいちばん深い祖先を解決して残りを足す）で、大文字小文字・Unicode の正規化をそろえて比べる。失敗の文は「stateDir・repoRoot・worktreeRoot が、リンクを解決すると重なる」。
+- **`stateDir` が `repoRoot` の内側にあり、gitignore 済みで、git に追跡されていないとき。** （`rootCwd` との位置は問いません。）daemon の起動のとき（`touryou-daemon --check-config` も同じ）に `git check-ignore`・`git ls-files` で確かめ、ignore されていない・追跡されているなら起動しません。`.gitignore` に `stateDir` を足してください（たとえば `<repoRoot>/.touryou` なら `.touryou/`）。追跡されているときは、`git rm --cached` で外すか、`stateDir` を `repoRoot` の外に置きます。git が使えない・確かめに失敗したときも、起動しません。
 
-つまり、`stateDir` や `worktreeRoot` を `repoRoot` の中（たとえば `<repoRoot>/.touryou`）に置く設定は、いまは起動できません。`rootCwd` は別で、`repoRoot` 自身かその配下でなければなりません。
+理由: `stateDir` にはトークン（`root-token`）と SQLite が入るので、`git add -A` などで誤ってコミットされないようにするためです。`worktreeRoot` は、子の作業ツリーが入れ子の git になるため、`repoRoot` の内側には置けません（確かめが済むまで拒否します）。`stateDir` が `.gitignore` から外れる・追跡される変更は、起動のときにしか確かめません。
+
+調べる場所（出典: `packages/daemon/src/config.ts` の `parseConfig`、`packages/daemon/src/compose.ts` の `realOverlap`、`packages/daemon/src/state-dir-ignore.ts` の `checkStateDirIgnored`）:
+
+- 設定を読むとき: 書かれたパス（`..` をそろえたもの）で比べる。`stateDir` が `repoRoot` の真に内側にある重なりだけを通す。同じ場所・`stateDir` が `repoRoot` を囲む・`worktreeRoot` が絡む重なりは拒否する。失敗の文は「stateDir・repoRoot・worktreeRoot は、互いに重なってはならない」（`invalidConfig`）。
+- daemon の起動のとき（`createDaemon`）: リンクを解決した実パス（まだないパスは、あるいちばん深い祖先を解決して残りを足す）で、大文字小文字・Unicode の正規化をそろえて同じ比べ方をする。失敗の文は「stateDir・repoRoot・worktreeRoot が、リンクを解決すると重なる」。リンクで `repoRoot` の外へ出る `stateDir` は外側と、中へ入るものは内側と判定される。
+- 起動の前と `--check-config`（`main.ts`）: 実パスの `stateDir` が `repoRoot` の内側なら、`git ls-files`（追跡済みなら拒否）と `git check-ignore -q --no-index`（ignore 済みでなければ拒否）を呼ぶ。`.gitignore` を自前で読まず、git の判定（否定・ネスト・`.git/info/exclude`・グローバルの ignore）に従う。
+
+`rootCwd` は別で、`repoRoot` 自身かその配下でなければなりません。
 
 ## 任意の項目と既定値
 

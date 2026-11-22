@@ -3,6 +3,7 @@
  *
  * - 未知のキーは拒否する。パスはすべて絶対パス（`..` を含まない・NUL を含まない・`/` だけでない）。
  * - 置き場（状態・作業ツリー・リポジトリ）は、互いに重ならないこと（状態の置き場に作業ツリーを作らない、など）。
+ *   ただし `stateDir` は、`repoRoot` の内側に置ける（gitignore 済みで追跡されていないことを、起動時に git で確かめる）。
  * - 根の範囲（`rootScope`）は、ブリーフを持たない根の子の、権限の上限になる。場所は、根の作業ツリー（`rootCwd`）からの
  *   相対パスで書き、`validateScope(rootScope, rootCwd)` を満たすこと。
  * - 外した設定（`LEGACY_KEYS`。SDK による子の起動・子の認証・子の HOME・子用の HTTP の MCP・中継）は、前の版から
@@ -315,12 +316,17 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
     paths[k] = p;
   }
   const { stateDir, repoRoot, worktreeRoot, rootCwd } = paths;
+  // 許す重なりは、`stateDir` が `repoRoot` の真に内側にある 1 つだけ（gitignore 済みかは、起動時に git で確かめる。
+  // `state-dir-ignore.ts`）。同じ場所・`stateDir` が `repoRoot` を囲む・`worktreeRoot` が絡む重なりは、拒否のまま。
+  const stateInsideRepo = stateDir !== repoRoot && isPathUnder(stateDir, repoRoot);
   if (
     overlaps(stateDir, worktreeRoot) ||
-    overlaps(stateDir, repoRoot) ||
+    (overlaps(stateDir, repoRoot) && !stateInsideRepo) ||
     overlaps(worktreeRoot, repoRoot)
   ) {
-    return bad("stateDir・repoRoot・worktreeRoot は、互いに重なってはならない");
+    return bad(
+      "stateDir・repoRoot・worktreeRoot は、互いに重なってはならない（ただし stateDir は、gitignore 済みなら repoRoot の内側に置ける）",
+    );
   }
   if (!isPathUnder(rootCwd, repoRoot))
     return bad("rootCwd は、repoRoot 自身かその配下でなければならない");

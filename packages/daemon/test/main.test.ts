@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
   chmodSync,
   mkdirSync,
@@ -234,6 +235,83 @@ describe("窓口のポートの決め方（port-file.ts）", () => {
     expect((await start(s)).exitCode).toBe(1);
     expect(s.err.join("")).toContain("portFileInvalid");
     expect(s.err.join("")).toContain("シンボリックリンク");
+  });
+});
+
+describe("stateDir が repoRoot の内側にあるとき（#218）", () => {
+  const gitInit = (repo: string): void => {
+    execFileSync("git", ["init", "-q"], { cwd: repo, stdio: "ignore" });
+  };
+  const inside = (over: Record<string, unknown> = {}) => {
+    const s = setup();
+    const stateDir = join(s.config.repoRoot as string, ".touryou-state");
+    writeFileSync(s.path, JSON.stringify({ ...s.config, stateDir, ...over }));
+    return { ...s, stateDir };
+  };
+
+  it("ignore 済みで未追跡なら、起動できる（実物の git）", async () => {
+    const s = inside();
+    gitInit(s.config.repoRoot as string);
+    writeFileSync(join(s.config.repoRoot as string, ".gitignore"), ".touryou-state/\n");
+    const r = await main(["--config", s.path], s.deps);
+    expect(s.err.join("")).toBe("");
+    expect(r.exitCode).toBe(0);
+    if (r.daemon) running.push(r.daemon);
+    expect(statSync(s.stateDir).isDirectory()).toBe(true);
+  });
+
+  it("ignore されていなければ、起動せずに終了コード 1（直し方つき）", async () => {
+    const s = inside();
+    gitInit(s.config.repoRoot as string);
+    const r = await main(["--config", s.path], s.deps);
+    expect(r.exitCode).toBe(1);
+    expect(r.daemon).toBeUndefined();
+    expect(s.err.join("")).toContain("gitignore されていない");
+    expect(s.err.join("")).toContain(".gitignore に .touryou-state/ を足す");
+    expect(() => statSync(s.stateDir)).toThrow(); // 検査が先なので、stateDir を作らない
+  });
+
+  it("repoRoot が git のリポジトリでなければ、起動しない", async () => {
+    const s = inside();
+    const r = await main(["--config", s.path], s.deps);
+    expect(r.exitCode).toBe(1);
+    expect(s.err.join("")).toContain("失敗 [invalidConfig]");
+  });
+
+  it("--check-config も、同じ検査を通す（通るとき・通らないとき）", async () => {
+    const s = inside();
+    gitInit(s.config.repoRoot as string);
+    const bad = await main(["--check-config", "--config", s.path], s.deps);
+    expect(bad.exitCode).toBe(1);
+    expect(s.err.join("")).toContain("gitignore されていない");
+    writeFileSync(join(s.config.repoRoot as string, ".gitignore"), ".touryou-state/\n");
+    const good = await main(["--check-config", "--config", s.path], s.deps);
+    expect(good.exitCode).toBe(0);
+    expect(() => statSync(s.stateDir)).toThrow();
+  });
+
+  it("検査の関数を差し替えられる。失敗なら、createDaemon まで進まない", async () => {
+    const s = inside();
+    let called = 0;
+    const r = await main(["--config", s.path], {
+      ...s.deps,
+      checkStateDir: async () => {
+        called += 1;
+        return { ok: false, error: failure("invalidConfig", "検査が通らない", "直す") };
+      },
+    });
+    expect(called).toBe(1);
+    expect(r.exitCode).toBe(1);
+    expect(s.err.join("")).toContain("検査が通らない");
+  });
+
+  it("worktreeRoot が repoRoot の内側なら、従来どおり設定の段で拒否する", async () => {
+    const s = setup();
+    const worktreeRoot = join(s.config.repoRoot as string, "wt");
+    writeFileSync(s.path, JSON.stringify({ ...s.config, worktreeRoot }));
+    const r = await main(["--config", s.path], s.deps);
+    expect(r.exitCode).toBe(1);
+    expect(s.err.join("")).toContain("重なってはならない");
   });
 });
 

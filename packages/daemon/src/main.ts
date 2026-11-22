@@ -10,6 +10,7 @@ import type { Failure, Result } from "@touryou/core";
 import { createDaemon, type Daemon, type WorktreePorts } from "./compose.js";
 import { type DaemonConfig, loadConfigFile } from "./config.js";
 import { isPort, StartFailure } from "./port-file.js";
+import { checkStateDirIgnored } from "./state-dir-ignore.js";
 
 export interface MainDeps {
   /** git の作業ツリーの口。 */
@@ -23,6 +24,13 @@ export interface MainDeps {
    * 渡さなければ、この確かめを省く。
    */
   readonly checkRepo?: (repoRoot: string) => Promise<Result<undefined, Failure>>;
+  /**
+   * stateDir が repoRoot の内側にあるときの、gitignore 済み・未追跡の確かめ（既定は `checkStateDirIgnored`。内側でなければ、何もしない）。
+   * 試験で差し替える。
+   */
+  readonly checkStateDir?: (
+    config: Pick<DaemonConfig, "stateDir" | "repoRoot">,
+  ) => Promise<Result<undefined, Failure>>;
 }
 
 export interface MainResult {
@@ -35,7 +43,8 @@ const USAGE = `使い方:
   touryou-daemon --config <設定ファイルの絶対パス> [--port <1〜65535>]
   touryou-daemon --check-config --config <設定ファイルの絶対パス>
   --check-config  起動せず、設定の読み込みと実パスの検査（repoRoot・rootCwd・worktreeRoot があり、実パスで、
-                  repoRoot が git のリポジトリ）だけを行う（touryou launchd init・apply が、常駐にする前に使う）
+                  repoRoot が git のリポジトリ。stateDir が repoRoot の内側なら、gitignore 済み・未追跡）だけを行う
+                  （touryou launchd init・apply が、常駐にする前に使う）
   --port      窓口のポート（設定の port より優先。どちらもなければ、前回のポートを stateDir に保存して使い続ける）
   -h, --help  この使い方を表示する（終了コード 0）
 終了コード: 0 起動した（または --help・検査が通った） / 1 起動に失敗 / 2 引数の誤り`;
@@ -92,6 +101,12 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<Mai
   const worktree = await deps.loadWorktreePorts(config.value);
   if (!worktree.ok) {
     deps.stderr(formatFailure(worktree.error));
+    return { exitCode: 1 };
+  }
+  // stateDir が repoRoot の内側にあるときだけ、git で ignore 済み・未追跡かを確かめる（起動も --check-config も、同じ検査を通す）。
+  const stateDirIgnored = await (deps.checkStateDir ?? checkStateDirIgnored)(config.value);
+  if (!stateDirIgnored.ok) {
+    deps.stderr(formatFailure(stateDirIgnored.error));
     return { exitCode: 1 };
   }
   if (checkOnly) {

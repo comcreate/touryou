@@ -91,14 +91,15 @@ gitignore かどうかは、どちらの検査も見ない。
   - 案 D（daemon が `.gitignore` を書く）: 設定の読み込みの副作用が増え、説明が複雑。利用者は選ばなかった。R1・R6 は、起動のたびの `git check-ignore` で足りるとみる。必要になったら別の issue にする。
 - 許す範囲の細かい決め（実装の PR で守る）:
   - 許す向きは `repoRoot ⊃ stateDir` だけ。`stateDir` が `repoRoot` と同じ場所、`stateDir` が `repoRoot` を囲む、`stateDir`⇔`worktreeRoot` の重なり、`worktreeRoot`⇔`repoRoot` の重なりは、今のまま拒否。
-  - `stateDir` が `rootCwd` を囲む／同じ場所も拒否（`rootCwd` は `repoRoot` の中にあるため、`stateDir` が `rootCwd` の中なら、根の作業ツリーに state が入る。許すのは、`stateDir` が `rootCwd` の外にある内側だけ）。
-  - git が使えない・`check-ignore` が失敗した・ignore されていない、のどれも拒否（安全側）。
+  - **`rootCwd` との位置は問わない（確定: 案 3-C。利用者に確かめ直した）。** 当初は「`stateDir` が `rootCwd` の内側なら拒否」としたが、通常の配置（`rootCwd` = `repoRoot`）で内側の `stateDir` がすべて拒否され、緩和の意味がなくなるため取り下げた。根の作業ツリーに state が見える問題は、ignore 済み・未追跡の確かめ（と、子のフックの `protectedRoots`）で足りる。
+  - git が使えない・`check-ignore` が失敗した・ignore されていない・**追跡済みのファイルを含む**、のどれも拒否（安全側）。
 
 ### 7-2. 検査の層（案 A）
 - `config.ts`（`parseConfig`）は純粋なまま。`repoRoot ⊃ stateDir` の向きだけを、構文の段では拒否しない（他の重なりは今のまま拒否）。
-- `compose.ts` の起動時（`realOverlap` の後）で、実パスにした `stateDir` を `repoRoot` からの相対パスにし、`git -C <repoRoot> check-ignore -q --no-index -- <相対>/` を呼ぶ（終了 0 = ignore 済み、1 = 未 ignore、128 などは失敗）。ignore 済みでなければ `invalidConfig`（「stateDir が repoRoot の内側にあるが gitignore されていない」＋直し方: `.gitignore` に足す、または外に置く）。
+- **【実装での変更】** `createDaemon` は同期関数で、git の実行（`GitRunner`）は非同期なので、検査は `compose.ts` ではなく、新しい `packages/daemon/src/state-dir-ignore.ts` の async 関数 `checkStateDirIgnored` にした。`main.ts` が、`createDaemon` と `--check-config` の前に 1 回呼ぶ（起動と `--check-config` が、同じ検査を通る。`MainDeps.checkStateDir` で試験が差し替えられる）。`compose.ts` の `realOverlap` は、同じ「`repoRoot ⊃ stateDir`」だけを実パスで許す。実パスを作る関数（`realPathForWrite`）は、同じモジュールを共有する。
+- `checkStateDirIgnored` は、実パスにした `stateDir` が `repoRoot` の真に内側のときだけ、`repoRoot` からの相対パスを作り、(1) `git ls-files -z -- <相対>` に出れば拒否（追跡済み）、(2) `git check-ignore -q --no-index -- <相対>/` を呼ぶ（終了 0 = ignore 済み、1 = 未 ignore、128 などは失敗）。ignore 済みでなければ `invalidConfig`（「stateDir が repoRoot の内側にあるが gitignore されていない」＋直し方: `.gitignore` に足す、または外に置く）。
 - `--check-config`（launchd の検査。`docs/launchd.md:48`）も同じ検査を通す。
-- 【要確認】`--no-index` は、追跡済みのファイルが ignore を無視される扱いを避けるためだが、`stateDir` が追跡されていれば（`git ls-files` に出れば）、ignore があっても誤コミットは起きる。**追跡済みなら拒否する検査**（`git ls-files -- <相対>`）を足すか、実装の子が決める。
+- 【確定】`--no-index` は、追跡済みのファイルが ignore を無視される扱いを避けるためだが、`stateDir` が追跡されていれば、ignore があっても誤コミットは起きる。そのため**追跡済み（`git ls-files -- <相対>` に出る）なら拒否する**（利用者の答え）。
 
 ### 7-3. 実装 PR の分け方
 1. **PR 1（検査）**: `config.ts` の重なりの検査を `repoRoot ⊃ stateDir` だけ緩める。`compose.ts` に ignore の検査を足す。`--check-config` に同じ検査を配線する。テスト（下）を付ける。
@@ -107,7 +108,7 @@ gitignore かどうかは、どちらの検査も見ない。
 PR 1 と 2 は同じ PR でもよい（変更が小さいため）。別 issue: `worktreeRoot` の内側を許すかは、R4 の実験の後に判断する。
 
 ### 7-4. 試験の観点
-- 設定: `stateDir` が `repoRoot` の内側 → 構文の段では通る。`repoRoot` と同じ場所・`repoRoot` を囲む・`worktreeRoot` と重なる・`rootCwd` の内側 → 拒否のまま。`worktreeRoot` が `repoRoot` の内側 → 拒否のまま。
+- 設定: `stateDir` が `repoRoot` の内側 → 構文の段では通る（`rootCwd` の内側でも通る。3-C）。`repoRoot` と同じ場所・`repoRoot` を囲む・`worktreeRoot` と重なる → 拒否のまま。`worktreeRoot` が `repoRoot` の内側 → 拒否のまま。
 - 起動時: ignore 済み → 起動できる。未 ignore → `invalidConfig`。`git` が使えない → 拒否。`stateDir` がまだない（初回）→ あるいちばん深い祖先で判定できる。
 - リンク: `stateDir` が `repoRoot` の外へのリンクなら、実パスで外側と判定される（許す条件に入らない）。`repoRoot` の中へのリンクなら、実パスで内側と判定される。大文字小文字・NFC の違い（APFS）。
 - ignore の書き方: `.touryou/`・`/.touryou`・`*` ・グローバルの ignore（`core.excludesFile`）・`.git/info/exclude`。否定（`!`）で外れる場合。
@@ -122,7 +123,7 @@ PR 1 と 2 は同じ PR でもよい（変更が小さいため）。別 issue: 
 >
 > `stateDir`・`repoRoot`・`worktreeRoot` は、互いに重なってはいけません。ただし次の 1 つだけは許します。
 >
-> - **`stateDir` が `repoRoot` の内側にあり、gitignore 済みで、`rootCwd` の外にあるとき。** daemon の起動のとき（`touryou-daemon --check-config` も同じ）に `git check-ignore` で確かめ、ignore されていなければ起動しません。`.gitignore` に `stateDir` を足してください。
+> - **`stateDir` が `repoRoot` の内側にあり、gitignore 済みで、git に追跡されていないとき。** （`rootCwd` との位置は問いません。）daemon の起動のとき（`touryou-daemon --check-config` も同じ）に `git check-ignore`・`git ls-files` で確かめ、ignore されていない・追跡されているなら起動しません。`.gitignore` に `stateDir` を足してください。
 >
 > 理由: `stateDir` にはトークン（`root-token`）と SQLite が入るので、`git add -A` などで誤ってコミットされないようにするためです。`worktreeRoot` は、子の作業ツリーが入れ子の git になるため、`repoRoot` の内側には置けません（確かめが済むまで拒否します）。`stateDir` が `.gitignore` から外れる・追跡される変更は、起動のときにしか確かめません。
 

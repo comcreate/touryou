@@ -145,6 +145,7 @@ import type { PluginDirPorts } from "./sdk/plugin-dir.js";
 import { isReadOnlySearch } from "./sdk/read-only-search.js";
 import type { RuntimeAdapter, Timers } from "./sdk/runtime.js";
 import { openSqliteStore } from "./sqlite-store.js";
+import { foldPath, realPathForWrite } from "./state-dir-ignore.js";
 import { createWaker } from "./wake.js";
 
 /** 最終削除の保持期間の既定（日。spec 5.8）。 */
@@ -342,29 +343,17 @@ export function trackTimers(base: Timers): { timers: Timers; cancelAll(): void }
 /** 置き場が、リンクを解決した実パスで、互いに重なっていないか。 */
 function realOverlap(config: DaemonConfig): string | undefined {
   // まだないパスも、最も深い既存の祖先を実パスにして、残りを足して比べる（resolveForWrite と同じ考え方）。
-  const real = (p: string): string => {
-    let head = p;
-    const rest: string[] = [];
-    for (;;) {
-      try {
-        const r = realpathSync(head);
-        return rest.length === 0 ? r : join(r, ...rest.reverse());
-      } catch {
-        const parent = dirname(head);
-        if (parent === head) return p;
-        rest.push(basename(head));
-        head = parent;
-      }
-    }
-  };
-  const s = real(config.stateDir);
-  const r = real(config.repoRoot);
-  const w = real(config.worktreeRoot);
+  const s = realPathForWrite(config.stateDir);
+  const r = realPathForWrite(config.repoRoot);
+  const w = realPathForWrite(config.worktreeRoot);
   // APFS は大文字小文字・Unicode の正規化の違いを区別しないので、そろえてから比べる（区別する FS では、厳しめに倒れる）。
-  const f = (x: string): string => x.normalize("NFC").toLowerCase();
+  const f = foldPath;
   const o = (a: string, b: string): boolean => isPathUnder(f(a), f(b)) || isPathUnder(f(b), f(a));
-  if (o(s, w) || o(s, r) || o(w, r)) {
-    return "stateDir・repoRoot・worktreeRoot が、リンクを解決すると重なる";
+  // 許す重なりは、stateDir が repoRoot の真に内側にある 1 つだけ（gitignore 済みかは、main.ts が起動の前に
+  // `checkStateDirIgnored` で確かめる）。リンクで外へ出る・同じ場所・囲む向きは、実パスで比べるので拒否される。
+  const stateInsideRepo = f(s) !== f(r) && isPathUnder(f(s), f(r));
+  if (o(s, w) || (o(s, r) && !stateInsideRepo) || o(w, r)) {
+    return "stateDir・repoRoot・worktreeRoot が、リンクを解決すると重なる（stateDir だけは、gitignore 済みなら repoRoot の内側に置ける）";
   }
   return undefined;
 }
