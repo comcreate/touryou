@@ -743,6 +743,158 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     await ctx.close();
   });
 
+  it("図の「N 分前」は、再読み込みも描き直しもなしに、15 秒ごとに現在時刻から計算し直される（#204）", async () => {
+    const ctx = await (browser as Browser).newContext({ locale: "ja-JP" });
+    const p2 = await ctx.newPage();
+    const errs: string[] = [];
+    p2.on("pageerror", (e: Error) => errs.push(e.message));
+    // 時計は、画面を開く前に差し替える（setInterval も、Date.now も、差し替えた時計のもの）
+    await p2.clock.install();
+    await p2.goto(`${url}/ui#ticket=${await ticket()}`);
+    await p2.waitForSelector("#graph .gnode");
+    const agoOf = () =>
+      p2.evaluate(() => {
+        const t = document.querySelector('#graph .gnode[data-id="ui-a"] .gs')?.textContent ?? "";
+        const m = /^作業　(\d+) 分前$/.exec(t);
+        return m === null ? null : Number(m[1]);
+      });
+    const before = await agoOf();
+    expect(before).not.toBeNull();
+    // 描き直したら消える印を、箱に付ける（描き直さずに、文字だけ書き換えることを確かめる）
+    await p2.evaluate(() => {
+      const box = document.querySelector('#graph .gnode[data-id="ui-a"]') as HTMLElement | null;
+      if (box) box.dataset.mark = "kept";
+    });
+    // 15 秒では 1 分に届かないので、文字は変わらない
+    await p2.clock.runFor(15_000);
+    expect(await agoOf()).toBe(before);
+    // 2 分進めると、15 秒ごとの更新で、少なくとも 2 分は増える（60 分を超えると「N 時間」の書き方に変わるので、短く進める）
+    await p2.clock.runFor(2 * 60_000);
+    const after = await agoOf();
+    expect(after).not.toBeNull();
+    expect((after ?? 0) - (before ?? 0)).toBeGreaterThanOrEqual(2);
+    expect(
+      await p2.evaluate(
+        () =>
+          (document.querySelector('#graph .gnode[data-id="ui-a"]') as HTMLElement | null)?.dataset
+            .mark,
+      ),
+    ).toBe("kept");
+    expect(errs).toEqual([]);
+    await ctx.close();
+  });
+
+  it("設定の「止めた・済んだ子を隠す」を入れると、図から止めた・済んだ子の箱が消え、切ると戻る。再読み込みのあとも残る（#206）", async () => {
+    const pressed = () =>
+      page.evaluate(() => document.getElementById("hide-finished")?.getAttribute("aria-pressed"));
+    const ids = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll("#graph .gnode")].map((e) => e.getAttribute("data-id")),
+      );
+    // 切り替えが設定の窓の中にあれば、窓を開いて押す（外にあれば、そのまま押す）
+    const toggle = async () => {
+      const inDialog = await page.evaluate(
+        () => document.querySelector("#settings #hide-finished") !== null,
+      );
+      if (inDialog) await page.click("#open-settings");
+      await page.click("#hide-finished");
+      if (inDialog) await page.click("#close-settings");
+      await page.waitForSelector("#graph .gnode");
+    };
+    expect(await pressed()).toBe("false");
+    const all = await ids();
+    expect(all).toContain("ui-old");
+    expect(await page.locator("#graph .gnode.t-over").count()).toBeGreaterThan(0);
+    await toggle();
+    expect(await pressed()).toBe("true");
+    const hidden = await ids();
+    expect(hidden).not.toContain("ui-old");
+    expect(await page.locator("#graph .gnode.t-over").count()).toBe(0);
+    for (const id of ["root", "ui-a", "ui-b", "ui-c", LONG]) expect(hidden).toContain(id);
+    expect(hidden.length).toBeLessThan(all.length);
+    // ブラウザに残る（鍵は 1 つ。値は still・theme・lang・hideFinished のどれか）
+    const saved = await page.evaluate(() =>
+      JSON.parse(window.localStorage.getItem("touryou.ui.settings") ?? "null"),
+    );
+    expect(saved.hideFinished).toBe(true);
+    // 再読み込みのあとも、隠れたまま
+    await reopen();
+    expect(await pressed()).toBe("true");
+    expect(await ids()).not.toContain("ui-old");
+    // 切ると戻る
+    await toggle();
+    expect(await pressed()).toBe("false");
+    expect(new Set(await ids())).toEqual(new Set(all));
+    await reopen();
+    expect(await pressed()).toBe("false");
+    expect(new Set(await ids())).toEqual(new Set(all));
+    expect(await csp()).toEqual([]);
+    expect(problems).toEqual([]);
+  });
+
+  it("紐付けが外れているかもしれない子（bindLostSuspect）のカードに、札と次にすること（child_bind・node_send。node_bindCode は出さない）が出る（#209）", async () => {
+    const lost = foldEvents([
+      ...created("root", "integrator", null, "紐付けの試験をまとめる"),
+      ...created("ui-lost", "implement", "root", "紐付けが外れた子"),
+      ev({
+        type: "inbox.added",
+        payload: {
+          id: "bl1",
+          kind: "info",
+          nodeId: "ui-lost",
+          ...inboxMessage("bindLostSuspect", { node: "ui-lost", minutes: 12 }),
+        },
+      }),
+    ]);
+    if (!lost.ok) throw new Error(lost.error.cause);
+    const server2 = createApiServer({
+      credentials: createCredentialStore({ humanToken: HUMAN }),
+      getState: () => lost.value,
+      handlers: {},
+    });
+    const url2 = (await server2.listen(0)).url;
+    try {
+      for (const [locale, chip, next] of [
+        ["ja-JP", "紐付けの接続が途切れているかも", "次の操作: 統合の Claude に"],
+        ["en-US", "Connection to the binding may be down", "Next: ask the integrator Claude"],
+      ] as const) {
+        const ctx = await (browser as Browser).newContext({ locale });
+        const p2 = await ctx.newPage();
+        const errs: string[] = [];
+        p2.on("pageerror", (e: Error) => errs.push(e.message));
+        const res = await fetch(`${url2}/v1/ui/ticket`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${HUMAN}` },
+        });
+        const t = ((await res.json()) as { value: { ticket: string } }).value.ticket;
+        await p2.goto(`${url2}/ui#ticket=${t}`);
+        await p2.waitForSelector("#card-ui-lost");
+        const chips = await p2.evaluate(() =>
+          [...document.querySelectorAll("#card-ui-lost > div .chip")].map(
+            (e) => e.textContent ?? "",
+          ),
+        );
+        expect(
+          chips.some((x) => x.includes(chip)),
+          `${locale}: ${chips.join(" / ")}`,
+        ).toBe(true);
+        // 次にすること（カードの表の説明。知らせの項目の文は、たたみの中にあるので数えない）
+        const descs = await p2.evaluate(() =>
+          [...document.querySelectorAll("#card-ui-lost > p.desc")].map((e) => e.textContent ?? ""),
+        );
+        const nextText = descs.find((x) => x.includes(next)) ?? "";
+        expect(nextText, locale).not.toBe("");
+        expect(nextText).toContain("child_bind");
+        expect(nextText).toContain("node_send");
+        expect(nextText).not.toContain("node_bindCode");
+        expect(errs).toEqual([]);
+        await ctx.close();
+      }
+    } finally {
+      await server2.close();
+    }
+  });
+
   it("prefers-reduced-motion のとき、図の線も彗星も動かない", async () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     expect(new Set(await animations())).toEqual(new Set(["none"]));
