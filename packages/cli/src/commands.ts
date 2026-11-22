@@ -1223,7 +1223,10 @@ export async function runCommand(
       id,
       "scope.decide",
       { extensionId, decision, ...(alsoLimit ? { alsoLimit: true } : {}) },
-      (v): v is { state: string } => isRecord(v) && typeof v.state === "string",
+      (v): v is { state: string; limitAdded?: boolean } =>
+        isRecord(v) &&
+        typeof v.state === "string" &&
+        (v.limitAdded === undefined || typeof v.limitAdded === "boolean"),
     );
     if (res.kind === "failure") return failed(res.failure);
     if (res.kind === "unconfirmed") {
@@ -1233,9 +1236,15 @@ export async function runCommand(
         id,
       );
     }
+    // 上限に足したかは、daemon の応答を見る（すでに承認済みへの再承認は、規則を足さない）
+    const limitNote = !alsoLimit
+      ? ""
+      : res.value.limitAdded === false
+        ? "（すでに承認済みなので、上限には足していない）"
+        : "（上限にも足した）";
     return {
       exitCode: 0,
-      stdout: `判定した: ${decision}${alsoLimit ? "（上限にも足した）" : ""}（子の状態 ${terminalSafe(res.value.state, 32)}）\nrequestId: ${id}\n`,
+      stdout: `判定した: ${decision}${limitNote}（子の状態 ${terminalSafe(res.value.state, 32)}）\nrequestId: ${id}\n`,
       stderr: "",
     };
   }

@@ -66,6 +66,19 @@ export const notice = (
   return { summary: summarize(m.summary), msg: m.msg };
 };
 
+/** 受信箱に出す規則の本文の長さ（秘密が残りうるので、先頭だけ出す）。 */
+const RULE_EXCERPT = 40;
+
+/** 受信箱の知らせに出す規則（長いものは先頭だけ。全文は記録の側にある）。 */
+export const ruleExcerpt = (rule: string): string =>
+  [...rule].length <= RULE_EXCERPT ? rule : `${[...rule].slice(0, RULE_EXCERPT).join("")}…`;
+
+/** 設定ファイルなどの絶対パスを、失敗の文から外す（理由の種類だけを残す）。 */
+export const withoutPaths = (text: string): string =>
+  text
+    .replace(/(設定ファイル) ?\/[^\s（）()、。]+/gu, "$1")
+    .replace(/(^|[\s（(])\/[^\s（）()、。]+/gu, "$1（パス省略）");
+
 /** 呼び出し元を表す鍵（ノード ID・人間・システム）。内部の requestId を呼び出し元ごとに分けるのに使う。 */
 const callerKey = (actor: Actor): string =>
   "nodeId" in actor ? actor.nodeId : "human" in actor ? "human" : "system";

@@ -292,7 +292,8 @@ export interface OperationMap {
       decision: "approve" | "reject" | "split";
       alsoLimit?: boolean;
     };
-    result: { state: NodeState };
+    /** `limitAdded`: `alsoLimit` つきのときだけ。この呼び出しで、上限に規則を足したか（承認済みへの再承認は `false`）。 */
+    result: { state: NodeState; limitAdded?: boolean };
   };
   /**
    * 設定ファイル config.json の、方針（`rootScope`・`permissions`・`autoApprove`）を読み込み直す（人間だけ。#194 PR4）。

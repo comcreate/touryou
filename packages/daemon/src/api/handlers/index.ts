@@ -95,6 +95,8 @@ export function createHandlersWithScheduler(
     denyRules?: Live<readonly string[]>;
     /** 根の方針の ask の規則。ask に当たる MCP ツールは、人間だけが承認できる（#194 PR3）。 */
     askRules?: Live<readonly string[]>;
+    /** 「上限にも足して承認」で足す規則の検査（#194 PR4）。 */
+    limitRuleProblem?: (rule: string) => string | undefined;
     /** 判断待ちの子の再開が成功した（起動して、再開の記録まで済んだ）あとに呼ぶ。期限にまつわる知らせを解決にするのに使う（#189）。 */
     onResumed?: (nodeId: string) => void;
   },
@@ -231,6 +233,9 @@ export function createHandlersWithScheduler(
             ...(spawn.rootScope === undefined ? {} : { rootScope: spawn.rootScope }),
             ...(spawn.denyRules === undefined ? {} : { denyRules: spawn.denyRules }),
             ...(spawn.askRules === undefined ? {} : { askRules: spawn.askRules }),
+            ...(spawn.limitRuleProblem === undefined
+              ? {}
+              : { limitRuleProblem: spawn.limitRuleProblem }),
             ...onFailure,
           }),
         }),

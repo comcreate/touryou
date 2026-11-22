@@ -20,10 +20,17 @@ import {
   stateOf,
 } from "@touryou/core";
 import { type DaemonConfig, policyBaseOf, restartRequiredKeys } from "../../config.js";
-import type { PolicyHolder } from "../../policy-holder.js";
-import { growScope, policyProblem } from "../../root-policy.js";
+import { type PolicyHolder, policyProblemWith } from "../../policy-holder.js";
 import type { HandlerRequest } from "../server.js";
-import { appendAtomically, deriveId, fail, type LogPort, notice } from "./context.js";
+import {
+  appendAtomically,
+  deriveId,
+  fail,
+  type LogPort,
+  notice,
+  ruleExcerpt,
+  withoutPaths,
+} from "./context.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;
 
@@ -43,7 +50,6 @@ export interface PolicyHandlerDeps {
 }
 
 const LIVE = new Set(["running", "waiting"]);
-const uniq = (xs: readonly string[]): string[] => [...new Set(xs)];
 
 export function createPolicyHandlers(deps: PolicyHandlerDeps) {
   const { log, holder } = deps;
@@ -65,23 +71,22 @@ export function createPolicyHandlers(deps: PolicyHandlerDeps) {
       const state = log.state();
       const exists = state.policyRules.some((x) => x.list === list && x.rule === rule);
       if (op === "add" && exists) return { ok: true, value: { changed: false } };
-      if (op === "remove" && !exists) return { ok: true, value: { changed: false } };
+      if (op === "remove" && !exists) {
+        // 設定ファイル由来の規則は、ここでは外せない（「変わらなかった」と区別する）
+        const base = holder.base();
+        const configured = list === "autoApprove" ? base.autoApprove.allow : base.permissions[list];
+        if (configured.includes(rule)) {
+          return fail(
+            "ruleFromConfig",
+            "その規則は設定ファイルにあるため、ここでは外せない",
+            "設定ファイル config.json を直して、touryou config reload で読み込み直す",
+          );
+        }
+        return { ok: true, value: { changed: false } };
+      }
       if (op === "add") {
         // 足したあとの方針が、設定のときと同じ検査（解析・子の許可の形・autoApprove の条件）を通ること
-        const base = holder.base();
-        const by = (l: typeof list): string[] => [
-          ...state.policyRules.filter((x) => x.list === l).map((x) => x.rule),
-          ...(l === list ? [rule] : []),
-        ];
-        const problem = policyProblem(
-          growScope(base.rootScope, by("allow")),
-          {
-            allow: uniq([...base.permissions.allow, ...by("allow")]),
-            deny: uniq([...base.permissions.deny, ...by("deny")]),
-            ask: uniq([...base.permissions.ask, ...by("ask")]),
-          },
-          { allow: uniq([...base.autoApprove.allow, ...by("autoApprove")]) },
-        );
+        const problem = policyProblemWith(holder.base(), [...state.policyRules, { list, rule }]);
         if (problem !== undefined) {
           return fail(
             "invalidRule",
@@ -95,7 +100,10 @@ export function createPolicyHandlers(deps: PolicyHandlerDeps) {
         info(
           req.requestId,
           "rule",
-          notice(op === "add" ? "policyRuleAdded" : "policyRuleRemoved", { list, rule }),
+          notice(op === "add" ? "policyRuleAdded" : "policyRuleRemoved", {
+            list,
+            rule: ruleExcerpt(rule),
+          }),
         ),
       ]);
       return r.ok ? { ok: true, value: { changed: !r.value.duplicate } } : r;
@@ -118,10 +126,12 @@ export function createPolicyHandlers(deps: PolicyHandlerDeps) {
         };
       }
       if (!loaded.ok) {
-        record("failed", notice("configReloadFailed", { cause: loaded.error.cause }), "failure");
+        // 設定ファイルのパスは、受信箱にも応答にも出さない（理由の種類だけ）
+        const cause = withoutPaths(loaded.error.cause);
+        record("failed", notice("configReloadFailed", { cause }), "failure");
         return fail(
           "configInvalid",
-          `設定を読み込み直せない（今の方針のまま）: ${loaded.error.cause}`,
+          `設定を読み込み直せない（今の方針のまま）: ${cause}`,
           "設定ファイルを直して、もう一度 config.reload を呼ぶ",
         );
       }
@@ -129,6 +139,17 @@ export function createPolicyHandlers(deps: PolicyHandlerDeps) {
       const restartRequired = restartRequiredKeys(deps.runningConfig(), next);
       const before = holder.base();
       const after = policyBaseOf(next);
+      // 実行中に足した規則と合わせた方針が、検査を通ること（通らなければ、今の方針のまま）
+      const mixed = policyProblemWith(after, log.state().policyRules);
+      if (mixed !== undefined) {
+        const cause = withoutPaths(`実行中に足した規則と合わせると、方針が検査を通らない: ${mixed}`);
+        record("failed", notice("configReloadFailed", { cause }), "failure");
+        return fail(
+          "configInvalid",
+          `設定を読み込み直せない（今の方針のまま）: ${cause}`,
+          "touryou policy remove で実行中の規則を外すか、設定ファイルを直して、もう一度 config.reload を呼ぶ",
+        );
+      }
       const changed = (["rootScope", "permissions", "autoApprove"] as const).filter(
         (k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]),
       );
@@ -175,6 +196,9 @@ function restrictToRunning(
   deps: PolicyHandlerDeps,
   keys: readonly string[],
 ): Partial<DaemonConfig> {
-  const running = deps.runningConfig() as unknown as Record<string, unknown>;
-  return Object.fromEntries(keys.map((k) => [k, running[k]])) as Partial<DaemonConfig>;
+  const running = deps.runningConfig();
+  // 動いている設定にない項目は undefined にする（今の設定の値で、上書きし直す）
+  return Object.fromEntries(
+    keys.map((k) => [k, Object.getOwnPropertyDescriptor(running, k)?.value]),
+  );
 }

@@ -12,6 +12,7 @@ import {
   buildRootPolicy,
   growScope,
   type PermissionsConfig,
+  policyProblem,
   type RootPolicy,
 } from "./root-policy.js";
 
@@ -50,6 +51,27 @@ function derive(base: PolicyBase, rules: readonly PolicyRuleRecord[]): LivePolic
     ...(policy.allowedMcpTools.length === 0 ? {} : { allowedMcpTools: policy.allowedMcpTools }),
   };
   return { rootScope, policy };
+}
+
+/**
+ * 基準 `base` に、実行中の規則 `rules` を足した方針が、設定のときと同じ検査（解析・子の許可の形・autoApprove の条件）を通るか。
+ * 通れば `undefined`、通らなければ理由。規則を足す前（足したあとの方針で）、`config.reload` の入れ替えの前に使う。
+ */
+export function policyProblemWith(
+  base: PolicyBase,
+  rules: readonly Pick<PolicyRuleRecord, "list" | "rule">[],
+): string | undefined {
+  const by = (list: PolicyRuleRecord["list"]): string[] =>
+    rules.filter((r) => r.list === list).map((r) => r.rule);
+  return policyProblem(
+    growScope(base.rootScope, by("allow")),
+    {
+      allow: uniq([...base.permissions.allow, ...by("allow")]),
+      deny: uniq([...base.permissions.deny, ...by("deny")]),
+      ask: uniq([...base.permissions.ask, ...by("ask")]),
+    },
+    { allow: uniq([...base.autoApprove.allow, ...by("autoApprove")]) },
+  );
 }
 
 export interface PolicyHolder {

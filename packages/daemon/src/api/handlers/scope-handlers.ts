@@ -23,6 +23,7 @@ import {
   isOwnMcpServerTool,
   isScopeSubset,
   isStrictDescendant,
+  LIMITS,
   type NodeState,
   type OperationMap,
   type Result,
@@ -44,6 +45,7 @@ import {
   type LogPort,
   live,
   notice,
+  ruleExcerpt,
 } from "./context.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;
@@ -67,6 +69,11 @@ export interface ScopeHandlerDeps {
    * 省略すると、ask はない。関数で渡すと、そのつど読む（config.reload で入れ替わった ask が、すぐ効く。#194 PR4）。
    */
   readonly askRules?: Live<readonly string[]>;
+  /**
+   * 「上限にも足して承認」で足す規則が、足したあとの方針の検査を通るか（通らなければ理由。#194 PR4）。
+   * 省略すると、規則の長さだけを検査する。
+   */
+  readonly limitRuleProblem?: (rule: string) => string | undefined;
   /** 応答に出さない原因の記録先。 */
   readonly onFailure?: (nodeId: string, cause: string) => void;
 }
@@ -315,12 +322,33 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
           "足さずに承認するか、config.json の permissions.allow に書く",
         );
       }
+      // 規則は、記録する前に検査する（長すぎる・方針の検査を通らない規則は、承認の記録ごと失敗させない）
+      if (limitRule !== undefined && ext.status === "open") {
+        const why =
+          limitRule.length > LIMITS.policyRule
+            ? `規則が長すぎる（${LIMITS.policyRule} 字まで）`
+            : deps.limitRuleProblem?.(limitRule);
+        if (why !== undefined) {
+          return fail(
+            "invalidTarget",
+            `この対象は、上限に足せない: ${why}`,
+            "足さずに承認するか、config.json の permissions.allow に書く",
+          );
+        }
+      }
       const stateOfNode = (): NodeState | undefined => stateOf(log.state(), ext.nodeId);
       // 承認済みへの再承認: 記録はせず、アダプタの更新だけをやり直す（requestId が違っても。冪等）。
+      // 規則は足さないので、alsoLimit つきなら `limitAdded: false` で返す（断ると、同じ要求の再送が失敗する）。
       if (decision === "approve" && ext.status === "approved") {
         const failed = applyToAdapter(ext, extensionId);
         if (failed) return failed;
-        return { ok: true, value: { state: stateOfNode() as NodeState } };
+        return {
+          ok: true,
+          value: {
+            state: stateOfNode() as NodeState,
+            ...(alsoLimit ? { limitAdded: false } : {}),
+          },
+        };
       }
       if (decision === "approve" && ext.status === "open") {
         // 検査は、記録する直前に取り直す（検査の途中の待ちの間に、範囲が変わっていないか）。
@@ -334,25 +362,27 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
           }
         }
       }
-      const bodies: EventBody[] = [
-        // 上限にも足す: 同じ記録（1 トランザクション）で、規則を足す（承認だけ・規則だけが残ることはない）
-        ...(limitRule === undefined || ext.status !== "open"
+      const limitBodies: readonly EventBody[] =
+        limitRule === undefined || ext.status !== "open"
           ? []
           : [
               {
                 type: "policy.ruleChanged",
                 payload: { list: "allow", rule: limitRule, op: "add" },
-              } as EventBody,
+              },
               {
                 type: "inbox.added",
                 payload: {
                   id: deriveId("inbox", "human", req.requestId, "rule"),
                   kind: "info",
                   nodeId: state.nodes.find((n) => n.parentId === null)?.id ?? ext.nodeId,
-                  ...notice("policyRuleAdded", { list: "allow", rule: limitRule }),
+                  ...notice("policyRuleAdded", { list: "allow", rule: ruleExcerpt(limitRule) }),
                 },
-              } as EventBody,
-            ]),
+              },
+            ];
+      const bodies: EventBody[] = [
+        // 上限にも足す: 同じ記録（1 トランザクション）で、規則を足す（承認だけ・規則だけが残ることはない）
+        ...limitBodies,
         {
           type: "scope.extensionDecided",
           payload: {
@@ -375,7 +405,13 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
         if (failed) return failed;
       }
       notifyChild(ext, decision, actor, req.requestId);
-      return { ok: true, value: { state: stateOfNode() as NodeState } };
+      return {
+        ok: true,
+        value: {
+          state: stateOfNode() as NodeState,
+          ...(alsoLimit ? { limitAdded: limitBodies.length > 0 } : {}),
+        },
+      };
     },
   };
 

@@ -123,7 +123,7 @@ import { ownedBy } from "./discarded-keys.js";
 import { EventLog } from "./eventlog.js";
 import { withExternalCheckResolution } from "./external-check.js";
 import type { GitPorts, LossFacts } from "./git-ports.js";
-import { createPolicyHolder } from "./policy-holder.js";
+import { createPolicyHolder, policyProblemWith } from "./policy-holder.js";
 import {
   choosePort,
   PORT_FILE,
@@ -1956,6 +1956,11 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       rootScope,
       denyRules,
       askRules,
+      limitRuleProblem: (rule: string) =>
+        policyProblemWith(policyHolder.base(), [
+          ...log.state().policyRules,
+          { list: "allow", rule },
+        ]),
       ...(config.maxTreeDepth === undefined ? {} : { maxTreeDepth: config.maxTreeDepth }),
       onFailure,
       ...(config.startLimits === undefined ? {} : { startLimits: config.startLimits }),

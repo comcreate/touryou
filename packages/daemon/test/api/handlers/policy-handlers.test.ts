@@ -14,7 +14,7 @@ import type { HandlerRequest } from "../../../src/api/server.js";
 import { type DaemonConfig, policyBaseOf } from "../../../src/config.js";
 import { EventLog } from "../../../src/eventlog.js";
 import { createMemoryStore } from "../../../src/memory-store.js";
-import { createPolicyHolder } from "../../../src/policy-holder.js";
+import { createPolicyHolder, policyProblemWith } from "../../../src/policy-holder.js";
 import type { RuntimeAdapter } from "../../../src/sdk/runtime.js";
 
 const SYS = { system: true } as const;
@@ -98,6 +98,8 @@ const rig = (initial: DaemonConfig = cfg()) => {
     cwdOf: async (id) => `/wt/${id}`,
     rootScope: () => holder.current().rootScope,
     denyRules: () => holder.current().policy.deny,
+    limitRuleProblem: (rule) =>
+      policyProblemWith(holder.base(), [...log.state().policyRules, { list: "allow", rule }]),
   });
   // biome-ignore lint/suspicious/noExplicitAny: テスト用に緩く扱う
   type Loose = { ok: boolean; value?: any; error?: Failure };
@@ -174,6 +176,30 @@ describe("policy.ruleChange（実行中の規則の追加・取り消し）", ()
     expect((await r.rule("deny", "Bash(git push:*)", "remove")).value).toEqual({ changed: false });
   });
 
+  it("should 3: 受信箱には、長い規則の先頭だけを出す", async () => {
+    const r = rig();
+    const rule = `Bash(${"a".repeat(100)}:*)`;
+    expect((await r.rule("deny", rule)).ok).toBe(true);
+    const item = r.s().inbox.at(-1);
+    expect(item?.summary).toContain("…");
+    expect(item?.summary).not.toContain(rule);
+    expect(JSON.stringify(item?.msg)).not.toContain(rule);
+    // 記録（規則そのもの）は、全文のまま
+    expect(r.s().policyRules[0]?.rule).toBe(rule);
+  });
+
+  it("should 4: 設定ファイル由来の規則の取り外しは、changed: false ではなく、案内つきで断る", async () => {
+    const r = rig(cfg({ permissions: { allow: [], deny: ["Bash(rm:*)"], ask: [] } }));
+    const seq = r.s().lastSeq;
+    const res = await r.rule("deny", "Bash(rm:*)", "remove");
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe("ruleFromConfig");
+    expect(res.error?.nextActions.join(" ")).toContain("config reload");
+    expect(r.s().lastSeq).toBe(seq);
+    // どこにもない規則は、これまでどおり changed: false
+    expect((await r.rule("deny", "Bash(ls:*)", "remove")).value).toEqual({ changed: false });
+  });
+
   it("解析できない規則は断り、何も書かない", async () => {
     const r = rig();
     const seq = r.s().lastSeq;
@@ -217,6 +243,39 @@ describe("config.reload（設定の読み直し）", () => {
     expect(r.s().inbox.at(-1)).toMatchObject({ kind: "failure" });
   });
 
+  it("should 3: 失敗の文（応答・受信箱）に、設定ファイルのパスを出さない", async () => {
+    const r = rig();
+    r.box.next = {
+      ok: false,
+      error: failure(
+        "configInvalid",
+        "設定ファイル /Users/someone/.touryou/config.json を、他のユーザーが書き換えられる",
+        "直す",
+      ),
+    };
+    const res = await r.reload();
+    expect(res.error?.cause).not.toContain("/Users/someone");
+    const item = r.s().inbox.at(-1);
+    expect(item?.summary).not.toContain("/Users/someone");
+    expect(JSON.stringify(item?.msg)).not.toContain("/Users/someone");
+    expect(res.error?.cause).toContain("他のユーザーが書き換えられる");
+  });
+
+  it("nit: 実行中に足した規則と合わせると検査を通らない設定は、入れ替えない", async () => {
+    const r = rig();
+    await r.rule("allow", "Bash(git status:*)");
+    await r.rule("autoApprove", "Bash(git status:*)");
+    const before = r.holder.current();
+    const baseBefore = r.holder.base();
+    r.box.next = ok(cfg({ permissions: { allow: [], deny: ["Bash(git status:*)"], ask: [] } }));
+    const res = await r.reload();
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe("configInvalid");
+    expect(r.holder.base()).toBe(baseBefore);
+    expect(r.holder.current()).toBe(before);
+    expect(r.s().inbox.at(-1)).toMatchObject({ kind: "failure" });
+  });
+
   it("新しい上限からはみ出す子は名前を返すが、子の範囲は縮めない", async () => {
     const r = rig();
     r.box.next = ok(cfg({ rootScope: { ...ROOT_SCOPE, allowedCommands: [] } }));
@@ -253,6 +312,33 @@ describe("scope.decide の alsoLimit（上限にも足して承認）", () => {
     );
     expect(res.error?.code).toBe("forbidden");
     expect(r.s().lastSeq).toBe(seq);
+  });
+
+  it("should 1: 承認済みへの alsoLimit つきの再承認は、規則を足さず、limitAdded: false を返す", async () => {
+    const r = rig();
+    const id = (await r.extend("git status")).value.extensionId as string;
+    const first = await r.decide({ extensionId: id, decision: "approve", alsoLimit: true });
+    expect(first.value.limitAdded).toBe(true);
+    const seq = r.s().lastSeq;
+    const again = await r.decide({ extensionId: id, decision: "approve", alsoLimit: true });
+    expect(again.ok).toBe(true);
+    expect(again.value.limitAdded).toBe(false);
+    expect(r.s().lastSeq).toBe(seq);
+    // alsoLimit なしの再承認は、limitAdded を返さない
+    expect((await r.decide({ extensionId: id, decision: "approve" })).value).not.toHaveProperty(
+      "limitAdded",
+    );
+  });
+
+  it("should 2: 長すぎる規則になる対象は、invalidTarget で断り、承認も記録しない", async () => {
+    const r = rig();
+    const id = (await r.extend(`git ${"a".repeat(1100)}`)).value.extensionId as string;
+    const seq = r.s().lastSeq;
+    const res = await r.decide({ extensionId: id, decision: "approve", alsoLimit: true });
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe("invalidTarget");
+    expect(r.s().lastSeq).toBe(seq);
+    expect(r.s().extensions[0]?.status).toBe("open");
   });
 
   it("deny に当たる MCP ツールは、alsoLimit でも承認しない", async () => {
