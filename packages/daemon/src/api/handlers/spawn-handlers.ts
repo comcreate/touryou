@@ -51,6 +51,7 @@ import {
   notice,
   summarize,
 } from "./context.js";
+import { depthProblem } from "./depth-check.js";
 import { createExclusive } from "./inflight.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;
@@ -89,6 +90,8 @@ export interface SpawnHandlerDeps {
    * 下の `spawn` は失敗させる（根の子を経由した権限の昇格を防ぐ）。
    */
   readonly rootScope?: Scope;
+  /** 木の深さの上限（設定 `maxTreeDepth`。root=0。深さがこの値以上のノードは作れない）。省略すると `DEFAULT_MAX_TREE_DEPTH`。 */
+  readonly maxTreeDepth?: number;
   /** スケジューラが同時に起動する数の上限（親ごと・全体）。既定は `DEFAULT_START_LIMITS`。 */
   readonly startLimits?: { readonly perParent?: number; readonly total?: number };
   /** 応答に出さない原因（後始末の失敗・アダプタの詳細など）の記録先。 */
@@ -436,6 +439,15 @@ export function createSpawner(deps: SpawnHandlerDeps) {
         );
       }
     }
+    // 木の深さの上限（ポートに触れる前に検査する。設定 maxTreeDepth。#168 PR4）。
+    const depthIssue = depthProblem({
+      state,
+      nodeId,
+      parentId,
+      role,
+      maxTreeDepth: deps.maxTreeDepth,
+    });
+    if (depthIssue !== undefined) return { ok: false, error: depthIssue };
     const adapter = deps.adapterFor(parentId);
     if (adapter === undefined) {
       return fail(

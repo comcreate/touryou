@@ -1913,6 +1913,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       runtime: config.childRuntime === "desktop" ? "desktop" : "cli",
       ...(adopt === undefined ? {} : { adopt }),
       rootScope: config.rootScope,
+      ...(config.maxTreeDepth === undefined ? {} : { maxTreeDepth: config.maxTreeDepth }),
       onFailure,
       ...(config.startLimits === undefined ? {} : { startLimits: config.startLimits }),
       // 再開が成功した（起動して、再開の記録まで済んだ）: 期限にまつわる知らせを解決にする。トークンの発行では解決にしない

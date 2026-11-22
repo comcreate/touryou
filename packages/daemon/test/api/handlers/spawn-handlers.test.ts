@@ -46,7 +46,9 @@ const ROOT_SCOPE: Scope = {
   forbiddenLocations: [".git"],
   allowedCommands: ["pnpm test"],
 };
-const rig = (opts: { rootScope?: Scope | null; runtime?: NodeRuntime } = {}) => {
+const rig = (
+  opts: { rootScope?: Scope | null; runtime?: NodeRuntime; maxTreeDepth?: number } = {},
+) => {
   const opened = EventLog.open(createMemoryStore().open(), { clock });
   if (!opened.ok) throw new Error(opened.error.code);
   const log = opened.value;
@@ -182,6 +184,7 @@ const rig = (opts: { rootScope?: Scope | null; runtime?: NodeRuntime } = {}) => 
     ports,
     credentials,
     ...(opts.rootScope === null ? {} : { rootScope: opts.rootScope ?? ROOT_SCOPE }),
+    ...(opts.maxTreeDepth === undefined ? {} : { maxTreeDepth: opts.maxTreeDepth }),
     stop: async (req) => {
       calls.stopped.push(req.params.nodeId);
       if (flags.stopFails) return { ok: false, error: failure("stopFailed", "x", "y") };
@@ -396,6 +399,53 @@ describe("node.spawn（子の生成と起動）", () => {
     expect(
       (await badRoot.call("node.spawn", { parentId: "m2", ...brief() }, "m2")).error?.code,
     ).toBe("rootScopeInvalid");
+  });
+
+  it("深さの上限（#168 PR4）: 新しいノードの深さが上限以上なら、ポートに触れる前に depthExceeded で断る", async () => {
+    // m1 は深さ 1。その下の子は深さ 2。上限 2 なら断る。
+    const r = rig({ maxTreeDepth: 2 });
+    const res = await r.call("node.spawn", { parentId: "m1", ...brief() });
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe("depthExceeded");
+    expect(res.error?.cause).toContain("maxTreeDepth");
+    expect(res.error?.nextActions.join("\n")).toContain("maxTreeDepth");
+    expect(r.calls.provisioned).toEqual([]);
+    expect(r.calls.issued).toEqual([]);
+    expect(r.calls.started).toEqual([]);
+    expect(r.s().nodes).toHaveLength(4);
+  });
+
+  it("深さの上限: 上限ちょうどに収まる（上限 3・深さ 2）なら生成できる。深さ 1 の統合ノードの下は、上限 2 だと断る", async () => {
+    const fit = await rig({ maxTreeDepth: 3 }).call("node.spawn", { parentId: "m1", ...brief() });
+    expect(fit.ok).toBe(true);
+    const over = await rig({ maxTreeDepth: 2 }).call(
+      "node.spawn",
+      { parentId: "m2", ...brief() },
+      "m2",
+    );
+    expect(over.error?.code).toBe("depthExceeded");
+  });
+
+  it("深さの上限: 省略したときの既定は 3。サブ統括（深さ 2 の統合ノード）の下の深さ 3 は断る", async () => {
+    const r = rig();
+    const sub = await r.call("node.spawn", { parentId: "m1", ...brief({ role: "integrator" }) });
+    expect(sub.ok).toBe(true);
+    const deep = await r.call("node.spawn", { parentId: sub.value.nodeId, ...brief() });
+    expect(deep.error?.code).toBe("depthExceeded");
+    expect(r.calls.provisioned).toHaveLength(1); // サブ統括の分だけ
+  });
+
+  it("node.split も同じ深さの上限に従う（上限 2 の下の切り出しは断る）", async () => {
+    const r = rig({ maxTreeDepth: 2 });
+    const res = await r.call("node.split", {
+      nodeId: "a",
+      keep: "mainline",
+      ...brief({ role: undefined }),
+    });
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe("depthExceeded");
+    expect(r.calls.provisioned).toEqual([]);
+    expect(r.s().nodes).toHaveLength(4);
   });
 
   it("作業ツリーを作れなければ、何も記録せずに失敗する", async () => {

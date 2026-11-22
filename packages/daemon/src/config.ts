@@ -231,6 +231,11 @@ export interface DaemonConfig {
    * 子が紐付けコードで結ぶ（仮置き。`docs/desktop-runtime.md`）。木全体で 1 つ（ノードごとの混在は扱わない）。
    */
   readonly childRuntime?: "cli" | "desktop";
+  /**
+   * 木の深さの上限（根を 0 と数え、深さがこの値以上のノードは spawn・adopt が `depthExceeded` で断る。2〜10 の整数）。
+   * 省略すると `DEFAULT_MAX_TREE_DEPTH`（3。サブ統括＝深さ 1・その下の孫＝深さ 2 まで）。#168 PR4。
+   */
+  readonly maxTreeDepth?: number;
   /** 子ごとの、エージェントのターン数の上限（API の往復）。省略すると 100。 */
   readonly maxTurns?: number;
   /** 子ごとの、費用の上限（USD）。省略すると 5。 */
@@ -282,6 +287,7 @@ const KEYS = [
   "rateLimit",
   "connection",
   "inProgress",
+  "maxTreeDepth",
   "maxTurns",
   "maxBudgetUsd",
   "touryouCommand",
@@ -623,6 +629,17 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
     };
   }
   if (
+    raw.maxTreeDepth !== undefined &&
+    (typeof raw.maxTreeDepth !== "number" ||
+      !Number.isInteger(raw.maxTreeDepth) ||
+      raw.maxTreeDepth < 2 ||
+      raw.maxTreeDepth > 10)
+  ) {
+    return bad(
+      "maxTreeDepth は 2〜10 の整数（根を深さ 0 と数える。省略すると 3。2 だと、根の直下の子までで、サブ統括は作れない）",
+    );
+  }
+  if (
     raw.maxTurns !== undefined &&
     (typeof raw.maxTurns !== "number" ||
       !Number.isInteger(raw.maxTurns) ||
@@ -888,6 +905,7 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
       ...(raw.childRuntime === undefined
         ? {}
         : { childRuntime: raw.childRuntime as "cli" | "desktop" }),
+      ...(raw.maxTreeDepth === undefined ? {} : { maxTreeDepth: raw.maxTreeDepth as number }),
       ...(raw.maxTurns === undefined ? {} : { maxTurns: raw.maxTurns as number }),
       ...(raw.maxBudgetUsd === undefined ? {} : { maxBudgetUsd: raw.maxBudgetUsd as number }),
       ...(raw.retentionDays === undefined ? {} : { retentionDays: raw.retentionDays as number }),

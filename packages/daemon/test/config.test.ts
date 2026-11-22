@@ -480,6 +480,18 @@ describe("parseConfig（設定は厳密に検査し、不正なら起動を失�
     for (const v of [0, -1, "9", null, 10001, Number.NaN]) bad({ maxBudgetUsd: v }, "maxBudgetUsd");
   });
 
+  it("maxTreeDepth（木の深さの上限）は、2〜10 の整数（任意。省略は既定の 3 で、値は持たない）", () => {
+    const ok1 = parseConfig(JSON.stringify({ ...base, maxTreeDepth: 4 }));
+    expect(ok1.ok && ok1.value.maxTreeDepth).toBe(4);
+    for (const v of [2, 10]) {
+      const r = parseConfig(JSON.stringify({ ...base, maxTreeDepth: v }));
+      expect(r.ok && r.value.maxTreeDepth).toBe(v);
+    }
+    const none = parseConfig(JSON.stringify(base));
+    expect(none.ok && none.value.maxTreeDepth).toBeUndefined();
+    for (const v of [0, 1, 11, -1, 2.5, "3", null, [], Number.NaN]) bad({ maxTreeDepth: v }, "maxTreeDepth");
+  });
+
   it("startLimits（同時に起動する数の上限）は、1〜64 の整数（任意。省略は既定の 4）", () => {
     const ok1 = parseConfig(JSON.stringify({ ...base, startLimits: { perParent: 2, total: 8 } }));
     expect(ok1.ok && ok1.value.startLimits).toEqual({ perParent: 2, total: 8 });

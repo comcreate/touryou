@@ -42,7 +42,7 @@ const params = (over: Record<string, unknown> = {}) => ({
 });
 
 /** root ─ m1(統合・範囲 PARENT_SCOPE・running) ─ a(実装・running)、root ─ m2(統合)。呼び出し元は既定で m1 */
-const rig = () => {
+const rig = (opts: { maxTreeDepth?: number } = {}) => {
   const opened = EventLog.open(createMemoryStore().open(), { clock });
   if (!opened.ok) throw new Error(opened.error.code);
   const log = opened.value;
@@ -134,6 +134,7 @@ const rig = () => {
     clock,
     ports,
     rootScope: PARENT_SCOPE,
+    ...(opts.maxTreeDepth === undefined ? {} : { maxTreeDepth: opts.maxTreeDepth }),
     onFailure: (_id, cause) => calls.failures.push(cause),
   }).handlers;
   const call = async (
@@ -236,6 +237,25 @@ describe("node.adopt（既存の作業ツリーの採用。#163）", () => {
     expect(r.calls.inspected).toEqual([]);
     expect(r.calls.marked).toEqual([]);
     expect(r.calls.issued).toEqual([]);
+  });
+
+  it("深さの上限（#168 PR4）: 採用する子の深さが上限以上なら、作業ツリーに触れる前に depthExceeded で断る", async () => {
+    // m1 は深さ 1。その下の子は深さ 2。上限 2 なら断る（上限 3 の既定は、ほかの試験で通る）。
+    const r = rig({ maxTreeDepth: 2 });
+    const res = await r.call(params());
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe("depthExceeded");
+    expect(res.error?.cause).toContain("maxTreeDepth");
+    expect(res.error?.nextActions.length).toBeGreaterThan(0);
+    expect(r.s().nodes.map((x) => x.id)).toEqual(["root", "m1", "a", "m2"]);
+    expect(r.calls.inspected).toEqual([]);
+    expect(r.calls.marked).toEqual([]);
+    expect(r.calls.issued).toEqual([]);
+  });
+
+  it("深さの上限: ちょうど収まる（上限 3・深さ 2）なら採用できる", async () => {
+    const r = rig({ maxTreeDepth: 3 });
+    expect((await r.call(params())).ok).toBe(true);
   });
 
   it("親の作業ツリーを取得できなければ、何もせずに失敗する（安全側）", async () => {
