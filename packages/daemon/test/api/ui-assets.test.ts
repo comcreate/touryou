@@ -432,6 +432,17 @@ describe("画面の資産（走査）", () => {
       "lastIndexOf",
       // Desktop の子を足してよい設定か（#159。表示モデルの値 true。設定の窓の注記を出すだけ）
       "desktopChildrenAllowed",
+      // 設定の窓の規則（#194 PR4）。表示モデルの policy（規則の一覧・MCP ツールの判定）と、config.reload の結果、alsoLimit の送信
+      "alsoLimit",
+      "policy",
+      "mcpGate",
+      "rules",
+      "list",
+      "rule",
+      "source",
+      "changed",
+      "restartRequired",
+      "overLimit",
     ]);
     // 埋め込んだ文字の表（#140。JSON の値で、コードでない）は、走査から除く
     const code = UI_JS.replace(TABLE_LINE, "")
@@ -447,11 +458,35 @@ describe("画面の資産（走査）", () => {
     expect(UI_JS).toContain("'scope.decide'");
     expect(UI_JS).toContain("{ extensionId: x.id, decision: decision }");
     expect([...UI_JS.matchAll(/'scope\.decide'/g)]).toHaveLength(1);
-    expect(UI_JS).toContain("b.disabled = x.targetHidden && decision !== 'reject'");
+    expect(UI_JS).toContain(
+      "b.disabled = (x.targetHidden && decision !== 'reject') || (denied && decision === 'approve')",
+    );
+    // 「上限にも足して承認」: approve のときだけ alsoLimit: true を足して送る（確認を挟む。上限の規則は daemon が対象から作る）
+    expect(UI_JS).toContain("[['approve', false], ['approve', true], ['reject', false], ['split', false]]");
+    expect(UI_JS).toContain("if (also) params.alsoLimit = true;");
+    expect(UI_JS).toContain("var denied = gate === 'deny';");
+    expect(UI_JS).toContain("if (denied) card.appendChild(el('p', 'error', t('ext.denyNote')));");
+    expect(UI_JS).toContain("else if (gate === 'ask') card.appendChild(el('p', 'desc', t('ext.askNote')));");
     // sendPending 以外に fetch がない（確認なしで送る経路がない）
     expect([...UI_JS.matchAll(/\bfetch\(\s*'\/v1\/request'/g)]).toHaveLength(1);
     // granted（許可する対象）を、画面から送らない
     expect(UI_JS).not.toContain("granted");
+  });
+
+  it("設定の窓の規則（#194 PR4）: 読み込み直し・足す・外すは、確認（openConfirm）を挟んでだけ送る。設定由来の規則には外すボタンを出さない", () => {
+    expect([...UI_JS.matchAll(/'config\.reload'/g)]).toHaveLength(1);
+    expect([...UI_JS.matchAll(/'policy\.ruleChange'/g)]).toHaveLength(1);
+    expect(UI_JS).toContain("openConfirm(t('policy.reloadTitle')");
+    expect(UI_JS).toContain("{ list: list, rule: r.rule, op: 'remove' }");
+    expect(UI_JS).toContain("{ list: list, rule: rule, op: 'add' }");
+    // 外せるのは、実行中に足した規則だけ
+    expect(UI_JS).toContain("if (r.source === 'runtime') {");
+    // 窓（モーダル）を閉じてから、確認の欄を出す
+    expect(UI_JS).toContain("if (settingsBox.open) settingsBox.close();");
+    // 結果の表示は、daemon の応答の値（配列）だけ。規則の本文は、本人が入力した値（と設定の値）だけを出す
+    expect(UI_JS).toContain("t('policy.reloaded', { changed: join(value && value.changed), restart: join(value && value.restartRequired), over: join(value && value.overLimit) })");
+    expect(UI_HTML).toContain('id="policy-reload"');
+    expect(UI_HTML).toContain('id="policy-add"');
   });
 
   it("el に渡すタグは、div・span・p・button・textarea・details・summary・code・h3 だけ（実行時にも、許可リストで拒む。#89 で details・summary・code を、カードの題で h3 を足した）", () => {
@@ -1783,6 +1818,7 @@ describe("状態変化の読み上げ・スマホの幅（UI レビューの対�
         "function renderList() { return 0; }",
         "function renderGraph() {}",
         "function renderPurge() {}",
+        "function renderPolicy() {}",
         "function showAuth() {}",
         "function showConnected() {}",
         "function setStatus() {}",

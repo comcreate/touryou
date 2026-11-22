@@ -58,6 +58,10 @@ export const UI_HTML = `<!doctype html>
 <label class="opt"><input type="radio" name="set-lang" value="ja" checked> <span lang="ja">日本語</span></label>
 <label class="opt"><input type="radio" name="set-lang" value="en"> <span lang="en">English</span></label></div><p class="note" data-t="lang.note">daemon が書く知らせも、選んだ言語で出します。子や統合が書いた文と、古い知らせは、書かれたままの言葉で出します。</p></fieldset>
 <fieldset id="set-desktop" hidden><legend data-t="settings.desktop">Desktop の子</legend><p class="note" data-t="settings.desktopNote">Desktop の子を足せる設定（allowDesktopChildren）が有効です。有効なあいだ、取り消せない操作（最終削除・破棄の成果の削除・回収の指示）は、端末つきで動いている daemon でしか通りません（launchd 経由では通りません）。変えるときは設定ファイルを直します。</p></fieldset>
+<fieldset id="set-policy" hidden><legend data-t="policy.title">子の権限の規則</legend><p class="note" data-t="policy.note">根の方針の規則です。「設定」は設定ファイル（config.json）の値、「実行中」は、いま足した規則です（daemon を起動し直すと、設定の値に戻ります）。deny は allow・ask より強く、ask に当たるツールの承認は、人間だけができます。</p>
+<div class="policy-row"><button id="policy-reload" class="sm" type="button" data-t="policy.reload">設定を読み込み直す</button></div>
+<div id="policy-rules" class="policy-rules"></div>
+<div class="policy-add"><label for="policy-list" class="sr" data-t="policy.listLabel">規則の種類</label><select id="policy-list"><option value="allow" data-t="policy.allow">allow（許す）</option><option value="deny" data-t="policy.deny">deny（禁じる）</option><option value="ask" data-t="policy.ask">ask（人に確かめる）</option><option value="autoApprove" data-t="policy.autoApprove">autoApprove（自動で承認）</option></select><label for="policy-rule" class="sr" data-t="policy.ruleLabel">足す規則</label><input id="policy-rule" type="text" maxlength="1024" autocomplete="off" spellcheck="false" placeholder="Bash(git status:*)"><button id="policy-add" class="sm" type="button" data-t="policy.add">足す</button></div><p id="policy-problem" class="error" hidden></p></fieldset>
 <p class="note" data-t="settings.kept">選んだものは、このブラウザに残ります。</p>
 <div class="settings-actions"><button id="close-settings" type="button" data-t="settings.close">閉じる</button></div></dialog>
 <main>
@@ -120,6 +124,12 @@ dialog.settings legend{font-weight:600;padding:0 4px}
 .settings .opts-label{display:block;color:var(--muted);font-size:13px}
 .settings .note{color:var(--muted);font-size:12.5px;margin:2px 0 6px}
 .settings-actions{text-align:right;margin-top:8px}
+.settings .policy-row{margin:6px 0}
+.settings .policy-group h3{font-size:13.5px;margin:10px 0 2px}
+.settings .policy-item{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;padding:2px 0;overflow-wrap:anywhere}
+.settings .policy-add{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.settings .policy-add select,.settings .policy-add input{font:inherit;font-size:14px;padding:4px 8px;border:1px solid var(--line);border-radius:8px;background:var(--sheet);color:var(--fg);min-width:0}
+.settings .policy-add input{flex:1 1 12em}
 button.danger{border-color:var(--shu);color:var(--shu);background:transparent}
 button.done{background:var(--matsu);border-color:var(--matsu);color:var(--on-strong)}
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;margin:-1px;padding:0;border:0}
@@ -393,8 +403,7 @@ export const UI_JS = `'use strict';
     document.title = t('page.title');
     document.querySelectorAll('[data-t]').forEach(function (e) { e.textContent = t(e.dataset.t); });
     document.querySelectorAll('[data-t-aria]').forEach(function (e) { e.ariaLabel = t(e.dataset.tAria); });
-    document.querySelectorAll('[data-t-title]').forEach(function (e) { e.title = t(e.dataset.tTitle); });
-  }
+    document.querySelectorAll('[data-t-title]').forEach(function (e) { e.title = t(e.dataset.tTitle); });  }
   applyLang();
 
   var TAGS = { div: true, span: true, p: true, button: true, textarea: true, details: true, summary: true, code: true, h3: true };
@@ -804,26 +813,34 @@ export const UI_JS = `'use strict';
   var DECISION_LABELS = { approve: 'ext.approve', reject: 'ext.reject', split: 'ext.split' };
   var DECISION_NOTES = { split: 'ext.splitNote' };
   var KIND_LABELS = { write: 'ext.kindWrite', command: 'ext.kindCommand', mcp: 'ext.kindMcp' };
-  function renderExtensions(list, box, byId) {
+  // gates: 拡張要求の ID → 'deny' | 'ask'（daemon が方針から判定した、MCP ツールの依頼だけ）。deny は承認できない。ask は人間だけが承認できる（この画面は人間）
+  function renderExtensions(list, box, byId, gates) {
     list.forEach(function (x) {
+      var gate = gates && Object.hasOwn(gates, x.id) ? gates[x.id] : '';
+      var denied = gate === 'deny';
       var card = taskCard('task', 'x-' + x.id, t('ext.title'), 'turn', byId.get(x.nodeId), x.nodeId);
       card.appendChild(el('div', 'ask', x.kind ? t('ext.ask', { kind: name(KIND_LABELS, x.kind), reason: x.reason }) : x.reason));
       card.appendChild(el('p', 'desc', t('ext.desc')));
       card.appendChild(el('div', 'confirm-line', t('ext.target', { target: x.targetHidden ? t('ext.hidden') : x.target })));
       // MCP ツールは引数を絞れない。承認が「どんな引数でも使ってよい」と同じ意味になることを、カードにも確認の窓にも出す
       if (x.kind === 'mcp') card.appendChild(el('p', 'error', t('ext.mcpNote')));
+      if (denied) card.appendChild(el('p', 'error', t('ext.denyNote')));
+      else if (gate === 'ask') card.appendChild(el('p', 'desc', t('ext.askNote')));
       var opts = el('div', 'opts');
-      ['approve', 'reject', 'split'].forEach(function (decision) {
-        var b = el('button', '', t(DECISION_LABELS[decision]));
-        b.disabled = x.targetHidden && decision !== 'reject';
+      // 「上限にも足して承認」(also) は、子への付与と同時に、根の上限（permissions.allow）にも足す。承認のときだけ
+      [['approve', false], ['approve', true], ['reject', false], ['split', false]].forEach(function (pair) {
+        var decision = pair[0];
+        var also = pair[1];
+        var label = also ? t('ext.approveAlso') : t(DECISION_LABELS[decision]);
+        var b = el('button', '', label);
+        b.disabled = (x.targetHidden && decision !== 'reject') || (denied && decision === 'approve');
         b.addEventListener('click', function () {
-          openConfirm(
-            t('ext.confirmTitle', { decision: t(DECISION_LABELS[decision]) }),
-            [[t('line.node'), x.nodeId], [t('line.kind'), x.kind ? name(KIND_LABELS, x.kind) : t('line.unknown')], [t('line.target'), x.targetHidden ? t('ext.hidden') : x.target], [t('line.reason'), x.reason], [t('line.verdict'), Object.hasOwn(DECISION_NOTES, decision) ? t('ext.verdictNote', { decision: t(DECISION_LABELS[decision]), note: t(DECISION_NOTES[decision]) }) : t(DECISION_LABELS[decision])]].concat(x.kind === 'mcp' && decision === 'approve' ? [[t('line.note'), t('ext.mcpNote')]] : []),
-            'scope.decide',
-            { extensionId: x.id, decision: decision },
-            t('ext.done', { decision: t(DECISION_LABELS[decision]) })
-          );
+          var lines = [[t('line.node'), x.nodeId], [t('line.kind'), x.kind ? name(KIND_LABELS, x.kind) : t('line.unknown')], [t('line.target'), x.targetHidden ? t('ext.hidden') : x.target], [t('line.reason'), x.reason], [t('line.verdict'), Object.hasOwn(DECISION_NOTES, decision) ? t('ext.verdictNote', { decision: label, note: t(DECISION_NOTES[decision]) }) : label]];
+          if (x.kind === 'mcp' && decision === 'approve') lines.push([t('line.note'), t('ext.mcpNote')]);
+          if (also) lines.push([t('line.note'), t('ext.alsoNote')]);
+          var params = { extensionId: x.id, decision: decision };
+          if (also) params.alsoLimit = true;
+          openConfirm(t('ext.confirmTitle', { decision: label }), lines, 'scope.decide', params, t('ext.done', { decision: label }));
         });
         opts.appendChild(b);
       });
@@ -917,7 +934,7 @@ export const UI_JS = `'use strict';
     var open = view.decisions.filter(function (d) { return !d.closedReason; });
     var closed = view.decisions.filter(function (d) { return d.closedReason; });
     renderDecisions(open, box, byId);
-    renderExtensions(view.extensions, box, byId);
+    renderExtensions(view.extensions, box, byId, view.policy ? view.policy.mcpGate : null);
     var delegated = delegatedOf(view.nodes);
     var n = open.length + view.extensions.length;
     view.inbox.forEach(function (i) {
@@ -1966,6 +1983,73 @@ export const UI_JS = `'use strict';
     approvalErrors.forEach(function (_v, id) { if (!live.has(id)) approvalErrors.delete(id); });
   }
 
+  // 根の方針の規則（設定の窓）。設定由来と、実行中に足したものを分けて出す。本文は、設定か、人間が入力した値だけ（受信箱の文は使わない）。
+  // 設定由来の規則は、ここからは外せない（設定ファイルを直して、読み込み直す）。実行中に足したものだけ、外せる。
+  var POLICY_LISTS = ['allow', 'deny', 'ask', 'autoApprove'];
+  var POLICY_LIST_LABELS = { allow: 'policy.allow', deny: 'policy.deny', ask: 'policy.ask', autoApprove: 'policy.autoApprove' };
+  function policyConfirm(title, lines, params, done, after) {
+    // 設定の窓は、ページの上に重なる（モーダル）。確認の欄は窓の下にあるので、窓を閉じてから確認を出す
+    if (pending && pending.sending) return;
+    if (settingsBox.open) settingsBox.close();
+    openConfirm(title, lines, 'policy.ruleChange', params, done, { after: after });
+  }
+  function renderPolicy(policy) {
+    var section = document.getElementById('set-policy');
+    var box = document.getElementById('policy-rules');
+    section.hidden = !policy;
+    clear(box);
+    if (!policy || !Array.isArray(policy.rules)) return;
+    POLICY_LISTS.forEach(function (list) {
+      var rules = policy.rules.filter(function (r) { return r.list === list; });
+      var group = el('div', 'policy-group');
+      var head = el('h3', '', t(POLICY_LIST_LABELS[list]));
+      head.id = 'policy-h-' + list;
+      group.appendChild(head);
+      if (rules.length === 0) group.appendChild(el('p', 'note', t('policy.none')));
+      var ul = el('div', 'policy-list');
+      rules.forEach(function (r) {
+        var li = el('div', 'policy-item');
+        li.appendChild(el('code', '', r.rule));
+        li.appendChild(el('span', 'chip ' + (r.source === 'runtime' ? 'turn' : 'request'), t(r.source === 'runtime' ? 'policy.runtime' : 'policy.config')));
+        if (r.source === 'runtime') {
+          var rm = el('button', 'quiet sm', t('policy.remove'));
+          rm.ariaLabel = t('policy.removeOne', { list: list, rule: r.rule });
+          rm.addEventListener('click', function () {
+            policyConfirm(t('policy.removeTitle'), [[t('line.policyList'), t(POLICY_LIST_LABELS[list])], [t('line.policyRule'), r.rule]], { list: list, rule: r.rule, op: 'remove' }, function (value) { return t(value && value.changed === false ? 'policy.removeNoChange' : 'policy.removed'); });
+          });
+          li.appendChild(rm);
+        }
+        ul.appendChild(li);
+      });
+      if (rules.length > 0) group.appendChild(ul);
+      box.appendChild(group);
+    });
+  }
+  function startPolicyAdd() {
+    var listSel = document.getElementById('policy-list');
+    var input = document.getElementById('policy-rule');
+    var problem = document.getElementById('policy-problem');
+    var rule = input.value;
+    var why = rule.trim() === '' ? t('policy.empty') : rule.length > 1024 ? t('policy.tooLong', { max: 1024 }) : '';
+    problem.textContent = why;
+    problem.hidden = why === '';
+    if (why !== '') { input.focus(); return; }
+    var list = POLICY_LISTS.indexOf(listSel.value) >= 0 ? listSel.value : 'allow';
+    var lines = [[t('line.policyList'), t(POLICY_LIST_LABELS[list])], [t('line.policyRule'), rule]];
+    if (list === 'allow' || list === 'autoApprove') lines.push([t('line.note'), t('policy.addWidenNote')]);
+    policyConfirm(t('policy.addTitle'), lines, { list: list, rule: rule, op: 'add' }, function (value) { return t(value && value.changed === false ? 'policy.addNoChange' : 'policy.added'); }, function () { input.value = ''; });
+  }
+  function startConfigReload() {
+    if (pending && pending.sending) return;
+    if (settingsBox.open) settingsBox.close();
+    openConfirm(t('policy.reloadTitle'), [[t('line.note'), t('policy.reloadNote')]], 'config.reload', {}, function (value) {
+      var none = t('policy.reloadNone');
+      var join = function (xs) { return Array.isArray(xs) && xs.length > 0 ? xs.join(t('sep.list')) : none; };
+      var text = t('policy.reloaded', { changed: join(value && value.changed), restart: join(value && value.restartRequired), over: join(value && value.overLimit) });
+      return text;
+    });
+  }
+
   function render(view) {
     attachDir = typeof view.attachDir === 'string' ? view.attachDir : '';
     // どの daemon の画面かを、ヘッダーに示す（作業場所の名前。全体の道筋は title に出す）
@@ -1977,7 +2061,8 @@ export const UI_JS = `'use strict';
     document.getElementById('set-desktop').hidden = view.desktopChildrenAllowed !== true;
     renderApprovals(view.confirmations);
     var flows = Array.isArray(view.flows) ? view.flows : [];
-    var v = { nodes: view.nodes, inbox: view.inbox, resolved: Array.isArray(view.resolved) ? view.resolved : [], decisions: view.decisions, extensions: view.extensions, flows: flows };
+    var v = { nodes: view.nodes, inbox: view.inbox, resolved: Array.isArray(view.resolved) ? view.resolved : [], decisions: view.decisions, extensions: view.extensions, flows: flows, policy: view.policy && typeof view.policy === 'object' ? view.policy : null };
+    renderPolicy(v.policy);
     var byId = new Map();
     view.nodes.forEach(function (n) { byId.set(n.id, n); });
     titleById = new Map();
@@ -2275,7 +2360,7 @@ export const UI_JS = `'use strict';
   settingsBox.addEventListener('keydown', function (e) {
     if (e.key !== 'Tab') return;
     var f = [];
-    settingsBox.querySelectorAll('input:not([disabled]),button:not([disabled])').forEach(function (x) {
+    settingsBox.querySelectorAll('input:not([disabled]),select:not([disabled]),button:not([disabled])').forEach(function (x) {
       if (x.type !== 'radio' || x.checked) f.push(x);
     });
     if (f.length === 0) return;
@@ -2284,6 +2369,9 @@ export const UI_JS = `'use strict';
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
+  document.getElementById('policy-reload').addEventListener('click', startConfigReload);
+  document.getElementById('policy-add').addEventListener('click', startPolicyAdd);
+  document.getElementById('policy-rule').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); startPolicyAdd(); } });
   stillBox.addEventListener('change', function () {
     settings.still = stillBox.checked;
     applySettings(settings);

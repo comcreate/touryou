@@ -193,6 +193,17 @@ export type ApiLogEvent =
 
 export type ApiLogger = (event: ApiLogEvent) => void;
 
+/** 画面に出す、根の方針の規則（`/v1/ui/state` の `policy`）。規則の本文は、設定か、人間が入力した値だけ。 */
+export interface UiPolicyView {
+  readonly rules: readonly {
+    readonly list: "allow" | "deny" | "ask" | "autoApprove";
+    readonly rule: string;
+    readonly source: "config" | "runtime";
+  }[];
+  /** MCP ツールの未判定の依頼（拡張要求 ID）ごとの、方針の判定。deny に当たる・ask に当たるものだけ載る。 */
+  readonly mcpGate: Readonly<Record<string, "deny" | "ask">>;
+}
+
 export interface ApiDeps {
   readonly credentials: CredentialStore;
   /**
@@ -215,6 +226,12 @@ export interface ApiDeps {
   readonly attachDir?: string;
   /** Desktop の子を足してよい設定（allowDesktopChildren か childRuntime: desktop）か。画面の設定の窓の注記に使う（#159）。 */
   readonly desktopChildrenAllowed?: boolean;
+  /**
+   * 画面の設定の窓・承認カードに出す、根の方針の規則の一覧と、MCP ツールの依頼ごとの判定（#194 PR4）。読み取りだけ。
+   * 規則は、設定由来（`config`）と、実行中に足したもの（`runtime`）を分ける。表示のキャッシュは `lastSeq` が鍵なので、
+   * 規則が変わるとき（`policy.ruleChanged`・`config.reload`）に、必ず記録が増えることが前提（どちらも受信箱に記録する）。
+   */
+  readonly policyView?: (state: OrchState) => UiPolicyView;
   /**
    * `GET /v1/whoami` で、統合ノードにだけ返す daemon の場所（#164）。`daemonId` は `identity` の起動ごとの識別子
    * （`docs/daemon-identity.md`）。省略すると、`daemon` は返さない。子には、どちらでも返さない。
@@ -1574,6 +1591,7 @@ export function createApiServer(deps: ApiDeps): ApiServer {
             ...(deps.attachDir === undefined ? {} : { attachDir: deps.attachDir }),
             // 設定の窓に、opt-in（Desktop の子を足してよい）の注記を出す。読み取りだけ（#159）
             ...(deps.desktopChildrenAllowed === true ? { desktopChildrenAllowed: true } : {}),
+            ...(deps.policyView === undefined ? {} : { policy: deps.policyView(current) }),
           },
         }),
       };
