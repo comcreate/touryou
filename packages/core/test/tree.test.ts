@@ -5,6 +5,7 @@ import {
   ancestors,
   childrenOf,
   countByState,
+  DEFAULT_MAX_TREE_DEPTH,
   depthOf,
   descendantsOf,
   isDirectChild,
@@ -89,6 +90,53 @@ describe("validateTree（FR_001, FR_002）", () => {
   it("自分を親にできない", () => {
     const v = validateTree([n("r", "integrator", null), n("a", "integrator", "a")]);
     expect(v.map((x) => x.kind)).toContain("cycle");
+  });
+});
+
+describe("validateTree の深さ検査（#168）", () => {
+  // root(0) ─ sub(1) ─ gc(2) ─ deep(3)
+  const chain = (extra: readonly TreeNode[] = []): readonly TreeNode[] => [
+    n("root", "integrator", null),
+    n("sub", "integrator", "root"),
+    n("gc", "integrator", "sub"),
+    ...extra,
+  ];
+
+  it("既定の上限は 3", () => {
+    expect(DEFAULT_MAX_TREE_DEPTH).toBe(3);
+  });
+
+  it("上限ちょうど（深さ 2 まで、上限 3）は妥当", () => {
+    expect(validateTree(chain(), { maxTreeDepth: DEFAULT_MAX_TREE_DEPTH })).toEqual([]);
+    expect(validateTree(chain([n("w", "implement", "sub")]), { maxTreeDepth: 3 })).toEqual([]);
+  });
+
+  it("上限を超える（深さ 3、上限 3）と depthExceeded を返す", () => {
+    const tree = chain([n("deep", "implement", "gc")]);
+    expect(validateTree(tree, { maxTreeDepth: 3 })).toEqual([
+      { kind: "depthExceeded", nodeId: "deep", depth: 3, maxTreeDepth: 3 },
+    ]);
+  });
+
+  it("上限を 2 にすると、深さ 2 のノードが超過になる", () => {
+    expect(validateTree(chain(), { maxTreeDepth: 2 })).toEqual([
+      { kind: "depthExceeded", nodeId: "gc", depth: 2, maxTreeDepth: 2 },
+    ]);
+  });
+
+  it("オプションを省略すると、深さは検査しない（既存の挙動）", () => {
+    expect(validateTree(chain([n("deep", "implement", "gc")]))).toEqual([]);
+  });
+
+  it("addChild は、上限の検査を持たない（daemon が validateTree で検査する）", () => {
+    expect(addChild(chain(), n("deep", "implement", "gc")).ok).toBe(true);
+  });
+
+  it("循環しているノードは depthExceeded にしない（cycle だけ）", () => {
+    const v = validateTree([n("r", "integrator", null), n("a", "integrator", "a")], {
+      maxTreeDepth: 1,
+    });
+    expect(v.map((x) => x.kind)).toEqual(["cycle"]);
   });
 });
 
@@ -340,6 +388,8 @@ describe("性質（fast-check）", () => {
       case "missingParent":
       case "parentNotIntegrator":
         return `${v.kind}:${v.nodeId}:${v.parentId}`;
+      case "depthExceeded":
+        return `${v.kind}:${v.nodeId}:${v.depth}`;
     }
   };
 

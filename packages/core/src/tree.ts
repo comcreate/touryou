@@ -21,7 +21,24 @@ export type TreeViolation =
   | { readonly kind: "rootNotIntegrator"; readonly nodeId: string }
   | { readonly kind: "missingParent"; readonly nodeId: string; readonly parentId: string }
   | { readonly kind: "parentNotIntegrator"; readonly nodeId: string; readonly parentId: string }
-  | { readonly kind: "cycle"; readonly nodeId: string };
+  | { readonly kind: "cycle"; readonly nodeId: string }
+  | {
+      readonly kind: "depthExceeded";
+      readonly nodeId: string;
+      readonly depth: number;
+      readonly maxTreeDepth: number;
+    };
+
+/**
+ * 木の深さの上限の既定（root=深さ 0。深さがこの値以上のノードは作れない）。
+ * 3 なら、サブ統括（深さ 1）と、その下の孫（深さ 2）までを許す。
+ */
+export const DEFAULT_MAX_TREE_DEPTH = 3;
+
+export interface ValidateTreeOptions {
+  /** 指定したときだけ、深さが `maxTreeDepth` 以上のノードを `depthExceeded` にする。省略すると深さは検査しない。 */
+  readonly maxTreeDepth?: number;
+}
 
 const byId = (nodes: readonly TreeNode[]): Map<string, TreeNode> => {
   const map = new Map<string, TreeNode>();
@@ -30,7 +47,10 @@ const byId = (nodes: readonly TreeNode[]): Map<string, TreeNode> => {
 };
 
 /** 木の不変条件を検査する。空の木は妥当。違反は入力順で返す。 */
-export function validateTree(nodes: readonly TreeNode[]): TreeViolation[] {
+export function validateTree(
+  nodes: readonly TreeNode[],
+  options: ValidateTreeOptions = {},
+): TreeViolation[] {
   const out: TreeViolation[] = [];
   if (nodes.length === 0) return out;
   const map = byId(nodes);
@@ -55,9 +75,32 @@ export function validateTree(nodes: readonly TreeNode[]): TreeViolation[] {
     } else if (parent.role !== "integrator") {
       out.push({ kind: "parentNotIntegrator", nodeId: node.id, parentId: node.parentId });
     }
-    if (reachesItself(map, node)) out.push({ kind: "cycle", nodeId: node.id });
+    const cyclic = reachesItself(map, node);
+    if (cyclic) out.push({ kind: "cycle", nodeId: node.id });
+    const { maxTreeDepth } = options;
+    if (maxTreeDepth !== undefined && !cyclic) {
+      const depth = depthIn(map, node);
+      if (depth >= maxTreeDepth) {
+        out.push({ kind: "depthExceeded", nodeId: node.id, depth, maxTreeDepth });
+      }
+    }
   }
   return out;
+}
+
+/** 索引済みの map で、根までの祖先の数（`depthOf` と同じ値）を数える。親が見つからない・別の循環に入るところで止める。 */
+function depthIn(map: ReadonlyMap<string, TreeNode>, start: TreeNode): number {
+  const visited = new Set<string>([start.id]);
+  let depth = 0;
+  let cur: TreeNode | undefined = start;
+  while (cur?.parentId != null) {
+    const parent: TreeNode | undefined = map.get(cur.parentId);
+    if (parent === undefined || visited.has(parent.id)) break;
+    visited.add(parent.id);
+    depth += 1;
+    cur = parent;
+  }
+  return depth;
 }
 
 function reachesItself(map: ReadonlyMap<string, TreeNode>, start: TreeNode): boolean {

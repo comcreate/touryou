@@ -786,6 +786,21 @@ export const CHILD_MCP_TOOL_NAMES: readonly string[] = [
 ];
 
 /**
+ * 統合のセッション（root・サブ統括）に出る touryou の mcp の道具の名前（接頭辞なし）。`whoami` と、ROLE_OPERATIONS.integrator の操作
+ * （mcp の toolName と同じ変換）。サブ統括の起動時の許可の一覧に使う。紐付けの道具 `child_bind` は含めない（統合は紐付け済みで起動するため）。
+ */
+export const INTEGRATOR_MCP_TOOL_NAMES: readonly string[] = [
+  "whoami",
+  ...ROLE_OPERATIONS.integrator.map((op) => op.replaceAll(".", "_")),
+];
+
+/** ロール別の、セッションに出る touryou の mcp の道具の名前（接頭辞なし）。`human` は mcp の道具を持たない。 */
+export const MCP_TOOL_NAMES_BY_ROLE = {
+  integrator: INTEGRATOR_MCP_TOOL_NAMES,
+  child: CHILD_MCP_TOOL_NAMES,
+} as const satisfies Partial<Record<ContractRole, readonly string[]>>;
+
+/**
  * 親（統合）のセッションで、確認なしにしてよい、読むだけの touryou の道具（接頭辞なし）。`/setup` の案内の Allow の例と、
  * 「記録（イベント）を書かない」ことの試験が、この一覧を見る。ものを変える道具（書く・起動・停止・判定・回収・`node_bindCode`）と、
  * 起動のコマンドを返して Bash で実行させる入口の `parent_request` は入れない（確認の画面で目で止めるため）。
