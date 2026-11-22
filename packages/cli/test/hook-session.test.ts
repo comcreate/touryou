@@ -440,11 +440,11 @@ describe("一時的な失敗の再試行（印のある作業ツリーの PreToo
     let n = 0;
     const slow: typeof fetch = async () => {
       n++;
-      k.c.t += 4000;
+      // 窓口の確かめが遅かった想定（1.5 秒。開始の時刻は確かめの前なので、経過に入る）+ fetch の時間切れ 4 秒
+      k.c.t += 1500 + 4000;
       throw new DOMException("timeout", "TimeoutError");
     };
     const k = clock();
-    k.c.t = 1500; // 窓口の確かめが遅かった想定
     const start = k.c.t;
     const r = await run(slow, k);
     expect(r.code).toBe(2);
