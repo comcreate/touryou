@@ -389,7 +389,10 @@ const VALIDATORS: Validators = {
     if (value.trim() === "") fail("target.value が空");
     const reason = text(o, "reason", LIMITS.extensionReason);
     if (reason.trim() === "") fail("reason が空");
-    return { target: { kind: oneOf(t, "kind", ["write", "command"] as const), value }, reason };
+    return {
+      target: { kind: oneOf(t, "kind", ["write", "command", "mcp"] as const), value },
+      reason,
+    };
   },
   "decision.answer": (p) => {
     const o = strict(p, ["decisionId", "choice", "text"]);

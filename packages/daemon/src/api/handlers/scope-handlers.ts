@@ -17,12 +17,16 @@ import {
   type EventBody,
   type ExtensionRecord,
   effectiveScope,
+  evaluate,
   type Failure,
+  isMcpToolName,
+  isOwnMcpServerTool,
   isScopeSubset,
   isStrictDescendant,
   type NodeState,
   type OperationMap,
   type Result,
+  runtimeOf,
   type Scope,
   stateOf,
   validateScope,
@@ -49,6 +53,11 @@ export interface ScopeHandlerDeps {
   readonly cwdOf: (nodeId: string) => Promise<string | undefined>;
   /** ブリーフのない親（根など）の有効な範囲（`SpawnHandlerDeps.rootScope` と同じ）。 */
   readonly rootScope?: Scope;
+  /**
+   * 根の方針の `deny` の規則（`RootPolicy.deny`）。MCP ツールの承認で、deny に当たるものは、上限の内側でも承認しない
+   * （deny は allow・ask・範囲より強い。設計書 § 3.3）。省略すると、deny はない。
+   */
+  readonly denyRules?: readonly string[];
   /** 応答に出さない原因の記録先。 */
   readonly onFailure?: (nodeId: string, cause: string) => void;
 }
@@ -63,6 +72,13 @@ function targetProblem(target: { kind: string; value: string }): string | undefi
   const v = target.value;
   if (v.trim() === "" || v !== v.trim()) return "前後の空白・空の値は使えない";
   if (CONTROL.test(v)) return "制御文字（改行を含む）は使えない";
+  if (target.kind === "mcp") {
+    // 子の依頼で付与できるのは、完全な名前の道具 1 つだけ（サーバー全体 mcp__<サーバー> は、人間が config に書くときだけ）
+    if (!isMcpToolName(v)) return "MCP ツールは mcp__<サーバー>__<道具> の完全な名前（サーバー全体は頼めない）";
+    // 親の道具（node_spawn など）を、拡張で子に付与できてしまうのを防ぐ
+    if (isOwnMcpServerTool(v)) return "touryou 自身の MCP サーバーの道具は頼めない";
+    return undefined;
+  }
   if (target.kind === "write") {
     if (v.startsWith("/")) return "絶対パスは使えない";
     const segs = v.split("/");
@@ -102,16 +118,36 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
         "範囲を確認する",
       );
     }
+    // MCP ツールは、deny に当たるなら、上限の内側でも承認しない（人間が deny したものを、承認で通さない）
+    if (
+      ext.target.kind === "mcp" &&
+      evaluate(
+        { allow: [], deny: deps.denyRules ?? [], ask: [] },
+        { kind: "mcp", tool: ext.target.value },
+      ) === "deny"
+    ) {
+      return fail(
+        "scopeDenied",
+        `MCP ツール ${ext.target.value} は、設定の permissions.deny に当たるため承認できない`,
+        "却下する",
+        "許すなら、人に確かめてから config.json の permissions.deny を直し、daemon を起動し直してから、もう一度判定する",
+      );
+    }
     const grown: Scope =
       ext.target.kind === "write"
         ? {
             ...current,
             writableLocations: [...new Set([...current.writableLocations, ext.target.value])],
           }
-        : {
-            ...current,
-            allowedCommands: [...new Set([...current.allowedCommands, ext.target.value])],
-          };
+        : ext.target.kind === "mcp"
+          ? {
+              ...current,
+              allowedMcpTools: [...new Set([...(current.allowedMcpTools ?? []), ext.target.value])],
+            }
+          : {
+              ...current,
+              allowedCommands: [...new Set([...current.allowedCommands, ext.target.value])],
+            };
     const [cwd, parentCwd] = await Promise.all([
       deps.cwdOf(ext.nodeId).catch(() => undefined),
       deps.cwdOf(node.parentId).catch(() => undefined),
@@ -140,9 +176,13 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
       if (deps.rootScope !== undefined && deps.rootScope === parentScope)
         return fail(
           "scopeNotSubset",
-          "拡張後の範囲が、根の範囲（設定ファイル config.json の rootScope）に収まらない",
+          ext.target.kind === "mcp"
+            ? "MCP ツールが、根の上限（設定ファイル config.json の permissions.allow）にない"
+            : "拡張後の範囲が、根の範囲（設定ファイル config.json の rootScope）に収まらない",
           "却下する",
-          "根の範囲を広げるなら、人に確かめてから config.json の rootScope（allowedCommands・writableLocations）を直し、daemon を起動し直してから、もう一度判定する（起動し直すまで、変更は効かない）",
+          ext.target.kind === "mcp"
+            ? "上限を広げるなら、人に確かめてから config.json の permissions.allow に MCP ツール（mcp__<サーバー>__<道具>）を足し、daemon を起動し直してから、もう一度判定する（起動し直すまで、変更は効かない）"
+            : "根の範囲を広げるなら、人に確かめてから config.json の rootScope（allowedCommands・writableLocations）を直し、daemon を起動し直してから、もう一度判定する（起動し直すまで、変更は効かない）",
         );
       return fail(
         "scopeNotSubset",
@@ -164,8 +204,16 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
       if (problem !== undefined) {
         return fail(
           "invalidTarget",
-          `拡張の対象が使えない: ${problem}（書き込み先は、作業ツリーの内側の相対パス。コマンドは、単純な 1 つのコマンド）`,
+          `拡張の対象が使えない: ${problem}（書き込み先は、作業ツリーの内側の相対パス。コマンドは、単純な 1 つのコマンド。MCP ツールは、mcp__<サーバー>__<道具> の完全な名前）`,
           "対象を直して要求し直す",
+        );
+      }
+      // MCP ツールの依頼は、CLI の子だけ（Desktop の子は別のフックの経路。v0.2.0 以降。設計書 確認点 E3）
+      if (target.kind === "mcp" && runtimeOf(log.state(), caller) === "desktop") {
+        return fail(
+          "invalidTarget",
+          "MCP ツールの依頼は、CLI の子だけが出せる（Desktop の子は v0.2.0 以降）",
+          "親に、MCP ツールが要る作業を CLI の子で進めるよう頼む",
         );
       }
       const extensionId = deriveId("ext", caller, req.requestId, "extension");
@@ -309,7 +357,9 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
     requestId: string,
   ): void {
     if (!LIVE.has(stateOf(log.state(), ext.nodeId) ?? "pending")) return;
-    const what = `${ext.target.kind === "write" ? "書き込み先" : "コマンド"} ${ext.target.value}`;
+    const kindLabel =
+      ext.target.kind === "write" ? "書き込み先" : ext.target.kind === "mcp" ? "MCP ツール" : "コマンド";
+    const what = `${kindLabel} ${ext.target.value}`;
     const text =
       decision === "approve"
         ? ext.target.kind === "command"

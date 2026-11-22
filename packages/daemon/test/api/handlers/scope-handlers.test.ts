@@ -30,7 +30,9 @@ const CHILD: Scope = {
 };
 
 /** root ─ m1(範囲 PARENT) ─ a(範囲 CHILD・running)。root ─ m2 ─ b。 */
-const rig = (opts: { rootScope?: Scope } = {}) => {
+const rig = (
+  opts: { rootScope?: Scope; denyRules?: readonly string[]; runtime?: "cli" | "desktop" } = {},
+) => {
   const opened = EventLog.open(createMemoryStore().open(), { clock });
   if (!opened.ok) throw new Error(opened.error.code);
   const log = opened.value;
@@ -45,6 +47,7 @@ const rig = (opts: { rootScope?: Scope } = {}) => {
     role: "integrator" | "implement",
     parentId: string | null,
     scope?: Scope,
+    runtime?: "cli" | "desktop",
   ) =>
     add({
       type: "node.created",
@@ -53,6 +56,7 @@ const rig = (opts: { rootScope?: Scope } = {}) => {
         role,
         parentId,
         dependsOn: [],
+        ...(runtime === undefined ? {} : { runtime }),
         ...(scope === undefined ? {} : { objective: "o", acceptanceCriteria: ["c"], scope }),
       },
     });
@@ -66,7 +70,7 @@ const rig = (opts: { rootScope?: Scope } = {}) => {
   ev("m2", { type: "start" });
   node("b", "implement", "m2", CHILD);
   ev("b", { type: "start" });
-  node("c", "implement", "root", CHILD);
+  node("c", "implement", "root", CHILD, opts.runtime);
   ev("c", { type: "start" });
 
   const calls = {
@@ -76,7 +80,7 @@ const rig = (opts: { rootScope?: Scope } = {}) => {
   };
   const flags = { updateFails: false };
   const adapter = {
-    kind: "cli" as const,
+    kind: opts.runtime ?? ("cli" as const),
     send: async (id: string, text: string) => {
       calls.sent.push([id, text]);
       return ok({ status: "queued" as const });
@@ -95,6 +99,7 @@ const rig = (opts: { rootScope?: Scope } = {}) => {
     cwdOf: async (id) => `/wt/${id}`,
     onFailure: (_id, cause) => calls.failures.push(cause),
     ...(opts.rootScope === undefined ? {} : { rootScope: opts.rootScope }),
+    ...(opts.denyRules === undefined ? {} : { denyRules: opts.denyRules }),
   });
   // biome-ignore lint/suspicious/noExplicitAny: テスト用に緩く扱う
   type Loose = { ok: boolean; value?: any; error?: Failure };
@@ -308,6 +313,60 @@ describe("scope.decide（拡張の判定。承認でアダプタの範囲を更�
     expect(res.error?.cause).toContain("rootScope");
     expect(res.error?.nextActions.join("\n")).toContain("daemon を起動し直");
     expect(r.calls.updated).toEqual([]);
+  });
+
+  describe("MCP ツールの依頼（kind: mcp）", () => {
+    const TOOL = "mcp__chrome__navigate";
+    const WITH_MCP: Scope = { ...PARENT, allowedMcpTools: [TOOL] };
+    const ask = (r: ReturnType<typeof rig>, value: string, caller = "c") =>
+      r.extend({ target: { kind: "mcp", value }, reason: "r" }, caller);
+
+    it("サーバー全体・自ノードの touryou の道具・形の崩れた名前は、何も記録せずに断る", async () => {
+      const r = rig({ rootScope: WITH_MCP });
+      const seq = r.s().lastSeq;
+      for (const value of [
+        "mcp__chrome",
+        "mcp__chrome__",
+        "mcp__node__whoami",
+        "mcp__plugin_touryou_node__report_done",
+        "Bash",
+        " mcp__chrome__navigate",
+      ]) {
+        const res = await ask(r, value);
+        expect(res.ok, value).toBe(false);
+        expect(res.error?.code, value).toBe("invalidTarget");
+      }
+      expect(r.s().lastSeq).toBe(seq);
+    });
+
+    it("Desktop の子からの依頼は断る（MCP は CLI の子だけ）", async () => {
+      const r = rig({ rootScope: WITH_MCP, runtime: "desktop" });
+      expect((await ask(r, TOOL)).error?.code).toBe("invalidTarget");
+    });
+
+    it("上限（rootScope の allowedMcpTools）の中なら、承認でき、子のスコープに入る", async () => {
+      const r = rig({ rootScope: WITH_MCP });
+      const id = (await ask(r, TOOL)).value.extensionId as string;
+      const res = await r.decide({ extensionId: id, decision: "approve" }, "root");
+      expect(res.ok).toBe(true);
+      expect(r.calls.updated.at(-1)?.[1].allowedMcpTools).toEqual([TOOL]);
+    });
+
+    it("上限にない MCP ツールは、承認できない（scopeNotSubset）", async () => {
+      const r = rig({ rootScope: WITH_MCP });
+      const id = (await ask(r, "mcp__chrome__evaluate")).value.extensionId as string;
+      const res = await r.decide({ extensionId: id, decision: "approve" }, "root");
+      expect(res.error?.code).toBe("scopeNotSubset");
+      expect(r.calls.updated).toEqual([]);
+    });
+
+    it("deny の規則に当たる MCP ツールは、上限にあっても承認できない（deny が勝つ）", async () => {
+      const r = rig({ rootScope: WITH_MCP, denyRules: ["mcp__chrome__navigate"] });
+      const id = (await ask(r, TOOL)).value.extensionId as string;
+      const res = await r.decide({ extensionId: id, decision: "approve" }, "root");
+      expect(res.error?.code).toBe("scopeDenied");
+      expect(r.calls.updated).toEqual([]);
+    });
   });
 
   it("更新に失敗したら、判定は記録済みのまま、受信箱に failure を出して失敗を返す。同じ要求の再送で更新をやり直す", async () => {

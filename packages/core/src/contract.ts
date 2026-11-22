@@ -859,3 +859,12 @@ const OWN_MCP_RE = new RegExp(
 
 /** touryou の mcp の道具の名前（`mcp__node__<道具>` と、plugin から入れたときの `mcp__plugin_<plugin>_node__<道具>`）から、道具の名前を取る。違えば undefined。 */
 export const ownMcpToolOf = (name: string): string | undefined => OWN_MCP_RE.exec(name)?.[1];
+
+/**
+ * 自ノードの touryou の MCP サーバーの道具か。`ownMcpToolOf` の形に加えて、サーバーの名前の前置き（`mcp__node__`・
+ * `mcp__plugin_<plugin>_node__`）で見る（道具の名前が変わっても、親の道具を子に付与しない。#194 PR3）。
+ */
+export const isOwnMcpServerTool = (name: string): boolean =>
+  ownMcpToolOf(name) !== undefined ||
+  name.startsWith("mcp__node__") ||
+  name.startsWith(`mcp__plugin_${PLUGIN_NAME}_node__`);

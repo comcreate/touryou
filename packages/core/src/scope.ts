@@ -149,6 +149,9 @@ export interface ScopeIssue {
 /** `allowedMcpTools` の 1 項目の形（`permissions.ts` の MCP 規則の名前と同じ文字）。 */
 const MCP_TOOL_NAME = /^mcp__[A-Za-z0-9_-]+__[A-Za-z0-9_-]+$/;
 
+/** 完全な MCP ツールの名前（`mcp__<サーバー>__<道具>`）か。サーバー全体（`mcp__<サーバー>`）は偽（#194 PR3）。 */
+export const isMcpToolName = (v: string): boolean => MCP_TOOL_NAME.test(v);
+
 /** 範囲の設定を検査する。空の一覧は妥当（何も許可しない）。 */
 export function validateScope(scope: Scope, cwd: string): ScopeIssue[] {
   const issues: ScopeIssue[] = [];

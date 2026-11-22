@@ -24,6 +24,7 @@ import { isStallSummary, PRIORITIES, type Priority, priorityOf } from "./inbox-k
 import { copyInboxMessage, type InboxMessage } from "./inbox-messages.js";
 import type { NodeRole, NodeState } from "./index.js";
 import { runtimeOf } from "./runtime.js";
+import { isMcpToolName } from "./scope.js";
 import { descendantsOf } from "./tree.js";
 
 export const UI_TEXT_MAX = 200;
@@ -177,8 +178,8 @@ export interface UiExtension {
   readonly id: string;
   readonly nodeId: string;
   readonly reason: string;
-  /** 要求の対象の種類（write: 書き込みの場所、command: 実行するコマンド）。種類が分からなければ、なし。 */
-  readonly kind?: "write" | "command";
+  /** 要求の対象の種類（write: 書き込みの場所、command: 実行するコマンド、mcp: MCP ツール）。種類が分からなければ、なし。 */
+  readonly kind?: "write" | "command" | "mcp";
   /** 要求の対象。表示してよいもの（`uiTargetOf`）だけ。隠したときは、なし。 */
   readonly target?: string;
   /** 対象を隠した（絶対パス・`..`・制御文字・長すぎる、など）。画面は、承認・切り出しをさせない。 */
@@ -316,7 +317,7 @@ const PARENT_SEGMENT = /(?:^|[\s=,:/\\])\.\.(?:$|[\s,:/\\])/;
 export function uiTargetOf(t: unknown): Pick<UiExtension, "kind" | "target" | "targetHidden"> {
   if (typeof t !== "object" || t === null) return { targetHidden: true };
   const { kind, value } = t as { kind?: unknown; value?: unknown };
-  if (kind !== "write" && kind !== "command") return { targetHidden: true };
+  if (kind !== "write" && kind !== "command" && kind !== "mcp") return { targetHidden: true };
   const hidden = { kind, targetHidden: true } as const;
   if (typeof value !== "string" || value.trim() === "" || value !== value.trim()) return hidden;
   let length = 0;
@@ -326,13 +327,16 @@ export function uiTargetOf(t: unknown): Pick<UiExtension, "kind" | "target" | "t
     length++;
   }
   if (length > UI_TARGET_MAX) return hidden;
+  // MCP ツールは、完全な名前（mcp__<サーバー>__<道具>）だけを表示する（サーバー全体など、ほかの形は隠して承認させない）
   const bad =
-    kind === "write"
-      ? ABSOLUTE_PATH.test(value) || PARENT_SEGMENT.test(value)
-      : !COMMAND_ALLOWED.test(value) ||
-        COMMAND_ABSOLUTE_WORD.test(value) ||
-        COMMAND_OPTION_SLASH.test(value) ||
-        PARENT_SEGMENT.test(value);
+    kind === "mcp"
+      ? !isMcpToolName(value)
+      : kind === "write"
+        ? ABSOLUTE_PATH.test(value) || PARENT_SEGMENT.test(value)
+        : !COMMAND_ALLOWED.test(value) ||
+          COMMAND_ABSOLUTE_WORD.test(value) ||
+          COMMAND_OPTION_SLASH.test(value) ||
+          PARENT_SEGMENT.test(value);
   return bad ? hidden : { kind, target: value, targetHidden: false };
 }
 

@@ -126,18 +126,8 @@ describe("自ノードの MCP ツールは許可し、未知のツールは拒�
   });
 
   it("別の MCP サーバー、サブエージェント、ウェブ、未知のツールは拒否する。範囲違反ではなく unknownTool（記録先は別。受信箱に載せない）", async () => {
-    for (const tool of [
-      "mcp__other__do",
-      "Task",
-      "Agent",
-      "WebFetch",
-      "WebSearch",
-      "KillShell",
-      "Unknown",
-      "",
-      "mcp__node",
-      "mcp__nodex__a",
-    ]) {
+    // 完全な形の MCP 名（mcp__other__do など）は、頼み方つきの別の文になる（下の「MCP ツール」で試す）
+    for (const tool of ["Task", "Agent", "WebFetch", "WebSearch", "KillShell", "Unknown", "", "mcp__node"]) {
       const d = await decide(tool, {});
       expect(d.allow, tool).toBe(false);
       if (!d.allow) {
@@ -985,5 +975,51 @@ describe("grantedOnlyByExtension の区切りを含む承認・withRealWritePath
     expect(await withRealWritePath("Bash", { command: "ls" }, "/w", resolve)).toEqual({
       command: "ls",
     });
+  });
+});
+
+describe("MCP ツール（#194 PR3）", () => {
+  const TOOL = "mcp__chrome__navigate";
+  const granted: Scope = { ...scope, allowedMcpTools: [TOOL] };
+  const run = (s: Scope, tool: string, mcp?: { upperLimit: readonly string[] }) =>
+    decideToolUse(s, CWD, tool, {}, identity, undefined, CWD, "child", mcp);
+
+  it("承認前は拒否（denyUnknown）。拒否の文に、頼み方と上限の名前が出る", async () => {
+    const d = await run(scope, TOOL, { upperLimit: ["mcp__chrome__navigate", "mcp__fs__read"] });
+    expect(d.allow).toBe(false);
+    const text = JSON.stringify(d);
+    expect(text).toContain("scope_extend");
+    expect(text).toContain("mcp");
+    expect(text).toContain("mcp__fs__read");
+    expect(text).toContain("どんな引数でも");
+  });
+
+  it("上限の名前は最大 20 件まで。残りは件数で示す", async () => {
+    const names = Array.from({ length: 25 }, (_, i) => `mcp__s__t${String(i).padStart(2, "0")}`);
+    const text = JSON.stringify(await run(scope, TOOL, { upperLimit: names }));
+    expect(text).toContain("mcp__s__t19");
+    expect(text).not.toContain("mcp__s__t20");
+    expect(text).toContain("5 件");
+  });
+
+  it("承認後（スコープに入っている）は、明示の許可。deny に当たるものは許可しない", async () => {
+    expect((await run(granted, TOOL)).allow).toBe(true);
+    const denied = await decideToolUse(granted, CWD, TOOL, {}, identity, undefined, CWD, "child", {
+      upperLimit: [],
+      denied: (t) => t === TOOL,
+    });
+    expect(denied.allow).toBe(false);
+  });
+
+  it("touryou 自身の道具は、MCP の許可を使わない（スコープにあっても通らない経路ではない）", async () => {
+    const own = "mcp__node__whoami";
+    const s: Scope = { ...scope, allowedMcpTools: [own] };
+    const d = await run(s, "mcp__node__nonexistent_tool", { upperLimit: [] });
+    expect(JSON.stringify(d)).not.toContain("どんな引数でも");
+  });
+
+  it("grantedOnlyByExtension: 承認で入った MCP ツールだけ true", () => {
+    expect(grantedOnlyByExtension(scope, granted, TOOL, {}, CWD)).toBe(true);
+    expect(grantedOnlyByExtension(scope, scope, TOOL, {}, CWD)).toBe(false);
   });
 });

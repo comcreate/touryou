@@ -803,13 +803,15 @@ export const UI_JS = `'use strict';
   // 対象が隠れている（絶対パス・.. ・制御文字・長すぎる、など）ときは、承認・切り出しをさせない（却下だけ）。
   var DECISION_LABELS = { approve: 'ext.approve', reject: 'ext.reject', split: 'ext.split' };
   var DECISION_NOTES = { split: 'ext.splitNote' };
-  var KIND_LABELS = { write: 'ext.kindWrite', command: 'ext.kindCommand' };
+  var KIND_LABELS = { write: 'ext.kindWrite', command: 'ext.kindCommand', mcp: 'ext.kindMcp' };
   function renderExtensions(list, box, byId) {
     list.forEach(function (x) {
       var card = taskCard('task', 'x-' + x.id, t('ext.title'), 'turn', byId.get(x.nodeId), x.nodeId);
       card.appendChild(el('div', 'ask', x.kind ? t('ext.ask', { kind: name(KIND_LABELS, x.kind), reason: x.reason }) : x.reason));
       card.appendChild(el('p', 'desc', t('ext.desc')));
       card.appendChild(el('div', 'confirm-line', t('ext.target', { target: x.targetHidden ? t('ext.hidden') : x.target })));
+      // MCP ツールは引数を絞れない。承認が「どんな引数でも使ってよい」と同じ意味になることを、カードにも確認の窓にも出す
+      if (x.kind === 'mcp') card.appendChild(el('p', 'error', t('ext.mcpNote')));
       var opts = el('div', 'opts');
       ['approve', 'reject', 'split'].forEach(function (decision) {
         var b = el('button', '', t(DECISION_LABELS[decision]));
@@ -817,7 +819,7 @@ export const UI_JS = `'use strict';
         b.addEventListener('click', function () {
           openConfirm(
             t('ext.confirmTitle', { decision: t(DECISION_LABELS[decision]) }),
-            [[t('line.node'), x.nodeId], [t('line.kind'), x.kind ? name(KIND_LABELS, x.kind) : t('line.unknown')], [t('line.target'), x.targetHidden ? t('ext.hidden') : x.target], [t('line.reason'), x.reason], [t('line.verdict'), Object.hasOwn(DECISION_NOTES, decision) ? t('ext.verdictNote', { decision: t(DECISION_LABELS[decision]), note: t(DECISION_NOTES[decision]) }) : t(DECISION_LABELS[decision])]],
+            [[t('line.node'), x.nodeId], [t('line.kind'), x.kind ? name(KIND_LABELS, x.kind) : t('line.unknown')], [t('line.target'), x.targetHidden ? t('ext.hidden') : x.target], [t('line.reason'), x.reason], [t('line.verdict'), Object.hasOwn(DECISION_NOTES, decision) ? t('ext.verdictNote', { decision: t(DECISION_LABELS[decision]), note: t(DECISION_NOTES[decision]) }) : t(DECISION_LABELS[decision])]].concat(x.kind === 'mcp' && decision === 'approve' ? [[t('line.note'), t('ext.mcpNote')]] : []),
             'scope.decide',
             { extensionId: x.id, decision: decision },
             t('ext.done', { decision: t(DECISION_LABELS[decision]) })

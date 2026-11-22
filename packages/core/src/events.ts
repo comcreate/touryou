@@ -571,9 +571,12 @@ const EXTENSION_STATUS: Readonly<Record<ExtensionDecision, "approved" | "rejecte
   split: "split",
 };
 
-/** 拡張の対象: 書き込み可能な場所の追加（`write`）か、許可するコマンドの追加（`command`）。 */
+/**
+ * 拡張の対象: 書き込み可能な場所の追加（`write`）、許可するコマンドの追加（`command`）、
+ * 使ってよい MCP ツールの追加（`mcp`。値は `mcp__<サーバー>__<道具>` の完全な名前。#194 PR3）。
+ */
 export interface ExtensionTarget {
-  readonly kind: "write" | "command";
+  readonly kind: "write" | "command" | "mcp";
   readonly value: string;
 }
 
@@ -1216,7 +1219,7 @@ function briefRecord(
 /** 拡張の対象の形を検査して写す。不正なら `undefined`。 */
 function parseExtensionTarget(x: unknown): ExtensionTarget | undefined {
   if (!isRec(x) || Object.keys(x).some((k) => k !== "kind" && k !== "value")) return undefined;
-  if (x.kind !== "write" && x.kind !== "command") return undefined;
+  if (x.kind !== "write" && x.kind !== "command" && x.kind !== "mcp") return undefined;
   if (!isBoundedText(x.value, LIMITS.extensionTarget) || x.value.trim() === "") return undefined;
   return Object.freeze({ kind: x.kind, value: x.value });
 }
@@ -2611,7 +2614,8 @@ export function foldEvents(
 
 /**
  * ノードの有効な範囲: ブリーフの範囲に、承認済みの拡張（`granted`）を判定の順に加えたもの。
- * 書き込み可能な場所（`write`）と許可するコマンド（`command`）だけが増え、禁止の場所は変わらない。
+ * 書き込み可能な場所（`write`）・許可するコマンド（`command`）・使ってよい MCP ツール（`mcp`）だけが増え、禁止の場所は変わらない。
+ * `allowedMcpTools` は、ブリーフか承認済みの拡張に 1 つでもあるときだけ持つ（なければ項目を作らない。既存の形のまま）。
  * ブリーフのないノード・存在しないノードは `undefined`。純粋関数（イベント列から導かれ、状態に二重に持たない）。
  */
 export function effectiveScope(state: OrchState, nodeId: string): Scope | undefined {
@@ -2619,18 +2623,20 @@ export function effectiveScope(state: OrchState, nodeId: string): Scope | undefi
   if (node?.scope === undefined) return undefined;
   const writable = [...node.scope.writableLocations];
   const commands = [...node.scope.allowedCommands];
+  const mcpTools = [...(node.scope.allowedMcpTools ?? [])];
   const granted = (state.extensions ?? [])
     .filter((x) => x.nodeId === nodeId && x.status === "approved" && x.granted !== undefined)
     .sort((a, b) => (a.decidedSeq ?? 0) - (b.decidedSeq ?? 0));
   for (const x of granted) {
     const g = x.granted as ExtensionTarget;
-    const list = g.kind === "write" ? writable : commands;
+    const list = g.kind === "write" ? writable : g.kind === "mcp" ? mcpTools : commands;
     if (!list.includes(g.value)) list.push(g.value);
   }
   return Object.freeze({
     writableLocations: Object.freeze(writable),
     forbiddenLocations: Object.freeze([...node.scope.forbiddenLocations]),
     allowedCommands: Object.freeze(commands),
+    ...(mcpTools.length === 0 ? {} : { allowedMcpTools: Object.freeze(mcpTools) }),
   });
 }
 

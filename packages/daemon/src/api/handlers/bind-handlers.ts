@@ -110,7 +110,7 @@ export function bindInstruction(
     "     （受け入れ基準ごとに 1 件。criterion には、受け取った受け入れ基準の文を、そのまま書く）",
     '   decision: {"question":"<人に決めてほしいこと>","options":["<案 1>","<案 2>"]}',
     '   decision-withdraw: {"decisionId":"<取り下げる判断の ID>"}（出した判断が要らなくなったとき。未回答の判断だけ。取り下げると、判断待ちから作業に戻る）',
-    '   scope-extend: {"target":{"kind":"write","value":"<書きたい場所>"},"reason":"<理由>"}（コマンドなら kind は "command"）',
+    '   scope-extend: {"target":{"kind":"write","value":"<書きたい場所>"},"reason":"<理由>"}（コマンドなら kind は "command"。MCP ツールなら kind は "mcp" で、value は mcp__<サーバー>__<道具>）',
     "   --dir と値・--url と値は、それぞれ別の語のまま書く。bind と同じ URL を使う。",
     "   bind と報告は、見張り（フック）が直前 30 秒以内に道具の呼び出しを見ていないと断られる（hooksNotActive）。その Bash の呼び出し自体が見張りを通るので、ふつうは気にしなくてよい。",
     "注意:",

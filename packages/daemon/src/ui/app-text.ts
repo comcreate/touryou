@@ -255,7 +255,12 @@ export const APP_TEXT = {
     en: "The target contains characters that cannot be shown, an absolute path, .., a value that is too long, or similar, so it cannot be approved or split off (only rejected). Ask the child to request again with a relative path or a simple command.",
   },
   "ext.kindCommand": { ja: "コマンド", en: "command" },
+  "ext.kindMcp": { ja: "MCP ツール", en: "MCP tool" },
   "ext.kindWrite": { ja: "書き込みの場所", en: "write location" },
+  "ext.mcpNote": {
+    ja: "MCP ツールは、引数を絞れません。承認すると、そのツールを、どんな引数でも使ってよいのと同じになります（ブラウザなど外部へ届くツールは、とくに確かめてください）。",
+    en: "The arguments of an MCP tool cannot be restricted. Approving lets the child use that tool with any arguments (check tools that reach outside, such as a browser, with extra care).",
+  },
   "ext.reject": { ja: "却下", en: "Reject" },
   "ext.split": { ja: "切り出し", en: "Split off" },
   "ext.splitNote": {
@@ -407,6 +412,7 @@ export const APP_TEXT = {
   "line.kind": { ja: "種類", en: "Kind" },
   "line.node": { ja: "ノード", en: "Node" },
   "line.none": { ja: "（なし）", en: "(none)" },
+  "line.note": { ja: "注意", en: "Note" },
   "line.reason": { ja: "理由", en: "Reason" },
   "line.record": { ja: "記録", en: "Record" },
   "line.target": { ja: "対象", en: "Target" },

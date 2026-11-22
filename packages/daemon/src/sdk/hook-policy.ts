@@ -12,6 +12,8 @@
  * - Bash は、コマンドとして判定する。`run_in_background` が `undefined`・`false` 以外、
  *   `dangerouslyDisableSandbox` が `true` なら拒否する（ADR 未決の既定）。
  * - 自ノードの MCP ツールは、子のロールの道具だけ（`mcp__node__<道具>`・`mcp__plugin_<plugin>_node__<道具>`）を許可する。権限の絞り込みは窓口のロール別の操作表（NFR_004）の責務。
+ * - ほかの MCP ツール（`mcp__<サーバー>__<道具>`）は、有効な範囲の `allowedMcpTools`（承認済みの拡張。`scope_extend` の `kind: mcp`）に
+ *   完全一致するときだけ許可する（#194 PR3）。拒否の文には、頼み方と、上限にある MCP の名前（最大 20 件）を出す。
  * - それ以外（別の MCP サーバー、サブエージェント、ウェブ、未知のツール）は拒否する（フェイルクローズ）。
  *   範囲の違反ではないため `violation` は持たず（`unknownTool`）、`scope.violation` として記録しない（受信箱に載せない）。
  * 例外を出さない: 入力の形が不正なら拒否する。
@@ -23,6 +25,8 @@ import {
   commandWords,
   entryWords,
   evaluateScope,
+  isMcpToolName,
+  isOwnMcpServerTool,
   isPathUnder,
   ownMcpToolOf,
   PLUGIN_NAME,
@@ -752,6 +756,32 @@ const denyUnknown = (tool: string): ToolDecision => ({
   reason: `ツール ${tool} は、このノードでは使えない。自分で原因を探したり、別の手を試したりしない。\n- touryou の道具（report_progress など）が使えるなら、この拒否の文を親に知らせて待つ。\n- 使えない（紐付けが外れている）なら、${CHILD_BIND_MCP_TOOL} を引数なしで 1 回だけ呼ぶ。つなぎ直せなければ、daemon が親の受信箱に「紐付けをやり直して」を出す。そのあとは、親が紐付けを出し直す（node_bindCode）まで待つ。`,
 });
 
+/** 拒否の文に出す、上限の MCP の名前の件数の上限。 */
+export const MCP_HINT_MAX = 20;
+
+/** MCP ツールの判定の補助（#194 PR3）。フックの判定は純粋関数のまま、daemon の方針を引数で受ける。 */
+export interface McpPolicy {
+  /** 上限（根の `permissions.allow`）にある MCP ツールの名前。拒否の文に最大 `MCP_HINT_MAX` 件を出す。名前だけ（パス・秘密は出さない）。 */
+  readonly upperLimit: readonly string[];
+  /** 方針の deny に当たるか。当たるツールは、承認済みでも許さない（deny が最優先）。省略すると、当たらない。 */
+  readonly denied?: (tool: string) => boolean;
+}
+
+/** MCP ツールの拒否の文。頼み方（`scope_extend` の `kind: mcp`）と、上限にある名前（最大 20 件）を出す。 */
+function denyMcp(tool: string, upperLimit: readonly string[]): ToolDecision {
+  const shown = upperLimit.filter(isMcpToolName).slice(0, MCP_HINT_MAX);
+  const more = upperLimit.length - shown.length;
+  const names =
+    shown.length === 0
+      ? "上限に、頼める MCP ツールは設定されていない（人が config.json の permissions.allow に足すまで、頼んでも承認されない）。"
+      : `上限にある MCP ツール: ${shown.join("、")}${more > 0 ? `（ほか ${more} 件）` : ""}。`;
+  return {
+    allow: false,
+    unknownTool: tool,
+    reason: `MCP ツール ${tool} は、このノードでは使えない。自分で原因を探したり、別の手を試したりしない。\n- 使う必要があるなら、scope_extend（target: { kind: "mcp", value: "${tool}" }、reason を添える）で親に頼む。承認は、そのツールを、どんな引数でも使ってよいのと同じ意味になる。承認されるまで待つ。\n- ${names}`,
+  };
+}
+
 /** scope の場所（writable・forbidden）を実パスにする。解決できない writable は落とし、forbidden は絶対パスのまま残す。 */
 export async function resolveScope(
   scope: Scope,
@@ -793,6 +823,7 @@ export async function decideToolUse(
   protectedPaths?: ProtectedPaths,
   toolCwd: string = cwd,
   role: "integrator" | "child" = "child",
+  mcp?: McpPolicy,
 ): Promise<ToolDecision> {
   if (typeof toolName !== "string") return denyUnknown("(ツール名が不正)");
   // 禁じる場所（FR_014 の例外）は、読み取りの道具も含めて、ほかの判定より先に見る。
@@ -881,6 +912,14 @@ export async function decideToolUse(
   ) {
     return ALLOW;
   }
+  // ほかの MCP ツール: 有効な範囲の allowedMcpTools（承認済みの拡張）に完全一致するときだけ許す。deny に当たるなら許さない。
+  // 自ノードのサーバーの道具（ロール違い）は、ここに来ても頼めないので、これまでの拒否の文のまま
+  if (isMcpToolName(toolName) && !isOwnMcpServerTool(toolName)) {
+    if (scope.allowedMcpTools?.includes(toolName) === true && mcp?.denied?.(toolName) !== true) {
+      return ALLOW;
+    }
+    return denyMcp(toolName, mcp?.upperLimit ?? []);
+  }
   return denyUnknown(toolName === "" ? "(ツール名が空)" : toolName);
 }
 
@@ -904,6 +943,12 @@ export function grantedOnlyByExtension(
   toolInput: unknown,
   cwd: string,
 ): boolean {
+  // MCP ツール: 起動のときの許可の一覧には、自ノードの touryou の道具しか入らない。有効な範囲の allowedMcpTools にあるものは、
+  // 明示の許可を返さないと、CLI の子（dontAsk）では Claude Code の側で断られる（#194 PR3。実機で確認済み）。
+  // settings の deny に同じ名前があれば、明示の許可のあとも deny が勝つ（道具が一覧から消える）
+  if (isMcpToolName(toolName) && !isOwnMcpServerTool(toolName)) {
+    return effective.allowedMcpTools?.includes(toolName) === true;
+  }
   const key = WRITE_TOOLS[toolName];
   if (key !== undefined) {
     // 書き込み: ブリーフでは断られ、有効な範囲（承認した書き込みの場所を足したもの）では通る場所。比べられなければ偽（フェイルクローズ）

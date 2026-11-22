@@ -205,8 +205,10 @@ const SCHEMAS: Readonly<Record<McpOperation, z.ZodType>> = {
   "scope.extend": z.strictObject({
     target: z.strictObject({
       kind: z
-        .enum(["write", "command"])
-        .describe('"write"（書ける範囲）か "command"（使えるコマンド）'),
+        .enum(["write", "command", "mcp"])
+        .describe(
+          '"write"（書ける範囲）・"command"（使えるコマンド）・"mcp"（使ってよい MCP ツール。値は mcp__<サーバー>__<道具> の完全な名前。サーバー全体と touryou 自身の道具は頼めない。承認は「どんな引数でも使ってよい」と同じ）',
+        ),
       value: nonBlank(LIMITS.extensionTarget),
     }),
     reason: nonBlank(LIMITS.extensionReason),

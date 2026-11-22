@@ -74,7 +74,8 @@ export interface DaemonConfig {
   /**
    * 権限の規則（Claude Code の `permissions` の書き方の部分集合。`docs/config.md`）。`allow` は子に付与できる範囲の上限に足す規則、
    * `deny` は常に拒否する規則、`ask` は承認を人間だけに限る規則。省略した一覧は空。解析できない規則は、起動を拒否する（#194 PR2）。
-   * いまは検査と正規化（`rootPolicyOf`）だけで、判定には接続していない。
+   * 判定への接続は、MCP ツールだけ（#194 PR3）: `allow` の MCP ツールは、子の依頼（`scope_extend` の `kind: mcp`）の上限になり、
+   * `deny` に当たる MCP ツールは、承認もフックの許可もされない。コマンド・書き込みの規則は、検査と正規化（`rootPolicyOf`）だけ。
    */
   readonly permissions?: PermissionsConfig;
   /**
