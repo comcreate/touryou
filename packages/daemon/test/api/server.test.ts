@@ -634,9 +634,15 @@ describe("bind 専用の入口（POST /v1/bind。Bearer なしで、nodeId と b
     expect((await r.call({ nodeId: "a", bindCode: code })).status).toBe(200);
   });
 
-  it("ロール・状態が合わないノードのコードは使えない（統合ノード・木にないノード）", async () => {
+  it("統合ノード（サブ統括）のコードは、統合ロールのトークンを返す。木にないノードのコードは使えない", async () => {
     const r = await rigBind();
-    expect((await r.call({ nodeId: "m1", bindCode: r.bind.issue("m1") })).status).toBe(401);
+    const m1 = await r.call({ nodeId: "m1", bindCode: r.bind.issue("m1") });
+    expect(m1.status).toBe(200);
+    expect(m1.json.value.nodeId).toBe("m1");
+    expect(r.credentials.authenticate(m1.json.value.token)).toEqual({
+      role: "integrator",
+      nodeId: "m1",
+    });
     expect((await r.call({ nodeId: "ghost", bindCode: r.bind.issue("ghost") })).status).toBe(401);
   });
 

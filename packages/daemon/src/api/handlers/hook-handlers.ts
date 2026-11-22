@@ -113,11 +113,12 @@ export function createHookHandlers(deps: HookHandlerDeps) {
       const state = log.state();
       const node = state.nodes.find((n) => n.id === nodeId);
       if (node === undefined) return fail("notFound", "ノードが見つからない", "ID を確認する");
-      if (node.role === "integrator") {
+      // 根（親がない統合ノード）は、範囲と作業ツリーを設定（rootScope・rootCwd）で持つので対象外。サブ統括は、子と同じに発行できる。
+      if (node.role === "integrator" && node.parentId === null) {
         return fail(
           "integratorNotSupported",
-          `ノード ${nodeId} は統合ノードで、フック専用のトークンは発行できない（子だけ）`,
-          "作業の子のノード ID を指定する",
+          `ノード ${nodeId} は根の統合ノードで、フック専用のトークンは発行できない（子とサブ統括だけ）`,
+          "作業の子かサブ統括のノード ID を指定する",
         );
       }
       const s = stateOf(state, nodeId);

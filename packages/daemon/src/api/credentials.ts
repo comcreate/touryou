@@ -462,14 +462,15 @@ export function createCredentialStore(options: {
       if (store.hasBindToken?.(nodeId) !== true) return undefined;
       const prev = meta.get(nodeId);
       if (prev === undefined) return undefined;
-      const token = store.issueNodeToken(nodeId, "child", "bind");
+      // ロールは、いまのトークンのものを引き継ぐ（ノードのロールに従う。呼び出し側からは受けない）。
+      const token = store.issueNodeToken(nodeId, prev.role, "bind");
       const m = meta.get(nodeId);
       if (m !== undefined) {
         m.issuedMs = prev.issuedMs;
         m.issuedAt = prev.issuedAt;
         repository?.put({
           tokenHash: byNode.get(nodeId) as string,
-          role: "child",
+          role: prev.role,
           nodeId,
           issuedAt: prev.issuedAt,
           lastUsedAt: m.issuedAt,

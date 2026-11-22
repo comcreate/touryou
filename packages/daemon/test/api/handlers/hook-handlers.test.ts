@@ -181,11 +181,19 @@ describe("node.hookToken（手動の CLI セッション用の、フック専用
     expect(JSON.stringify(rows)).not.toContain(res.value.token);
   });
 
-  it("統合ノードのトークン・統合ノード・依存待ち・desktop・管理していないノードは、発行しない", () => {
+  it("サブ統括（親のいる統合ノード）には、子と同じに発行できる", () => {
+    const r = setup();
+    const res = r.call("m1");
+    if (!res.ok) throw new Error(res.error.code);
+    expect(res.value.nodeId).toBe("m1");
+    expect(r.tokens.authenticate(res.value.token)).toBe("m1");
+  });
+
+  it("統合ノードのトークン・根の統合ノード・依存待ち・desktop・管理していないノードは、発行しない", () => {
     const r = setup();
     const code = (x: ReturnType<typeof r.call>) => (x.ok ? null : x.error.code);
     expect(code(r.call("a", "integrator"))).toBe("forbidden");
-    expect(code(r.call("m1"))).toBe("integratorNotSupported");
+    expect(code(r.call("root"))).toBe("integratorNotSupported");
     expect(code(r.call("p"))).toBe("notActive");
     expect(code(r.call("zzz"))).toBe("notFound");
     expect(code(setup({ cli: false }).call("a"))).toBe("notCli");

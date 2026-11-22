@@ -123,7 +123,7 @@ Desktop の子は、親・子とも auto の権限モードを前提にする。
    - `tokenExpired`（終了コード 3）が出たら、子は報告をやめて、会話で人（親）に頼む。親か人が `node_bindCode` で文面を出し直し、子に渡す。子が 1 からやり直す（古い `token` は rename で置き換わる）。
    - コマンドの詳しい振る舞いは [`docs/cli.md`](cli.md) の「Desktop の子が使う `touryou child`」。
    - Desktop の子の範囲のコマンドの許可には、daemon が `<touryouCommand> child bind`・`<touryouCommand> child report` の 2 つ（前方一致）だけを足す（アダプタが持つ範囲だけ。記録の範囲と、人が書いたほかの決まりは変えない）。今は Desktop の子にフックが効かないので、効くようになってから意味を持つ（(a)）。
-   - Desktop の中間の統合ノード（role が integrator）は、紐付けできない（`node.bindCode` は `integratorNotSupported`。紐付けで渡すのは子のトークンだけ。**仮置き**）。
+   - Desktop の中間の統合ノード（role が integrator）は、紐付けできない（`node.bindCode` は `integratorNotSupported`。**仮置き**）。CLI の木では、サブ統括（親のいる統合ノード）が、ノードのロールに従った統合トークンで紐付けられる（#168。bind コードは直接の親の統合ノードか人間が発行する）。
    - 紐付けの報告は、シェルの変数に頼らず、紐付けのコードを子のコマンドの文字列に出さない形にした（確かめは [`docs/manual-verification-checklist.md`](manual-verification-checklist.md) の D1）。
 
 ### 見張り（FR_014 のフック）を Desktop の子に効かせる（(a)）

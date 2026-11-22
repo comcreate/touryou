@@ -10,6 +10,7 @@
 
 import {
   type Failure,
+  isDirectChild,
   isStrictDescendant,
   type OperationMap,
   type Result,
@@ -189,13 +190,32 @@ export function createBindHandlers(deps: BindHandlerDeps) {
       }
       const s = stateOf(state, nodeId);
       if (s === undefined) return fail("notFound", "ノードが見つからない", "ID を確認する");
-      // 紐付けで渡すトークンは子のロールだけ（`POST /v1/bind`）。Desktop の中間の統合ノードは、まだ紐付けできない（仮置き）。
-      if (state.nodes.find((x) => x.id === nodeId)?.role === "integrator") {
-        return fail(
-          "integratorNotSupported",
-          `ノード ${nodeId} は統合ノードで、紐付けできない（紐付けで渡すのは子のトークンだけ。仮置き）`,
-          "中間の統合ノードを使わず、統合ノードの直下に作業の子を作る",
-        );
+      // 紐付けで渡すトークンは、ノードのロールに従う（`POST /v1/bind`）。サブ統括（統合ノードの子の統合ノード）は、CLI の木だけ。
+      const target = state.nodes.find((x) => x.id === nodeId);
+      if (target?.role === "integrator") {
+        // 根（親がない統合ノード）の資格は、人が用意する常駐のもの。コードで根のトークンを作る経路は作らない。
+        if (target.parentId === null) {
+          return fail(
+            "forbidden",
+            `ノード ${nodeId} は根の統合ノードで、bind コードでは紐付けない（人が用意した常駐のトークンを使う）`,
+            "根は /touryou:start で用意する",
+          );
+        }
+        // サブ統括の bind コードは、直接の親の統合ノードだけが発行する（人間は除く。設計 #168 判断 1）。
+        if (!human && !isDirectChild(state.nodes, caller, nodeId)) {
+          return fail(
+            "forbidden",
+            "サブ統括の bind コードは、直接の親の統合ノードだけが発行できる",
+            "直接の親（統合ノード）か人間に依頼する",
+          );
+        }
+        if (deps.cli !== true) {
+          return fail(
+            "integratorNotSupported",
+            `ノード ${nodeId} は統合ノードで、Desktop の木では紐付けできない（サブ統括は CLI の木だけ。仮置き）`,
+            "Desktop では中間の統合ノードを使わず、統合ノードの直下に作業の子を作る",
+          );
+        }
       }
       if (deps.desktop === undefined && deps.cli === true) {
         if (!LIVE.has(s)) {

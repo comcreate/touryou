@@ -1900,10 +1900,14 @@ export function createApiServer(deps: ApiDeps): ApiServer {
         // 記録の失敗で、応答を変えない
       }
     };
+    // 紐付けで渡すトークンのロールは、ノードの role で決める（呼び出し側の申告は受けない。設計 #168 §3）。
+    // 木にないノードは、従来どおり子として扱い、checkPrincipal が拒否する。
+    const bindRoleOf = (id: string): "integrator" | "child" =>
+      deps.getState().nodes.find((n) => n.id === id)?.role === "integrator" ? "integrator" : "child";
     if (b?.bindCode === undefined) {
       const ok =
         deps.rebindOk?.(nodeId, b?.sessionId as string) === true &&
-        checkPrincipal({ role: "child", nodeId }, deps.getState()).ok;
+        checkPrincipal({ role: bindRoleOf(nodeId), nodeId }, deps.getState()).ok;
       if (!ok) {
         rebindLost();
         return denied(
@@ -1936,12 +1940,12 @@ export function createApiServer(deps: ApiDeps): ApiServer {
       }
       return send(res, 200, { ok: true, value: { nodeId, token: rebound } });
     }
-    // 結び付いたノードが、子ロールで、トークンを持てる状態か（統合ノード・木にない・停止後などは不可）を先に確かめ、
+    // 結び付いたノードが、自分のロールのトークンを持てる状態か（木にない・停止後などは不可）を先に確かめ、
     // 許されたときだけコードを消費する。
     const redeemed = bind.redeem(
       nodeId,
       b?.bindCode,
-      (id) => checkPrincipal({ role: "child", nodeId: id }, deps.getState()).ok,
+      (id) => checkPrincipal({ role: bindRoleOf(id), nodeId: id }, deps.getState()).ok,
     );
     if (!redeemed.ok) {
       // コードが無効（未知・期限切れ・使用済み）なら、親に出し直しを頼む知らせを出す。ノードの状態が許さないときは出さない
@@ -1975,7 +1979,11 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     }
     let token: string;
     try {
-      token = deps.credentials.issueNodeToken(redeemed.nodeId, "child", "bind");
+      token = deps.credentials.issueNodeToken(
+        redeemed.nodeId,
+        bindRoleOf(redeemed.nodeId),
+        "bind",
+      );
     } catch (error) {
       return internalError(res, "bind", "bind", error);
     }

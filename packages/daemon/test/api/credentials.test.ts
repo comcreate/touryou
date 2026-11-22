@@ -39,6 +39,19 @@ describe("認証情報（人間と、ノード専用のトークンを分ける�
     expect(s.authenticate(c)).toEqual({ role: "child", nodeId: "a" });
   });
 
+  it("再紐付け（rebindNodeToken）は、いまのトークンのロールを引き継ぐ。サブ統括は統合のまま、子は子のまま", () => {
+    const s = store();
+    s.issueNodeToken("m1", "integrator", "bind");
+    s.issueNodeToken("a", "child", "bind");
+    const m = s.rebindNodeToken?.("m1");
+    const c = s.rebindNodeToken?.("a");
+    expect(s.authenticate(m as string)).toEqual({ role: "integrator", nodeId: "m1" });
+    expect(s.authenticate(c as string)).toEqual({ role: "child", nodeId: "a" });
+    // 常駐（sdk）のトークンは、紐付けのトークンではないので、再紐付けの対象外
+    s.issueNodeToken("root", "integrator");
+    expect(s.rebindNodeToken?.("root")).toBeUndefined();
+  });
+
   it("未知・空・文字列でないトークンは認証できない（フェイルクローズ）", () => {
     const s = store();
     for (const bad of ["", "x", "unknown-token-unknown-token-unknown", undefined, null, 5, {}]) {
