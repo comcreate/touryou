@@ -202,6 +202,11 @@ export interface UiPolicyView {
   }[];
   /** MCP ツールの未判定の依頼（拡張要求 ID）ごとの、方針の判定。deny に当たる・ask に当たるものだけ載る。 */
   readonly mcpGate: Readonly<Record<string, "deny" | "ask">>;
+  /**
+   * 上限に足せる未判定の依頼（拡張要求 ID）ごとの、足される規則の本文（`permissions.allow` の書き方）。載らない依頼
+   * （規則に表せない・長すぎる・方針の検査を通らない）には、画面は「上限にも足して承認」を出さない。人間の画面だけに出す。
+   */
+  readonly limitRules: Readonly<Record<string, string>>;
 }
 
 export interface ApiDeps {

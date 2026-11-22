@@ -73,12 +73,12 @@ export const INBOX_MESSAGES = {
   },
   // ── 方針の変更（#194 PR4）
   policyRuleAdded: {
-    ja: "方針の規則を足した（{list}）: {rule}",
-    en: "Added a policy rule ({list}): {rule}",
+    ja: "方針の規則を足した（{list}・{kind}の規則。本文は状態画面で確かめる）",
+    en: "Added a policy rule ({list}, {kind} rule; see the status screen for its text)",
   },
   policyRuleRemoved: {
-    ja: "方針の規則を外した（{list}）: {rule}",
-    en: "Removed a policy rule ({list}): {rule}",
+    ja: "方針の規則を外した（{list}・{kind}の規則。本文は状態画面で確かめる）",
+    en: "Removed a policy rule ({list}, {kind} rule; see the status screen for its text)",
   },
   configReloaded: {
     ja: "設定を読み込み直した（反映した項目: {changed}）",

@@ -262,7 +262,7 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .still *,.still *::before{animation:none!important;transition:none!important}
 .still .comet{display:none}
 @media (prefers-reduced-motion: reduce){*,*::before{animation:none!important;transition:none!important}.comet{display:none}}
-@media (max-width:640px){.now .count{font-size:44px}.now h2{font-size:18px}.top .tools{margin-left:0}button.sm,button.copy,button.gear{min-height:44px}.zoom{top:4px}.zoom button{min-width:44px;min-height:44px}.seg button{min-width:44px}}
+@media (max-width:640px){.now .count{font-size:44px}.now h2{font-size:18px}.top .tools{margin-left:0}button.sm,button.copy,button.gear,.settings .policy-add select,.settings .policy-add input{min-height:44px}.zoom{top:4px}.zoom button{min-width:44px;min-height:44px}.seg button{min-width:44px}}
 `;
 
 // 根に出る、Desktop の子を人が確かめる依頼（daemon の再起動のあとの整合。external-check.ts）の文面の先頭。画面は、これを「停止の代行依頼」と同じ扱いにする
@@ -403,7 +403,8 @@ export const UI_JS = `'use strict';
     document.title = t('page.title');
     document.querySelectorAll('[data-t]').forEach(function (e) { e.textContent = t(e.dataset.t); });
     document.querySelectorAll('[data-t-aria]').forEach(function (e) { e.ariaLabel = t(e.dataset.tAria); });
-    document.querySelectorAll('[data-t-title]').forEach(function (e) { e.title = t(e.dataset.tTitle); });  }
+    document.querySelectorAll('[data-t-title]').forEach(function (e) { e.title = t(e.dataset.tTitle); });
+  }
   applyLang();
 
   var TAGS = { div: true, span: true, p: true, button: true, textarea: true, details: true, summary: true, code: true, h3: true };
@@ -814,9 +815,11 @@ export const UI_JS = `'use strict';
   var DECISION_NOTES = { split: 'ext.splitNote' };
   var KIND_LABELS = { write: 'ext.kindWrite', command: 'ext.kindCommand', mcp: 'ext.kindMcp' };
   // gates: 拡張要求の ID → 'deny' | 'ask'（daemon が方針から判定した、MCP ツールの依頼だけ）。deny は承認できない。ask は人間だけが承認できる（この画面は人間）
-  function renderExtensions(list, box, byId, gates) {
+  // limitRules: 拡張要求の ID → 上限に足される規則の本文（daemon が、足せる依頼にだけ載せる。載らなければ「上限にも足して承認」を出さない）
+  function renderExtensions(list, box, byId, gates, limitRules) {
     list.forEach(function (x) {
       var gate = gates && Object.hasOwn(gates, x.id) ? gates[x.id] : '';
+      var limitRule = limitRules && Object.hasOwn(limitRules, x.id) ? limitRules[x.id] : '';
       var denied = gate === 'deny';
       var card = taskCard('task', 'x-' + x.id, t('ext.title'), 'turn', byId.get(x.nodeId), x.nodeId);
       card.appendChild(el('div', 'ask', x.kind ? t('ext.ask', { kind: name(KIND_LABELS, x.kind), reason: x.reason }) : x.reason));
@@ -831,13 +834,18 @@ export const UI_JS = `'use strict';
       [['approve', false], ['approve', true], ['reject', false], ['split', false]].forEach(function (pair) {
         var decision = pair[0];
         var also = pair[1];
+        if (also && limitRule === '') return;
         var label = also ? t('ext.approveAlso') : t(DECISION_LABELS[decision]);
         var b = el('button', '', label);
         b.disabled = (x.targetHidden && decision !== 'reject') || (denied && decision === 'approve');
         b.addEventListener('click', function () {
           var lines = [[t('line.node'), x.nodeId], [t('line.kind'), x.kind ? name(KIND_LABELS, x.kind) : t('line.unknown')], [t('line.target'), x.targetHidden ? t('ext.hidden') : x.target], [t('line.reason'), x.reason], [t('line.verdict'), Object.hasOwn(DECISION_NOTES, decision) ? t('ext.verdictNote', { decision: label, note: t(DECISION_NOTES[decision]) }) : label]];
           if (x.kind === 'mcp' && decision === 'approve') lines.push([t('line.note'), t('ext.mcpNote')]);
-          if (also) lines.push([t('line.note'), t('ext.alsoNote')]);
+          if (also) {
+            lines.push([t('line.limitRule'), limitRule]);
+            lines.push([t('line.note'), t('ext.alsoNote')]);
+            if (x.kind === 'command') lines.push([t('line.note'), t('ext.alsoNoteCommand')]);
+          }
           var params = { extensionId: x.id, decision: decision };
           if (also) params.alsoLimit = true;
           openConfirm(t('ext.confirmTitle', { decision: label }), lines, 'scope.decide', params, t('ext.done', { decision: label }));
@@ -934,7 +942,7 @@ export const UI_JS = `'use strict';
     var open = view.decisions.filter(function (d) { return !d.closedReason; });
     var closed = view.decisions.filter(function (d) { return d.closedReason; });
     renderDecisions(open, box, byId);
-    renderExtensions(view.extensions, box, byId, view.policy ? view.policy.mcpGate : null);
+    renderExtensions(view.extensions, box, byId, view.policy ? view.policy.mcpGate : null, view.policy ? view.policy.limitRules : null);
     var delegated = delegatedOf(view.nodes);
     var n = open.length + view.extensions.length;
     view.inbox.forEach(function (i) {
@@ -2002,13 +2010,14 @@ export const UI_JS = `'use strict';
     POLICY_LISTS.forEach(function (list) {
       var rules = policy.rules.filter(function (r) { return r.list === list; });
       var group = el('div', 'policy-group');
-      var head = el('h3', '', t(POLICY_LIST_LABELS[list]));
-      head.id = 'policy-h-' + list;
-      group.appendChild(head);
+      group.appendChild(el('h3', '', t(POLICY_LIST_LABELS[list])));
       if (rules.length === 0) group.appendChild(el('p', 'note', t('policy.none')));
       var ul = el('div', 'policy-list');
+      ul.role = 'list';
+      ul.ariaLabel = t(POLICY_LIST_LABELS[list]);
       rules.forEach(function (r) {
         var li = el('div', 'policy-item');
+        li.role = 'listitem';
         li.appendChild(el('code', '', r.rule));
         li.appendChild(el('span', 'chip ' + (r.source === 'runtime' ? 'turn' : 'request'), t(r.source === 'runtime' ? 'policy.runtime' : 'policy.config')));
         if (r.source === 'runtime') {
@@ -2371,7 +2380,7 @@ export const UI_JS = `'use strict';
   });
   document.getElementById('policy-reload').addEventListener('click', startConfigReload);
   document.getElementById('policy-add').addEventListener('click', startPolicyAdd);
-  document.getElementById('policy-rule').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); startPolicyAdd(); } });
+  document.getElementById('policy-rule').addEventListener('keydown', function (e) { if (e.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); startPolicyAdd(); } });
   stillBox.addEventListener('change', function () {
     settings.still = stillBox.checked;
     applySettings(settings);

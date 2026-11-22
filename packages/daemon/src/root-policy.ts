@@ -14,6 +14,7 @@
 
 import {
   evaluate,
+  LIMITS,
   type ParsedRule,
   type PermissionOp,
   parseRule,
@@ -291,6 +292,19 @@ export function ruleOfExtension(target: {
     case "mcp":
       return parseRule(target.value).ok ? target.value : undefined;
   }
+}
+
+/**
+ * 拡張の対象を、実際に上限へ足せるとき（規則に直せて、長さと足したあとの方針の検査を通る）だけ、その規則を返す。
+ * 状態画面が「上限にも足して承認」を出すかの判断に使う（`scope.decide` の検査と同じ条件）。
+ */
+export function addableLimitRule(
+  target: { readonly kind: "write" | "command" | "mcp"; readonly value: string },
+  problemOf: (rule: string) => string | undefined,
+): string | undefined {
+  const rule = ruleOfExtension(target);
+  if (rule === undefined || rule.length > LIMITS.policyRule) return undefined;
+  return problemOf(rule) === undefined ? rule : undefined;
 }
 
 /**

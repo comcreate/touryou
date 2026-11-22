@@ -28,7 +28,7 @@ import {
   fail,
   type LogPort,
   notice,
-  ruleExcerpt,
+  ruleKindOf,
   withoutPaths,
 } from "./context.js";
 
@@ -102,7 +102,7 @@ export function createPolicyHandlers(deps: PolicyHandlerDeps) {
           "rule",
           notice(op === "add" ? "policyRuleAdded" : "policyRuleRemoved", {
             list,
-            rule: ruleExcerpt(rule),
+            kind: ruleKindOf(rule),
           }),
         ),
       ]);

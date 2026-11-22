@@ -66,12 +66,18 @@ export const notice = (
   return { summary: summarize(m.summary), msg: m.msg };
 };
 
-/** 受信箱に出す規則の本文の長さ（秘密が残りうるので、先頭だけ出す）。 */
-const RULE_EXCERPT = 40;
-
-/** 受信箱の知らせに出す規則（長いものは先頭だけ。全文は記録の側にある）。 */
-export const ruleExcerpt = (rule: string): string =>
-  [...rule].length <= RULE_EXCERPT ? rule : `${[...rule].slice(0, RULE_EXCERPT).join("")}…`;
+/**
+ * 受信箱の知らせに出す規則の種類（Bash・Edit・mcp・other）。規則の本文は、秘密（例: 認証の見出しつきのコマンド）を含みうるので、
+ * 受信箱・応答・ログには出さず、人間の状態画面の規則の一覧にだけ出す。
+ */
+export const ruleKindOf = (rule: string): "Bash" | "Edit" | "mcp" | "other" =>
+  rule.startsWith("Bash(")
+    ? "Bash"
+    : rule.startsWith("Edit(")
+      ? "Edit"
+      : rule.startsWith("mcp__")
+        ? "mcp"
+        : "other";
 
 /** 設定ファイルなどの絶対パスを、失敗の文から外す（理由の種類だけを残す）。 */
 export const withoutPaths = (text: string): string =>

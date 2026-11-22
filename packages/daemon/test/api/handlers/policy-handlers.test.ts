@@ -176,12 +176,12 @@ describe("policy.ruleChange（実行中の規則の追加・取り消し）", ()
     expect((await r.rule("deny", "Bash(git push:*)", "remove")).value).toEqual({ changed: false });
   });
 
-  it("should 3: 受信箱には、長い規則の先頭だけを出す", async () => {
+  it("should 3: 受信箱には、長い規則の本文を出さない（抜粋も出さない）", async () => {
     const r = rig();
     const rule = `Bash(${"a".repeat(100)}:*)`;
     expect((await r.rule("deny", rule)).ok).toBe(true);
     const item = r.s().inbox.at(-1);
-    expect(item?.summary).toContain("…");
+    expect(item?.summary).not.toContain("aaaa");
     expect(item?.summary).not.toContain(rule);
     expect(JSON.stringify(item?.msg)).not.toContain(rule);
     // 記録（規則そのもの）は、全文のまま
@@ -284,6 +284,32 @@ describe("config.reload（設定の読み直し）", () => {
     expect(res.value.overLimit).toEqual(["c"]);
     expect(r.updated).toEqual([]);
     expect(r.s().nodes.find((x) => x.id === "c")).toBeDefined();
+  });
+});
+
+describe("should 1: 受信箱に規則の本文を出さない（種類と足した・外したの別だけ）", () => {
+  const SECRET = "sk-secret-token-123";
+  const noticeOf = (r: ReturnType<typeof rig>): string =>
+    JSON.stringify(r.s().inbox.filter((i) => i.kind === "info"));
+
+  it("policy.ruleChange: 足す・外すの知らせに、秘密を含む規則の本文が出ない（種類だけ出る）", async () => {
+    const r = rig();
+    const rule = `Bash(curl -H ${SECRET}:*)`;
+    expect((await r.rule("deny", rule)).value).toEqual({ changed: true });
+    expect(noticeOf(r)).not.toContain(SECRET);
+    expect(noticeOf(r)).toContain("Bash");
+    expect((await r.rule("deny", rule, "remove")).value).toEqual({ changed: true });
+    expect(noticeOf(r)).not.toContain(SECRET);
+    expect(noticeOf(r)).toContain("方針の規則を外した");
+  });
+
+  it("scope.decide の alsoLimit: 上限に足した知らせにも、依頼のコマンドの本文が出ない", async () => {
+    const r = rig();
+    const id = (await r.extend(`curl -H ${SECRET}`)).value.extensionId as string;
+    const res = await r.decide({ extensionId: id, decision: "approve", alsoLimit: true });
+    expect(res.ok).toBe(true);
+    expect(noticeOf(r)).not.toContain(SECRET);
+    expect(noticeOf(r)).toContain("方針の規則を足した");
   });
 });
 

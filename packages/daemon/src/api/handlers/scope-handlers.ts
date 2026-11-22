@@ -45,7 +45,7 @@ import {
   type LogPort,
   live,
   notice,
-  ruleExcerpt,
+  ruleKindOf,
 } from "./context.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;
@@ -376,7 +376,7 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
                   id: deriveId("inbox", "human", req.requestId, "rule"),
                   kind: "info",
                   nodeId: state.nodes.find((n) => n.parentId === null)?.id ?? ext.nodeId,
-                  ...notice("policyRuleAdded", { list: "allow", rule: ruleExcerpt(limitRule) }),
+                  ...notice("policyRuleAdded", { list: "allow", kind: ruleKindOf(limitRule) }),
                 },
               },
             ];

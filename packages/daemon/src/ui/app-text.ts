@@ -242,8 +242,12 @@ export const APP_TEXT = {
     en: "Could not send (cannot connect to the daemon).",
   },
   "ext.alsoNote": {
-    ja: "子への付与と同時に、根の上限（permissions.allow）にも、この対象を足します。ほかの子の依頼も、この対象なら上限の内側になります。実行中だけの規則で、daemon を起動し直すと、設定ファイルの上限に戻ります（残すなら、設定ファイルにも書きます）。",
-    en: "Besides granting it to the child, this also adds the target to the root limit (permissions.allow), so requests for the same target from other children fall inside the limit. It is a runtime rule only: restarting the daemon returns to the limit in the config file (write it there too to keep it).",
+    ja: "子への付与と同時に、根の上限（permissions.allow）に、下の規則を足します。実行中だけの規則で、daemon を起動し直すと、設定ファイルの上限に戻ります（残すなら、設定ファイルにも書きます）。",
+    en: "Besides granting it to the child, this adds the rule below to the root limit (permissions.allow). It is a runtime rule only: restarting the daemon returns to the limit in the config file (write it there too to keep it).",
+  },
+  "ext.alsoNoteCommand": {
+    ja: "足す規則は前方一致です。同じ書き出しで始まるコマンドは、引数が違っても、すべて上限の内側になります（ほかの子の依頼も含みます）。",
+    en: "The rule is a prefix match: every command that starts the same way, whatever its arguments, falls inside the limit (including requests from other children).",
   },
   "ext.approve": { ja: "承認", en: "Approve" },
   "ext.approveAlso": { ja: "上限にも足して承認", en: "Approve and add to the limit" },
@@ -423,6 +427,7 @@ export const APP_TEXT = {
   "line.content": { ja: "内容", en: "What it does" },
   "line.decision": { ja: "判断", en: "Decision" },
   "line.kind": { ja: "種類", en: "Kind" },
+  "line.limitRule": { ja: "上限に足す規則", en: "Rule added to the limit" },
   "line.node": { ja: "ノード", en: "Node" },
   "line.policyList": { ja: "規則の種類", en: "Rule list" },
   "line.policyRule": { ja: "規則", en: "Rule" },

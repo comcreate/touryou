@@ -434,6 +434,9 @@ describe("画面の資産（走査）", () => {
       "desktopChildrenAllowed",
       // 設定の窓の規則（#194 PR4）。表示モデルの policy（規則の一覧・MCP ツールの判定）と、config.reload の結果、alsoLimit の送信
       "alsoLimit",
+      "limitRules",
+      "isComposing",
+      "role",
       "policy",
       "mcpGate",
       "rules",
@@ -466,6 +469,11 @@ describe("画面の資産（走査）", () => {
       "[['approve', false], ['approve', true], ['reject', false], ['split', false]]",
     );
     expect(UI_JS).toContain("if (also) params.alsoLimit = true;");
+    // should 3: 上限に足せない依頼（daemon の limitRules に載らない）には、「上限にも足して承認」を出さない。確認には、足される規則の本文を出す
+    expect(UI_JS).toContain("if (also && limitRule === '') return;");
+    expect(UI_JS).toContain("lines.push([t('line.limitRule'), limitRule]);");
+    // should 2: command の依頼には、前方一致（引数は問わない）の注意を足す
+    expect(UI_JS).toContain("if (x.kind === 'command') lines.push([t('line.note'), t('ext.alsoNoteCommand')]);");
     expect(UI_JS).toContain("var denied = gate === 'deny';");
     expect(UI_JS).toContain("if (denied) card.appendChild(el('p', 'error', t('ext.denyNote')));");
     expect(UI_JS).toContain(
@@ -1905,7 +1913,9 @@ describe("状態変化の読み上げ・スマホの幅（UI レビューの対�
   it("スマホの幅: 小さいボタンは 44px。図のボタンは top 4px で、下端が FIT_TOP に収まる", () => {
     const mobile = /@media \(max-width:640px\)\{([^\n]*)\}\n?$/m.exec(UI_CSS)?.[1] ?? "";
     expect(mobile, "スマホ幅の @media が取れない").not.toBe("");
-    expect(mobile).toContain("button.sm,button.copy,button.gear{min-height:44px}");
+    expect(mobile).toContain(
+      "button.sm,button.copy,button.gear,.settings .policy-add select,.settings .policy-add input{min-height:44px}",
+    );
     expect(mobile).toContain(".zoom button{min-width:44px;min-height:44px}");
     const top = Number(/\.zoom\{top:(\d+)px\}/.exec(mobile)?.[1]);
     const src = readFileSync(new URL("../../src/ui/graph-entry.ts", import.meta.url), "utf8");

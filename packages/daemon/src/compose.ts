@@ -133,6 +133,7 @@ import {
   writeSavedPort,
 } from "./port-file.js";
 import { reconcileOnStartup } from "./reconcile.js";
+import { addableLimitRule } from "./root-policy.js";
 import { latestLaunch, ParentRequestCliAdapter } from "./sdk/cli-adapter.js";
 import { DesktopRuntimeAdapter, touryouChildCommands } from "./sdk/desktop-adapter.js";
 import {
@@ -1671,6 +1672,9 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
   // 実行中の方針（#194 PR4）: 設定の方針（`config.reload` で入れ替える）と、実行中に足した規則（`policy.ruleChanged`）を畳んだもの。
   // 判定のたびに `policyHolder.current()` を読む（変わらない間は同じオブジェクトを返す）。
   const policyHolder = createPolicyHolder(policyBaseOf(config), () => log.state().policyRules);
+  // 上限に足す規則を、足したあとの方針の検査にかける（`scope.decide` の検査と、状態画面の「足せるか」の判断で共通）
+  const limitRuleProblem = (rule: string): string | undefined =>
+    policyProblemWith(policyHolder.base(), [...log.state().policyRules, { list: "allow", rule }]);
   let runningConfig: DaemonConfig = config;
   const mcpDenied = (tool: string): boolean =>
     evaluate(
@@ -1956,11 +1960,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       rootScope,
       denyRules,
       askRules,
-      limitRuleProblem: (rule: string) =>
-        policyProblemWith(policyHolder.base(), [
-          ...log.state().policyRules,
-          { list: "allow", rule },
-        ]),
+      limitRuleProblem,
       ...(config.maxTreeDepth === undefined ? {} : { maxTreeDepth: config.maxTreeDepth }),
       onFailure,
       ...(config.startLimits === undefined ? {} : { startLimits: config.startLimits }),
@@ -2183,8 +2183,13 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       ) => rules.map((rule) => ({ list, rule, source: "config" as const }));
       const live = policyHolder.current().policy;
       const mcpGate: Record<string, "deny" | "ask"> = {};
+      // 上限に足せる未判定の依頼（拡張要求 ID → 足される規則の本文。人間の画面だけに出す）
+      const limitRules: Record<string, string> = {};
       for (const x of state.extensions) {
-        if (x.status !== "open" || x.target.kind !== "mcp") continue;
+        if (x.status !== "open") continue;
+        const limitRule = addableLimitRule(x.target, limitRuleProblem);
+        if (limitRule !== undefined) limitRules[x.extensionId] = limitRule;
+        if (x.target.kind !== "mcp") continue;
         const probe = { kind: "mcp", tool: x.target.value } as const;
         if (evaluate({ allow: [], deny: live.deny, ask: [] }, probe) === "deny")
           mcpGate[x.extensionId] = "deny";
@@ -2204,6 +2209,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           })),
         ],
         mcpGate,
+        limitRules,
       };
     },
     // 統合ノードの whoami に出す daemon の場所（#164）
