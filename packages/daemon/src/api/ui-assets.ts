@@ -477,9 +477,12 @@ export const UI_JS = `'use strict';
     if (!n || n.cli !== true || typeof n.sessionRef !== 'string' || !/^[A-Za-z0-9][-A-Za-z0-9_.]{0,127}$/.test(n.sessionRef)) return '';
     return attachWith(n.sessionRef);
   }
-  // 画面の案内の 1 行ずつ（名前の形・番号の形）
+  // 画面に出すコマンド。番号の形は、子のプロセスが動いていても止まっていても開けるので、番号が分かるときは、それだけを出す
+  // （名前の形は、プロセスがあるときしか開けない。2 つ並べると、利用者が先に名前の形で失敗する。#205）。
+  // 番号が分からないときだけ、名前の形を出す（あわせて、番号を調べる案内 stall.noRef を出す）。
   function attachCommands(n) {
-    return [attachCommand(n), attachCommandByRef(n)].filter(function (c) { return c !== ''; });
+    var cmd = attachCommandByRef(n) || attachCommand(n);
+    return cmd === '' ? [] : [cmd];
   }
   // ノードの呼び名（題がなければ ID）。
   function nodeLabel(n, max) { return n && typeof n.title === 'string' && n.title !== '' ? cleanText(n.title, max) : n ? n.id : ''; }
@@ -883,9 +886,9 @@ export const UI_JS = `'use strict';
         if (i.at) card.appendChild(whenEl('div', 'when', i.at, 'stall.when'));
         var cmds = attachCommands(node);
         if (cmds.length) {
-          cmds.forEach(function (cmd, idx) {
+          cmds.forEach(function (cmd) {
             var row = el('div', 'cmd');
-            row.appendChild(el('span', '', t(idx === 0 ? 'stall.paste' : 'stall.pasteByRef')));
+            row.appendChild(el('span', '', t('stall.paste')));
             row.appendChild(el('code', '', cmd));
             row.appendChild(copyButton(cmd));
             card.appendChild(row);

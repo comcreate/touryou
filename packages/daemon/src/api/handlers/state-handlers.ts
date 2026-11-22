@@ -10,6 +10,7 @@
  */
 
 import {
+  type DecisionClosedReason,
   type EventBody,
   type Failure,
   type NodeState,
@@ -71,6 +72,24 @@ export interface StateHandlerDeps {
 }
 
 const ACTIVE: ReadonlySet<NodeState> = new Set(["running", "waiting", "stopping"]);
+
+/** 閉じた判断に答えたときの失敗の文（`decisionClosed`）。`closedReason` から、理由の文と次にすることを引く。`unknown` は、理由の記録がない古い判断。 */
+const DECISION_CLOSED: Readonly<
+  Record<DecisionClosedReason | "unknown", { reason: string; hint: string }>
+> = {
+  discarded: {
+    reason: "人が破棄を決めた",
+    hint: "子を作り直すなら、新しい子に聞き直してもらう",
+  },
+  withdrawn: {
+    reason: "出した子が、要らなくなって取り下げた",
+    hint: "回答は要らない。必要なら、子が新しい判断を出す",
+  },
+  unknown: {
+    reason: "不明",
+    hint: "子を作り直すなら、新しい子に聞き直してもらう",
+  },
+};
 
 const callerOf = (req: HandlerRequest): string => req.caller?.nodeId ?? "";
 
@@ -500,7 +519,7 @@ export function createStateHandlers(deps: StateHandlerDeps) {
             id: deriveId("inbox", caller, req.requestId, "inbox"),
             kind: "info",
             nodeId: caller,
-            summary: summarize(`判断を取り下げた（要らなくなった）: ${d.question ?? d.decisionId}`),
+            ...notice("decisionWithdrawn", { question: d.question ?? d.decisionId }),
           },
         },
         ...(item === undefined
@@ -568,12 +587,11 @@ export function createStateHandlers(deps: StateHandlerDeps) {
       }
       // 閉じた判断（破棄を決めた子）は、答えても届かない。何も書かずに失敗を返す。
       if (d.status === "closed") {
+        const closed = DECISION_CLOSED[d.closedReason ?? "unknown"];
         return fail(
           "decisionClosed",
-          `この判断は閉じている（理由: ${d.closedReason === "discarded" ? "人が破棄を決めた" : d.closedReason === "withdrawn" ? "出した子が、要らなくなって取り下げた" : (d.closedReason ?? "不明")}）。答えても届かない`,
-          d.closedReason === "withdrawn"
-            ? "回答は要らない。必要なら、子が新しい判断を出す"
-            : "子を作り直すなら、新しい子に聞き直してもらう",
+          `この判断は閉じている（理由: ${closed.reason}）。答えても届かない`,
+          closed.hint,
         );
       }
       const answer = p.choice ?? p.text ?? "";

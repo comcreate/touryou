@@ -704,10 +704,6 @@ export const APP_TEXT = {
     ja: "端末に貼って、子の画面を開きます:",
     en: "Paste this in a terminal to open the child's screen:",
   },
-  "stall.pasteByRef": {
-    ja: "上で開けないとき（子のプロセスが止まっているとき）は、番号の形で開きます:",
-    en: "If the above does not open it (the child's process has stopped), open it by session number:",
-  },
   "stall.noRef": {
     ja: "上で開けないとき（子のプロセスが止まっているとき）は、claude agents で子の番号を見て、claude attach <番号> を打ってください。",
     en: "If the above does not open it (the child's process has stopped), look up the child's number with claude agents and run claude attach <number>.",

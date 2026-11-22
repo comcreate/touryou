@@ -387,6 +387,11 @@ export const INBOX_MESSAGES = {
     ja: "子 {node} の作業ツリーの git のディレクトリを確かめられないため、書き込みを拒否している。人が作業ツリー（git worktree）を確かめる",
     en: "Writes are refused because the git folder of child {node}'s worktree cannot be checked. A person should check the worktree (git worktree)",
   },
+  // ── 判断の取り下げ（#196・#202）
+  decisionWithdrawn: {
+    ja: "判断を取り下げた（要らなくなった）: {question}",
+    en: "Decision withdrawn (no longer needed): {question}",
+  },
 } as const satisfies Readonly<Record<string, { readonly ja: string; readonly en: string }>>;
 
 export type InboxMessageKey = keyof typeof INBOX_MESSAGES;

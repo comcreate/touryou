@@ -1496,16 +1496,17 @@ describe("画面の使い勝手（#13）", () => {
     );
   });
 
-  it("(#150) 子のプロセスが止まっていても開けるよう、セッション番号があるときは、名前の形と番号の形の両方を出す", () => {
+  it("(#150・#205) セッション番号があるときは、動いていても止まっていても開ける番号の形だけを出す。番号がないときだけ名前の形を出す", () => {
     uiContext.attachDir = "/r";
     const child = { id: "n-a1", cli: true, sessionRef: "bg-1234" };
     expect(api.attachCommandByRef(child)).toBe("cd '/r' && claude attach bg-1234");
-    expect(api.attachCommands(child)).toEqual([
-      "cd '/r' && claude attach n-a1",
-      "cd '/r' && claude attach bg-1234",
-    ]);
+    // 番号が分かるときは、コマンドは 1 つ（番号の形）。名前の形は並べない
+    expect(api.attachCommands(child)).toEqual(["cd '/r' && claude attach bg-1234"]);
     // 番号がない・形が不正・CLI の子でないものには、番号の形を出さない（名前の形だけ）
     expect(api.attachCommands({ id: "n-a1", cli: true })).toEqual([
+      "cd '/r' && claude attach n-a1",
+    ]);
+    expect(api.attachCommands({ id: "n-a1", cli: true, sessionRef: "a b; rm -rf" })).toEqual([
       "cd '/r' && claude attach n-a1",
     ]);
     expect(api.attachCommandByRef({ id: "n-a1", cli: true, sessionRef: "a b; rm -rf" })).toBe("");

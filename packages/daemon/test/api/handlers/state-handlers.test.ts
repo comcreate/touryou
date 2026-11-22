@@ -1,4 +1,11 @@
-import { type EventBody, failure, isSafeId, type NodeEvent, stateOf } from "@touryou/core";
+import {
+  type EventBody,
+  failure,
+  inboxMessageText,
+  isSafeId,
+  type NodeEvent,
+  stateOf,
+} from "@touryou/core";
 import { describe, expect, it } from "vitest";
 import { createCredentialStore } from "../../../src/api/credentials.js";
 import { createInstructionDelivery } from "../../../src/api/handlers/instruction-delivery.js";
@@ -122,6 +129,21 @@ describe("判断の取り下げ（#196）", () => {
     );
     expect(ans.ok).toBe(false);
     expect(ans.error?.code).toBe("decisionClosed");
+    // 理由の文と次にすることは、closedReason から決まる（取り下げ）
+    expect(ans.error?.cause).toContain("出した子が、要らなくなって取り下げた");
+    expect(ans.error?.nextActions).toEqual(["回答は要らない。必要なら、子が新しい判断を出す"]);
+  });
+
+  it("取り下げの知らせ（info）は、日英の鍵（msg）つき。英語の画面でも英語で出る（#202）", async () => {
+    const r = rig();
+    const decisionId = await ask(r);
+    await r.call("decision.withdraw", r.req("decision.withdraw", { decisionId }, A));
+    const info = r.state().inbox.find((i) => i.kind === "info" && i.nodeId === "a");
+    expect(info?.summary).toBe("判断を取り下げた（要らなくなった）: どちらにするか");
+    expect(info?.msg).toEqual({ key: "decisionWithdrawn", args: { question: "どちらにするか" } });
+    expect(info?.msg !== undefined && inboxMessageText("en", info.msg)).toBe(
+      "Decision withdrawn (no longer needed): どちらにするか",
+    );
   });
 
   it("同じ requestId の再送は成功で、resumed は元の要求が記録した値のまま（いまの状態で変わらない）", async () => {
