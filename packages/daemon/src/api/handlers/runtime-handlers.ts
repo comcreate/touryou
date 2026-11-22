@@ -66,6 +66,8 @@ export interface RuntimeHandlerDeps {
   readonly delivery?: InstructionDelivery;
   /** 応答に出さない原因（配送の記録の失敗など）の記録先。 */
   readonly onFailure?: (nodeId: string, cause: string) => void;
+  /** サブ統括の連動停止で、配下の子の停止の確認を待つ上限と確認の間隔（ミリ秒）。既定は 10 分と 2 秒。試験で短くする。 */
+  readonly cascade?: { readonly waitMs?: number; readonly pollMs?: number };
 }
 
 const callerOf = (req: HandlerRequest): string => req.caller?.nodeId ?? "";
@@ -75,6 +77,13 @@ const nodeOf = (state: OrchState, nodeId: string): NodeRecord | undefined =>
   state.nodes.find((n) => n.id === nodeId);
 
 const SENDABLE: ReadonlySet<NodeState> = new Set(["running", "waiting"]);
+
+/** 連動停止（サブ統括の停止）で、配下の子を新しく停止の依頼に載せる状態（pending は取り消し）。 */
+const CASCADE_STOP: ReadonlySet<NodeState> = new Set(["pending", "running", "waiting"]);
+/** 連動停止で、すでに停止の途中にある子（依頼を出し直さず、確認だけを待つ）。 */
+const CASCADE_WAIT: ReadonlySet<NodeState> = new Set(["stopping", "stopIncomplete"]);
+/** 連動停止で、停止が確認された子の状態。 */
+const CASCADE_SETTLED: ReadonlySet<NodeState> = new Set(["stopped", "reclaimable", "archived"]);
 
 const noRuntime = (nodeId: string) =>
   fail(
@@ -296,7 +305,31 @@ export function createRuntimeHandlers(deps: RuntimeHandlerDeps) {
     return { ok: true, value: { status: "queued", duplicate: false } };
   };
 
-  return {
+  // 連動停止の待ちの上限と確認の間隔（ミリ秒）。待ちは、サブ統括のセッションが孫の停止の依頼を実行する時間を見込む。
+  const cascadeWaitMs = deps.cascade?.waitMs ?? 600_000;
+  const cascadePollMs = Math.max(1, deps.cascade?.pollMs ?? 2_000);
+
+  /**
+   * 子の停止がすべて確認される（stopped・回収可能・アーカイブ）まで待つ。上限までに確認できなかった子を、
+   * `ID（状態）` の形で返す（なければ空）。理由には、ID と状態名だけを入れる（子の自由な文字列を含めない）。
+   */
+  const waitChildrenStopped = async (ids: readonly string[]): Promise<string[]> => {
+    const until = Date.now() + cascadeWaitMs;
+    for (;;) {
+      const state = log.state();
+      const rest = ids.filter((id) => !CASCADE_SETTLED.has(stateOf(state, id) ?? "archived"));
+      if (rest.length === 0) return [];
+      if (Date.now() >= until) return rest.map((id) => `${id}（${stateOf(state, id) ?? "不明"}）`);
+      await new Promise<void>((resolve) => setTimeout(resolve, cascadePollMs));
+    }
+  };
+
+  // サブ統括の停止は、配下の子に対して `node.stop` を呼び直す（呼び出し元は止める統合ノード）。ハンドラの表ができたあとで束ねる。
+  let stopSelf: (req: HandlerRequest<"node.stop">) => R<"node.stop"> = () => {
+    throw new Error("node.stop が未初期化");
+  };
+
+  const handlers = {
     // 同じ requestId の同時の送信は、1 つにまとめる（配送が 1 回だけになる）。
     "node.send": (req: HandlerRequest<"node.send">): Promise<R<"node.send">> =>
       exclusive(`${callerOf(req)}\0${req.requestId}`, JSON.stringify(req.params), () =>
@@ -368,6 +401,53 @@ export function createRuntimeHandlers(deps: RuntimeHandlerDeps) {
       const adapter = adapterFor(nodeId);
       if (effect !== "cancelStart" && adapter === undefined) return noRuntime(nodeId);
 
+      // サブ統括（統合ノード）の停止は、配下の子を先に停止の依頼に載せる（連動停止。#168 PR5。後順: 孫が先、サブ統括が後）。
+      // 自分の記録より前に、子の検査を済ませる（子を止められないときに、一部だけ止めた状態を残さない）。再送（効果なし）では何もしない。
+      const waitIds: string[] = [];
+      if (node.role === "integrator" && (effect === "gracefulStop" || effect === "immediateStop")) {
+        const kids = before.nodes.filter((c) => isDirectChild(before.nodes, nodeId, c.id));
+        for (const kid of kids) {
+          const needsAdapter = CASCADE_STOP.has(kid.state) && kid.state !== "pending";
+          if (needsAdapter && adapterFor(kid.id) === undefined) return noRuntime(kid.id);
+        }
+        for (const kid of kids) {
+          if (CASCADE_WAIT.has(kid.state)) {
+            // すでに停止の途中（確認待ち）。依頼を出し直さず、確認だけを待つ（再試行でも、先の依頼の確認を待つ）。
+            waitIds.push(kid.id);
+          } else if (CASCADE_STOP.has(kid.state)) {
+            const stopped = stopSelf({
+              requestId: `${req.requestId}/cascade/${kid.id}`,
+              operation: "node.stop",
+              role: "integrator",
+              caller: { nodeId },
+              params: {
+                nodeId: kid.id,
+                mode,
+                ...(mode === "graceful" && graceMs !== undefined && kid.state !== "pending"
+                  ? { graceMs }
+                  : {}),
+              },
+            } as HandlerRequest<"node.stop">);
+            if (!stopped.ok) return stopped;
+            waitIds.push(kid.id);
+          } else if (kid.state === "verified") {
+            // 受理済みの子は、状態を変えずに、裏のセッションの停止の依頼を出し直す（#115 の既存の規則）。確認は待たない。
+            const bodies = sessionStopBodies(before, kid.id, `${req.requestId}/cascade/${kid.id}`);
+            if (bodies.length > 0) {
+              const done = appendAtomically(
+                log,
+                clock,
+                `${req.requestId}/cascade/${kid.id}`,
+                { nodeId },
+                bodies,
+              );
+              if (!done.ok) return done;
+            }
+          }
+          // done（人だけが止められる。#115）・停止済み・回収可能・アーカイブの子は、対象にしない。
+        }
+      }
+
       const r = appendAtomically(log, clock, req.requestId, actor, [
         { type: "node.stateChanged", payload: { nodeId, event } },
       ]);
@@ -386,14 +466,30 @@ export function createRuntimeHandlers(deps: RuntimeHandlerDeps) {
           [...after.stopRequests].reverse().find((q) => q.nodeId === nodeId && q.seq < stopSeq);
         if (attempt !== undefined) {
           const adapterMode = effect === "immediateStop" ? "immediate" : "graceful";
-          void adapter
-            .stop(nodeId, {
+          // 配下の子の停止がすべて確認されてから、自分のセッションの停止を始める（停止未完了にすると、統合の資格が失効し、
+          // 孫の停止の依頼を実行できなくなる）。確認できなければ、停止未完了にして、理由（子の ID と状態）を受信箱に出す。
+          const stopSelfSession = (): Promise<Result<StopValue, Failure>> =>
+            adapter.stop(nodeId, {
               mode: adapterMode,
               stopSeq: attempt.seq,
               ...(adapterMode === "graceful" && attempt.graceMs !== undefined
                 ? { graceMs: attempt.graceMs }
                 : {}),
-            })
+            });
+          const stopAfterChildren = async (): Promise<Result<StopValue, Failure>> => {
+            const unconfirmed = await waitChildrenStopped(waitIds);
+            if (unconfirmed.length > 0) {
+              return fail(
+                "stopFailed",
+                `配下の子の停止を確認できない: ${unconfirmed.join("、")}`,
+                "子ごとに、親のセッションで claude stop を実行したか確かめ、node_confirmStopped で宣言する",
+                "そのあと、このノードを node_stop で止め直す",
+              );
+            }
+            return stopSelfSession();
+          };
+          // 待つ子がなければ（子のない統合ノード・子のいる子ではないノード）、これまでと同じ経路で、すぐに停止を始める。
+          void (waitIds.length === 0 ? stopSelfSession() : stopAfterChildren())
             .then(
               (result) => notifySettled(nodeId, attempt.seq, result),
               (error: unknown) =>
@@ -495,4 +591,6 @@ export function createRuntimeHandlers(deps: RuntimeHandlerDeps) {
       };
     },
   };
+  stopSelf = handlers["node.stop"];
+  return handlers;
 }
