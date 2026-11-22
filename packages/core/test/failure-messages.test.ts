@@ -51,7 +51,12 @@ describe("失敗の文の表（#141）", () => {
 
   it("表にない鍵は undefined。値の制御文字は空白にし、長すぎる値は切る", () => {
     expect(failureMessageText("en", { key: "noSuchKey", args: {} })).toBeUndefined();
-    const f = failureMsg("forbidden", "roleLacksOperation", { role: "a\nb", op: "x".repeat(2000) }, "直す");
+    const f = failureMsg(
+      "forbidden",
+      "roleLacksOperation",
+      { role: "a\nb", op: "x".repeat(2000) },
+      "直す",
+    );
     const args = (f.msg as { args: Record<string, string> }).args;
     expect(args.role).toBe("a b");
     expect(args.op).toHaveLength(1000);

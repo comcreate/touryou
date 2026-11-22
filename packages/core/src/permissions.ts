@@ -100,7 +100,8 @@ function parseMcp(rule: string): ParseResult {
   const rest = rule.slice("mcp__".length);
   const at = rest.indexOf("__");
   if (at === -1) {
-    if (!MCP_NAME.test(rest)) return fail(rule, rest.includes("*") ? "unsupported" : "invalidMcpName");
+    if (!MCP_NAME.test(rest))
+      return fail(rule, rest.includes("*") ? "unsupported" : "invalidMcpName");
     return { ok: true, rule: { kind: "mcpServer", server: rest } };
   }
   const server = rest.slice(0, at);

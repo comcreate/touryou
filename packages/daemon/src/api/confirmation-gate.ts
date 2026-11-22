@@ -20,9 +20,9 @@ import {
   type ConfirmableOperation,
   type DaemonOperation,
   type Failure,
+  type FailureMessageKey,
   failure,
   failureMsg,
-  type FailureMessageKey,
   type PendingConfirmation,
   type Result,
 } from "@touryou/core";
@@ -121,12 +121,7 @@ const invalid = (
   );
 
 const idConflict = (): Failure =>
-  failureMsg(
-    "requestIdConflict",
-    "requestIdConflict",
-    {},
-    "新しい requestId で要求する",
-  );
+  failureMsg("requestIdConflict", "requestIdConflict", {}, "新しい requestId で要求する");
 
 export function createConfirmationGate(deps: ConfirmationGateDeps): ConfirmationGate {
   const nowMs = deps.nowMs ?? Date.now;
@@ -290,8 +285,7 @@ export function createConfirmationGate(deps: ConfirmationGateDeps): Confirmation
           error: failureMsg("forbidden", "confirmationHumanOnly", {}, "人が画面で確認する"),
         };
       const wait = throttle.blocked();
-      if (wait !== undefined)
-        return { ok: false, error: invalid("confirmationTooManyFailures") };
+      if (wait !== undefined) return { ok: false, error: invalid("confirmationTooManyFailures") };
       const e = entries.get(req.params.confirmationId);
       if (e === undefined) {
         throttle.fail();
@@ -374,8 +368,7 @@ export function createConfirmationGate(deps: ConfirmationGateDeps): Confirmation
       out["confirm.approve"] = approve(inners);
       out["confirm.cancel"] = (req: HandlerRequest<"confirm.cancel">): AnyResult => {
         const e = entries.get(req.params.confirmationId);
-        if (e === undefined)
-          return { ok: false, error: invalid("confirmationGoneOnCancel") };
+        if (e === undefined) return { ok: false, error: invalid("confirmationGoneOnCancel") };
         drop(e);
         return { ok: true, value: { cancelled: true } };
       };

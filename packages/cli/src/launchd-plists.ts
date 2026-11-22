@@ -59,12 +59,10 @@ export const daemonPlistNames = (
   readDir: (path: string) => string[] = (p) => readdirSync(p),
 ): DaemonPlistName[] => {
   try {
-    return [...readDir(dir)]
-      .sort()
-      .flatMap((n) => {
-        const p = parsePlistName(n);
-        return p === undefined || (kind === "others" && p.suffix === undefined) ? [] : [p];
-      });
+    return [...readDir(dir)].sort().flatMap((n) => {
+      const p = parsePlistName(n);
+      return p === undefined || (kind === "others" && p.suffix === undefined) ? [] : [p];
+    });
   } catch {
     return [];
   }
@@ -85,7 +83,9 @@ export function pathValueOf(text: string): string | undefined {
 
 /** PATH の値から、init に渡す `--path-prefix` の引数を作り戻す（既定の PATH なら空）。 */
 export const pathPrefixArgs = (pathValue: string): string[] =>
-  pathValue === DEFAULT_PATH ? [] : ["--path-prefix", pathValue.slice(0, -(DEFAULT_PATH.length + 1))];
+  pathValue === DEFAULT_PATH
+    ? []
+    : ["--path-prefix", pathValue.slice(0, -(DEFAULT_PATH.length + 1))];
 
 /** 安全な読み取り（他の人が書ける・リンク・持ち主の違うファイルは例外）。`forbid` は禁じる権限のビット。 */
 export type PlistReader = (path: string, forbid: number) => string;

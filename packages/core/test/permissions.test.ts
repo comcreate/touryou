@@ -178,13 +178,17 @@ describe("evaluate: deny > ask > allow", () => {
   it("deny は allow より強い（同じ規則が両方にあっても deny）", () => {
     expect(evaluate(policy, cmd("git push origin main"))).toBe("deny");
     expect(evaluate(policy, write("docs/secret/k.md"))).toBe("deny");
-    expect(
-      evaluate({ allow: ["Bash(ls:*)"], deny: ["Bash(ls:*)"], ask: [] }, cmd("ls -l")),
-    ).toBe("deny");
+    expect(evaluate({ allow: ["Bash(ls:*)"], deny: ["Bash(ls:*)"], ask: [] }, cmd("ls -l"))).toBe(
+      "deny",
+    );
   });
   it("ask は allow より強く、deny より弱い", () => {
     expect(evaluate(policy, cmd("git commit -m x"))).toBe("ask");
-    const both = { allow: ["Bash(git:*)"], deny: ["Bash(git commit:*)"], ask: ["Bash(git commit:*)"] };
+    const both = {
+      allow: ["Bash(git:*)"],
+      deny: ["Bash(git commit:*)"],
+      ask: ["Bash(git commit:*)"],
+    };
     expect(evaluate(both, cmd("git commit -m x"))).toBe("deny");
   });
   it("どれにも当たらなければ none", () => {

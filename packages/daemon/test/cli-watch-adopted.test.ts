@@ -41,7 +41,14 @@ const stateWith = (over: NodeOver, launch = false): OrchState =>
 const ADOPTED = { runtime: "cli", adopted: { at: iso(T0) } } as const;
 const probe: BindLostProbe = { absentSinceMs: () => T0, hasValidBindToken: () => true };
 const find = (state: OrchState, afterMin: number) =>
-  watchFindings(state, T0 + afterMin * MIN, { ...SPEC, sinceMs: T0 - MIN }, undefined, () => false, probe);
+  watchFindings(
+    state,
+    T0 + afterMin * MIN,
+    { ...SPEC, sinceMs: T0 - MIN },
+    undefined,
+    () => false,
+    probe,
+  );
 
 describe("watchFindings: 採用した子（起動の報告なし。#159）", () => {
   it("止まっているかも: 最後の動きから stallMs を超えると出る", () => {

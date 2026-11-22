@@ -19,8 +19,8 @@
 
 import {
   type DaemonOperation,
-  type failure,
   type FailureMessageKey,
+  type failure,
   failureMsg,
   INTEGRATOR_OPERATION_CLASS,
   isDirectChild,

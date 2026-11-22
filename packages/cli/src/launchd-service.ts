@@ -256,9 +256,7 @@ interface StatusRow {
   readonly whoami: number | null;
 }
 
-async function statusLines(
-  ctx: Ctx,
-): Promise<{ lines: string[]; ok: boolean; rows: StatusRow[] }> {
+async function statusLines(ctx: Ctx): Promise<{ lines: string[]; ok: boolean; rows: StatusRow[] }> {
   const lines: string[] = [];
   const rows: StatusRow[] = [];
   let ok = true;
@@ -971,7 +969,9 @@ export async function runLaunchdService(
       const st = await statusLines(ctx);
       return withWarnings({
         exitCode: st.ok ? 0 : 1,
-        stdout: json ? `${JSON.stringify({ ok: st.ok, count: st.rows.length, daemons: st.rows })}\n` : `${st.lines.join("\n")}\n`,
+        stdout: json
+          ? `${JSON.stringify({ ok: st.ok, count: st.rows.length, daemons: st.rows })}\n`
+          : `${st.lines.join("\n")}\n`,
         stderr: "",
       });
     }

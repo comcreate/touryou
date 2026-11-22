@@ -130,9 +130,13 @@ export const FAILURE_MESSAGES = {
 export type FailureMessageKey = keyof typeof FAILURE_MESSAGES;
 
 /** 並びが空のときの文字。 */
-export const FAILURE_NONE = { ja: "なし", en: "none" } as const satisfies Readonly<Record<Lang, string>>;
+export const FAILURE_NONE = { ja: "なし", en: "none" } as const satisfies Readonly<
+  Record<Lang, string>
+>;
 /** 並びの区切り（`inbox-messages.ts` の `LIST_SEPS.comma` と同じ）。 */
-export const FAILURE_LIST_SEP = { ja: "、", en: ", " } as const satisfies Readonly<Record<Lang, string>>;
+export const FAILURE_LIST_SEP = { ja: "、", en: ", " } as const satisfies Readonly<
+  Record<Lang, string>
+>;
 
 /** 値の上限（記録の検査と違い、窓口の応答だけなので、並びのために少し広げる）。 */
 export const FAILURE_MESSAGE_LIMITS = { args: 8, value: 1000 } as const;
@@ -203,6 +207,8 @@ export function isFailureMessage(x: unknown): x is FailureMessage {
     typeof a === "object" &&
     a !== null &&
     !Array.isArray(a) &&
-    Object.values(a).every((v) => typeof v === "string" || (typeof v === "number" && Number.isFinite(v)))
+    Object.values(a).every(
+      (v) => typeof v === "string" || (typeof v === "number" && Number.isFinite(v)),
+    )
   );
 }

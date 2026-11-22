@@ -193,8 +193,7 @@ describe("node.created の runtime と uiViewOf の runtime（#159）", () => {
           ...(sessionRef === undefined ? {} : { sessionRef }),
         },
       } as never);
-    const viewOf = (events: OrchEvent[]) =>
-      uiViewOf(must(events)).nodes.find((x) => x.id === "a");
+    const viewOf = (events: OrchEvent[]) => uiViewOf(must(events)).nodes.find((x) => x.id === "a");
 
     it("runtime が cli の採用した子に、cli・runtime・作業ツリー・sessionRef を出す", () => {
       const v = viewOf([
