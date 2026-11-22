@@ -172,7 +172,9 @@ describe("複数の daemon（--config）", () => {
     it("repoRoot がなく名前を作れなければ、daemon 名（daemon-<8 文字>）を使う。既定の設定には案内を出さない", async () => {
       const w = makeWorld();
       const r = await bin(w, ["init", "--config", w.otherConfig]);
-      expect(r.stdout).toContain(registerLine(w, w.otherLabel.replace("touryou.", ""), w.otherConfig));
+      expect(r.stdout).toContain(
+        registerLine(w, w.otherLabel.replace("touryou.", ""), w.otherConfig),
+      );
       const def = await bin(w, ["init"]);
       expect(def.exitCode).toBe(0);
       expect(def.stdout).not.toContain("【MCP を登録する】");

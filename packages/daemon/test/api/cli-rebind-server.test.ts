@@ -1,9 +1,9 @@
 import { type EventBody, foldEvents, type OrchEvent, type OrchState, ok } from "@touryou/core";
 import { afterEach, describe, expect, it } from "vitest";
 import { createBindCodes } from "../../src/api/bind.js";
-import { createHookTokens } from "../../src/api/hook.js";
 import { createCredentialStore } from "../../src/api/credentials.js";
 import { createBindWorktreeCheck } from "../../src/api/handlers/cli-bind-check.js";
+import { createHookTokens } from "../../src/api/hook.js";
 import { type ApiLogEvent, type ApiServer, createApiServer } from "../../src/api/server.js";
 
 // attach で mcp が入れ替わった CLI の子の、コードなしのつなぎ直し（#145）。

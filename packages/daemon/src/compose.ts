@@ -732,7 +732,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
         // 木に結ぶだけで、別のセッションへ権限を渡さないため（#223）。止まった・再開した・役目の終わった・期限切れ・失効は、
         // issuedKind が bind でないので、今までどおり失効させる（下の revokeEntered と、引き出しの片付けでも）
         // Desktop の子は、従来どおり、ここでは失効させない
-        if (issuedKind !== "bind" && nodeRuntimeOf(nodeId) !== "desktop") hookTokens?.revoke(nodeId);
+        if (issuedKind !== "bind" && nodeRuntimeOf(nodeId) !== "desktop")
+          hookTokens?.revoke(nodeId);
         if (hookSessions.unbind(nodeId)) note("hookUnbound", { reason: "tokenReissued" });
       },
       // トークンの期限。根には付けない。
