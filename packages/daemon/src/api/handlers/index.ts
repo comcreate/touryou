@@ -8,6 +8,8 @@ import { createInboxResolveHandlers } from "./inbox-resolve-handlers.js";
 import { createInstructionDelivery } from "./instruction-delivery.js";
 import { createParentRequestHandlers } from "./parent-request-handlers.js";
 import { createPauseHandlers } from "./pause-handlers.js";
+import { createPolicyHandlers, type PolicyHandlerDeps } from "./policy-handlers.js";
+import type { Live } from "./context.js";
 
 export {
   createDiscardedHandlers,
@@ -41,6 +43,7 @@ export {
   operationsFor,
   type RuntimeHandlerDeps,
 } from "./runtime-handlers.js";
+export { createPolicyHandlers, type PolicyHandlerDeps } from "./policy-handlers.js";
 export { createScopeHandlers, type ScopeHandlerDeps } from "./scope-handlers.js";
 export {
   createSpawner,
@@ -89,14 +92,16 @@ export function createHandlersWithScheduler(
     /** 渡すと、既存の作業ツリーの採用（node.adopt。#163）も有効になる。 */
     adopt?: AdoptPorts;
     /** 根の方針の deny の規則。MCP ツールの承認で、deny に当たるものを承認しない（#194 PR3）。 */
-    denyRules?: readonly string[];
+    denyRules?: Live<readonly string[]>;
     /** 根の方針の ask の規則。ask に当たる MCP ツールは、人間だけが承認できる（#194 PR3）。 */
-    askRules?: readonly string[];
+    askRules?: Live<readonly string[]>;
     /** 判断待ちの子の再開が成功した（起動して、再開の記録まで済んだ）あとに呼ぶ。期限にまつわる知らせを解決にするのに使う（#189）。 */
     onResumed?: (nodeId: string) => void;
   },
   /** 渡すと（ログが `purgeTree` を持つとき）、最終削除の操作（node.purge・node.purgePreview）も有効になる。 */
   purge?: Omit<PurgeHandlerDeps, "log">,
+  /** 渡すと、方針の操作（config.reload・policy.ruleChange。人間だけ。#194 PR4）も有効になる。 */
+  policy?: Omit<PolicyHandlerDeps, "log" | "clock">,
 ): { handlers: Handlers; tick: () => Promise<void>; close: () => Promise<void> } {
   const onFailure = spawn?.onFailure === undefined ? {} : { onFailure: spawn.onFailure };
   // 追加指示の配送は、node.send と node.review（差し戻しの理由）で共有する。
@@ -187,6 +192,7 @@ export function createHandlersWithScheduler(
             firstEventOf,
           },
         })),
+    ...(policy === undefined ? {} : createPolicyHandlers({ ...deps, ...policy })),
     ...(!full
       ? {}
       : {

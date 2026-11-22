@@ -117,7 +117,8 @@ import {
   safeCause as safeCauseOfChildrenDir,
 } from "./children-dir.js";
 import { boundInState, recordWatchFindings, type WatchCounts, watchFindings } from "./cli-watch.js";
-import { type DaemonConfig, rootPolicyOf } from "./config.js";
+import { type DaemonConfig, loadConfigFile, policyBaseOf } from "./config.js";
+import { createPolicyHolder } from "./policy-holder.js";
 import { createDigestIssuer } from "./digest-issuer.js";
 import { ownedBy } from "./discarded-keys.js";
 import { EventLog } from "./eventlog.js";
@@ -1667,20 +1668,25 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       ? [{ path: dirname(gitDir), kind: "otherNodeGitDir" }]
       : [];
   // MCP ツールの方針（#194 PR3）: 上限は根の方針の `allow` の MCP ツール。`deny` に当たるものは、承認もフックの許可もしない。
-  const rootPolicy = rootPolicyOf(config);
+  // 実行中の方針（#194 PR4）: 設定の方針（`config.reload` で入れ替える）と、実行中に足した規則（`policy.ruleChanged`）を畳んだもの。
+  // 判定のたびに `policyHolder.current()` を読む（変わらない間は同じオブジェクトを返す）。
+  const policyHolder = createPolicyHolder(policyBaseOf(config), () => log.state().policyRules);
+  let runningConfig: DaemonConfig = config;
   const mcpDenied = (tool: string): boolean =>
-    evaluate({ allow: [], deny: rootPolicy.deny, ask: [] }, { kind: "mcp", tool }) === "deny";
+    evaluate(
+      { allow: [], deny: policyHolder.current().policy.deny, ask: [] },
+      { kind: "mcp", tool },
+    ) === "deny";
   const mcpPolicy: McpPolicy = {
-    upperLimit: rootPolicy.allowedMcpTools.filter((t) => !mcpDenied(t)),
+    get upperLimit() {
+      return policyHolder.current().policy.allowedMcpTools.filter((t) => !mcpDenied(t));
+    },
     denied: mcpDenied,
   };
   // 根の範囲（子の権限の上限）に、上限の MCP ツールを足したもの（書き込み・コマンドの意味は、config.rootScope のまま）
-  const rootScope: Scope = {
-    ...config.rootScope,
-    ...(rootPolicy.allowedMcpTools.length === 0
-      ? {}
-      : { allowedMcpTools: rootPolicy.allowedMcpTools }),
-  };
+  const rootScope = (): Scope => policyHolder.current().rootScope;
+  const denyRules = (): readonly string[] => policyHolder.current().policy.deny;
+  const askRules = (): readonly string[] => policyHolder.current().policy.ask;
   /** CLI の子のフックが最後に来た時刻（見張り。メモリだけ）。 */
   const cliHookAt = new Map<string, number>();
   const decideCliHook = async (
@@ -1948,8 +1954,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       nodeRuntime: nodeRuntimeOf,
       ...(adopt === undefined ? {} : { adopt }),
       rootScope,
-      denyRules: rootPolicy.deny,
-      askRules: rootPolicy.ask,
+      denyRules,
+      askRules,
       ...(config.maxTreeDepth === undefined ? {} : { maxTreeDepth: config.maxTreeDepth }),
       onFailure,
       ...(config.startLimits === undefined ? {} : { startLimits: config.startLimits }),
@@ -1959,6 +1965,27 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
       },
     },
     purgeDeps,
+    // 方針の操作（config.reload・policy.ruleChange）。設定ファイルがないとき（試験の簡易な構成）は、読み直せない
+    {
+      holder: policyHolder,
+      loadConfig: () =>
+        deps.configPath === undefined
+          ? {
+              ok: false as const,
+              error: failure(
+                "noConfigFile",
+                "設定ファイルのパスがない",
+                "daemon を --config で起動する",
+              ),
+            }
+          : loadConfigFile(deps.configPath),
+      runningConfig: () => runningConfig,
+      onReloaded: (next) => {
+        runningConfig = next;
+      },
+      cwdOf,
+      onFailure,
+    },
   );
   // 自動の最終削除（設定で有効にしたときだけ）。人間のコマンドと同じ関数を通る。
   const autoPurger =

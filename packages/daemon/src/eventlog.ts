@@ -80,8 +80,8 @@ export interface PurgeOutcome {
   readonly deleted: number;
 }
 
-/** スナップショットに保存する core の状態のスキーマの版。`OrchState` の形を変えたら上げる（2: 停止の試行・観測の記録を追加、3: 範囲外のツール拒否・予期しない終了・報告の記録と、判断要求の内容を追加、4: 範囲の拡張要求・追加指示の記録と、ノードのブリーフ・判断要求の止める子を追加、5: 破棄の判断・アーカイブ時刻・指示の配送の記録を追加、6: 受信箱の項目の解決済みの記録を追加、7: 最終削除の標識〔tombstones〕を追加、8: ノードの最終コミット〔lastCommit〕を追加、9: 自動の最終削除の保留〔purgeHold〕を追加、10: 受信箱の項目に priority（要約 digest）を追加、…、12: ノードの紐付けた session_id〔sessionId〕を追加、13: 親のセッション〔parentSession〕を追加、14: 親への依頼〔parentRequests〕を追加、15: 範囲の拡張の対象に MCP ツール〔kind: mcp〕を追加。旧の daemon は、kind: mcp のイベントを読めない）。 */
-export const STATE_VERSION = 15;
+/** スナップショットに保存する core の状態のスキーマの版。`OrchState` の形を変えたら上げる（2: 停止の試行・観測の記録を追加、3: 範囲外のツール拒否・予期しない終了・報告の記録と、判断要求の内容を追加、4: 範囲の拡張要求・追加指示の記録と、ノードのブリーフ・判断要求の止める子を追加、5: 破棄の判断・アーカイブ時刻・指示の配送の記録を追加、6: 受信箱の項目の解決済みの記録を追加、7: 最終削除の標識〔tombstones〕を追加、8: ノードの最終コミット〔lastCommit〕を追加、9: 自動の最終削除の保留〔purgeHold〕を追加、10: 受信箱の項目に priority（要約 digest）を追加、…、12: ノードの紐付けた session_id〔sessionId〕を追加、13: 親のセッション〔parentSession〕を追加、14: 親への依頼〔parentRequests〕を追加、15: 範囲の拡張の対象に MCP ツール〔kind: mcp〕を追加。旧の daemon は、kind: mcp のイベントを読めない、16: 実行中に足した方針の規則〔policyRules。policy.ruleChanged〕を追加。旧の daemon は、policy.ruleChanged のイベントを読めない）。 */
+export const STATE_VERSION = 16;
 
 /** イベントの行のハッシュ（SHA-256、16 進）。スナップショットがログと食い違っていないかを確かめる。 */
 export function eventHash(row: StoredEvent): string {

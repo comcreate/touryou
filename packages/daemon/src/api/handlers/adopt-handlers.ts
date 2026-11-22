@@ -30,7 +30,9 @@ import {
   derivedRequestId,
   deriveId,
   fail,
+  type Live,
   type LogPort,
+  live,
 } from "./context.js";
 import { depthProblem } from "./depth-check.js";
 import { createExclusive } from "./inflight.js";
@@ -62,7 +64,7 @@ export interface AdoptHandlerDeps {
   readonly clock: () => string;
   readonly ports: AdoptPorts;
   /** 根の有効な範囲（spawn と同じ）。 */
-  readonly rootScope?: Scope;
+  readonly rootScope?: Live<Scope>;
   /** 木の深さの上限（spawn と同じ。設定 `maxTreeDepth`）。省略すると `DEFAULT_MAX_TREE_DEPTH`。 */
   readonly maxTreeDepth?: number;
   /** 応答に出さない原因の記録先。 */
@@ -184,7 +186,7 @@ export function createAdoptHandlers(deps: AdoptHandlerDeps) {
             parentId: p.parentId,
             parentCwd,
             scope: p.scope,
-            rootScope: deps.rootScope,
+            rootScope: deps.rootScope === undefined ? undefined : live(deps.rootScope),
           });
           if (scopeProblem !== undefined) return { ok: false, error: scopeProblem };
 

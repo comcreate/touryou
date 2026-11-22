@@ -273,6 +273,47 @@ function editRuleOf(location: string): string | undefined {
 
 const uniq = (xs: readonly string[]): string[] => [...new Set(xs)];
 
+/**
+ * 拡張の対象（子の依頼）を、上限に足す規則（`permissions.allow` の書き方）にする。表せなければ undefined。
+ * コマンドは前方一致（`Bash(<コマンド>:*)`。従来の `allowedCommands` と同じ意味）、書き込み先は `Edit(<場所>/**)`、MCP ツールは名前そのもの。
+ */
+export function ruleOfExtension(target: {
+  readonly kind: "write" | "command" | "mcp";
+  readonly value: string;
+}): string | undefined {
+  switch (target.kind) {
+    case "command": {
+      const rule = `Bash(${target.value.trim()}:*)`;
+      return parseRule(rule).ok ? rule : undefined;
+    }
+    case "write":
+      return editRuleOf(target.value);
+    case "mcp":
+      return parseRule(target.value).ok ? target.value : undefined;
+  }
+}
+
+/**
+ * 実行中に足した `allow` の規則を、根の範囲（`Scope`）に足す（`legacyRules` の逆向き）。表せる規則だけを足す
+ * （`Bash(<語>:*)` → `allowedCommands`、`Edit(<場所>/**)` → `writableLocations`。完全一致の Bash・MCP は、範囲には足さない）。
+ * MCP ツールは、`RootPolicy.allowedMcpTools` から呼び出し側が足す。
+ */
+export function growScope(rootScope: Scope, allowRules: readonly string[]): Scope {
+  const commands = [...rootScope.allowedCommands];
+  const locations = [...rootScope.writableLocations];
+  for (const r of allowRules) {
+    const p = parseRule(r);
+    if (!p.ok) continue;
+    if (p.rule.kind === "bashPrefix") commands.push(p.rule.words.join(" "));
+    else if (p.rule.kind === "edit") locations.push(p.rule.dir);
+  }
+  return {
+    ...rootScope,
+    allowedCommands: uniq(commands),
+    writableLocations: uniq(locations),
+  };
+}
+
 /** `rootScope`（旧の書き方）を規則に直す。表せない項目（解析できないコマンド・作業ツリー全体・外を指す場所）は入れない。 */
 function legacyRules(rootScope: Scope): { allow: string[]; deny: string[] } {
   const allow: string[] = [];

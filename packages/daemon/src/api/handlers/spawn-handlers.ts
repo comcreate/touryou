@@ -47,7 +47,9 @@ import {
   derivedRequestId,
   deriveId,
   fail,
+  type Live,
   type LogPort,
+  live,
   notice,
   summarize,
 } from "./context.js";
@@ -101,7 +103,7 @@ export interface SpawnHandlerDeps {
    * 作業ツリーの下（相対パスは根の作業ツリー基準）、`allowedCommands` は設定のリスト。なければ、ブリーフを持たない親の
    * 下の `spawn` は失敗させる（根の子を経由した権限の昇格を防ぐ）。
    */
-  readonly rootScope?: Scope;
+  readonly rootScope?: Live<Scope>;
   /** 木の深さの上限（設定 `maxTreeDepth`。root=0。深さがこの値以上のノードは作れない）。省略すると `DEFAULT_MAX_TREE_DEPTH`。 */
   readonly maxTreeDepth?: number;
   /** スケジューラが同時に起動する数の上限（親ごと・全体）。既定は `DEFAULT_START_LIMITS`。 */
@@ -512,7 +514,7 @@ export function createSpawner(deps: SpawnHandlerDeps) {
       parentId,
       parentCwd,
       scope: brief.scope,
-      rootScope: deps.rootScope,
+      rootScope: deps.rootScope === undefined ? undefined : live(deps.rootScope),
     });
     if (scopeProblem !== undefined) return { ok: false, error: scopeProblem };
 

@@ -283,8 +283,42 @@ export interface OperationMap {
     result: { newNodeId: string };
   };
   "scope.decide": {
-    params: { extensionId: string; decision: "approve" | "reject" | "split" };
+    /**
+     * `alsoLimit`: 人間だけが付けられる。承認する対象を、子への付与と同時に、根の上限（`permissions.allow`）にも足す
+     * （「上限にも足して承認」。`policy.ruleChanged` を同じ記録で書く。#194 PR4）。`approve` のときだけ。
+     */
+    params: {
+      extensionId: string;
+      decision: "approve" | "reject" | "split";
+      alsoLimit?: boolean;
+    };
     result: { state: NodeState };
+  };
+  /**
+   * 設定ファイル config.json の、方針（`rootScope`・`permissions`・`autoApprove`）を読み込み直す（人間だけ。#194 PR4）。
+   * 検査（`parseConfig`）に通ったときだけ、方針を入れ替える。ほかの項目が変わっていれば、再起動が要る項目の名前を返し、反映しない。
+   * `changed`: 入れ替えた項目の名前。`restartRequired`: 変わっているが、再起動しないと効かない項目の名前。
+   * `overLimit`: 新しい上限から、すでに子に付与した範囲がはみ出している子の ID（子の範囲は縮めない）。
+   */
+  /**
+   * 実行中の方針の規則を足す・外す（人間だけ。`policy.ruleChanged` を記録する。#194 PR4）。`deny` は実行中の層にも足せる。
+   * `changed`: 状態が変わったか（すでにある規則の足し・ない規則の取り外しは、`false`）。
+   */
+  "policy.ruleChange": {
+    params: {
+      list: "allow" | "deny" | "ask" | "autoApprove";
+      rule: string;
+      op: "add" | "remove";
+    };
+    result: { changed: boolean };
+  };
+  "config.reload": {
+    params: Record<string, never>;
+    result: {
+      changed: readonly string[];
+      restartRequired: readonly string[];
+      overLimit: readonly string[];
+    };
   };
   "node.review": {
     /** 完了の判定。差し戻し（reject）には理由（feedback）が必須で、受理（accept）では任意。 */
@@ -671,6 +705,8 @@ export const ROLE_OPERATIONS = {
     "node.hookUnbind",
     "node.hookToken",
     "scope.decide",
+    "config.reload",
+    "policy.ruleChange",
     "node.reclaimInstruct",
     "node.reclaimPreview",
     "node.purge",

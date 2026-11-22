@@ -76,7 +76,7 @@ SDK による子の起動・子の認証・子の HOME の隔離・子用の HTT
 
 根（統合）のセッションは、TouRyou のフックで絞らない（フックが働くのは、子の印のある作業ツリーだけ。`cli/src/hook.ts`）。根の Bash・書き込みは、利用者の Claude Code の許可の設定のとおりに動く。`rootScope` は、子に渡す範囲の上限で、根自身の操作の制限ではない。
 
-子の範囲は、親の範囲（根の子なら `rootScope`）の内側でなければなりません。外にはみ出すと、子の起動（`node_spawn`）や範囲の拡張の承認が `scopeNotSubset` で失敗します。子に `git add`・`git commit` をさせるなら、`rootScope.allowedCommands` に `"git add"`・`"git commit"` を入れておきます。`config.json` は daemon の起動のときだけ読むので、`rootScope` を直したら daemon を起動し直します（常駐なら `/touryou:service` の起動し直し）。
+子の範囲は、親の範囲（根の子なら `rootScope`）の内側でなければなりません。外にはみ出すと、子の起動（`node_spawn`）や範囲の拡張の承認が `scopeNotSubset` で失敗します。子に `git add`・`git commit` をさせるなら、`rootScope.allowedCommands` に `"git add"`・`"git commit"` を入れておきます。`rootScope`・`permissions`・`autoApprove` を直したら、`touryou config reload` で読み込み直せます（検査に通ったときだけ入れ替わり、すでに付与した子の範囲は縮めません。新しい上限からはみ出す子は、名前が出ます）。ほかの項目は daemon の起動のときだけ読むので、直したら daemon を起動し直します（常駐なら `/touryou:service` の起動し直し）。`config reload` で、ほかの項目の変更があれば、名前を出して反映しません。実行中だけ規則を足す・外すときは `touryou policy add|remove <allow|deny|ask|autoApprove> <規則>`（人間だけ。`deny` も足せます）。
 
 `rootScope.allowedCommands` の一致の規則: 項目を空白で語に分け、命令の先頭の語から順に、すべて一致すれば許可します（語の単位の前方一致。`"cd"` は `cd sub` を通しますが、`cdx sub` は通しません）。出典は `packages/core/src/scope.ts` の `checkCommand` です。
 
@@ -137,7 +137,7 @@ SDK による子の起動・子の認証・子の HOME の隔離・子用の HTT
 ### MCP ツールの依頼と、上限・deny
 
 - 子は、`scope_extend` の `kind: mcp` で、使いたい MCP ツールを**完全な名前**（`mcp__<サーバー>__<道具>`）で頼みます。サーバー全体（`mcp__<サーバー>`）と、touryou 自身の道具（`node_spawn` など）は、頼めません（人間が `permissions.allow` に書くときだけ、サーバー全体を書けます）。
-- 承認できるのは、**`permissions.allow` に書いた MCP ツールの内側**だけです。書いていないものは、承認できません（上限を広げるのは人間です。`config.json` を直し、daemon を起動し直してから、もう一度判定します）。
+- 承認できるのは、**`permissions.allow` に書いた MCP ツールの内側**だけです。書いていないものは、承認できません（上限を広げるのは人間です。判定のときに `touryou scope decide <ID> approve --also-limit`（上限にも足して承認）にするか、`config.json` を直して `touryou config reload` で読み込み直してから、もう一度判定します）。
 - `permissions.deny` に当たる MCP ツールは、上限の内側でも承認できず、承認済みでもフックが許しません（deny が最優先）。
 - 承認は、そのツールを、**どんな引数でも使ってよいのと同じ**意味です（Claude Code の規則は、名前だけで、引数を絞れません）。ブラウザなど外部へ届くツールは、承認の前に理由を確かめてください。自動承認（`autoApprove`）は、まだ MCP の依頼につながっていません。
 - 依頼できるのは CLI の子だけです（Desktop の子は v0.2.0 以降）。

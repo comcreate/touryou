@@ -29,6 +29,8 @@ export const RESULT_KEYS: ResultKeys = {
   "decision.present": ["decisionId"],
   "node.split": ["newNodeId"],
   "scope.decide": ["state"],
+  "config.reload": ["changed", "restartRequired", "overLimit"],
+  "policy.ruleChange": ["changed"],
   "node.review": ["state"],
   "node.reclaimPreview": ["reclaimable", "unmet", "blockers", "loss", "tips"],
   "node.reclaim": ["reclaimed"],

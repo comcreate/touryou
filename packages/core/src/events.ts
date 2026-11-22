@@ -33,6 +33,7 @@ import { INBOX_KINDS, type InboxKind, PRIORITIES, type Priority } from "./inbox-
 import { type InboxMessage, isInboxMessage } from "./inbox-messages.js";
 import type { NodeRole, NodeState } from "./index.js";
 import { isBoundedText, LIMITS } from "./limits.js";
+import { parseRule } from "./permissions.js";
 import {
   isViolationDiagnosis,
   type Scope,
@@ -185,6 +186,19 @@ export type EventBody =
         readonly decision: ExtensionDecision;
         /** 承認（approve）のとき必須: 許可した対象（要求と同じ種類）。却下・切り出しでは付けない。 */
         readonly granted?: ExtensionTarget;
+      };
+    }
+  | {
+      /**
+       * 実行中の方針の規則の変更（#194 PR4）。config の方針（基準）に、実行中に足す・外す規則。行為者は人間だけ
+       * （人間でないものは畳み込みで拒否する）。`list: "autoApprove"` は記録だけで、承認には接続しない（PR5）。
+       * 同じ規則の足しは、すでにあれば何も変えない。ない規則の取り外しも、何も変えない。
+       */
+      readonly type: "policy.ruleChanged";
+      readonly payload: {
+        readonly list: PolicyList;
+        readonly rule: string;
+        readonly op: "add" | "remove";
       };
     }
   | {
@@ -580,6 +594,23 @@ export interface ExtensionTarget {
   readonly value: string;
 }
 
+/** 方針の規則の一覧の名前（`permissions.allow`・`deny`・`ask`・`autoApprove.allow`）。 */
+export type PolicyList = "allow" | "deny" | "ask" | "autoApprove";
+
+const POLICY_LISTS: readonly PolicyList[] = ["allow", "deny", "ask", "autoApprove"];
+const isPolicyList = (x: unknown): x is PolicyList =>
+  typeof x === "string" && (POLICY_LISTS as readonly string[]).includes(x);
+
+/** 実行中に足した規則（`policy.ruleChanged` の `add` から `remove` を引いた、今ある規則）。 */
+export interface PolicyRuleRecord {
+  readonly list: PolicyList;
+  readonly rule: string;
+  /** 足したイベントの `seq`・時刻と、足した者（人間）。 */
+  readonly addedSeq: number;
+  readonly addedAt: string;
+  readonly addedBy: Actor;
+}
+
 /** 範囲の拡張要求（FR_015）。 */
 export interface ExtensionRecord {
   readonly extensionId: string;
@@ -746,6 +777,8 @@ export interface OrchState {
   readonly reports: readonly ReportRecord[];
   /** 範囲の拡張要求と判定。 */
   readonly extensions: readonly ExtensionRecord[];
+  /** 実行中に足した方針の規則（#194 PR4）。古いスナップショットには無い。 */
+  readonly policyRules: readonly PolicyRuleRecord[];
   /** 追加指示の記録（時系列）。 */
   readonly instructions: readonly InstructionRecord[];
   /** 最終削除の標識（時系列。削除したノードの記録は、ログから消えている）。 */
@@ -827,6 +860,7 @@ export const initialState = (): OrchState => ({
   exits: [],
   reports: [],
   extensions: [],
+  policyRules: [],
   instructions: [],
   tombstones: [],
   lastSeq: 0,
@@ -924,6 +958,7 @@ interface Draft {
   reportIdx: Map<string, ReportRecord>;
   extensions: ExtensionRecord[];
   extensionIdx: Map<string, number>;
+  policyRules: PolicyRuleRecord[];
   instructions: InstructionRecord[];
   tombstones: PurgeRecord[];
   /** ノードごとの、今の実行（直近の start・restart・差し戻しより後）の件数。上限の判定を O(1) にする（状態から導ける写し）。 */
@@ -1034,6 +1069,13 @@ const reportShape = (r: unknown): boolean =>
   isReportKind(r.kind) &&
   typeof r.text === "string" &&
   parseActor(r.actor) !== undefined;
+const policyRuleShape = (x: unknown): boolean =>
+  isRec(x) &&
+  isPolicyList(x.list) &&
+  typeof x.rule === "string" &&
+  Number.isInteger(x.addedSeq) &&
+  typeof x.addedAt === "string" &&
+  parseActor(x.addedBy) !== undefined;
 const extensionShape = (x: unknown): boolean =>
   isRec(x) &&
   isId(x.extensionId) &&
@@ -1099,6 +1141,7 @@ function toDraft(state: OrchState): Draft | undefined {
   const exits = arrayOf<ExitRecord>(state.exits, exitShape);
   const reports = arrayOf<ReportRecord>(state.reports, reportShape);
   const extensions = arrayOf<ExtensionRecord>(state.extensions, extensionShape);
+  const policyRules = arrayOf<PolicyRuleRecord>(state.policyRules, policyRuleShape);
   const instructions = arrayOf<InstructionRecord>(state.instructions, instructionShape);
   const tombstones = arrayOf<PurgeRecord>(state.tombstones, purgeShape);
   if (
@@ -1114,6 +1157,7 @@ function toDraft(state: OrchState): Draft | undefined {
     !exits ||
     !reports ||
     !extensions ||
+    !policyRules ||
     !instructions ||
     !tombstones
   )
@@ -1138,6 +1182,7 @@ function toDraft(state: OrchState): Draft | undefined {
     reportIdx: new Map(reports.map((r) => [r.reportId, r])),
     extensions: [...extensions],
     extensionIdx: new Map(extensions.map((x, i) => [x.extensionId, i])),
+    policyRules: [...policyRules],
     instructions: [...instructions],
     tombstones: [...tombstones],
     runCounts: new Map(),
@@ -1191,6 +1236,7 @@ function toState(d: Draft): OrchState {
     exits: Object.freeze(d.exits),
     reports: Object.freeze(d.reports),
     extensions: Object.freeze(d.extensions),
+    policyRules: Object.freeze(d.policyRules),
     instructions: Object.freeze(d.instructions),
     tombstones: Object.freeze(d.tombstones),
     lastSeq: d.lastSeq,
@@ -2528,6 +2574,49 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
         decidedAt: raw.at as string,
         ...(granted === undefined ? {} : { granted }),
       });
+      return commit();
+    }
+
+    case "policy.ruleChanged": {
+      const { list, rule, op } = p;
+      if (
+        !isPolicyList(list) ||
+        typeof rule !== "string" ||
+        rule === "" ||
+        rule.length > LIMITS.policyRule ||
+        (op !== "add" && op !== "remove")
+      ) {
+        return invalid(seq, "policy.ruleChanged の payload（list・rule・op）");
+      }
+      // 方針の変更は人間だけ（権限の昇格にあたるので、窓口の表に加えて、畳み込みでも安全側に倒す）
+      if (!("human" in actor)) {
+        return reject(
+          seq,
+          "invalidPayload",
+          "policy.ruleChanged の行為者は人間だけ",
+          "人間の操作として記録する",
+        );
+      }
+      // 解析できない規則は足さない（取り外しは、解析できなくても、あるものを外せる）
+      if (op === "add" && !parseRule(rule).ok) {
+        return invalid(seq, "policy.ruleChanged の rule（解析できない規則）");
+      }
+      const at = d.policyRules.findIndex((x) => x.list === list && x.rule === rule);
+      if (op === "add") {
+        if (at < 0) {
+          d.policyRules.push(
+            freezeRecord({
+              list,
+              rule,
+              addedSeq: seq,
+              addedAt: raw.at as string,
+              addedBy: actor,
+            }),
+          );
+        }
+      } else if (at >= 0) {
+        d.policyRules.splice(at, 1);
+      }
       return commit();
     }
 

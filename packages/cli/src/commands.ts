@@ -127,6 +127,13 @@ const USAGE = `使い方:
       保管している先端から、新しいブランチを作る（作成だけ。既存のブランチは上書きしない。保管は残る）。既定の名前は touryou/restored/<key>
   touryou discarded drop <nodeId|key> [--yes] [--request-id <id>]
       保管を 1 件消す（取り消せない）。--yes がなければ、対象の表示だけで止まる
+  touryou config reload
+      設定ファイル config.json の方針（rootScope・permissions・autoApprove）を読み込み直す（人間だけ）。検査に通ったときだけ入れ替える。
+      ほかの項目が変わっていれば、名前を出して反映しない（daemon を起動し直す）。新しい上限からはみ出す子は、名前を出す（子の範囲は縮めない）
+  touryou policy add|remove <allow|deny|ask|autoApprove> <規則> [--request-id <id>]
+      実行中の方針の規則を足す・外す（人間だけ。記録と受信箱に残る）。deny も足せる。規則は 1 つの引数（例: 'Bash(git push:*)'）
+  touryou scope decide <拡張要求の ID> <approve|reject|split> [--also-limit] [--request-id <id>]
+      範囲の拡張を判定する（人間だけ。画面と同じ）。--also-limit は、承認する対象を根の上限（permissions.allow）にも足す（approve のときだけ）
   touryou launchd init [--org <組織の逆ドメイン。省略で Label は touryou.daemon>] [--path-prefix <ディレクトリ>] [--config <絶対パス> | --others]
       daemon・touryou-mcp を launchd で常駐させる起動スクリプトと plist を、$HOME/.touryou の下に生成する（窓口・トークンは不要。launchctl は実行しない。
       トークンの値は、生成も表示もしない）。詳しくは docs/launchd.md
@@ -160,6 +167,10 @@ const ALLOWED_FLAGS: Readonly<Record<string, readonly string[]>> = {
   "discarded-list": [],
   "discarded-restore": ["--branch"],
   "discarded-drop": ["--yes"],
+  "config-reload": [],
+  "policy-add": [],
+  "policy-remove": [],
+  "scope-decide": ["--also-limit"],
 };
 /** 値を取るオプション。 */
 const VALUE_FLAGS: ReadonlySet<string> = new Set([
@@ -1069,6 +1080,21 @@ export async function runCommand(
     command = `discarded-${sub}`;
     rest = rest.slice(1);
   }
+  if (command === "config") {
+    if (rest[0] !== "reload") return usageError("touryou config には、reload を指定する");
+    command = "config-reload";
+    rest = rest.slice(1);
+  } else if (command === "policy") {
+    if (rest[0] !== "add" && rest[0] !== "remove") {
+      return usageError("touryou policy には、add・remove のどちらかを指定する");
+    }
+    command = `policy-${rest[0]}`;
+    rest = rest.slice(1);
+  } else if (command === "scope") {
+    if (rest[0] !== "decide") return usageError("touryou scope には、decide を指定する");
+    command = "scope-decide";
+    rest = rest.slice(1);
+  }
   const allowed = ALLOWED_FLAGS[command];
   if (allowed === undefined) return usageError(`不明なコマンド: ${command}`);
 
@@ -1102,6 +1128,106 @@ export async function runCommand(
       positional.push(a);
       rerunArgs.push(a);
     }
+  }
+  if (command === "config-reload") {
+    if (positional.length !== 0) return usageError("touryou config reload に、引数はない");
+    const id = requestId ?? deps.newRequestId();
+    const res = await invoke(
+      deps.client,
+      id,
+      "config.reload",
+      {},
+      (v): v is { changed: string[]; restartRequired: string[]; overLimit: string[] } =>
+        isRecord(v) &&
+        isStringArray(v.changed) &&
+        isStringArray(v.restartRequired) &&
+        isStringArray(v.overLimit),
+    );
+    if (res.kind === "failure") return failed(res.failure);
+    if (res.kind === "unconfirmed") {
+      return unconfirmed(res.reason, `"$HOME/.touryou/current/bin/touryou" config reload`, id);
+    }
+    const { changed, restartRequired, overLimit } = res.value;
+    const lines = [
+      `設定を読み込み直した（反映した項目: ${changed.length === 0 ? "なし" : changed.join("・")}）`,
+    ];
+    if (restartRequired.length > 0) {
+      lines.push(
+        `反映していない（再起動が要る項目）: ${restartRequired.join("・")}。反映するには daemon を起動し直す`,
+      );
+    }
+    if (overLimit.length > 0) {
+      lines.push(
+        `新しい上限からはみ出している子（範囲は縮めていない）: ${overLimit.map((n) => terminalSafe(n, 64)).join("・")}`,
+      );
+    }
+    return { exitCode: 0, stdout: `${lines.join("\n")}\nrequestId: ${id}\n`, stderr: "" };
+  }
+  if (command === "policy-add" || command === "policy-remove") {
+    const [list, rule, ...more] = positional;
+    if (
+      list === undefined ||
+      rule === undefined ||
+      more.length !== 0 ||
+      !["allow", "deny", "ask", "autoApprove"].includes(list)
+    ) {
+      return usageError(
+        `touryou policy ${command === "policy-add" ? "add" : "remove"} <allow|deny|ask|autoApprove> <規則> （規則は 1 つの引数。例: 'Bash(git push:*)'）`,
+      );
+    }
+    const id = requestId ?? deps.newRequestId();
+    const res = await invoke(
+      deps.client,
+      id,
+      "policy.ruleChange",
+      {
+        list: list as "allow" | "deny" | "ask" | "autoApprove",
+        rule,
+        op: command === "policy-add" ? "add" : "remove",
+      },
+      (v): v is { changed: boolean } => isRecord(v) && typeof v.changed === "boolean",
+    );
+    if (res.kind === "failure") return failed(res.failure);
+    if (res.kind === "unconfirmed") {
+      return unconfirmed(res.reason, `"$HOME/.touryou/current/bin/touryou" ${argv.join(" ")} --request-id ${id}`, id);
+    }
+    const verb = command === "policy-add" ? "足した" : "外した";
+    return {
+      exitCode: 0,
+      stdout: `${res.value.changed ? verb : "変わらなかった（すでにその状態）"}: ${list} ${terminalSafe(rule, 200)}\nrequestId: ${id}\n`,
+      stderr: "",
+    };
+  }
+  if (command === "scope-decide") {
+    const [extensionId, decision, ...more] = positional;
+    if (
+      extensionId === undefined ||
+      more.length !== 0 ||
+      (decision !== "approve" && decision !== "reject" && decision !== "split")
+    ) {
+      return usageError("touryou scope decide <拡張要求の ID> <approve|reject|split> [--also-limit]");
+    }
+    const alsoLimit = flags.has("--also-limit");
+    if (alsoLimit && decision !== "approve") {
+      return usageError("--also-limit は approve のときだけ付けられる");
+    }
+    const id = requestId ?? deps.newRequestId();
+    const res = await invoke(
+      deps.client,
+      id,
+      "scope.decide",
+      { extensionId, decision, ...(alsoLimit ? { alsoLimit: true } : {}) },
+      (v): v is { state: string } => isRecord(v) && typeof v.state === "string",
+    );
+    if (res.kind === "failure") return failed(res.failure);
+    if (res.kind === "unconfirmed") {
+      return unconfirmed(res.reason, `"$HOME/.touryou/current/bin/touryou" ${argv.join(" ")} --request-id ${id}`, id);
+    }
+    return {
+      exitCode: 0,
+      stdout: `判定した: ${decision}${alsoLimit ? "（上限にも足した）" : ""}（子の状態 ${terminalSafe(res.value.state, 32)}）\nrequestId: ${id}\n`,
+      stderr: "",
+    };
   }
   if (command === "inbox") return runInbox(flags, values, positional, requestId, deps);
   if (command === "inbox-resolve" || command === "inbox-reopen") {

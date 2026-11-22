@@ -58,6 +58,19 @@ export function rootPolicyOf(config: DaemonConfig): RootPolicy {
   );
 }
 
+/** 設定から、入れ替えられる方針の部分（`rootScope`・`permissions`・`autoApprove`）を取り出す。 */
+export function policyBaseOf(config: DaemonConfig): {
+  readonly rootScope: Scope;
+  readonly permissions: PermissionsConfig;
+  readonly autoApprove: AutoApproveConfig;
+} {
+  return {
+    rootScope: config.rootScope,
+    permissions: config.permissions ?? EMPTY_PERMISSIONS,
+    autoApprove: config.autoApprove ?? EMPTY_AUTO_APPROVE,
+  };
+}
+
 export interface DaemonConfig {
   /** 状態（SQLite・トークン）の置き場。0700 のディレクトリにする。 */
   readonly stateDir: string;
@@ -935,6 +948,38 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
         : { desktopRequireVerifiedHooks: raw.desktopRequireVerifiedHooks as boolean }),
     },
   };
+}
+
+/** 読み込み直し（`config.reload`）で入れ替えてよい項目。ほかの項目は、起動のときにだけ読む。 */
+export const RELOADABLE_KEYS = ["rootScope", "permissions", "autoApprove"] as const;
+
+/** キー順に依存しない JSON（設定の比較用）。 */
+function stable(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stable).join(",")}]`;
+  if (typeof v === "object" && v !== null) {
+    const e = Object.entries(v as Record<string, unknown>)
+      .filter(([, x]) => x !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${e.map(([k, x]) => `${JSON.stringify(k)}:${stable(x)}`).join(",")}}`;
+  }
+  return JSON.stringify(v) ?? "null";
+}
+
+/**
+ * 読み込み直した設定のうち、今の設定から変わっている「再起動が要る項目」の名前（`RELOADABLE_KEYS` 以外）。
+ * 変わっていなければ空。起動のときに外した設定の名前（`ignoredLegacyKeys`）の違いは、見ない。
+ */
+export function restartRequiredKeys(current: DaemonConfig, next: DaemonConfig): string[] {
+  const skip = new Set<string>([...RELOADABLE_KEYS, "ignoredLegacyKeys"]);
+  const keys = new Set([...Object.keys(current), ...Object.keys(next)]);
+  return [...keys]
+    .filter((k) => !skip.has(k))
+    .filter(
+      (k) =>
+        stable((current as unknown as Record<string, unknown>)[k]) !==
+        stable((next as unknown as Record<string, unknown>)[k]),
+    )
+    .sort();
 }
 
 /** 設定ファイルを読んで検査する。読めない・不正なら失敗（起動しない）。 */

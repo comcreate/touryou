@@ -32,6 +32,8 @@ export const LIMITS = {
   extensionTarget: 1024,
   extensionReason: 4 * 1024,
   openExtensionsPerNode: 10,
+  /** 実行中に足す方針の規則 1 件の長さの上限（`policy.ruleChanged`）。 */
+  policyRule: 1024,
   /** 未回答（open）の判断要求の、ノードあたりの件数（拡張要求の `openExtensionsPerNode` と同じ考え方）。 */
   openDecisionsPerNode: 10,
   /** 強制の回収で失われるコミットの件名: 1 ノードあたりの件数と、1 件の長さ。 */

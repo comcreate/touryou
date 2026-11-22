@@ -46,7 +46,7 @@ export function childScopeProblem(req: {
         "scopeNotSubset",
         "子の範囲が、根の範囲（設定ファイル config.json の rootScope）に収まらない（コマンド・書き込み可能な場所・禁止の場所）",
         "子の範囲を、根の範囲の内側に絞って指定し直す（forbiddenLocations には、根の禁止の場所をすべて含める。禁止は根から引き継ぐ）",
-        "根の範囲を広げるなら、人に確かめてから config.json の rootScope（allowedCommands・writableLocations）を直し、daemon を起動し直す（起動し直すまで、変更は効かない）",
+        "根の範囲を広げるなら、人に確かめてから config.json の rootScope（allowedCommands・writableLocations）を直し、touryou config reload で読み込み直す（daemon を起動し直すのでもよい。どちらかをするまで、変更は効かない）",
       );
     return failure(
       "scopeNotSubset",

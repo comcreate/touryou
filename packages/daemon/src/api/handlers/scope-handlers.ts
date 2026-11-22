@@ -39,9 +39,12 @@ import {
   appendAtomically,
   deriveId,
   fail,
+  type Live,
   type LogPort,
+  live,
   notice,
 } from "./context.js";
+import { growScope, ruleOfExtension } from "../../root-policy.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;
 
@@ -52,17 +55,18 @@ export interface ScopeHandlerDeps {
   /** ノードの作業ツリー（実パス）。アダプタ側を正とする。取得できなければ `undefined`（承認しない＝安全側）。 */
   readonly cwdOf: (nodeId: string) => Promise<string | undefined>;
   /** ブリーフのない親（根など）の有効な範囲（`SpawnHandlerDeps.rootScope` と同じ）。 */
-  readonly rootScope?: Scope;
+  readonly rootScope?: Live<Scope>;
   /**
    * 根の方針の `deny` の規則（`RootPolicy.deny`）。MCP ツールの承認で、deny に当たるものは、上限の内側でも承認しない
    * （deny は allow・ask・範囲より強い。設計書 § 3.3）。省略すると、deny はない。
+   * 関数で渡すと、そのつど読む（実行中に足した deny が、すぐ効く。#194 PR4）。
    */
-  readonly denyRules?: readonly string[];
+  readonly denyRules?: Live<readonly string[]>;
   /**
    * 根の方針の `ask` の規則（`RootPolicy.ask`）。ask に当たる MCP ツールは、人間だけが承認できる（統合ノードの判定では承認しない）。
-   * 省略すると、ask はない。
+   * 省略すると、ask はない。関数で渡すと、そのつど読む（config.reload で入れ替わった ask が、すぐ効く。#194 PR4）。
    */
-  readonly askRules?: readonly string[];
+  readonly askRules?: Live<readonly string[]>;
   /** 応答に出さない原因の記録先。 */
   readonly onFailure?: (nodeId: string, cause: string) => void;
 }
@@ -111,8 +115,14 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
   async function checkApprove(
     ext: ExtensionRecord,
     human: boolean,
+    /** 「上限にも足して承認」で、上限に足す規則。足したあとの上限で判定する（deny は、これでも承認しない）。 */
+    limitRule?: string,
   ): Promise<{ ok: false; error: Failure } | undefined> {
     const state = log.state();
+    // 実行中に入れ替わる方針は、要求の中で 1 回だけ読む（同じ値で、上限の文言の分岐〔同一性の比較〕まで通す）
+    const rootScope = deps.rootScope === undefined ? undefined : live(deps.rootScope);
+    const denyRules = deps.denyRules === undefined ? [] : live(deps.denyRules);
+    const askRules = deps.askRules === undefined ? [] : live(deps.askRules);
     const node = state.nodes.find((n) => n.id === ext.nodeId);
     if (node === undefined || node.parentId === null) {
       return fail("notFound", "対象のノードまたはその親が見つからない", "ID を確認する");
@@ -129,15 +139,15 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
     if (
       ext.target.kind === "mcp" &&
       evaluate(
-        { allow: [], deny: deps.denyRules ?? [], ask: [] },
+        { allow: [], deny: denyRules, ask: [] },
         { kind: "mcp", tool: ext.target.value },
       ) === "deny"
     ) {
       return fail(
         "scopeDenied",
-        `MCP ツール ${ext.target.value} は、設定の permissions.deny に当たるため承認できない`,
+        `MCP ツール ${ext.target.value} は、方針の deny（設定の permissions.deny か、実行中に足した規則）に当たるため承認できない`,
         "却下する",
-        "許すなら、人に確かめてから config.json の permissions.deny を直し、daemon を起動し直してから、もう一度判定する",
+        "許すなら、人に確かめてから config.json の permissions.deny を直し、touryou config reload で読み込み直してから（実行中に足した deny は、touryou policy remove deny で外す）、もう一度判定する",
       );
     }
     // MCP ツールは、ask に当たるなら、人間だけが承認できる（統合ノードの判定では、子の頼みを自動で通さない）
@@ -145,7 +155,7 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
       ext.target.kind === "mcp" &&
       !human &&
       evaluate(
-        { allow: [], deny: [], ask: deps.askRules ?? [] },
+        { allow: [], deny: [], ask: askRules },
         { kind: "mcp", tool: ext.target.value },
       ) === "ask"
     ) {
@@ -185,7 +195,22 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
         "対象を、作業ツリーの内側の相対パスにして要求し直させる",
       );
     }
-    const parentScope = effectiveScope(state, node.parentId) ?? deps.rootScope;
+    const brief = effectiveScope(state, node.parentId);
+    // 親が根（ブリーフがない）のときだけ、「上限にも足して承認」の規則を、上限に足して比べる
+    const parentScope =
+      brief ??
+      (rootScope === undefined || limitRule === undefined
+        ? rootScope
+        : {
+            ...growScope(rootScope, [limitRule]),
+            ...(ext.target.kind === "mcp"
+              ? {
+                  allowedMcpTools: [
+                    ...new Set([...(rootScope.allowedMcpTools ?? []), ext.target.value]),
+                  ],
+                }
+              : {}),
+          });
     if (parentScope === undefined) {
       return fail(
         "rootScopeUnconfigured",
@@ -195,7 +220,7 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
     }
     if (!isScopeSubset(grown, parentScope, { child: parentCwd, parent: parentCwd })) {
       // 上限が根の範囲（設定ファイル）のときは、直す場所と、起動し直しが要ることを出す（node.spawn と同じ判定。Issue #5）
-      if (deps.rootScope !== undefined && deps.rootScope === parentScope)
+      if (brief === undefined)
         return fail(
           "scopeNotSubset",
           ext.target.kind === "mcp"
@@ -203,8 +228,8 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
             : "拡張後の範囲が、根の範囲（設定ファイル config.json の rootScope）に収まらない",
           "却下する",
           ext.target.kind === "mcp"
-            ? "上限を広げるなら、人に確かめてから config.json の permissions.allow に MCP ツール（mcp__<サーバー>__<道具>）を足し、daemon を起動し直してから、もう一度判定する（起動し直すまで、変更は効かない）"
-            : "根の範囲を広げるなら、人に確かめてから config.json の rootScope（allowedCommands・writableLocations）を直し、daemon を起動し直してから、もう一度判定する（起動し直すまで、変更は効かない）",
+            ? "上限を広げるなら、人に確かめてから、人間の判定で「上限にも足して承認」（scope_decide の alsoLimit。touryou scope decide --also-limit）にするか、config.json の permissions.allow に MCP ツール（mcp__<サーバー>__<道具>）を足して touryou config reload で読み込み直し（daemon を起動し直すのでもよい）、もう一度判定する"
+            : "根の範囲を広げるなら、人に確かめてから、人間の判定で「上限にも足して承認」（scope_decide の alsoLimit。touryou scope decide --also-limit）にするか、config.json の rootScope（allowedCommands・writableLocations）を直して touryou config reload で読み込み直し（daemon を起動し直すのでもよい）、もう一度判定する",
         );
       return fail(
         "scopeNotSubset",
@@ -277,6 +302,23 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
           "親の統合ノードに依頼する",
         );
       }
+      // 「上限にも足して承認」: 根の上限を広げる操作なので、人間だけ（統合ノードは付けられない）
+      const alsoLimit = decision === "approve" && req.params.alsoLimit === true;
+      if (alsoLimit && !human) {
+        return fail(
+          "forbidden",
+          "上限にも足して承認できるのは、人間だけ（根の上限を広げる操作）",
+          "足さずに承認するか、人間に頼む",
+        );
+      }
+      const limitRule = alsoLimit ? ruleOfExtension(ext.target) : undefined;
+      if (alsoLimit && limitRule === undefined) {
+        return fail(
+          "invalidTarget",
+          "この対象は、上限の規則に直せない",
+          "足さずに承認するか、config.json の permissions.allow に書く",
+        );
+      }
       const stateOfNode = (): NodeState | undefined => stateOf(log.state(), ext.nodeId);
       // 承認済みへの再承認: 記録はせず、アダプタの更新だけをやり直す（requestId が違っても。冪等）。
       if (decision === "approve" && ext.status === "approved") {
@@ -288,7 +330,7 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
         // 検査は、記録する直前に取り直す（検査の途中の待ちの間に、範囲が変わっていないか）。
         for (let attempt = 0; ; attempt++) {
           const basis = JSON.stringify(effectiveScope(log.state(), ext.nodeId));
-          const problem = await checkApprove(ext, human);
+          const problem = await checkApprove(ext, human, limitRule);
           if (problem) return problem;
           if (JSON.stringify(effectiveScope(log.state(), ext.nodeId)) === basis) break;
           if (attempt >= 1) {
@@ -297,6 +339,24 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
         }
       }
       const bodies: EventBody[] = [
+        // 上限にも足す: 同じ記録（1 トランザクション）で、規則を足す（承認だけ・規則だけが残ることはない）
+        ...(limitRule === undefined || ext.status !== "open"
+          ? []
+          : [
+              {
+                type: "policy.ruleChanged",
+                payload: { list: "allow", rule: limitRule, op: "add" },
+              } as EventBody,
+              {
+                type: "inbox.added",
+                payload: {
+                  id: deriveId("inbox", "human", req.requestId, "rule"),
+                  kind: "info",
+                  nodeId: state.nodes.find((n) => n.parentId === null)?.id ?? ext.nodeId,
+                  ...notice("policyRuleAdded", { list: "allow", rule: limitRule }),
+                },
+              } as EventBody,
+            ]),
         {
           type: "scope.extensionDecided",
           payload: {

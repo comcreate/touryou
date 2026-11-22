@@ -128,6 +128,13 @@ function toFailure(e: Failure): Failure {
 export const alreadyApplied = (state: OrchState, actor: Actor, requestId: string): boolean =>
   Object.hasOwn(state.requests, derivedRequestId(actor, requestId, 0));
 
+/**
+ * 値そのもの、または、そのつど値を返す関数。実行中に入れ替わる方針（`config.reload`・`policy.ruleChanged`）は、関数で渡し、
+ * 判定の直前に 1 回だけ読む（1 つの要求の中で、同じ値を使う）。
+ */
+export type Live<T> = T | (() => T);
+export const live = <T>(v: Live<T>): T => (typeof v === "function" ? (v as () => T)() : v);
+
 export const fail = (
   code: string,
   cause: string,

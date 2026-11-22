@@ -321,10 +321,26 @@ const VALIDATORS: Validators = {
     };
   },
   "scope.decide": (p) => {
-    const o = strict(p, ["extensionId", "decision"]);
+    const o = strict(p, ["extensionId", "decision", "alsoLimit"]);
+    const decision = oneOf(o, "decision", ["approve", "reject", "split"] as const);
+    const base = { extensionId: id(o, "extensionId"), decision };
+    if (o.alsoLimit === undefined) return base;
+    if (typeof o.alsoLimit !== "boolean") fail("alsoLimit は真偽値");
+    if (o.alsoLimit && decision !== "approve") fail("alsoLimit は approve のときだけ付けられる");
+    return { ...base, alsoLimit: o.alsoLimit as boolean };
+  },
+  "config.reload": (p) => {
+    strict(p, []);
+    return {};
+  },
+  "policy.ruleChange": (p) => {
+    const o = strict(p, ["list", "rule", "op"]);
+    const rule = text(o, "rule", LIMITS.policyRule);
+    if (rule.trim() === "") fail("rule は空にできない");
     return {
-      extensionId: id(o, "extensionId"),
-      decision: oneOf(o, "decision", ["approve", "reject", "split"] as const),
+      list: oneOf(o, "list", ["allow", "deny", "ask", "autoApprove"] as const),
+      rule,
+      op: oneOf(o, "op", ["add", "remove"] as const),
     };
   },
   "node.review": (p) => {

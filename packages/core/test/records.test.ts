@@ -336,6 +336,7 @@ describe("子が入れる文字列・配列の上限（コードポイントで�
       commit: 128,
       inboxResolveItems: 200,
       feedback: 8 * 1024,
+      policyRule: 1024,
     });
   });
 

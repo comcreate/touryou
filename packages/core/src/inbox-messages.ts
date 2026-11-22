@@ -71,6 +71,31 @@ export const INBOX_MESSAGES = {
     ja: "範囲の拡張 {extension} を承認したが、アダプタの範囲を更新できなかった",
     en: "Scope request {extension} was approved, but the adapter's scope could not be updated",
   },
+  // ── 方針の変更（#194 PR4）
+  policyRuleAdded: {
+    ja: "方針の規則を足した（{list}）: {rule}",
+    en: "Added a policy rule ({list}): {rule}",
+  },
+  policyRuleRemoved: {
+    ja: "方針の規則を外した（{list}）: {rule}",
+    en: "Removed a policy rule ({list}): {rule}",
+  },
+  configReloaded: {
+    ja: "設定を読み込み直した（反映した項目: {changed}）",
+    en: "Reloaded the config (applied: {changed})",
+  },
+  configRestartRequired: {
+    ja: "設定ファイルの {items} が変わっているが、反映していない（再起動が要る項目）。反映するには daemon を起動し直す",
+    en: "{items} changed in the config file but was not applied (it needs a restart). Restart the daemon to apply it",
+  },
+  configOverLimit: {
+    ja: "新しい上限から、付与済みの範囲がはみ出している子がいる（{nodes}）。子の範囲は縮めていない。必要なら、その子を止めるか作り直す",
+    en: "Some children hold a scope that exceeds the new limit ({nodes}). Their scopes were not reduced. Stop or recreate them if needed",
+  },
+  configReloadFailed: {
+    ja: "設定を読み込み直せなかった。今の方針のまま: {cause}",
+    en: "Could not reload the config. The current policy stays in place: {cause}",
+  },
   integrated: {
     ja: "子 {node} のブランチを、親のブランチ {target} へ fast-forward で統合した（先端 {tip}）",
     en: "Fast-forwarded child {node}'s branch into the parent branch {target} (tip {tip})",

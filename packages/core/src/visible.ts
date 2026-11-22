@@ -30,6 +30,8 @@ export function visibleState(state: OrchState, callerId: string): OrchState {
       tombstones: Object.freeze([]),
       reports: Object.freeze(mine(state.reports)),
       extensions: Object.freeze(mine(state.extensions)),
+      // 実行中の方針の規則は、人間（daemon）が直接読む。呼び出し元には見せない。
+      policyRules: Object.freeze([]),
       instructions: Object.freeze(mine(state.instructions)),
       lastSeq: state.lastSeq,
       requests: Object.freeze({}),
