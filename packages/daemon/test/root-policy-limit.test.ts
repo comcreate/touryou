@@ -14,9 +14,7 @@ describe("addableLimitRule（上限に足せる対象だけ、規則を返す）
     expect(addableLimitRule({ kind: "command", value: "git status" }, pass)).toBe(
       "Bash(git status:*)",
     );
-    expect(addableLimitRule({ kind: "mcp", value: "mcp__srv__tool" }, pass)).toBe(
-      "mcp__srv__tool",
-    );
+    expect(addableLimitRule({ kind: "mcp", value: "mcp__srv__tool" }, pass)).toBe("mcp__srv__tool");
   });
 
   it("規則に表せない対象（解析できないコマンド・作業ツリーの外の書き込み先）は、規則を返さない", () => {

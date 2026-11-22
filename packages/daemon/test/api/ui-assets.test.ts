@@ -473,7 +473,9 @@ describe("画面の資産（走査）", () => {
     expect(UI_JS).toContain("if (also && limitRule === '') return;");
     expect(UI_JS).toContain("lines.push([t('line.limitRule'), limitRule]);");
     // should 2: command の依頼には、前方一致（引数は問わない）の注意を足す
-    expect(UI_JS).toContain("if (x.kind === 'command') lines.push([t('line.note'), t('ext.alsoNoteCommand')]);");
+    expect(UI_JS).toContain(
+      "if (x.kind === 'command') lines.push([t('line.note'), t('ext.alsoNoteCommand')]);",
+    );
     expect(UI_JS).toContain("var denied = gate === 'deny';");
     expect(UI_JS).toContain("if (denied) card.appendChild(el('p', 'error', t('ext.denyNote')));");
     expect(UI_JS).toContain(
