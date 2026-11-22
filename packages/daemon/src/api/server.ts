@@ -213,6 +213,8 @@ export interface ApiDeps {
    * 画面は `cd <ここ> && claude attach <ノード ID>` の形で出す。表示モデルの応答にだけ載せ、記録には残さない。
    */
   readonly attachDir?: string;
+  /** Desktop の子を足してよい設定（allowDesktopChildren か childRuntime: desktop）か。画面の設定の窓の注記に使う（#159）。 */
+  readonly desktopChildrenAllowed?: boolean;
   /**
    * `GET /v1/whoami` で、統合ノードにだけ返す daemon の場所（#164）。`daemonId` は `identity` の起動ごとの識別子
    * （`docs/daemon-identity.md`）。省略すると、`daemon` は返さない。子には、どちらでも返さない。
@@ -1559,6 +1561,8 @@ export function createApiServer(deps: ApiDeps): ApiServer {
             ),
             ...(deps.confirmations === undefined ? {} : { confirmations: deps.confirmations() }),
             ...(deps.attachDir === undefined ? {} : { attachDir: deps.attachDir }),
+            // 設定の窓に、opt-in（Desktop の子を足してよい）の注記を出す。読み取りだけ（#159）
+            ...(deps.desktopChildrenAllowed === true ? { desktopChildrenAllowed: true } : {}),
           },
         }),
       };

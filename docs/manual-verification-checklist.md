@@ -227,6 +227,17 @@
   4. 動いている Desktop の子がある状態で、daemon を再起動する。根の受信箱を見る。もう一度再起動して、また見る。そのあと、その子を止めたと宣言する。
 - **期待する結果**: 停止済み（stopped）になり、宣言した者と根拠が記録に残り、代行依頼が解決済みになる。打ち込みが違えば（空・1 文字違い・前後に空白）送れない。再起動のあと、根の受信箱に（停止未完了の帯で）1 件出る。もう一度再起動しても増えない。対象の子をすべて止めたと宣言すると、根の「daemon の再起動のあと」の依頼も解決済みになる。窓口のポートは、前回のポートを stateDir に保存して使い続ける（`portSource` が saved）。
 
+### D4. 混在の木（`allowDesktopChildren: true`。#159 PR2b）
+
+- **前提**: 設定 `allowDesktopChildren: true`（`childRuntime` は省略＝`cli`）の daemon と、Claude のデスクトップアプリ。
+- **手順**:
+  1. 同じ親から `node_spawn` を 2 回呼ぶ。1 回目は `runtime` を省略（CLI の子）、2 回目は `runtime: "desktop"`。
+  2. 状態画面で、子ごとの runtime・開き方・安全の表示と、設定の窓の「Desktop の子を足してよい」の注記を見る。
+  3. daemon の再起動のあと、reconcile の帯の数を見る。
+  4. 設定から `allowDesktopChildren` を外して起動し直し、`runtime: "desktop"` で `node_spawn` を呼ぶ。
+  5. （任意）launchd の常駐（端末なし）のまま、取り返しのつかない操作（`node_integrate` など）を呼ぶ。
+- **期待する結果**: 1 は CLI の子として、2 は Desktop の子として作られる（`node.created.runtime` が子ごとに違う）。画面は子ごとの runtime を示し、帯の数は Desktop の子だけを数える。4 は `desktopChildNotAllowed` で断られ、何も作られない。5 は `confirmationUnavailable`（端末がないため。opt-in の木では CLI の子だけでも端末つきの daemon が要る）。
+
 ## L. 常駐のログイン項目（Issue #64）
 
 - **前提**: v0.1.1 の形（`current/bin/node` を起こす plist）か v0.1.0 の形（`run-daemon.sh` を起こす plist）で常駐している Mac。zsh（`noclobber` でも動くように、上書きは `>|` で書く）。`sfltool dumpbtm` は管理者のパスワードを聞くことがある。

@@ -42,7 +42,8 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 | `permissions` | なし（空） | 権限の規則（`allow`・`deny`・`ask`）。Claude Code の `permissions` と同じ書き方の部分集合。下の「権限の規則（`permissions`・`autoApprove`）」 |
 | `autoApprove` | なし（空） | 自動承認してよい規則（`allow` だけ）。読み取りだけのものに限る。下の「権限の規則（`permissions`・`autoApprove`）」 |
 | `port` | `0` | 窓口のポート（127.0.0.1）。0 なら `--port` → 保存した前回のポート → 空いているポート（`docs/plugin.md` の「使う順序」） |
-| `childRuntime` | `cli` | 子の実行環境。`cli` は親のセッションが `claude --bg` で起動する子（TouRyou は起動しない。親への依頼の形。[`plugin.md`](plugin.md) の「親から子を起動する流れ」）。`desktop` は実験的（[`desktop-runtime.md`](desktop-runtime.md)） |
+| `childRuntime` | `cli` | 子の実行環境の**既定値**（`node_spawn` の `runtime` を省略したときの値）。`cli` は親のセッションが `claude --bg` で起動する子（TouRyou は起動しない。親への依頼の形。[`plugin.md`](plugin.md) の「親から子を起動する流れ」）。`desktop` は実験的（[`desktop-runtime.md`](desktop-runtime.md)）。`desktop` にすると、`allowDesktopChildren` を暗に許可したものとみなす（互換）。記録のない古い子は、この値で扱う |
+| `allowDesktopChildren` | `false` | Desktop の子を足してよいか（opt-in。#159）。`true` のときだけ、`node_spawn` の `runtime: "desktop"` を受け、CLI の子と Desktop の子を 1 つの木に混ぜられる。許可がないのに `runtime: "desktop"` を指定すると `desktopChildNotAllowed` で失敗する。**`true` にすると、取り消せない操作（`touryou purge`・`discarded-drop`・回収の指示）は、端末つきで動いている daemon でしか通らない**（CLI の子だけの操作も同じ。launchd 経由では `confirmationUnavailable`）。既定の `false` の木は、これまでどおり。画面の設定の窓に、有効なときの注記が出る |
 | `maxTreeDepth` | `3` | 木の深さの上限（2〜10 の整数。根を深さ 0 と数える）。`node_spawn`・`node_adopt` は、新しいノードの深さがこの値以上になるとき、理由と直し方を添えて `depthExceeded` で断る。既定の 3 は、根（0）・サブ統括（1）・その下の孫（2）まで。書き方は `"maxTreeDepth": 4` のように整数 1 つ。範囲の外・整数でない値は、起動時に理由つきで拒否される。変えたら daemon を起動し直す（起動し直すまで、変更は効かない）。深くするほど、同時の起動・要約・停止の連動の検証範囲が増える |
 | `maxTurns` | `100` | 子ごとのターン数の上限 |
 | `maxBudgetUsd` | `5` | 子ごとの費用の上限（USD） |

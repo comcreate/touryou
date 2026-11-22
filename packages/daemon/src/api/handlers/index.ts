@@ -82,6 +82,9 @@ export function createHandlersWithScheduler(
     | "onFailure"
     | "startLimits"
     | "runtime"
+    | "adapterForRuntime"
+    | "desktopAllowed"
+    | "nodeRuntime"
   > & {
     /** 渡すと、既存の作業ツリーの採用（node.adopt。#163）も有効になる。 */
     adopt?: AdoptPorts;

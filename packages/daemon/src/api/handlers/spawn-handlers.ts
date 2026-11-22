@@ -76,10 +76,22 @@ export interface SpawnPorts {
 export interface SpawnHandlerDeps {
   readonly log: LogPort;
   readonly clock: () => string;
-  /** 新しい子のランタイム（アダプタ）。親のものを使う。 */
+  /** 記録済みのノードのランタイム（アダプタ）。そのノードの `runtime` で選ばれる（起動のやり直し・切り出しの元など）。 */
   readonly adapterFor: (nodeId: string) => RuntimeAdapter | undefined;
-  /** 新しい子の `node.created` に記録する実行環境（設定 `childRuntime` と同じ値。記録だけで、振り分けには使わない。#159）。 */
+  /**
+   * これから作る子のランタイム（アダプタ）を、その子の runtime で選ぶ（#159 PR2b）。省略すると、親の `adapterFor(parentId)` を使う
+   * （木が単一 runtime の構成）。その runtime のアダプタがなければ `undefined`（`noRuntime` で失敗させる）。
+   */
+  readonly adapterForRuntime?: (runtime: NodeRuntime) => RuntimeAdapter | undefined;
+  /** `node_spawn` の `runtime` を省略したときの実行環境（設定 `childRuntime`）。新しい子の `node.created` に記録する（#159）。 */
   readonly runtime?: NodeRuntime;
+  /**
+   * Desktop の子を作ってよいか（設定 `allowDesktopChildren`。`childRuntime: "desktop"` は暗に許可）。省略は false。
+   * false のとき、`runtime` が desktop になる生成は `desktopChildNotAllowed` で失敗させる（opt-in。#159）。
+   */
+  readonly desktopAllowed?: boolean;
+  /** ノードの runtime（記録・起動の報告・設定の既定から導く）。切り出しで、元のノードと同じ runtime を引き継ぐのに使う。省略すると、記録の値か `runtime`。 */
+  readonly nodeRuntime?: (nodeId: string) => NodeRuntime | undefined;
   readonly ports: SpawnPorts;
   readonly credentials: Pick<CredentialStore, "issueNodeToken" | "revokeNode">;
   /** `node.split` の keep が stop のときに、元のノードを止める（`node.stop` のハンドラ）。 */
@@ -347,10 +359,18 @@ export function createSpawner(deps: SpawnHandlerDeps) {
   /** spawn・split の共通の本体。 */
   async function create(
     req: { requestId: string; caller: string },
-    input: { parentId: string; role: NodeRecord["role"]; brief: BriefParams; tag: string },
+    input: {
+      parentId: string;
+      role: NodeRecord["role"];
+      brief: BriefParams;
+      tag: string;
+      /** 子の実行環境の指定。省略すると `deps.runtime`（設定の既定）。 */
+      runtime?: NodeRuntime;
+    },
   ): Promise<Result<Spawned, Failure>> {
     const { requestId, caller } = req;
     const { parentId, role, brief, tag } = input;
+    const runtime = input.runtime ?? deps.runtime;
     const actor = { nodeId: caller };
     const nodeId = deriveId("node", caller, requestId, tag);
     const dependsOn = [...(brief.dependsOn ?? [])];
@@ -364,7 +384,7 @@ export function createSpawner(deps: SpawnHandlerDeps) {
         objective: brief.objective,
         acceptanceCriteria: [...brief.acceptanceCriteria],
         scope: brief.scope,
-        ...(deps.runtime === undefined ? {} : { runtime: deps.runtime }),
+        ...(runtime === undefined ? {} : { runtime }),
       },
     };
 
@@ -383,7 +403,8 @@ export function createSpawner(deps: SpawnHandlerDeps) {
       }
       if (node.state === "pending" && dependsDone(log.state(), dependsOn)) {
         // 記録済み・未起動（起動の前に異常終了した）。起動だけをやり直す。
-        const adapter = deps.adapterFor(parentId);
+        // 記録済みのノードなので、そのノードの runtime のアダプタで起動する（親のものではない）
+        const adapter = deps.adapterFor(nodeId);
         const provisioned = await ports
           .provisionWorktree({ parentId, nodeId })
           .catch(() => undefined);
@@ -448,11 +469,26 @@ export function createSpawner(deps: SpawnHandlerDeps) {
       maxTreeDepth: deps.maxTreeDepth,
     });
     if (depthIssue !== undefined) return { ok: false, error: depthIssue };
-    const adapter = deps.adapterFor(parentId);
+    // Desktop の子は opt-in（設定 allowDesktopChildren。childRuntime: desktop は暗に許可）のときだけ作れる（#159）。
+    if (runtime === "desktop" && deps.desktopAllowed !== true) {
+      return fail(
+        "desktopChildNotAllowed",
+        "Desktop の子を作る許可がない（設定 allowDesktopChildren が true でない）",
+        "設定の allowDesktopChildren を確かめる（有効にすると、取り消せない操作は端末つきの daemon でしか通らなくなる）",
+        "runtime を省略するか cli にして、CLI の子として作る",
+      );
+    }
+    // 子の runtime のアダプタ（親のものではない）。省略時は、単一 runtime の木として親のアダプタ。
+    const adapter =
+      runtime !== undefined && deps.adapterForRuntime !== undefined
+        ? deps.adapterForRuntime(runtime)
+        : deps.adapterFor(parentId);
     if (adapter === undefined) {
       return fail(
         "noRuntime",
-        `親 ${parentId} のランタイム（アダプタ）が見つからない`,
+        runtime === undefined
+          ? `親 ${parentId} のランタイム（アダプタ）が見つからない`
+          : `${runtime} の子のランタイム（アダプタ）が見つからない`,
         "ノードの状態を確認する",
       );
     }
@@ -607,7 +643,8 @@ export function createSpawner(deps: SpawnHandlerDeps) {
           unstartable(nodeId, notice("unstartableNoBrief", {}));
           return { ok: true, value: undefined };
         }
-        const adapter = deps.adapterFor(parentId);
+        // そのノードの runtime のアダプタ（記録した runtime で選ぶ。親のものではない）
+        const adapter = deps.adapterFor(nodeId);
         if (adapter === undefined) {
           unstartable(nodeId, notice("unstartableNoAdapter", { parent: parentId }));
           return { ok: true, value: undefined };
@@ -718,7 +755,7 @@ export function createSpawner(deps: SpawnHandlerDeps) {
 
   const handlers = {
     "node.spawn": (req: HandlerRequest<"node.spawn">): Promise<R<"node.spawn">> => {
-      const { parentId, role, parentSessionId, ...brief } = req.params;
+      const { parentId, role, runtime, parentSessionId, ...brief } = req.params;
       const caller = req.caller?.nodeId ?? "";
       return exclusive(
         `${caller}\0${req.requestId}`,
@@ -726,7 +763,7 @@ export function createSpawner(deps: SpawnHandlerDeps) {
         async (): Promise<R<"node.spawn">> => {
           const created = await create(
             { requestId: req.requestId, caller },
-            { parentId, role, brief, tag: "spawn" },
+            { parentId, role, brief, tag: "spawn", ...(runtime === undefined ? {} : { runtime }) },
           );
           if (!created.ok) return created;
           // 親のセッションを記録する（知らせの宛先）。記録に失敗しても、生成は止めない。
@@ -789,9 +826,20 @@ export function createSpawner(deps: SpawnHandlerDeps) {
             "状態を確認する",
           );
         }
+        // 切り出した子は、元のノードと同じ runtime で作る（同じ種類の作業の続きなので）
+        const originalRuntime =
+          deps.nodeRuntime === undefined
+            ? (original.runtime ?? deps.runtime)
+            : deps.nodeRuntime(nodeId);
         const made = await create(
           { requestId: req.requestId, caller },
-          { parentId: original.parentId, role: original.role, brief, tag: "split" },
+          {
+            parentId: original.parentId,
+            role: original.role,
+            brief,
+            tag: "split",
+            ...(originalRuntime === undefined ? {} : { runtime: originalRuntime }),
+          },
         );
         if (!made.ok) return made;
         const newNodeId = made.value.nodeId;

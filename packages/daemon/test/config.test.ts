@@ -471,6 +471,16 @@ describe("parseConfig（設定は厳密に検査し、不正なら起動を失�
     for (const v of ["sdk", 1, null]) bad({ childRuntime: v }, "childRuntime");
   });
 
+  it("allowDesktopChildren（Desktop の子の opt-in）は真偽値（任意。省略は無効）", () => {
+    const none = parseConfig(JSON.stringify(base));
+    expect(none.ok && none.value.allowDesktopChildren).toBeUndefined();
+    for (const v of [true, false]) {
+      const r = parseConfig(JSON.stringify({ ...base, allowDesktopChildren: v }));
+      expect(r.ok && r.value.allowDesktopChildren).toBe(v);
+    }
+    for (const v of ["true", 1, null]) bad({ allowDesktopChildren: v }, "allowDesktopChildren");
+  });
+
   it("maxTurns・maxBudgetUsd（子ごとの上限）は、正の数（任意）", () => {
     const ok1 = parseConfig(JSON.stringify({ ...base, maxTurns: 50, maxBudgetUsd: 2.5 }));
     expect(ok1.ok && [ok1.value.maxTurns, ok1.value.maxBudgetUsd]).toEqual([50, 2.5]);

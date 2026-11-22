@@ -108,7 +108,7 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 
 0 成功 / 1 失敗・結果が確認できない / 2 引数・環境の誤り / 3 子のトークンの期限切れ（`touryou child report` だけ）
 
-**Desktop の木（設定 `childRuntime: "desktop"`）では、`touryou purge`・`touryou discarded-drop`・回収の指示（`node.reclaimInstruct`）は、すぐには実行されない**。daemon は確認待ちにして `confirmationRequired` を返す（終了コード 1）。daemon の端末（`/dev/tty`）に出たコードを、画面（`/ui`）のいちばん上の「確認待ち」の欄に打つと、実行する。daemon が端末なしで動いているときは `confirmationUnavailable`（終了コード 1。端末から daemon を起動する）。CLI の子だけの木は、今までどおり。詳しくは [`docs/desktop-runtime.md`](desktop-runtime.md) の「取り消せない操作の確認」。
+**Desktop の子がありうる木（設定 `childRuntime: "desktop"`、または opt-in の `allowDesktopChildren: true`）では、`touryou purge`・`touryou discarded-drop`・回収の指示（`node.reclaimInstruct`）は、すぐには実行されない**。daemon は確認待ちにして `confirmationRequired` を返す（終了コード 1）。daemon の端末（`/dev/tty`）に出たコードを、画面（`/ui`）のいちばん上の「確認待ち」の欄に打つと、実行する。daemon が端末なしで動いているときは `confirmationUnavailable`（終了コード 1。端末から daemon を起動する）。既定の CLI の子だけの木は、今までどおり（opt-in を有効にすると、CLI の子だけの操作も同じ確認になる）。詳しくは [`docs/desktop-runtime.md`](desktop-runtime.md) の「取り消せない操作の確認」。
 
 ## Desktop の子が使う `touryou child`
 

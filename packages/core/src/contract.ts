@@ -7,7 +7,7 @@
  */
 
 import type { Brief } from "./brief.js";
-import type { ExtensionTarget, ReportEvidence, ReportKind } from "./events.js";
+import type { ExtensionTarget, NodeRuntime, ReportEvidence, ReportKind } from "./events.js";
 import type { InboxItem } from "./inbox.js";
 import type { NodeRole, NodeState } from "./index.js";
 import type { Blocker, UnmetReason } from "./reclaim.js";
@@ -137,8 +137,16 @@ export interface OperationMap {
   // 統合
   /** 子の生成。ブリーフ（spec 5.2）を受ける。作業ツリー・ブランチは params に含めず、アダプタが親ブランチから決める。 */
   "node.spawn": {
-    /** `parentSessionId`: 呼んだ親の Claude Code の session_id（mcp が付ける。知らせの宛先）。 */
-    params: { parentId: string; role: NodeRole; parentSessionId?: string } & Brief;
+    /**
+     * `parentSessionId`: 呼んだ親の Claude Code の session_id（mcp が付ける。知らせの宛先）。
+     * `runtime`: 子の実行環境（#159）。省略すると daemon の設定 `childRuntime`（既定 cli）。`desktop` は、設定 `allowDesktopChildren` が true のときだけ受ける。
+     */
+    params: {
+      parentId: string;
+      role: NodeRole;
+      runtime?: NodeRuntime;
+      parentSessionId?: string;
+    } & Brief;
     /** 依存先が未完了なら `pending`（待っている先行ノードを `waitingFor` に）、そうでなければ起動して `running`。 */
     result: { nodeId: string; status: "running" | "pending"; waitingFor?: string[] };
   };

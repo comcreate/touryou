@@ -35,7 +35,7 @@ type McpOperation = RoleOperation<McpRole>;
 /** 操作ごとの説明。`McpOperation` を網羅しないと型エラーになる。 */
 const DESCRIPTIONS: Readonly<Record<McpOperation, string>> = {
   "node.spawn":
-    "子を生成する。parentId は、自分の ID（起動の指示の先頭か、tree_list の self 列が「あなた」の行で分かる）か、子孫の ID を、短縮しないでそのまま渡す（作業ツリーのディレクトリ名は ID ではない）。引数: parentId・role・objective（目的）・acceptanceCriteria（受け入れ基準）・scope（writableLocations・forbiddenLocations は作業ツリー内の相対パス、allowedCommands）・dependsOn（省略可）。作業ツリーとブランチは指定しない（システムが親のブランチから決める）。結果は { nodeId, status: running か pending, waitingFor? }（依存先が未完了なら pending で、待っている先行ノードを waitingFor に示す）",
+    "子を生成する。parentId は、自分の ID（起動の指示の先頭か、tree_list の self 列が「あなた」の行で分かる）か、子孫の ID を、短縮しないでそのまま渡す（作業ツリーのディレクトリ名は ID ではない）。引数: parentId・role・objective（目的）・acceptanceCriteria（受け入れ基準）・scope（writableLocations・forbiddenLocations は作業ツリー内の相対パス、allowedCommands）・dependsOn（省略可）・runtime（cli か desktop。省略可。省略すると daemon の設定の既定。desktop は設定 allowDesktopChildren が true のときだけ。許可がなければ desktopChildNotAllowed で失敗する）。作業ツリーとブランチは指定しない（システムが親のブランチから決める）。結果は { nodeId, status: running か pending, waitingFor? }（依存先が未完了なら pending で、待っている先行ノードを waitingFor に示す）",
   "node.adopt":
     "すでにある作業ツリーと、そこで動いているセッションを、子として採用する（起動しない。CLI の木だけ）。引数: parentId（自分の ID か子孫の ID）・role・worktree（実在する作業ツリーの絶対パス）・branch（そのブランチ名。上流は親のブランチにしておく）・objective・acceptanceCriteria・scope（spawn と同じ。親の範囲に収まること）・sessionRef（省略可）。作業ツリーとブランチは削除しない（回収でも消えない）。検査に通らないときは、原因と次の操作を返す。結果は { nodeId, worktree, branch, dirty（未コミットの変更あり）, instruction, duplicate }。instruction を、そのセッションの人に伝える（セッションで /mcp の Reconnect → child_bind を引数なしで呼ぶ）。コードが切れたら node_bindCode で出し直す",
   "node.send":

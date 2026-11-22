@@ -644,9 +644,12 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
   const defaultRuntime: NodeRuntime = config.childRuntime === "desktop" ? "desktop" : "cli";
   const nodeRuntimeOf = (nodeId: string): NodeRuntime =>
     runtimeOf(log.state(), nodeId) ?? defaultRuntime;
-  // その runtime の子を、この daemon が扱えるか（アダプタを用意するか）。PR2b で、Desktop は opt-in の設定を見る形に直す。
-  const cliEnabled = config.childRuntime !== "desktop";
-  const desktopEnabled = config.childRuntime === "desktop";
+  // Desktop の子を作ってよいか（opt-in。#159 PR2b）。`childRuntime: "desktop"` は、暗に許可したものとみなす（互換）。
+  const desktopAllowed = config.childRuntime === "desktop" || config.allowDesktopChildren === true;
+  // その runtime の子を、この daemon が扱えるか（アダプタを用意するか）。CLI は、`childRuntime: "desktop"` の木では
+  // opt-in（allowDesktopChildren）がなければ扱わない（今までの Desktop の木のまま）。
+  const cliEnabled = config.childRuntime !== "desktop" || config.allowDesktopChildren === true;
+  const desktopEnabled = desktopAllowed;
 
   // フックの受け口の session_id の結び付け。トークンを発行し直した・失効させたら外す。
   const hookSessions = createSessionBinder();
@@ -1909,8 +1912,13 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     {
       ports: spawn,
       credentials,
-      // 子の `node.created` に記録する実行環境（設定 childRuntime と同じ値。記録だけで、振り分けには使わない。#159）
+      // `node_spawn` の runtime を省略したときの実行環境（設定 childRuntime）。子の `node.created` に記録する（#159）
       runtime: config.childRuntime === "desktop" ? "desktop" : "cli",
+      // 子の runtime のアダプタ（親のものではない）。その runtime を扱えなければ undefined（noRuntime）
+      adapterForRuntime: (rt: NodeRuntime) =>
+        rt === "desktop" ? desktopAdapter : cliEnabled ? cliAdapter : undefined,
+      desktopAllowed,
+      nodeRuntime: nodeRuntimeOf,
       ...(adopt === undefined ? {} : { adopt }),
       rootScope: config.rootScope,
       ...(config.maxTreeDepth === undefined ? {} : { maxTreeDepth: config.maxTreeDepth }),
@@ -2023,7 +2031,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
   // 紐付けで結んだ session_id → ノード（フックの受け口が、信頼度の低い報告にだけ使う）
   const sessionBindings = createSessionBindings({ log, cwdOf: (id) => deps.worktree.cwdOf(id) });
   const cliBindWorktreeOk = createBindWorktreeCheck({ cwdOf: (id) => deps.worktree.cwdOf(id) });
-  // 取り消せない操作の確認。Desktop の木だけ（子が人間のトークンを読めてしまうため）。CLI の子だけの木は今までどおり。
+  // 取り消せない操作の確認。Desktop の子がありうる木だけ（opt-in の allowDesktopChildren か childRuntime: desktop。子が人間の
+  // トークンを読めてしまうため）。opt-in が有効なら、CLI の子だけの操作も端末なしでは取り消せない（#159）。既定の CLI の木は今までどおり。
   const confirmGate =
     desktopAdapter === undefined
       ? undefined
@@ -2102,6 +2111,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     stopDelegated: (nodeId: string) => stopDelegatedOf(adapterFor(nodeId))(nodeId),
     // 画面の claude attach を打つ場所（#136）
     attachDir: config.repoRoot,
+    // 設定の窓の注記（opt-in が有効なとき、取り消せない操作は端末つきの daemon でしか通らない）
+    desktopChildrenAllowed: desktopAllowed,
     // 統合ノードの whoami に出す daemon の場所（#164）
     daemonInfo: { rootCwd: config.rootCwd, repoRoot: config.repoRoot },
     ...(confirmGate === undefined

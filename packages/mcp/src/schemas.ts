@@ -14,6 +14,7 @@ import {
   LIMITS,
   MAX_GRACE_MS,
   NODE_ROLES,
+  NODE_RUNTIMES,
   ok,
   pauseNodeIdsProblem,
   type Result,
@@ -60,6 +61,12 @@ const SCHEMAS: Readonly<Record<McpOperation, z.ZodType>> = {
   "node.spawn": withBrief({
     parentId: id,
     role: z.enum(NODE_ROLES).describe(`子のロール（${NODE_ROLES.join("・")} のどれか）`),
+    runtime: z
+      .enum(NODE_RUNTIMES)
+      .optional()
+      .describe(
+        "子の実行環境（cli か desktop。省略すると daemon の設定の既定）。desktop は、設定 allowDesktopChildren が true のときだけ",
+      ),
   }),
   "node.adopt": z
     .strictObject({

@@ -430,6 +430,8 @@ describe("画面の資産（走査）", () => {
       "bindLost",
       // どの daemon の画面かを、作業場所の名前で示す（#197）
       "lastIndexOf",
+      // Desktop の子を足してよい設定か（#159。表示モデルの値 true。設定の窓の注記を出すだけ）
+      "desktopChildrenAllowed",
     ]);
     // 埋め込んだ文字の表（#140。JSON の値で、コードでない）は、走査から除く
     const code = UI_JS.replace(TABLE_LINE, "")

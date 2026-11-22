@@ -227,8 +227,9 @@ export interface DaemonConfig {
   /** daemon が使う git の絶対パス（info/exclude の場所を調べる）。既定 `/usr/bin/git`。 */
   readonly gitPath?: string;
   /**
-   * 子の実行環境。`cli`（既定）は、親のセッションが起動する子（いまの版では未対応）。`desktop` は、統合セッションが Desktop のタスク生成で起動し、
-   * 子が紐付けコードで結ぶ（仮置き。`docs/desktop-runtime.md`）。木全体で 1 つ（ノードごとの混在は扱わない）。
+   * 子の実行環境の既定値（`node_spawn` の `runtime` を省略したときの値。#159）。`cli`（既定）は、親のセッションが起動する子
+   * （いまの版では未対応）。`desktop` は、統合セッションが Desktop のタスク生成で起動し、子が紐付けコードで結ぶ
+   * （仮置き。`docs/desktop-runtime.md`）。`desktop` にすると、`allowDesktopChildren` を暗に許可したものとみなす（互換）。
    */
   readonly childRuntime?: "cli" | "desktop";
   /**
@@ -236,6 +237,12 @@ export interface DaemonConfig {
    * 省略すると `DEFAULT_MAX_TREE_DEPTH`（3。サブ統括＝深さ 1・その下の孫＝深さ 2 まで）。#168 PR4。
    */
   readonly maxTreeDepth?: number;
+  /**
+   * Desktop の子を足してよいか（opt-in。既定 false。#159）。`true` のときだけ、`node_spawn` の `runtime: "desktop"` を受け、
+   * CLI の子と Desktop の子を 1 つの木に混ぜられる。`true` の木では、取り消せない操作の確認（端末つきの daemon だけ）が働く。
+   * `childRuntime: "desktop"` は、これを暗に許可したものとみなす。
+   */
+  readonly allowDesktopChildren?: boolean;
   /** 子ごとの、エージェントのターン数の上限（API の往復）。省略すると 100。 */
   readonly maxTurns?: number;
   /** 子ごとの、費用の上限（USD）。省略すると 5。 */
@@ -298,6 +305,7 @@ const KEYS = [
   "hookFirstSeenMinutes",
   "gitPath",
   "childRuntime",
+  "allowDesktopChildren",
 ] as const;
 
 /** 外した設定。受け取って無視する。 */
@@ -763,6 +771,9 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
   ) {
     return bad('childRuntime は "cli" か "desktop"');
   }
+  if (raw.allowDesktopChildren !== undefined && typeof raw.allowDesktopChildren !== "boolean") {
+    return bad("allowDesktopChildren は true か false");
+  }
   let startLimits: { perParent?: number; total?: number } | undefined;
   if (raw.startLimits !== undefined) {
     const v = raw.startLimits as Record<string, unknown>;
@@ -906,6 +917,9 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
         ? {}
         : { childRuntime: raw.childRuntime as "cli" | "desktop" }),
       ...(raw.maxTreeDepth === undefined ? {} : { maxTreeDepth: raw.maxTreeDepth as number }),
+      ...(raw.allowDesktopChildren === undefined
+        ? {}
+        : { allowDesktopChildren: raw.allowDesktopChildren as boolean }),
       ...(raw.maxTurns === undefined ? {} : { maxTurns: raw.maxTurns as number }),
       ...(raw.maxBudgetUsd === undefined ? {} : { maxBudgetUsd: raw.maxBudgetUsd as number }),
       ...(raw.retentionDays === undefined ? {} : { retentionDays: raw.retentionDays as number }),

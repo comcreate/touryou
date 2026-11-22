@@ -47,7 +47,17 @@ const ROOT_SCOPE: Scope = {
   allowedCommands: ["pnpm test"],
 };
 const rig = (
-  opts: { rootScope?: Scope | null; runtime?: NodeRuntime; maxTreeDepth?: number } = {},
+  opts: {
+    rootScope?: Scope | null;
+    runtime?: NodeRuntime;
+    /** Desktop の子を作ってよいか（設定 allowDesktopChildren）。 */
+    desktopAllowed?: boolean;
+    /** runtime ごとのアダプタを渡す（子の runtime で選ぶ。#159）。`noDesktop` で desktop のアダプタを渡さない。 */
+    perRuntime?: boolean;
+    noDesktop?: boolean;
+    /** 木の深さの上限（設定 maxTreeDepth。#168 PR4）。 */
+    maxTreeDepth?: number;
+  } = {},
 ) => {
   const opened = EventLog.open(createMemoryStore().open(), { clock });
   if (!opened.ok) throw new Error(opened.error.code);
@@ -176,10 +186,31 @@ const rig = (
       if (flags.revokeThrows) throw new Error("失効できない");
     },
   };
+  // Desktop の子のアダプタの代わり（起動の要求だけ記録する）
+  const desktopStarted: StartRequest[] = [];
+  const desktopAdapter = {
+    ...adapter,
+    kind: "desktop" as const,
+    async start(req: StartRequest): Promise<Result<StartValue, Failure>> {
+      desktopStarted.push(req);
+      return ok({ sessionId: "sess-d", cwd: req.worktreePath, removedEnv: [] });
+    },
+  } as unknown as RuntimeAdapter;
+  const adapterOfRecorded = (id: string): RuntimeAdapter =>
+    opts.perRuntime === true && log.state().nodes.find((x) => x.id === id)?.runtime === "desktop"
+      ? desktopAdapter
+      : adapter;
   const h = createSpawnHandlers({
     log,
     clock,
-    adapterFor: () => adapter,
+    adapterFor: opts.perRuntime === true ? adapterOfRecorded : () => adapter,
+    ...(opts.perRuntime === true
+      ? {
+          adapterForRuntime: (rt: NodeRuntime) =>
+            rt === "desktop" ? (opts.noDesktop === true ? undefined : desktopAdapter) : adapter,
+        }
+      : {}),
+    ...(opts.desktopAllowed === true ? { desktopAllowed: true } : {}),
     ...(opts.runtime === undefined ? {} : { runtime: opts.runtime }),
     ports,
     credentials,
@@ -208,7 +239,7 @@ const rig = (
     // biome-ignore lint/suspicious/noExplicitAny: 操作ごとの型は呼び出し側で保証
     return (await (h[op] as any)(req)) as { ok: boolean; value?: any; error?: Failure };
   };
-  return { log, call, calls, flags, ev, s: () => log.state() };
+  return { log, call, calls, flags, ev, desktopStarted, s: () => log.state() };
 };
 
 describe("node.spawn（子の生成と起動）", () => {
@@ -244,7 +275,7 @@ describe("node.spawn（子の生成と起動）", () => {
 
   it("設定の実行環境（runtime）を、子の node.created に記録する。渡さなければ記録しない（#159）", async () => {
     for (const runtime of ["cli", "desktop"] as const) {
-      const r = rig({ runtime });
+      const r = rig({ runtime, desktopAllowed: true });
       const res = await r.call("node.spawn", { parentId: "m1", ...brief() });
       expect(res.ok).toBe(true);
       expect(r.s().nodes.find((x) => x.id === res.value.nodeId)?.runtime).toBe(runtime);
@@ -252,6 +283,86 @@ describe("node.spawn（子の生成と起動）", () => {
     const r = rig();
     const res = await r.call("node.spawn", { parentId: "m1", ...brief() });
     expect(r.s().nodes.find((x) => x.id === res.value.nodeId)).not.toHaveProperty("runtime");
+  });
+
+  describe("子ごとの runtime（#159 PR2b）", () => {
+    it("runtime: desktop は、許可（desktopAllowed）があるときだけ作れる。Desktop のアダプタで起動し、記録する", async () => {
+      const r = rig({ runtime: "cli", desktopAllowed: true, perRuntime: true });
+      const res = await r.call("node.spawn", { parentId: "m1", ...brief(), runtime: "desktop" });
+      expect(res.ok).toBe(true);
+      expect(r.s().nodes.find((x) => x.id === res.value.nodeId)?.runtime).toBe("desktop");
+      expect(r.desktopStarted).toHaveLength(1);
+      expect(r.calls.started).toHaveLength(0);
+    });
+
+    it("許可がなければ desktopChildNotAllowed で失敗し、何も作らず記録もしない（既定の木・runtime: cli の木）", async () => {
+      for (const runtime of ["cli", undefined] as const) {
+        const r = rig({ ...(runtime === undefined ? {} : { runtime }), perRuntime: true });
+        const before = r.s().lastSeq;
+        const res = await r.call("node.spawn", { parentId: "m1", ...brief(), runtime: "desktop" });
+        expect(res.ok).toBe(false);
+        expect(res.error?.code).toBe("desktopChildNotAllowed");
+        expect(res.error?.nextActions.length).toBeGreaterThan(0);
+        expect(r.s().lastSeq).toBe(before);
+        expect(r.calls.provisioned).toEqual([]);
+        expect(r.calls.issued).toEqual([]);
+        expect(r.desktopStarted).toHaveLength(0);
+      }
+    });
+
+    it("設定の既定が desktop でも、許可がなければ（runtime を省略しても）失敗する", async () => {
+      const r = rig({ runtime: "desktop", perRuntime: true });
+      const res = await r.call("node.spawn", { parentId: "m1", ...brief() });
+      expect(res.ok).toBe(false);
+      expect(res.error?.code).toBe("desktopChildNotAllowed");
+    });
+
+    it("runtime を省略すると、設定の既定で作る。明示した cli は、既定が desktop でも CLI のアダプタで作る", async () => {
+      const r = rig({ runtime: "desktop", desktopAllowed: true, perRuntime: true });
+      const a = await r.call("node.spawn", { parentId: "m1", ...brief() });
+      expect(r.s().nodes.find((x) => x.id === a.value.nodeId)?.runtime).toBe("desktop");
+      const b = await r.call("node.spawn", { parentId: "m1", ...brief(), runtime: "cli" });
+      expect(r.s().nodes.find((x) => x.id === b.value.nodeId)?.runtime).toBe("cli");
+      expect(r.desktopStarted).toHaveLength(1);
+      expect(r.calls.started).toHaveLength(1);
+    });
+
+    it("子の runtime のアダプタがなければ noRuntime で失敗する（何も記録しない）", async () => {
+      const r = rig({ runtime: "cli", desktopAllowed: true, perRuntime: true, noDesktop: true });
+      const before = r.s().lastSeq;
+      const res = await r.call("node.spawn", { parentId: "m1", ...brief(), runtime: "desktop" });
+      expect(res.ok).toBe(false);
+      expect(res.error?.code).toBe("noRuntime");
+      expect(r.s().lastSeq).toBe(before);
+    });
+
+    it("同じ requestId の再送は、runtime が同じなら重複せず、違えば requestIdConflict", async () => {
+      const r = rig({ runtime: "cli", desktopAllowed: true, perRuntime: true });
+      const first = await r.call(
+        "node.spawn",
+        { parentId: "m1", ...brief(), runtime: "desktop" },
+        "m1",
+        "dup-1",
+      );
+      expect(first.ok).toBe(true);
+      const same = await r.call(
+        "node.spawn",
+        { parentId: "m1", ...brief(), runtime: "desktop" },
+        "m1",
+        "dup-1",
+      );
+      expect(same.ok).toBe(true);
+      expect(same.value.nodeId).toBe(first.value.nodeId);
+      expect(r.desktopStarted).toHaveLength(1);
+      const other = await r.call(
+        "node.spawn",
+        { parentId: "m1", ...brief(), runtime: "cli" },
+        "m1",
+        "dup-1",
+      );
+      expect(other.ok).toBe(false);
+      expect(other.error?.code).toBe("requestIdConflict");
+    });
   });
 
   it("親の範囲に収まらない子の範囲は、何も記録せず、作った作業ツリーを片付けて失敗する", async () => {

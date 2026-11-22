@@ -23,6 +23,7 @@ import {
   LIMITS,
   MAX_GRACE_MS,
   NODE_ROLES,
+  NODE_RUNTIMES,
   type OperationMap,
   pauseNodeIdsProblem,
   type Result,
@@ -204,12 +205,13 @@ type Validators = { [Op in DaemonOperation]: (p: unknown) => OperationMap[Op]["p
 
 const VALIDATORS: Validators = {
   "node.spawn": (p) => {
-    const o = strict(p, ["parentId", "role", "parentSessionId", ...BRIEF_KEYS]);
+    const o = strict(p, ["parentId", "role", "runtime", "parentSessionId", ...BRIEF_KEYS]);
     if (o.parentSessionId !== undefined && !isSessionId(o.parentSessionId))
       fail("parentSessionId が不正");
     return {
       parentId: id(o, "parentId"),
       role: oneOf(o, "role", NODE_ROLES),
+      ...(o.runtime === undefined ? {} : { runtime: oneOf(o, "runtime", NODE_RUNTIMES) }),
       ...brief(o),
       ...(o.parentSessionId === undefined ? {} : { parentSessionId: o.parentSessionId as string }),
     };

@@ -57,6 +57,7 @@ export const UI_HTML = `<!doctype html>
 <div role="radiogroup" aria-labelledby="set-lang-label" class="opts"><span id="set-lang-label" class="opts-label" data-t="lang.screen">画面の言語</span>
 <label class="opt"><input type="radio" name="set-lang" value="ja" checked> <span lang="ja">日本語</span></label>
 <label class="opt"><input type="radio" name="set-lang" value="en"> <span lang="en">English</span></label></div><p class="note" data-t="lang.note">daemon が書く知らせも、選んだ言語で出します。子や統合が書いた文と、古い知らせは、書かれたままの言葉で出します。</p></fieldset>
+<fieldset id="set-desktop" hidden><legend data-t="settings.desktop">Desktop の子</legend><p class="note" data-t="settings.desktopNote">Desktop の子を足せる設定（allowDesktopChildren）が有効です。有効なあいだ、取り消せない操作（最終削除・破棄の成果の削除・回収の指示）は、端末つきで動いている daemon でしか通りません（launchd 経由では通りません）。変えるときは設定ファイルを直します。</p></fieldset>
 <p class="note" data-t="settings.kept">選んだものは、このブラウザに残ります。</p>
 <div class="settings-actions"><button id="close-settings" type="button" data-t="settings.close">閉じる</button></div></dialog>
 <main>
@@ -1971,6 +1972,7 @@ export const UI_JS = `'use strict';
     where.hidden = !whereName;
     where.textContent = whereName;
     where.title = t('page.where') + ': ' + attachDir;
+    document.getElementById('set-desktop').hidden = view.desktopChildrenAllowed !== true;
     renderApprovals(view.confirmations);
     var flows = Array.isArray(view.flows) ? view.flows : [];
     var v = { nodes: view.nodes, inbox: view.inbox, resolved: Array.isArray(view.resolved) ? view.resolved : [], decisions: view.decisions, extensions: view.extensions, flows: flows };

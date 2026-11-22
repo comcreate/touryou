@@ -70,7 +70,7 @@ export type EventBody =
         readonly objective?: string;
         readonly acceptanceCriteria?: readonly string[];
         readonly scope?: Scope;
-        /** 子の実行環境（#159）。子の生成で、daemon の設定 `childRuntime` と同じ値を記録する。根や以前の記録では省略。 */
+        /** 子の実行環境（#159）。子の生成で、`node_spawn` の `runtime`（省略時は daemon の設定 `childRuntime`）を記録する。根や以前の記録では省略。 */
         readonly runtime?: NodeRuntime;
       };
     }
@@ -476,7 +476,7 @@ export interface NodeRecord {
   readonly objective?: string;
   readonly acceptanceCriteria?: readonly string[];
   readonly scope?: Scope;
-  /** 子の実行環境（`node.created` の `runtime`。見張り・画面は `runtimeOf` で判定する。compose の振り分けには、まだ使わない）。根や以前の記録にはない。 */
+  /** 子の実行環境（`node.created` の `runtime`。見張り・画面・daemon の振り分け〔アダプタ・整合・引き出し・フック・bind〕は `runtimeOf` で判定する。#159）。根や以前の記録にはない。 */
   readonly runtime?: NodeRuntime;
   /** 破棄の判断（停止したノードだけ。再開すると消える）。回収の再判定の入力 `facts.discarded` の情報源。 */
   readonly discarded?: {

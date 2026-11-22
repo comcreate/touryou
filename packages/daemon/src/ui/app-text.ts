@@ -686,6 +686,11 @@ export const APP_TEXT = {
   "sep.sentence": { ja: "。", en: ". " },
   "settings.a11y": { ja: "アクセシビリティ", en: "Accessibility" },
   "settings.close": { ja: "閉じる", en: "Close" },
+  "settings.desktop": { ja: "Desktop の子", en: "Desktop children" },
+  "settings.desktopNote": {
+    ja: "Desktop の子を足せる設定（allowDesktopChildren）が有効です。有効なあいだ、取り消せない操作（最終削除・破棄の成果の削除・回収の指示）は、端末つきで動いている daemon でしか通りません（launchd 経由では通りません）。変えるときは設定ファイルを直します。",
+    en: "Adding Desktop children is enabled (allowDesktopChildren). While it is on, irreversible operations (final purge, deleting discarded work, reclaim instructions) only go through when the daemon runs with a terminal (not under launchd). To change it, edit the config file.",
+  },
   "settings.kept": {
     ja: "選んだものは、このブラウザに残ります。",
     en: "Your choices are kept in this browser.",
