@@ -638,8 +638,9 @@ describe("bind 専用の入口（POST /v1/bind。Bearer なしで、nodeId と b
     const r = await rigBind();
     const m1 = await r.call({ nodeId: "m1", bindCode: r.bind.issue("m1") });
     expect(m1.status).toBe(200);
-    expect(m1.json.value.nodeId).toBe("m1");
-    expect(r.credentials.authenticate(m1.json.value.token)).toEqual({
+    const value = m1.json.value as { nodeId: string; token: string };
+    expect(value.nodeId).toBe("m1");
+    expect(r.credentials.authenticate(value.token)).toEqual({
       role: "integrator",
       nodeId: "m1",
     });

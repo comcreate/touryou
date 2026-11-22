@@ -1903,7 +1903,9 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     // 紐付けで渡すトークンのロールは、ノードの role で決める（呼び出し側の申告は受けない。設計 #168 §3）。
     // 木にないノードは、従来どおり子として扱い、checkPrincipal が拒否する。
     const bindRoleOf = (id: string): "integrator" | "child" =>
-      deps.getState().nodes.find((n) => n.id === id)?.role === "integrator" ? "integrator" : "child";
+      deps.getState().nodes.find((n) => n.id === id)?.role === "integrator"
+        ? "integrator"
+        : "child";
     if (b?.bindCode === undefined) {
       const ok =
         deps.rebindOk?.(nodeId, b?.sessionId as string) === true &&
@@ -1979,11 +1981,7 @@ export function createApiServer(deps: ApiDeps): ApiServer {
     }
     let token: string;
     try {
-      token = deps.credentials.issueNodeToken(
-        redeemed.nodeId,
-        bindRoleOf(redeemed.nodeId),
-        "bind",
-      );
+      token = deps.credentials.issueNodeToken(redeemed.nodeId, bindRoleOf(redeemed.nodeId), "bind");
     } catch (error) {
       return internalError(res, "bind", "bind", error);
     }

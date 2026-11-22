@@ -63,7 +63,11 @@ describe("config の permissions・autoApprove（#194 PR2）", () => {
       "Bash(grep -rn:*)",
       "mcp__playwright__browser_snapshot",
     ]);
-    expect(p.deny).toEqual(["Edit(.git/**)", "Bash(git push:*)", "mcp__playwright__browser_navigate"]);
+    expect(p.deny).toEqual([
+      "Edit(.git/**)",
+      "Bash(git push:*)",
+      "mcp__playwright__browser_navigate",
+    ]);
     expect(p.ask).toEqual(["Bash(git commit:*)"]);
     expect(p.autoApprove).toEqual(["Bash(grep -rn:*)", "mcp__playwright__browser_snapshot"]);
     expect(p.allowedMcpTools).toEqual(["mcp__playwright__browser_snapshot"]);
@@ -104,9 +108,9 @@ describe("config の permissions・autoApprove（#194 PR2）", () => {
     bad({ permissions: { allow: ["Bash(find . -exec:*)"] } }, "任意のコード");
     bad({ permissions: { allow: ["Bash(cd src:*)"] } }, "cd");
     // deny・ask は、1 語でもよい（広く止める側）
-    expect(ok({ permissions: { deny: ["Bash(curl:*)"], ask: ["Bash(git:*)"] } }).permissions?.deny).toEqual([
-      "Bash(curl:*)",
-    ]);
+    expect(
+      ok({ permissions: { deny: ["Bash(curl:*)"], ask: ["Bash(git:*)"] } }).permissions?.deny,
+    ).toEqual(["Bash(curl:*)"]);
   });
 
   describe("autoApprove の検査", () => {
@@ -135,12 +139,16 @@ describe("config の permissions・autoApprove（#194 PR2）", () => {
       bad({ permissions: { allow }, autoApprove: { allow: ["mcp__b"] } }, "サーバー全体");
       // サーバー全体を allow に書いて、その中の道具を名前で自動承認するのは、よい
       expect(
-        ok({ permissions: { allow }, autoApprove: { allow: ["mcp__b__snapshot"] } }).autoApprove?.allow,
+        ok({ permissions: { allow }, autoApprove: { allow: ["mcp__b__snapshot"] } }).autoApprove
+          ?.allow,
       ).toEqual(["mcp__b__snapshot"]);
     });
 
     it("読み取り専用の表にないコマンドは書けない（書き込み・実行・ネットワーク・リポジトリを変えるもの）", () => {
-      bad({ permissions: { allow }, autoApprove: { allow: ["Bash(pnpm test:*)"] } }, "読み取り専用");
+      bad(
+        { permissions: { allow }, autoApprove: { allow: ["Bash(pnpm test:*)"] } },
+        "読み取り専用",
+      );
       const more = [...allow, "Bash(git add -A:*)", "Bash(curl -s:*)", "Bash(tail -n:*)"];
       for (const r of ["Bash(git add -A:*)", "Bash(curl -s:*)", "Bash(tail -n:*)"]) {
         bad({ permissions: { allow: more }, autoApprove: { allow: [r] } }, "読み取り専用");
@@ -148,13 +156,19 @@ describe("config の permissions・autoApprove（#194 PR2）", () => {
     });
 
     it("allow（上限）の内側にないものは書けない", () => {
-      bad({ permissions: { allow: [] }, autoApprove: { allow: ["Bash(grep -rn:*)"] } }, "内側にない");
+      bad(
+        { permissions: { allow: [] }, autoApprove: { allow: ["Bash(grep -rn:*)"] } },
+        "内側にない",
+      );
       bad({ autoApprove: { allow: ["mcp__a__read"] } }, "内側にない");
       // 上限より広い前方一致は不可（grep -rn の上限に、grep -r の自動承認は入らない）
       bad({ permissions: { allow }, autoApprove: { allow: ["Bash(grep -r:*)"] } }, "内側にない");
       // 上限が完全一致なら、前方一致の自動承認は上限を超える
       bad(
-        { permissions: { allow: ["Bash(grep -rn)"] }, autoApprove: { allow: ["Bash(grep -rn:*)"] } },
+        {
+          permissions: { allow: ["Bash(grep -rn)"] },
+          autoApprove: { allow: ["Bash(grep -rn:*)"] },
+        },
         "内側にない",
       );
       // rootScope.allowedCommands（旧の書き方）も上限に数える
@@ -167,9 +181,15 @@ describe("config の permissions・autoApprove（#194 PR2）", () => {
 
     it("deny・ask に当たるものは書けない", () => {
       const deny = { allow, deny: ["Bash(grep -rn:*)"] };
-      bad({ permissions: deny, autoApprove: { allow: ["Bash(grep -rn:*)"] } }, "deny か permissions.ask");
       bad(
-        { permissions: { allow, deny: ["Bash(grep:*)"] }, autoApprove: { allow: ["Bash(grep -rn:*)"] } },
+        { permissions: deny, autoApprove: { allow: ["Bash(grep -rn:*)"] } },
+        "deny か permissions.ask",
+      );
+      bad(
+        {
+          permissions: { allow, deny: ["Bash(grep:*)"] },
+          autoApprove: { allow: ["Bash(grep -rn:*)"] },
+        },
         "deny か permissions.ask",
       );
       bad(
@@ -187,7 +207,10 @@ describe("config の permissions・autoApprove（#194 PR2）", () => {
 
     it("autoApprove の Bash にも、子の許可と同じ検査を通す", () => {
       bad({ permissions: { allow }, autoApprove: { allow: ["Bash(grep:*)"] } }, "1 語だけ");
-      bad({ permissions: { allow }, autoApprove: { allow: ["Bash(find -exec:*)"] } }, "任意のコード");
+      bad(
+        { permissions: { allow }, autoApprove: { allow: ["Bash(find -exec:*)"] } },
+        "任意のコード",
+      );
     });
   });
 
