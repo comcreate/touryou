@@ -263,11 +263,12 @@ describe("config.reload（設定の読み直し）", () => {
 
   it("nit: 実行中に足した規則と合わせると検査を通らない設定は、入れ替えない", async () => {
     const r = rig();
-    await r.rule("allow", "Bash(git status:*)");
-    await r.rule("autoApprove", "Bash(git status:*)");
+    // 自動承認に入れられるのは、読み取り専用の表のコマンドだけ（git ls-files）
+    expect((await r.rule("allow", "Bash(git ls-files:*)")).ok).toBe(true);
+    expect((await r.rule("autoApprove", "Bash(git ls-files:*)")).ok).toBe(true);
     const before = r.holder.current();
     const baseBefore = r.holder.base();
-    r.box.next = ok(cfg({ permissions: { allow: [], deny: ["Bash(git status:*)"], ask: [] } }));
+    r.box.next = ok(cfg({ permissions: { allow: [], deny: ["Bash(git ls-files:*)"], ask: [] } }));
     const res = await r.reload();
     expect(res.ok).toBe(false);
     expect(res.error?.code).toBe("configInvalid");
@@ -332,7 +333,8 @@ describe("scope.decide の alsoLimit（上限にも足して承認）", () => {
 
   it("should 2: 長すぎる規則になる対象は、invalidTarget で断り、承認も記録しない", async () => {
     const r = rig();
-    const id = (await r.extend(`git ${"a".repeat(1100)}`)).value.extensionId as string;
+    // 依頼の対象は 1024 字以内に収まるが、Bash(…:*) を付けた規則は 1024 字を超える
+    const id = (await r.extend(`git ${"a".repeat(1015)}`)).value.extensionId as string;
     const seq = r.s().lastSeq;
     const res = await r.decide({ extensionId: id, decision: "approve", alsoLimit: true });
     expect(res.ok).toBe(false);
