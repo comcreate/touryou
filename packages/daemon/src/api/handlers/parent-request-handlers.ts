@@ -254,6 +254,7 @@ export function createParentRequestHandlers(deps: ParentRequestHandlerDeps) {
           permissions: allow.value,
           worktree: r.worktree,
           name: nodeId,
+          role: node.role,
           ...(model === undefined ? {} : { model }),
           ...(effort === undefined ? {} : { effort }),
           ...(forkSessionRef === undefined ? {} : { forkSessionRef }),

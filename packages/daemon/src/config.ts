@@ -644,7 +644,7 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
       raw.maxTreeDepth > 10)
   ) {
     return bad(
-      "maxTreeDepth は 2〜10 の整数（根を深さ 0 と数える。省略すると 3。2 だと、根の直下の子までで、サブ統括は作れない）",
+      "maxTreeDepth は 2〜10 の整数（根を深さ 0 と数える。省略すると 3。深さが上限以上のノードは断る。2 だと、根の直下のサブ統括までで、サブ統括の下の子は作れない）",
     );
   }
   if (

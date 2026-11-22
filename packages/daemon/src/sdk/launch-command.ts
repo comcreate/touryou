@@ -16,6 +16,14 @@ import { shellWord } from "../api/handlers/bind-handlers.js";
 export const CHILD_LAUNCH_INSTRUCTION =
   "最初に touryou の child_bind を引数なしで呼んで、受信箱の手順に従って";
 
+/** サブ統括（role が integrator）の最初の番の指示。integrator の skill に従うよう指す（設計 .sdd/task/168/design.md §3）。 */
+export const INTEGRATOR_LAUNCH_INSTRUCTION =
+  "touryou の integrator の skill に従って、最初に child_bind を引数なしで呼んで";
+
+/** ノードのロールに合う起動の指示。integrator だけ書き分け、それ以外（implement・investigate など）は子の文のまま。 */
+export const launchInstructionOf = (role: string | undefined): string =>
+  role === "integrator" ? INTEGRATOR_LAUNCH_INSTRUCTION : CHILD_LAUNCH_INSTRUCTION;
+
 /** 子の設定（知らせを止めない）と、許可の一覧。 */
 export const childLaunchSettings = (p: {
   allow: readonly string[];
@@ -42,6 +50,8 @@ export interface LaunchCommandInput {
   readonly worktree: string;
   /** 子のセッションの名前（ノードの ID）。 */
   readonly name: string;
+  /** ノードのロール。integrator なら指示の文が integrator の skill を指す。省くと子の文。 */
+  readonly role?: string | undefined;
   readonly model?: string;
   readonly effort?: string;
   /** フォークするときの親のセッションの参照。 */
@@ -59,7 +69,7 @@ export function buildLaunchCommand(input: LaunchCommandInput): string {
     "&&",
     "claude",
     "--bg",
-    shellWord(CHILD_LAUNCH_INSTRUCTION),
+    shellWord(launchInstructionOf(input.role)),
     "--name",
     shellWord(input.name),
     ...(input.model === undefined ? [] : ["--model", shellWord(input.model)]),

@@ -232,6 +232,13 @@ describe("parent.request・parent.report", () => {
     // 子: 従来どおり、子の道具だけ
     expect(child.value.command).toContain('"mcp__node__report_done"');
     expect(child.value.command).not.toContain('"mcp__node__node_spawn"');
+    // 起動の指示: サブ統括は integrator の skill を指し、子は従来の文のまま
+    expect(sub.value.command).toContain(
+      "--bg 'touryou の integrator の skill に従って、最初に child_bind を引数なしで呼んで' --name sub",
+    );
+    expect(child.value.command).toContain(
+      "--bg '最初に touryou の child_bind を引数なしで呼んで、受信箱の手順に従って' --name a",
+    );
   });
 
   it("parent.request: plugin の場所が確かめを通れば --plugin-dir を足す。通らなければ付けず、受信箱に理由を 1 回だけ出す", async () => {

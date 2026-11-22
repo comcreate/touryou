@@ -4,6 +4,7 @@ import {
   buildLaunchCommand as build,
   CHILD_LAUNCH_INSTRUCTION,
   childLaunchSettings,
+  INTEGRATOR_LAUNCH_INSTRUCTION,
   isEffort,
   isModelName,
 } from "../../src/sdk/launch-command.js";
@@ -92,6 +93,20 @@ describe("起動の依頼の文（設計 6.2）", () => {
     expect(CHILD_LAUNCH_INSTRUCTION).toBe(
       "最初に touryou の child_bind を引数なしで呼んで、受信箱の手順に従って",
     );
+  });
+
+  it("ロールで指示を書き分ける: integrator は integrator の skill を指し、implement・investigate・省略は子の文のまま", () => {
+    const instructionOf = (role?: string): string =>
+      argsOf(buildLaunchCommand({ worktree: "/w/a", name: "n", ...(role ? { role } : {}) }))[1] as string;
+    expect(instructionOf("integrator")).toBe(INTEGRATOR_LAUNCH_INSTRUCTION);
+    expect(INTEGRATOR_LAUNCH_INSTRUCTION).toBe(
+      "touryou の integrator の skill に従って、最初に child_bind を引数なしで呼んで",
+    );
+    for (const role of ["implement", "investigate", undefined]) {
+      expect(instructionOf(role)).toBe(
+        "最初に touryou の child_bind を引数なしで呼んで、受信箱の手順に従って",
+      );
+    }
   });
 
   it("--settings の JSON は sh で 1 語に分かれ、そのまま読み戻せる（crossSessionInbound と permissions.allow）", () => {
