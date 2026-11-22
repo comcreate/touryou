@@ -119,7 +119,10 @@ describe("関係図: サブ統括の配下の数（#168）", () => {
       expect(graphString(lang, "role.below", { role: "R", n: 4, h: 0 })).toContain("4");
       expect(graphString(lang, "role.belowHuman", { role: "R", n: 4, h: 2 })).toContain("2");
     }
-    expect(UI_TEXT["role.below"]).toEqual({ ja: "{role}（配下 {n} 件）", en: "{role} ({n} below)" });
+    expect(UI_TEXT["role.below"]).toEqual({
+      ja: "{role}（配下 {n} 件）",
+      en: "{role} ({n} below)",
+    });
   });
 
   it("受信箱の要約（digest）の種類の名前は、サブ統括の要約（日本語・英語）", () => {

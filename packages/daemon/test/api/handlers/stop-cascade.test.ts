@@ -150,7 +150,9 @@ describe("サブ統括の連動停止（孫が先、サブ統括が後）", () =
     expect(r.adapter.stops.map(([id]) => id)).not.toContain("m1");
     const item = r.log
       .state()
-      .inbox.find((i) => i.kind === "stopIncomplete" && i.nodeId === "m1" && i.resolved === undefined);
+      .inbox.find(
+        (i) => i.kind === "stopIncomplete" && i.nodeId === "m1" && i.resolved === undefined,
+      );
     expect(item?.summary).toContain("g1（stopping）");
     expect(item?.summary).toContain("g2（stopping）");
     // 孫の成果（記録・状態）は消えない。確認できた孫（gp）は理由に出ない。

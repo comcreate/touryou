@@ -9,6 +9,8 @@
 - **`stateDir` を `repoRoot` の内側に置けるようにした**（#218）。起動のとき（`touryou-daemon --check-config` も同じ）に、git で ignore 済みかつ未追跡と確かめられたときだけ許し、そうでなければ `invalidConfig` で直し方を出す。`worktreeRoot` は今までどおり `repoRoot` の内側に置けない。詳しくは `docs/config.md`「置き場の重なりの検査」。
 - **木の深さの上限を足した**（#168 PR4）。`node_spawn`・`node_adopt` は、深さが `maxTreeDepth`（既定 3。設定で 2〜10）以上になるノードを、理由と直し方を添えて `depthExceeded` で断る。変えたら daemon を起動し直す（`docs/config.md`）。
 - **`node_spawn` に `runtime` 引数（`cli`・`desktop`）を足した**（#159 PR2b）。設定 `allowDesktopChildren: true`（既定は false）の木だけ、CLI の子と Desktop の子を 1 つの木に混ぜられる。有効にした木では、取り消せない操作（`touryou purge` など）の確認に、端末つきの daemon が要る（launchd 経由では `confirmationUnavailable`）。既定の木と、`runtime` を省略した `node_spawn` の挙動は変わらない。
+- **サブ統括（統合ノード）を `node_stop` すると、配下の動作中の子を先に停止の依頼に載せるようにした**（#168 PR5）。子の停止が確認されてから、サブ統括自身のセッションを止める。上限（既定 10 分）までに確認できないときは、サブ統括が `stopIncomplete` になり、子の ID と状態を理由に root の受信箱へ出す。done の子は止めない。
+- **状態画面の関係図で、サブ統括の箱に配下の件数と「あなたの答え」の件数を出した**（#168 PR6）。受信箱の digest は「サブ統括の要約」と表示する。
 
 ### 直したこと
 
@@ -31,6 +33,7 @@
 - サブ統括（統合ノードの子の統合ノード）の紐付けを足した: bind コードの引き換えと再紐付けが、ノードのロールに従って統合トークンを発行する。CLI の木のみ。bind コードは直接の親か人間が発行し、根は発行できない（#168 PR2）。
 - config に `permissions`（allow・deny・ask）と `autoApprove` を足した（任意）。解析できない規則・上限の外の自動承認・読み取り専用でない自動承認は、起動時に理由つきで拒否する。判定にはまだつながらない（#194 PR2）。旧の daemon は新しい項目を未知のキーとして拒否するので、戻すときは消す（`docs/config.md`）。
 - サブ統括の許可とフックを足した（#168 PR3）。統合ロールに、子の操作（`report_progress`・`report_decision`・`decision_withdraw`・`report_outOfScope`・`report_done`・`scope_extend` と、子の受信箱の `child_inbox`）を足し、サブ統括が自分の親へ完了・範囲の拡張を報告できるようにした（親を持たない根は拒否）。フックの自分の MCP の道具の許可と、起動時の許可の一覧を、ノードのロールで切り替える（サブ統括は `node_spawn` などの統合の道具を使える。範囲・禁じる場所の判定は同じ）。mcp の `child_bind` は、紐付け後に `whoami` のロールで道具の一覧を切り替える。ADR は `.sdd/adr/touryou-168-*.md`。
+- #159 PR2b の専用の試験を足した: opt-in の木の取り消せない操作の確認ゲート（`confirmationRequired`・`confirmationUnavailable`）と、CLI・Desktop の混在の compose。discarded-drop の compose 経由と、CLI の子の bind までの hook の試験は未達。
 
 ### 注意
 

@@ -144,7 +144,10 @@ const seedArchivedTree = (r: ReturnType<typeof rig>) => {
 describe("opt-in の木: 取り消せない操作の確認ゲート", () => {
   it("allowDesktopChildren が true: 端末つきの daemon では、人間のトークンの最終削除は確認待ち。確認するまで消えない", async () => {
     const lines: string[] = [];
-    const r = rig({ retentionDays: 0, allowDesktopChildren: true }, { write: (l) => lines.push(l) });
+    const r = rig(
+      { retentionDays: 0, allowDesktopChildren: true },
+      { write: (l) => lines.push(l) },
+    );
     seedArchivedTree(r);
     const d = await boot(r);
     const asked = await call(d.url, d.humanToken, "node.purge", { nodeId: "t" }, "purge-1");
@@ -241,7 +244,8 @@ describe("opt-in の木: 取り消せない操作の確認ゲート", () => {
 });
 
 describe("opt-in の木: CLI の子と Desktop の子の混在（compose）", () => {
-  const optIn = () => rig({ allowDesktopChildren: true, touryouCommand, desktopRequireVerifiedHooks: false });
+  const optIn = () =>
+    rig({ allowDesktopChildren: true, touryouCommand, desktopRequireVerifiedHooks: false });
   const spawn = async (
     d: Awaited<ReturnType<typeof boot>>,
     runtime: "cli" | "desktop" | undefined,
