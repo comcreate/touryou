@@ -358,6 +358,14 @@ const VALIDATORS: Validators = {
   },
   "node.reclaimPreview": nodeIdOnly,
   "node.reclaim": nodeIdOnly,
+  "node.reclaimBatchPreview": (p) => {
+    strict(p, []);
+    return {};
+  },
+  "node.reclaimBatch": (p) => {
+    const o = strict(p, ["expectDigest"]);
+    return { expectDigest: id(o, "expectDigest") };
+  },
   "node.integrate": nodeIdOnly,
   "node.capabilities": nodeIdOnly,
   "decision.get": (p) => {

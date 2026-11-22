@@ -350,6 +350,36 @@ export interface OperationMap {
   };
   "node.reclaim": { params: { nodeId: string }; result: { reclaimed: readonly string[] } };
   /**
+   * 統合済みの子の一括の回収の事前確認（人間だけ。#234）。受理済み（verified）で、親のブランチに統合済み（祖先判定）の子を、
+   * 回収できるもの（`eligible`）と、できないもの（理由つき。未コミット・未統合・動作中のプロセスなど）に分けて返す。何も変えない。
+   * `digest`: 回収できるものの ID と、ブランチの先端を畳んだ照合の値。`node.reclaimBatch` の `expectDigest` に、そのまま渡す。
+   * スカッシュ・リベースでマージした子は、祖先判定では統合済みと分からないので、`notMerged` で対象外に出る（個別の `touryou reclaim` で扱う）。
+   */
+  "node.reclaimBatchPreview": {
+    params: Record<string, never>;
+    result: {
+      candidates: readonly {
+        nodeId: string;
+        eligible: boolean;
+        unmet: readonly UnmetReason[];
+        blockers: readonly Blocker[];
+      }[];
+      digest: string;
+    };
+  };
+  /**
+   * 統合済みの子の一括の回収（人間だけ。#234）。`expectDigest` は、事前確認の `digest`。いま計算し直した値と違えば、何も消さずに
+   * `digestMismatch`。回収は 1 件ずつ、通常の回収（強制なし）で行い、直前に再判定する（未コミット・未統合に変わったものは飛ばして `failed` に出す）。
+   * 強制（`--force`・`-D`）は使わない。
+   */
+  "node.reclaimBatch": {
+    params: { expectDigest: string };
+    result: {
+      reclaimed: readonly string[];
+      failed: readonly { nodeId: string; code: string; cause: string }[];
+    };
+  };
+  /**
    * 受理した直接の子（verified）のブランチを、親のブランチへ fast-forward だけで統合する（Issue #4）。
    * `alreadyIntegrated`: すでに統合済みで、何も変えなかった。`target`: 親のブランチ。`tip`: 統合した子の先端。
    * fast-forward できなければ何も変えずに失敗（`notFastForward`）を返す（人間が統合のしかたを決める）。
@@ -710,6 +740,8 @@ export const ROLE_OPERATIONS = {
     "policy.ruleChange",
     "node.reclaimInstruct",
     "node.reclaimPreview",
+    "node.reclaimBatchPreview",
+    "node.reclaimBatch",
     "node.purge",
     "node.purgePreview",
     "node.purgeHold",

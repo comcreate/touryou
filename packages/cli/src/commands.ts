@@ -67,6 +67,12 @@ const USAGE = `使い方:
       まず、失われるもの（統合されていないコミット・未保存の変更・未追跡のファイル）を表示する。
       --yes      破棄を指示する（なければ、表示だけで止まる）。--expect が要る
       --expect <digest>  表示した先端の照合用の値（表示に出る 12 桁の 16 進）。指示の時点の先端から計算し直した値と違えば、何も指示しない
+  touryou reclaim-merged [--yes --expect <digest>] [--request-id <id>]
+      統合済みの子（受理済みで、親のブランチに取り込み済み）の作業ツリーとブランチを、一括で回収する（取り消せない）。
+      まず、回収できる子と、対象外の子（理由つき。未コミット・未統合・動作中のプロセスなど）を表示する。強制は使わない。
+      スカッシュ・リベースでマージした子は、統合済みと分からず対象外に出る。個別に touryou reclaim <nodeId> で扱う。
+      --yes      一括の回収を実行する（なければ、表示だけで止まる）。--expect が要る
+      --expect <digest>  表示した一覧の照合用の値（表示に出る 12 桁の 16 進）。実行の時点の一覧から計算し直した値と違えば、何も回収しない
   touryou purge-hold <nodeId> [--until <日時> | --days <日数>] [--reason <理由>] [--request-id <id>]
       自動の最終削除（autoPurge）を、この木について保留する。nodeId は、予告に出ている木の根（アーカイブ済みで、親がアーカイブされていないノード）。
       有効な予告は、その場で取り下げる。人間の "$HOME/.touryou/current/bin/touryou" purge は、保留に関係なく実行できる（保留を無視したことは監査に残る）。
@@ -150,6 +156,7 @@ const USAGE = `使い方:
 const ALLOWED_FLAGS: Readonly<Record<string, readonly string[]>> = {
   purge: ["--dry-run", "--yes", "--expect", "--tombstone", "--no-tombstone"],
   reclaim: ["--yes", "--expect"],
+  "reclaim-merged": ["--yes", "--expect"],
   "purge-hold": ["--until", "--days", "--reason"],
   "purge-release": [],
   "confirm-stopped": ["--note"],
@@ -316,6 +323,53 @@ const isReclaimPreview = (v: unknown): v is ReclaimPreview =>
   Array.isArray(v.blockers) &&
   (v.loss === undefined || (Array.isArray(v.loss) && v.loss.every(isLossView))) &&
   (v.tips === undefined || isTips(v.tips));
+interface BatchPreview {
+  readonly candidates: readonly {
+    readonly nodeId: string;
+    readonly eligible: boolean;
+    readonly unmet: readonly string[];
+  }[];
+  readonly digest: string;
+}
+const isBatchPreview = (v: unknown): v is BatchPreview =>
+  isRecord(v) &&
+  typeof v.digest === "string" &&
+  Array.isArray(v.candidates) &&
+  v.candidates.every(
+    (c) =>
+      isRecord(c) &&
+      typeof c.nodeId === "string" &&
+      typeof c.eligible === "boolean" &&
+      isStringArray(c.unmet),
+  );
+interface BatchResult {
+  readonly reclaimed: readonly string[];
+  readonly failed: readonly { readonly nodeId: string; readonly code: string; readonly cause: string }[];
+}
+const isBatchResult = (v: unknown): v is BatchResult =>
+  isRecord(v) &&
+  isStringArray(v.reclaimed) &&
+  Array.isArray(v.failed) &&
+  v.failed.every(
+    (f) =>
+      isRecord(f) &&
+      typeof f.nodeId === "string" &&
+      typeof f.code === "string" &&
+      typeof f.cause === "string",
+  );
+/** 一括の回収の、対象外の理由（`UnmetReason`）の文。 */
+const UNMET_TEXT: Readonly<Record<string, string>> = {
+  stateNotEligible: "回収できる状態でない",
+  factsMissing: "作業ツリーの情報を確認できない",
+  notMerged: "統合されていない",
+  dirty: "未コミット（未保存の変更がある）",
+  dependentsIncomplete: "依存する別のノードがまだ完了していない",
+  openDecision: "未回答の判断がある",
+  descendantsNotReclaimable: "配下に回収できないノードがある",
+  processesRunning: "作業ツリーでプロセスが動いている",
+  processesUnknown: "作業ツリーのプロセスを調べられない",
+  discardRequired: "破棄の判断が要る",
+};
 /** シェルで安全に貼り付けられるように、単一引用符で囲む（中の `'` は `'\''` にする）。 */
 const shellQuote = (v: string): string => `'${v.replace(/'/g, "'\\''")}'`;
 interface DiscardedView {
@@ -1059,6 +1113,98 @@ async function runInboxResolve(
   };
 }
 
+/** 統合済みの子の一括の回収（#234）。まず一覧を表示し、`--yes --expect <digest>` のときだけ実行する。 */
+async function runReclaimMerged(
+  flags: ReadonlySet<string>,
+  values: ReadonlyMap<string, string>,
+  positional: readonly string[],
+  requestId: string | undefined,
+  deps: CommandDeps,
+): Promise<CommandResult> {
+  if (positional.length !== 0) return usageError("touryou reclaim-merged に、引数はない");
+  const id = requestId ?? deps.newRequestId();
+  const rerun = `"$HOME/.touryou/current/bin/touryou" reclaim-merged --request-id ${id}`;
+  const fail = (o: Outcome<unknown>): CommandResult =>
+    o.kind === "failure"
+      ? failed(o.failure)
+      : unconfirmed((o as { reason: string }).reason, rerun, id);
+  const preview = await invoke(deps.client, id, "node.reclaimBatchPreview", {}, isBatchPreview);
+  if (preview.kind !== "ok") return fail(preview);
+  const { candidates, digest } = preview.value;
+  const eligible = candidates.filter((c) => c.eligible);
+  const skipped = candidates.filter((c) => !c.eligible);
+  const lines = [`統合済みの子の一括の回収（照合の値: ${digest}）`];
+  lines.push(
+    eligible.length === 0
+      ? "回収できる子: なし"
+      : `回収できる子（${eligible.length} 件。作業ツリーとブランチを、強制せずに消す）:`,
+  );
+  for (const c of eligible) lines.push(`  - ${terminalSafe(c.nodeId, 128)}`);
+  if (skipped.length > 0) {
+    lines.push(`対象外（${skipped.length} 件）:`);
+    for (const c of skipped) {
+      const why = c.unmet.map((r) => UNMET_TEXT[r] ?? terminalSafe(r, 40)).join("、");
+      lines.push(`  - ${terminalSafe(c.nodeId, 128)}: ${why}`);
+    }
+  }
+  if (skipped.some((c) => c.unmet.includes("notMerged"))) {
+    lines.push(
+      "「統合されていない」の子は、親のブランチに取り込まれていない（スカッシュ・リベースでマージした子も、ここに入る）。個別に確かめて回収する: touryou reclaim <nodeId>",
+    );
+  }
+  const shown = `${lines.join("\n")}\n`;
+  const expect = values.get("--expect");
+  if (!flags.has("--yes")) {
+    return {
+      exitCode: 2,
+      stdout: shown,
+      stderr:
+        eligible.length === 0
+          ? "回収できる子がない。何も実行していない\n"
+          : `${values.has("--expect") ? "--expect は、表示だけ（実行には --yes が要る）。" : ""}回収は取り消せない（作業ツリーとブランチが消える）。上の内容でよければ、表示の値を付けて再実行する: "$HOME/.touryou/current/bin/touryou" reclaim-merged --yes --expect ${digest}\n`,
+    };
+  }
+  if (expect === undefined) {
+    return usageError(
+      `--yes には --expect <digest> が要る（表示した一覧の照合用の値。--yes なしで実行すると、表示される: ${digest}）`,
+    );
+  }
+  if (expect !== digest) {
+    return {
+      exitCode: 1,
+      stdout: shown,
+      stderr: `表示した内容のあとで、回収できる子または先端が変わっている（照合の値が違う）。何も回収していない。上の内容を確かめ直して、よければ再実行する: "$HOME/.touryou/current/bin/touryou" reclaim-merged --yes --expect ${digest}\n`,
+    };
+  }
+  if (eligible.length === 0) return { exitCode: 0, stdout: shown, stderr: "" };
+  // 照合の値は、表示した値と同じ（daemon が、実行の直前に計算し直して照合する）。
+  const res = await invoke(
+    deps.client,
+    id,
+    "node.reclaimBatch",
+    { expectDigest: expect },
+    isBatchResult,
+  );
+  if (res.kind !== "ok") return fail(res);
+  const out = [`回収した: ${res.value.reclaimed.length} 件`];
+  for (const n of res.value.reclaimed) out.push(`  - ${terminalSafe(n, 128)}`);
+  if (res.value.failed.length > 0) {
+    out.push(
+      `回収できなかった: ${res.value.failed.length} 件（消していない。確かめ直して、もう一度実行する）`,
+    );
+    for (const f of res.value.failed) {
+      out.push(
+        `  - ${terminalSafe(f.nodeId, 128)}: ${terminalSafe(f.code, 40)}: ${terminalSafe(f.cause, 300)}`,
+      );
+    }
+  }
+  return {
+    exitCode: res.value.failed.length === 0 ? 0 : 1,
+    stdout: `${shown}${out.join("\n")}\nrequestId: ${id}\n`,
+    stderr: "",
+  };
+}
+
 export async function runCommand(
   argv: readonly string[],
   deps: CommandDeps,
@@ -1280,6 +1426,9 @@ export async function runCommand(
   }
   if (command === "answer") {
     return runAnswer(flags, values, positional, requestId, deps);
+  }
+  if (command === "reclaim-merged") {
+    return runReclaimMerged(flags, values, positional, requestId, deps);
   }
   const [nodeId] = positional;
   if (nodeId === undefined || positional.length !== 1) {

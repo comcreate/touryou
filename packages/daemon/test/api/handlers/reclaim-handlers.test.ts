@@ -142,11 +142,12 @@ const rig = (
     params: Record<string, unknown>,
     caller = "m1",
     requestId = `q-${++n}`,
+    role: "integrator" | "human" | "child" = "integrator",
   ) => {
     const req = {
       requestId,
       operation: op,
-      role: "integrator",
+      role,
       caller: { nodeId: caller },
       params,
     } as unknown as HandlerRequest<never>;
@@ -1091,5 +1092,74 @@ describe("回収の断り（openDecision）の nextActions", () => {
     expect(res.error?.cause).toContain("未回答の判断");
     expect(res.error?.nextActions.join("\n")).toContain("Web 画面");
     expect(res.error?.nextActions.join("\n")).toContain("touryou answer");
+  });
+});
+
+describe("統合済みの子の一括の回収（#234）", () => {
+  const human = (r: ReturnType<typeof rig>, op: "node.reclaimBatchPreview" | "node.reclaimBatch", p = {}) =>
+    r.call(op, p, "", `q-${++n}`, "human");
+  const rowOf = (res: { value?: any }, id: string) =>
+    res.value.candidates.find((c: { nodeId: string }) => c.nodeId === id);
+
+  it("プレビューは、回収できる子と、対象外の子を理由つきで返す（何も消さない）", async () => {
+    const r = rig({
+      facts: {
+        b: { merged: true, clean: false, worktreePath: `${WT}/b` },
+        c: { merged: false, clean: true, worktreePath: `${WT}/c` },
+      },
+    });
+    const res = await human(r, "node.reclaimBatchPreview");
+    expect(res.ok).toBe(true);
+    expect(rowOf(res, "a").eligible).toBe(true);
+    expect(rowOf(res, "b")).toMatchObject({ eligible: false, unmet: ["dirty"] });
+    expect(rowOf(res, "c")).toMatchObject({ eligible: false, unmet: ["notMerged"] });
+    expect(r.removed).toEqual([]);
+  });
+
+  it("照合の値が合えば、回収できる子だけを、強制せずに消す", async () => {
+    const r = rig({
+      facts: { b: { merged: true, clean: false, worktreePath: `${WT}/b` } },
+    });
+    const pre = await human(r, "node.reclaimBatchPreview");
+    const res = await human(r, "node.reclaimBatch", { expectDigest: pre.value.digest });
+    expect(res.ok).toBe(true);
+    expect(res.value.reclaimed.sort()).toEqual(["a", "c"]);
+    expect(res.value.failed).toEqual([]);
+    expect(r.removed.sort()).toEqual(["a", "c"]);
+    expect(r.forces.every(([, f]) => f === undefined)).toBe(true);
+    expect(stateOf(r.s(), "b")).toBe("verified"); // 未コミットの子は、触らない
+  });
+
+  it("照合の値が違えば、何も消さない（digestMismatch）", async () => {
+    const r = rig();
+    const res = await human(r, "node.reclaimBatch", { expectDigest: "000000000000" });
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe("digestMismatch");
+    expect(r.removed).toEqual([]);
+  });
+
+  it("表示のあとで、回収できる子が未コミットに変わったら、照合の値が変わり、何も消さない", async () => {
+    const r = rig();
+    const pre = await human(r, "node.reclaimBatchPreview");
+    r.state.facts.b = { merged: true, clean: false, worktreePath: `${WT}/b` };
+    const res = await human(r, "node.reclaimBatch", { expectDigest: pre.value.digest });
+    expect(res.ok).toBe(false);
+    expect(res.error?.code).toBe("digestMismatch");
+    expect(r.removed).toEqual([]);
+  });
+
+  it("統合ノード・子のロールからは、プレビューも実行も呼べない（何も消さない）", async () => {
+    const r = rig();
+    for (const role of ["integrator", "child"] as const) {
+      for (const [op, p] of [
+        ["node.reclaimBatchPreview", {}],
+        ["node.reclaimBatch", { expectDigest: "000000000000" }],
+      ] as const) {
+        const res = await r.call(op, p, "m1", `q-${++n}`, role);
+        expect(res.ok).toBe(false);
+        expect(res.error?.code).toBe("forbidden");
+      }
+    }
+    expect(r.removed).toEqual([]);
   });
 });

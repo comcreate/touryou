@@ -112,3 +112,21 @@ touryou reclaim <nodeId> --yes --expect <digest>    # 表示した照合の値�
 
 HTML 画面（`docs/ui.md`「回収の指示」）からも、同じ破棄の指示ができる。cli と同じく、プレビューで内容を見せ、**見せた先端（`tips`）を `expectTips` としてそのまま送る**（違えば、何も記録せず `tipMismatch`）。画面は、さらに、**対象のノード ID を打ち込ませる**。失われるものを調べられなかったノードがあるとき（`unknown`・`workingTreeUnknown`）は、画面からは指示できない（cli で確かめる）。
 
+## 統合済みの子の一括の回収（`touryou reclaim-merged`。#234）
+
+PR がマージされた子の作業ツリーとローカルブランチ（`touryou/*`）を、プレビューのうえ、まとめて回収する。**人間のロールだけ**が呼べる（統合ノード・子の AI は、`node.reclaimBatchPreview`・`node.reclaimBatch` を呼べない。ロール表と試験で確かめている）。
+
+```sh
+"$HOME/.touryou/current/bin/touryou" reclaim-merged                          # 一覧だけ（何も消さない。終了コード 2）
+"$HOME/.touryou/current/bin/touryou" reclaim-merged --yes --expect <digest>   # 一覧の値を付けて実行
+```
+
+- **対象**: 状態が `verified` で、祖先の判定で統合済み（`merged: true`）と分かり、作業ツリーが未コミットでないもの。配下の子から先に判定する。
+- **対象外（理由つきで表示）**: 未コミット（`dirty`）、統合されていない（`notMerged`）、状態を調べられない、など。未コミット・未統合の成果は、一括では消さない。
+- **スカッシュ・リベースでマージした子は、対象外になる**。統合済みの判定が祖先の判定（`merge-base --is-ancestor`）のため、スカッシュ・リベースは検出できない。一覧に「統合されていない」と出た子は、個別に確かめて回収する: `touryou reclaim <nodeId>`。
+- **強制しない**: 通常の回収と同じく、`git worktree remove`・`git branch -d` だけ（`--force`・`-D` は使わない）。git 自身も、未コミット・未統合の成果を拒む。
+- **照合の値（`--expect`）**: 一覧の内容（回収できる子と、その先端）から daemon が計算する値。`--yes` には、表示した値が要る。表示のあとで対象や先端が変わると、値が合わず（`digestMismatch`）、何も消さない。
+- **「未 push」の意味と限界**: リモートへの push は見ていない。親のブランチへの統合（`notMerged`）と未コミット（`dirty`）で、成果の取りこぼしを防ぐ。
+- **リポジトリごと**: daemon が管理する作業ツリーの置き場（`worktreeRoot`）の単位で閉じる。ほかのリポジトリの作業ツリーには触らない。
+- 1 件の失敗（`failed`）があっても、残りは続ける。失敗した子は消えていないので、確かめ直してもう一度実行する。
+

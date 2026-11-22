@@ -73,6 +73,13 @@ describe("操作の契約（NFR_004, DC_003）", () => {
 
   it("人間は purge の事前確認（node.purgePreview）を持ち、統合ノードは decision.get・report.get を持つ", () => {
     expect(ROLE_OPERATIONS.human).toContain("node.purgePreview");
+    // 統合済みの子の一括の回収（#234）は、人間のロールだけ（親の AI・子は呼べない）
+    for (const op of ["node.reclaimBatchPreview", "node.reclaimBatch"]) {
+      expect(ROLE_OPERATIONS.human).toContain(op);
+      for (const r of ["integrator", "child"] as const) {
+        expect((ROLE_OPERATIONS[r] as readonly string[]).includes(op)).toBe(false);
+      }
+    }
     expect(ROLE_OPERATIONS.integrator).toEqual(
       expect.arrayContaining(["decision.get", "report.get"]),
     );

@@ -58,6 +58,73 @@ const happy = () =>
   });
 const ops = (sent: readonly DaemonRequest<"human">[]) => sent.map((s) => s.operation);
 
+describe("reclaim-merged（#234: 統合済みの子の一括の回収）", () => {
+  const BATCH = {
+    candidates: [
+      { nodeId: "ok1", eligible: true, unmet: [], blockers: [] },
+      { nodeId: "dirty1", eligible: false, unmet: ["dirty"], blockers: [] },
+      { nodeId: "sq1", eligible: false, unmet: ["notMerged"], blockers: [] },
+    ],
+    digest: "0123456789ab",
+  };
+  const batch = () =>
+    fakeClient({
+      "node.reclaimBatchPreview": ok(BATCH),
+      "node.reclaimBatch": ok({ reclaimed: ["ok1"], failed: [] }),
+    });
+
+  it("--yes がなければ、一覧（対象と、理由つきの対象外）を表示するだけで、実行しない（終了コード 2）", async () => {
+    const { client, sent } = batch();
+    const r = await runCommand(["reclaim-merged"], deps(client));
+    expect(ops(sent)).toEqual(["node.reclaimBatchPreview"]);
+    expect(r.exitCode).toBe(2);
+    expect(r.stdout).toContain("ok1");
+    expect(r.stdout).toContain("dirty1");
+    expect(r.stdout).toContain("未コミット");
+    expect(r.stdout).toContain("スカッシュ");
+    expect(r.stdout).toContain("touryou reclaim <nodeId>");
+    expect(r.stderr).toContain("--yes --expect 0123456789ab");
+  });
+
+  it("--yes には --expect が要る（何も実行しない）", async () => {
+    const { client, sent } = batch();
+    const r = await runCommand(["reclaim-merged", "--yes"], deps(client));
+    expect(r.exitCode).toBe(2);
+    expect(ops(sent)).toEqual(["node.reclaimBatchPreview"]);
+  });
+
+  it("--expect が表示した値と違えば、何も実行しない（終了コード 1）", async () => {
+    const { client, sent } = batch();
+    const r = await runCommand(["reclaim-merged", "--yes", "--expect", "ffffffffffff"], deps(client));
+    expect(r.exitCode).toBe(1);
+    expect(ops(sent)).toEqual(["node.reclaimBatchPreview"]);
+  });
+
+  it("--yes --expect が表示した値と同じなら、node.reclaimBatch を送る", async () => {
+    const { client, sent } = batch();
+    const r = await runCommand(["reclaim-merged", "--yes", "--expect", "0123456789ab"], deps(client));
+    expect(r.exitCode).toBe(0);
+    expect(ops(sent)).toEqual(["node.reclaimBatchPreview", "node.reclaimBatch"]);
+    expect(sent[1]?.params).toEqual({ expectDigest: "0123456789ab" });
+    expect(r.stdout).toContain("回収した: 1 件");
+  });
+
+  it("回収できる子がなければ、実行しない", async () => {
+    const { client, sent } = fakeClient({
+      "node.reclaimBatchPreview": ok({ candidates: [], digest: "0123456789ab" }),
+    });
+    const r = await runCommand(["reclaim-merged", "--yes", "--expect", "0123456789ab"], deps(client));
+    expect(ops(sent)).toContain("node.reclaimBatchPreview");
+    expect(r.exitCode).toBe(0);
+  });
+
+  it("位置引数は受け付けない", async () => {
+    const { client } = batch();
+    const r = await runCommand(["reclaim-merged", "n1"], deps(client));
+    expect(r.exitCode).toBe(2);
+  });
+});
+
 describe("purge の対象表示と --yes（FR_031, NFR_006）", () => {
   it("--yes がなければ削除せず、事前確認で対象を表示して --yes を要求する（終了コード 2）", async () => {
     const { client, sent } = happy();

@@ -14,7 +14,9 @@
  *   `discardRequired`（人間の判断が要る）として拒否する。
  */
 
+import { createHash } from "node:crypto";
 import {
+  type Actor,
   assessReclaim,
   type Blocker,
   discardedNodeIds,
@@ -603,16 +605,117 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
       }
       reclaiming = true;
       try {
-        return await execute(req.requestId, caller, nodeId);
+        return await execute(req.requestId, { nodeId: caller }, nodeId);
+      } finally {
+        reclaiming = false;
+      }
+    },
+
+    // 一括の回収の事前確認（人間だけ。#234）。何も変えない。
+    "node.reclaimBatchPreview": async (
+      req: HandlerRequest<"node.reclaimBatchPreview">,
+    ): Promise<R<"node.reclaimBatchPreview">> => {
+      if (req.role !== "human") return batchHumanOnly();
+      const { candidates, digest } = await batchCandidates();
+      return { ok: true, value: { candidates, digest } };
+    },
+
+    // 一括の回収の実行（人間だけ。#234）。照合の値が違えば何も消さない。強制は使わない（通常の回収だけ）。
+    "node.reclaimBatch": async (req: HandlerRequest<"node.reclaimBatch">): Promise<R<"node.reclaimBatch">> => {
+      if (req.role !== "human") return batchHumanOnly();
+      if (reclaiming) {
+        return fail("busy", "別の回収を実行中", "少し待って、もう一度回収する");
+      }
+      reclaiming = true;
+      try {
+        const { candidates, digest } = await batchCandidates();
+        if (req.params.expectDigest !== digest) {
+          return fail(
+            "digestMismatch",
+            "表示した一覧のあとで、回収できる子または先端が変わっている（照合の値が違う）。何も回収していない",
+            "もう一度 touryou reclaim-merged で、一覧を確かめ直す",
+          );
+        }
+        const reclaimed: string[] = [];
+        const failed: { nodeId: string; code: string; cause: string }[] = [];
+        for (const c of candidates) {
+          if (!c.eligible) continue;
+          // 1 件ずつ、通常の回収（強制なし）。`execute` が、削除の直前に再判定する（未コミット・未統合に変わっていれば、飛ばす）。
+          const r = await execute(`${req.requestId}/${c.nodeId}`, { human: true }, c.nodeId);
+          if (r.ok) reclaimed.push(...r.value.reclaimed.filter((id) => !reclaimed.includes(id)));
+          else failed.push({ nodeId: c.nodeId, code: r.error.code, cause: r.error.cause });
+        }
+        return { ok: true, value: { reclaimed, failed } };
       } finally {
         reclaiming = false;
       }
     },
   };
 
+  function batchHumanOnly() {
+    return fail(
+      "forbidden",
+      "統合済みの子の一括の回収は、人間だけができる",
+      "人間に、touryou reclaim-merged を実行してもらう",
+    );
+  }
+
+  /**
+   * 一括の回収の候補: 受理済み（verified）の子を、配下から先の順に判定する。回収できる子は、あとの判定（親の統合ノード）では回収可能とみなす。
+   * 照合の値は、回収できる子の ID と先端（取れなければ、回収できないものとして対象外にする）を畳んだもの。
+   */
+  async function batchCandidates(): Promise<{
+    candidates: {
+      nodeId: string;
+      eligible: boolean;
+      unmet: readonly UnmetReason[];
+      blockers: readonly Blocker[];
+    }[];
+    digest: string;
+  }> {
+    const state = log.state();
+    const virtual = new Map<string, ReclaimNode>(state.nodes.map((n) => [n.id, n]));
+    const open = openDecisionNodes(state);
+    const discarded = new Set(discardedNodeIds(state));
+    const order: NodeRecord[] = [];
+    for (const n of state.nodes) {
+      if (n.parentId === null || !state.nodes.some((p) => p.id === n.parentId)) {
+        order.push(...postOrder(state.nodes, n.id));
+      }
+    }
+    const candidates: {
+      nodeId: string;
+      eligible: boolean;
+      unmet: readonly UnmetReason[];
+      blockers: readonly Blocker[];
+    }[] = [];
+    const lines: string[] = [];
+    for (const n of order) {
+      if (n.state !== "verified") continue;
+      const { result: r } = await assessNode([...virtual.values()], open, n.id, discarded);
+      if (!r.ok) {
+        candidates.push({ nodeId: n.id, eligible: false, unmet: ["stateNotEligible"], blockers: [] });
+        continue;
+      }
+      let { unmet } = r.value;
+      let eligible = r.value.reclaimable;
+      if (eligible) {
+        const tip = await currentTip(n.id);
+        if (tip.kind === "unknown") {
+          eligible = false;
+          unmet = ["factsMissing"];
+        } else lines.push(`${n.id}:${tip.kind === "tip" ? tip.sha : "none"}`);
+      }
+      if (eligible) virtual.set(n.id, { ...n, state: "reclaimable" });
+      candidates.push({ nodeId: n.id, eligible, unmet, blockers: r.value.blockers });
+    }
+    const digest = createHash("sha256").update(lines.sort().join("\n"), "utf8").digest("hex").slice(0, 12);
+    return { candidates, digest };
+  }
+
   async function execute(
     requestId: string,
-    caller: string,
+    actor: Actor,
     nodeId: string,
   ): Promise<Result<{ reclaimed: readonly string[] }, Failure>> {
     const { plan, unmet } = await assess(log.state(), nodeId);
@@ -634,7 +737,6 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
       if (moved.length > 0) return tipMismatch(moved, "whenBeforeReclaim");
     }
 
-    const actor = { nodeId: caller };
     const reclaimed: string[] = [];
     const done = () => (reclaimed.length === 0 ? "なし" : reclaimed.join("、"));
     for (const n of plan) {
