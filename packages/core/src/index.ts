@@ -36,6 +36,7 @@ export * from "./limits.js";
 export * from "./process-name.js";
 export * from "./purge.js";
 export * from "./reclaim.js";
+export * from "./runtime.js";
 export * from "./scope.js";
 export * from "./transition.js";
 export * from "./tree.js";

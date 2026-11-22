@@ -2,7 +2,9 @@
  * CLI の子の見張り（設計 6.2 の「止まったことの検出」2、FR_009 の「読まれないまま所定の時間を超えたら」）。
  *
  * - daemon は子を呼ばない。記録の時刻（と、フックが来た時刻）だけで決める。
- * - 止まっているかもしれない子: 親が起動を報告した、動いている（running）CLI の子で、最後の動き（起動の報告・報告・判断の要求・
+ * - 対象: `runtimeOf` が cli の子のうち、親が起動を報告した（done）子と、採用した子（`node.adopted`。起動の報告がなくてもよい。#159）。
+ *   Desktop の子は対象外。
+ * - 止まっているかもしれない子: 親が起動を報告した（採用した子は報告なし）、動いている（running）CLI の子で、最後の動き（起動の報告・報告・判断の要求・
  *   範囲違反・道具の拒否・指示の受け取り・フックの呼び出し）から `stallMs` を超えたもの。同じ「最後の動き」には 1 回だけ出す。
  *   判断の答え・範囲の頼みの判定を待っている子には出さない。同じ子の未解決の知らせがあれば、新しく出さない（#115）。
  *   判断待ち（waiting）は、人の答えを待っているので出さない。
@@ -27,6 +29,7 @@ import {
   isPrefaceInstruction,
   isStallSummary,
   lastActivityMs,
+  runtimeOf,
 } from "@touryou/core";
 
 import { appendAtomically, deriveId, type LogPort, notice } from "./api/handlers/context.js";
@@ -126,14 +129,19 @@ export function watchFindings(
     const launch = [...state.parentRequests]
       .reverse()
       .find((r) => r.nodeId === n.id && r.kind === "launch" && r.report?.outcome === "done");
-    if (launch === undefined) continue; // CLI の子で、親が起動を報告したものだけ（failed・未報告は対象外）
+    // 対象は CLI の子（`runtimeOf` が cli）のうち、親が起動を報告した（done）子か、採用した子（#159。起動の報告がない）。
+    // 起動が failed・未報告の子は対象外。Desktop の子は出さない
+    if (runtimeOf(state, n.id) !== "cli") continue;
+    if (launch === undefined && n.adopted === undefined) continue;
+    // 紐付けていない子の基準の時刻: 起動の報告、採用した子は採用の記録（`node.adopted`）
+    const baseAt = launch?.report?.at ?? n.adopted?.at;
     if (
       spec.unboundMs !== undefined &&
       (n.state === "running" || n.state === "waiting") &&
-      // 再起動の前に起動の報告があった子は出さない（紐付けのトークンはメモリだけなので、紐付けたかが分からない。
+      // 再起動の前に起動の報告（採用）があった子は出さない（紐付けのトークンはメモリだけなので、紐付けたかが分からない。
       // そのような子は「紐付けをやり直して」〔compose の noticeRebind〕に任せる）
-      ms(launch.report?.at) > (spec.sinceMs ?? 0) &&
-      nowMs - ms(launch.report?.at) > spec.unboundMs &&
+      ms(baseAt) > (spec.sinceMs ?? 0) &&
+      nowMs - ms(baseAt) > spec.unboundMs &&
       !isBound(n.id)
     )
       unbound.push({ nodeId: n.id });

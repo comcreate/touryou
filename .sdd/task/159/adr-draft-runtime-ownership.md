@@ -15,6 +15,8 @@ category: "developer-tooling"
 
 親の承認のあと、[touryou.md](../../adr/touryou.md) の末尾に追記する（本書は案。opt-in の方針は、利用者の判断 1 で A に決まった）。
 
+**実装の状況（PR1）**: `runtimeOf`（属性・起動の報告・不明の 3 通り）を core に置き、adopt が `node.created` に `runtime: "cli"` を記録し、見張り（cli-watch）と画面（ui-view）が `runtimeOf` で CLI の子を判定する所まで入った（#159 PR1）。compose の振り分け（PR2a）・spawn の `runtime` 引数と opt-in（PR2b）は未実装のため、status は draft のまま。
+
 ## 2026-11-22 子の runtime はノードの属性を正とし、spawn の引数は入力にとどめる
 
 - **Decision**: 子の実行環境（`cli` | `desktop`）は、`node.created.runtime`（ノードの属性）を正とする。`node_spawn` に任意の `runtime` 引数を足すが、それは入力で、検証して属性に写す。daemon の設定 `childRuntime` は、引数がないときの既定値に格下げする。振り分け（アダプタ・整合・引き出し・フックの受け口・bind の文面）は、すべて 1 つの関数（`runtimeOf`）が返す属性で決める。属性は不変とし、付け替えは、止めてから採用し直す。Desktop の子を足せる条件（opt-in の設定）は利用者の判断 1 で決める（推奨: 設定に明示の許可を足し、既定は無効）。

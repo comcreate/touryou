@@ -1106,7 +1106,12 @@ export const UI_JS = `'use strict';
     // 子の実行環境（記録のあるものだけ）の開き方と安全面の注記（#159）。たたむ
     if (n.runtime === 'cli' || n.runtime === 'desktop') {
       var rt = fold('runtime-' + n.id, t(n.runtime === 'cli' ? 'runtime.cli' : 'runtime.desktop'));
-      rt.appendChild(el('div', 'confirm-line', n.runtime === 'cli' ? t('runtime.openCli', { id: n.id }) : t('runtime.openDesktop')));
+      // 採用した子（#159）は、起動の報告がないので、sessionRef があれば番号で、なければ作業ツリーの場所で開き方を出す
+      var openText = n.runtime !== 'cli' ? t('runtime.openDesktop')
+        : typeof n.adoptedWorktree !== 'string' ? t('runtime.openCli', { id: n.id })
+        : attachCommandByRef(n) ? t('runtime.openAdoptedRef', { ref: n.sessionRef })
+        : t('runtime.openAdopted', { path: n.adoptedWorktree });
+      rt.appendChild(el('div', 'confirm-line', openText));
       rt.appendChild(el('div', 'confirm-line', t(n.runtime === 'cli' ? 'runtime.safetyCli' : 'runtime.safetyDesktop')));
       card.appendChild(rt);
     }

@@ -5,6 +5,7 @@ import {
   isStallSummary,
   type OrchEvent,
   type OrchState,
+  runtimeOf,
   stallSummary,
   UI_CUT_MARK,
   UI_FLOW_TEXT_MAX,
@@ -148,6 +149,84 @@ describe("node.created の runtime と uiViewOf の runtime（#159）", () => {
     ]);
     expect(s.nodes.find((x) => x.id === "a")).not.toHaveProperty("runtime");
     expect(uiViewOf(s).nodes.find((x) => x.id === "a")?.runtime).toBe("cli");
+  });
+
+  describe("runtimeOf（属性・起動の報告・不明）", () => {
+    const launch = (outcome: string) => [
+      ev({
+        type: "node.parentRequested",
+        payload: { nodeId: "a", requestRef: "r1", kind: "launch", worktree: "/w/a" },
+      } as never),
+      ev({
+        type: "node.parentReported",
+        payload: { nodeId: "a", requestRef: "r1", outcome },
+      } as never),
+    ];
+
+    it("属性があればそれ（起動の報告より優先）", () => {
+      const s = must([...rootEvents(), created("a", "implement", "root", { runtime: "desktop" })]);
+      expect(runtimeOf(s, "a")).toBe("desktop");
+      const t = must([
+        ...rootEvents(),
+        created("a", "implement", "root", { runtime: "desktop" }),
+        ...launch("done"),
+      ]);
+      expect(runtimeOf(t, "a")).toBe("desktop");
+    });
+
+    it("属性がなく、起動が done なら cli。failed・未報告・ないノードは不明", () => {
+      expect(runtimeOf(must([...base(), ...launch("done")]), "a")).toBe("cli");
+      expect(runtimeOf(must([...base(), ...launch("failed")]), "a")).toBeUndefined();
+      expect(runtimeOf(must(base()), "a")).toBeUndefined();
+      expect(runtimeOf(must(base()), "nobody")).toBeUndefined();
+    });
+  });
+
+  describe("採用した子（node.adopted。#159）", () => {
+    const adopt = (sessionRef?: string) =>
+      ev({
+        type: "node.adopted",
+        payload: {
+          nodeId: "a",
+          worktree: "/w/a",
+          branch: "feature/a",
+          ...(sessionRef === undefined ? {} : { sessionRef }),
+        },
+      } as never);
+    const viewOf = (events: OrchEvent[]) =>
+      uiViewOf(must(events)).nodes.find((x) => x.id === "a");
+
+    it("runtime が cli の採用した子に、cli・runtime・作業ツリー・sessionRef を出す", () => {
+      const v = viewOf([
+        ...rootEvents(),
+        created("a", "implement", "root", { runtime: "cli" }),
+        adopt("bg-1234"),
+      ]);
+      expect(v).toMatchObject({
+        cli: true,
+        runtime: "cli",
+        sessionRef: "bg-1234",
+        adoptedWorktree: "/w/a",
+      });
+    });
+
+    it("sessionRef がなければ載せず、作業ツリーだけ出す。採用でない子には adoptedWorktree を付けない", () => {
+      const v = viewOf([
+        ...rootEvents(),
+        created("a", "implement", "root", { runtime: "cli" }),
+        adopt(),
+      ]);
+      expect(v).toMatchObject({ cli: true, runtime: "cli", adoptedWorktree: "/w/a" });
+      expect(v).not.toHaveProperty("sessionRef");
+      expect(viewOf(base())).not.toHaveProperty("adoptedWorktree");
+    });
+
+    it("runtime のない古い採用の記録には、cli も runtime も付けない（推し量らない）", () => {
+      const v = viewOf([...base(), adopt("bg-1234")]);
+      expect(v).not.toHaveProperty("cli");
+      expect(v).not.toHaveProperty("runtime");
+      expect(v?.sessionRef).toBe("bg-1234");
+    });
   });
 
   it("cli・desktop 以外の runtime は invalidPayload で拒否する", () => {

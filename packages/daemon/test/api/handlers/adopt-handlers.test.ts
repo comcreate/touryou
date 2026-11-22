@@ -299,6 +299,16 @@ describe("node.adopt（既存の作業ツリーの採用。#163）", () => {
     expect(conflict.error?.code).toBe("requestIdConflict");
   });
 
+  it("node.created に runtime の cli を記録し、再送でも変わらない（#159）", async () => {
+    const r = rig();
+    const first = await r.call(params(), "m1", "ad-rt");
+    const id = first.value.nodeId as string;
+    expect(r.s().nodes.find((x) => x.id === id)?.runtime).toBe("cli");
+    await r.call(params(), "m1", "ad-rt");
+    expect(r.s().nodes.filter((x) => x.id === id)).toHaveLength(1);
+    expect(r.s().nodes.find((x) => x.id === id)?.runtime).toBe("cli");
+  });
+
   it("parentSessionId があれば、node.parentSessionSet を記録する", async () => {
     const r = rig();
     const res = await r.call(params({ parentSessionId: "sess-parent" }));

@@ -23,6 +23,7 @@ import { isResolvedByHuman } from "./inbox.js";
 import { isStallSummary, PRIORITIES, type Priority, priorityOf } from "./inbox-kinds.js";
 import { copyInboxMessage, type InboxMessage } from "./inbox-messages.js";
 import type { NodeRole, NodeState } from "./index.js";
+import { runtimeOf } from "./runtime.js";
 
 export const UI_TEXT_MAX = 200;
 /** 判断の質問の上限（コードポイント）。人間が、何を聞かれているかを読んで答えるので、ほかより長い。 */
@@ -76,6 +77,11 @@ export interface UiNode {
    * ほかは付けない（記録のないものを、画面で推し量らない）。画面は、実行環境の札と、開き方・安全面の注記を出す。
    */
   readonly runtime?: NodeRuntime;
+  /**
+   * 採用した子（`node.adopted`。#159）の作業ツリーのパス。`sessionRef` がない採用した子の開き方
+   * （「作業ツリー {path} の中で動くセッション」）に使う。採用した子だけに付ける。
+   */
+  readonly adoptedWorktree?: string;
   /**
    * 紐付けのトークンが切れた子（#189）。未解決の `tokenExpiredIdleBind`（使わなかった時間が長い。`idle`）・
    * `tokenExpiredAbsoluteBind`（発行から時間がたった。`absolute`）の知らせの鍵から導く（文は見ない）。両方あれば新しいほう。
@@ -347,14 +353,23 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       .filter((i) => priorityOf(i) === "failed" && !isStallSummary(i.summary))
       .map((i) => i.nodeId),
   );
-  // CLI の子: 親が起動（launch）を done で報告した子（#136）
+  // CLI の子: 親が起動（launch）を done で報告した子（#136）と、採用した CLI の子（`node.adopted`。#159）
   const cliChildren = new Set(
     state.parentRequests
       .filter((r) => r.kind === "launch" && r.report?.outcome === "done")
       .map((r) => r.nodeId),
   );
-  // 起動の報告の sessionRef（新しい報告を優先）。停止・削除の報告の sessionRef は読まない
+  for (const n of state.nodes) {
+    if (n.adopted !== undefined && runtimeOf(state, n.id) === "cli") cliChildren.add(n.id);
+  }
+  // 起動の報告の sessionRef（新しい報告を優先）。停止・削除の報告の sessionRef は読まない。
+  // 起動の報告がない採用した子は、採用の記録（`node.adopted`）の sessionRef
   const sessionRefs = new Map<string, string>();
+  for (const n of state.nodes) {
+    if (n.adopted?.sessionRef !== undefined && isSessionRef(n.adopted.sessionRef)) {
+      sessionRefs.set(n.id, n.adopted.sessionRef);
+    }
+  }
   for (const r of state.parentRequests) {
     if (r.kind === "launch" && r.report?.outcome === "done" && isSessionRef(r.report.sessionRef)) {
       sessionRefs.set(r.nodeId, r.report.sessionRef);
@@ -387,7 +402,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
     // トークンが切れた子には、切れた札を出すので、重ねない
     const lost =
       !BIND_EXPIRED_HIDDEN_STATES.has(n.state) && expired === undefined && bindLost.has(n.id);
-    const runtime = n.runtime ?? (cliChildren.has(n.id) ? "cli" : undefined);
+    const runtime = runtimeOf(state, n.id);
     return {
       id: idOf(n.id),
       role: n.role,
@@ -400,6 +415,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
       ...(cliChildren.has(n.id) ? { cli: true as const } : {}),
       ...(sessionRef === undefined ? {} : { sessionRef }),
       ...(runtime === undefined ? {} : { runtime }),
+      ...(n.adopted === undefined ? {} : { adoptedWorktree: uiText(n.adopted.worktree) }),
       ...(expired === undefined ? {} : { bindExpired: expired }),
       ...(lost ? { bindLost: true as const } : {}),
       ...(title === "" ? {} : { title }),

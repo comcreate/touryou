@@ -250,6 +250,8 @@ export function createAdoptHandlers(deps: AdoptHandlerDeps) {
                 objective: p.objective,
                 acceptanceCriteria: [...p.acceptanceCriteria],
                 scope: p.scope,
+                // 採用した子の実行環境（#159）。いまの採用は CLI の子だけ
+                runtime: "cli",
               },
             },
             { type: "node.stateChanged", payload: { nodeId, event: { type: "start" } } },

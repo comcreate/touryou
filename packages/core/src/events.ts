@@ -476,7 +476,7 @@ export interface NodeRecord {
   readonly objective?: string;
   readonly acceptanceCriteria?: readonly string[];
   readonly scope?: Scope;
-  /** 子の実行環境（`node.created` の `runtime`。記録だけで、振り分けには使わない）。根や以前の記録にはない。 */
+  /** 子の実行環境（`node.created` の `runtime`。見張り・画面は `runtimeOf` で判定する。compose の振り分けには、まだ使わない）。根や以前の記録にはない。 */
   readonly runtime?: NodeRuntime;
   /** 破棄の判断（停止したノードだけ。再開すると消える）。回収の再判定の入力 `facts.discarded` の情報源。 */
   readonly discarded?: {

@@ -153,6 +153,8 @@ describe("画面の資産（走査）", () => {
       "tabIndex",
       // 止まった子を、セッション番号で開くコマンドを組むため（表示モデルの nodes[].sessionRef。#150）
       "sessionRef",
+      // 採用した子の開き方に、作業ツリーのパスを出すため（表示モデルの nodes[].adoptedWorktree。#159）
+      "adoptedWorktree",
       // 受信箱の項目を人が片付ける・戻す（#99）: inbox.resolve・inbox.reopen の結果の鍵
       "resolved",
       "alreadyResolved",

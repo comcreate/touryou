@@ -658,6 +658,14 @@ export const APP_TEXT = {
   "resolve.title": { ja: "項目を片付ける", en: "Mark items as done" },
   "runtime.cli": { ja: "CLI の子", en: "CLI child" },
   "runtime.desktop": { ja: "Desktop の子", en: "Desktop child" },
+  "runtime.openAdopted": {
+    ja: "開き方: 採用した子です。作業ツリー {path} の中で動くセッションを開きます。",
+    en: "How to open: this is an adopted child. Open the session running inside the worktree {path}.",
+  },
+  "runtime.openAdoptedRef": {
+    ja: "開き方: 採用した子です。端末でリポジトリのディレクトリに移り、claude attach {ref} を打つと、この子の画面を開けます。",
+    en: "How to open: this is an adopted child. In a terminal, go to the repository directory and run claude attach {ref} to open this child's screen.",
+  },
   "runtime.openCli": {
     ja: "開き方: 端末でリポジトリのディレクトリに移り、claude attach {id} を打つと、この子の画面を開けます。",
     en: "How to open: in a terminal, go to the repository directory and run claude attach {id} to open this child's screen.",
