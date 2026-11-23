@@ -83,13 +83,13 @@ export const UI_HTML = `<!doctype html>
 <p id="notice" class="notice" hidden></p>
 <section id="view" class="stage" data-view="yours" hidden>
 <section class="win" data-p="left" aria-labelledby="yours-title"><header class="wh"><h2 id="yours-title" data-t="pane.yours">あなたの番</h2></header><div class="wb">
-<section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h2 id="now-title" data-t="now.title">いまあなたがすること</h2><p id="now-lead" class="lead"></p></section>
+<section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h3 id="now-title" data-t="now.title">いまあなたがすること</h3><p id="now-lead" class="lead"></p></section>
 <div id="todo" class="todo"></div>
 </div></section>
 <section class="win" data-p="graph" aria-labelledby="flows-title"><header class="wh"><h2 id="flows-title" data-t="flows.title">やり取り</h2></header><div class="wb"><p class="lead" data-t="flows.lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button></div><div id="graph-filter" class="seg" hidden><button id="hide-finished" class="quiet sm" type="button" aria-pressed="false" data-t="view.hideFinished">止めた・済んだ子を隠す</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span><span data-t="legend.up">← 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">→ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></div></section>
 <section class="win" data-p="right" aria-labelledby="cards-title"><header class="wh"><h2 id="cards-title" data-t="cards.title">作業ごとのようす</h2></header><div class="wb"><p class="lead" data-t="cards.lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
 <details id="finished" class="finished"><summary id="finished-summary" data-t="cards.finishedTitle">終わった作業</summary><div id="finished-cards" class="cards"></div></details></div></section>
-<nav class="nav" data-t-aria="pane.switch" aria-label="窓の切り替え"><button id="nav-yours" class="nb" type="button" data-view="yours" aria-current="page"><span aria-hidden="true">●</span><span data-t="pane.navYours">出番</span><span id="nav-count" class="bdg" hidden></span></button><button id="nav-explore" class="nb" type="button" data-view="explore" aria-current="false"><span aria-hidden="true">⌥</span><span data-t="pane.navExplore">図と作業</span></button></nav>
+<nav class="nav" data-t-aria="pane.switch" aria-label="表示の切り替え"><button id="nav-yours" class="nb" type="button" data-view="yours" aria-current="page"><span data-t="pane.yours">あなたの番</span><span id="nav-count" class="bdg" aria-hidden="true" hidden></span><span id="nav-count-sr" class="sr"></span></button><button id="nav-explore" class="nb" type="button" data-view="explore" aria-current="false"><span data-t="pane.navExplore">やり取りと作業</span></button></nav>
 </section>
 </main>
 <script src="/ui/app.js"></script>
@@ -139,8 +139,12 @@ main{padding:0 16px 48px}
 @media (min-width:900px){
   body{display:flex;flex-direction:column;height:100dvh}
   main{flex:1;min-height:0;display:flex;flex-direction:column;padding:0 20px 16px;overflow:auto}
-  .approvals{position:static;max-height:40vh;overflow:auto;flex:none}
-  .stage{flex:1;min-height:0}
+  /* 承認・確認・知らせは、同時に出ても窓をつぶさないよう、高さに上限を置き、中だけスクロールする */
+  .approvals{position:static;max-height:32vh;overflow:auto;flex:none}
+  #confirm{max-height:32vh;overflow:auto;flex:none}
+  #notice{max-height:12vh;overflow:auto;flex:none}
+  /* 高さの低い横長の画面でも窓が使えるよう、最小の高さを置く（足りないときは main がスクロールする） */
+  .stage{flex:1;min-height:360px}
 }
 @media (min-width:900px) and (max-width:1279px){
   .stage{grid-template-columns:clamp(320px,36vw,420px) minmax(0,1fr);grid-template-rows:minmax(0,1.3fr) minmax(0,1fr);grid-template-areas:"left graph" "left right"}
@@ -209,7 +213,7 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .now .count{grid-row:span 2;font-size:56px;line-height:1;font-weight:800;color:var(--kaki);min-width:1.2ch;text-align:center;font-variant-numeric:tabular-nums}
 .now .count.zero{color:var(--matsu)}
 .now .count.bump-a{animation:bump-a .6s cubic-bezier(.3,1.6,.5,1)}.now .count.bump-b{animation:bump-b .6s cubic-bezier(.3,1.6,.5,1)}
-.now h2{margin:0;font-size:21px}.now .lead{margin:0}
+.now h3{margin:0;font-size:21px}.now .lead{margin:0}
 .todo{display:grid;gap:10px;margin:12px 0 0}
 .task{background:var(--sheet);border:1px solid var(--line);border-left:5px solid var(--kaki-line);border-radius:4px 12px 12px 4px;padding:12px 16px;overflow-wrap:anywhere}
 .task.stall{border-left-color:var(--kiiro-line)}.task.request{border-left-color:var(--muted)}.task.closed{border-left-color:var(--line);opacity:.75}
@@ -325,7 +329,7 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .card,.task,.empty,.tlist,.board{background:var(--panel);border-top-color:var(--edge);border-right-color:var(--edge);border-bottom-color:var(--edge);box-shadow:var(--hl),var(--shadow-in);backdrop-filter:var(--blur-inner);-webkit-backdrop-filter:var(--blur-inner)}
 :is(.card,.task,.empty,.tlist,.board) :is(.card,.task,.empty,.tlist,.board),dialog.settings :is(.card,.empty){backdrop-filter:none;-webkit-backdrop-filter:none}
 dialog.settings :is(.card,.empty){background:var(--sheet)}
-@media (max-width:640px){dialog.settings{width:calc(100vw - 32px);max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px)}.now .count{font-size:44px}.now h2{font-size:18px}.top .tools{margin-left:0}button.sm,button.copy,button.gear,.settings .policy-add select,.settings .policy-add input{min-height:44px}.zoom{top:4px}.zoom button{min-width:44px;min-height:44px}.seg button{min-width:44px}}
+@media (max-width:640px){dialog.settings{width:calc(100vw - 32px);max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px)}.now .count{font-size:44px}.now h3{font-size:18px}.top .tools{margin-left:0}button.sm,button.copy,button.gear,.settings .policy-add select,.settings .policy-add input{min-height:44px}.zoom{top:4px}.zoom button{min-width:44px;min-height:44px}.seg button{min-width:44px}}
 `;
 
 // 根に出る、Desktop の子を人が確かめる依頼（daemon の再起動のあとの整合。external-check.ts）の文面の先頭。画面は、これを「停止の代行依頼」と同じ扱いにする
@@ -501,7 +505,8 @@ export const UI_JS = `'use strict';
   var authEl = document.getElementById('auth');
   var viewEl = document.getElementById('view');
   // 狭い画面（899px 以下）の下のタブ（#254 の段階 2）。「出番」（あなたの番の窓）と「図と作業」（やり取り・作業ごとのようすの窓）を切り替える。
-  // 広い画面では、CSS が 3 つの窓をすべて出すので、この切り替えは見た目に効かない。選びは残さない（開くたびに「出番」から）
+  // 広い画面では、CSS が 3 つの窓をすべて出すので、この切り替えは見た目に効かない。
+  // 開いたときは「あなたの番」から始める。切り替えるのは、利用者がタブか「詳しく」を押したときだけ（データの更新では戻さない）。選びはブラウザに残さない
   var paneButtons = [document.getElementById('nav-yours'), document.getElementById('nav-explore')];
   function showPane(v) {
     viewEl.dataset.view = v;
@@ -1064,10 +1069,11 @@ export const UI_JS = `'use strict';
     if (lastCount !== -1 && n !== lastCount) { countFlip = !countFlip; cls += countFlip ? ' bump-a' : ' bump-b'; }
     countEl.className = cls;
     lastCount = n;
-    // 下のタブの「出番」にも、件数の札を出す（0 件のときは出さない）
+    // 下のタブの「あなたの番」にも、件数の札を出す（0 件のときは出さない）。札は読み上げず、隠した文で件数を読ませる
     var navCount = document.getElementById('nav-count');
     navCount.textContent = String(n);
     navCount.hidden = n === 0;
+    document.getElementById('nav-count-sr').textContent = n ? t('pane.navCount', { n: n }) : '';
     document.getElementById('now-title').textContent = n ? t('now.titleN', { n: n }) : t('now.none');
     document.getElementById('now-lead').textContent = n ? t('now.lead') : '';
   }

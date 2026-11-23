@@ -314,10 +314,26 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     // 下のタブの名前と、出番の件数の札
     expect(
       await page.evaluate(() => document.querySelector("#view .nav")?.getAttribute("aria-label")),
-    ).toBe("窓の切り替え");
+    ).toBe("表示の切り替え");
     const countOf = (sel: string) =>
       page.evaluate((q) => document.querySelector(q)?.textContent ?? "", sel);
     expect(await countOf("#nav-count")).toBe(await countOf("#now-count"));
+    // 下のタブの下にも余白があり、最後の窓がタブに隠れない
+    expect(
+      await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector("main") as Element).paddingBottom)),
+    ).toBeGreaterThanOrEqual(56);
+    // 899px と 900px の境: 899px は下のタブ、900px は 2 列でタブなし
+    await page.setViewportSize({ width: 899, height: 900 });
+    expect(await navShown()).toBe(true);
+    await page.setViewportSize({ width: 900, height: 900 });
+    expect(await navShown()).toBe(false);
+    const [l3, g3] = await boxes();
+    expect((l3?.x ?? 0) < (g3?.x ?? 0)).toBe(true);
+    // 高さの低い横長の画面: 窓は最小の高さを保ち、main がスクロールする
+    await page.setViewportSize({ width: 1280, height: 400 });
+    expect(
+      await page.evaluate(() => (document.querySelector("#view") as HTMLElement).getBoundingClientRect().height),
+    ).toBeGreaterThanOrEqual(359);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.waitForSelector("#graph .gnode");
   });

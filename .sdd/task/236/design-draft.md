@@ -55,9 +55,9 @@ depends-on: ["spec-touryou-ui"]
 
 - **窓**：`#view` を 3 つの窓（`section.win`。`data-p` は `left`・`graph`・`right`）の舞台（`.stage`）にする。左は「あなたの番」（`#now-count` などの `.now` と `#todo`）、中は「やり取り」（図・一覧・凡例）、右は「作業ごとのようす」（`#cards`・`#finished`）。窓の見出しは `h2`（`#yours-title`・`#flows-title`・`#cards-title`）で、窓は `aria-labelledby` でその名前を持つ。既存の要素の id・`aria-label` は変えない。
 - **入れなかったもの**：モックの窓の中のタブ（左の「判断・答え待ち／受信箱の知らせ」、右の「選んだ作業／作業の一覧」）は、本番に対応する中身（受信箱だけの一覧・選んだ作業の詳しい欄）がなく、表示モデルを変えない決めなので、入れない。承認の欄（`#approvals`）・確認の欄（`#confirm`）・知らせ（`#notice`）は、どのタブを出していても見えるよう、窓の外（舞台の上）に置いたままにする。
-- **幅の区切り**：1280px〜は 3 列、900〜1279px は左＋右の上下（図が上）、900px〜は画面全体をスクロールせず、窓の中（`.wb`）だけスクロールする。〜899px は 1 列で、下のタブ（`nav.nav`。`#nav-yours`・`#nav-explore`。選んだほうに `aria-current="page"`）で「出番」（左の窓）と「図と作業」（中・右の窓）を切り替える。選びは `#view` の `data-view` に持ち、残さない。「出番」のタブには件数の札（`#nav-count`）を出す。一覧の「詳しく」（`openCard`）は、先に「図と作業」へ切り替える。
+- **幅の区切り**：1280px〜は 3 列、900〜1279px は左＋右の上下（図が上）、900px〜は画面全体をスクロールせず、窓の中（`.wb`）だけスクロールする。〜899px は 1 列で、下のタブ（`nav.nav`。`#nav-yours`・`#nav-explore`。選んだほうに `aria-current="page"`）で「あなたの番」（左の窓）と「やり取りと作業」（中・右の窓）を切り替える（窓の見出しと同じ言葉）。選びは `#view` の `data-view` に持ち、ブラウザには残さない。開いたときは「あなたの番」から始め、データの更新では切り替えない。「あなたの番」のタブには件数の札（`#nav-count`。読み上げは隠した `#nav-count-sr`）を出す。900px〜では、`#approvals`・`#confirm`・`#notice` に高さの上限と中のスクロールを置き、`.stage` に最小の高さ 360px を置く（低い横長の画面では `main` がスクロールする）。`.now` の見出しは窓の `h2` の下の `h3`。一覧の「詳しく」（`openCard`）は、先に「図と作業」へ切り替える。
 - **面**：外の窓（`.win`・`.top`・`.nav`）は、背面の `::before` に塗り `--win` とぼかし `--blur-outer` を持たせる。中の面（`.card`・`.task`・`.empty`・`.tlist`・`.board`）は塗り `--panel` とぼかし `--blur-inner`。入れ子の中の面と、設定・管理の窓の中のカードはぼかさない。値はモックのまま（明・暗の 3 か所）。
-- **文言**：`pane.yours`・`pane.switch`・`pane.navYours`・`pane.navExplore`（日英）。
+- **文言**：`pane.yours`・`pane.switch`・`pane.navExplore`・`pane.navCount`（日英）。
 
 # 6. 確かめ（段階 1）
 
