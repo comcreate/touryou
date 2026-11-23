@@ -23,7 +23,8 @@
   --glass-edge:rgba(255,255,255,.45);--edge:rgba(90,100,115,.26);
   --hl:inset 0 1px 0 rgba(255,255,255,.7);--hl-line:rgba(255,255,255,.9);--node:rgba(255,255,255,.08);
   --shadow:0 4px 16px rgba(0,0,0,.05);--shadow-in:0 1px 4px rgba(20,30,50,.04);
-  /* ぼかしは二重: 外の窓の背面（::before）で 1 回、中の面で もう 1 回。値は利用者が変えられるよう分けている */
+  /* ぼかしは二重: 外の窓の背面（::before）で 1 回、中の面で もう 1 回。値は利用者が変えられるよう分け、
+     明・暗でも別に持つ（明はここ、暗は下の 2 か所） */
   --blur-outer:blur(7px) saturate(160%);--blur-inner:blur(7px) saturate(160%);
   /* 文字の色は、面が薄くても背景の上で 4.5:1 を保つよう、明では濃いめにしている */
   --ink:#1d1f22;--ink2:#474c53;--rule:#c4c8cd;--grid:#e4e6e9;
@@ -40,6 +41,7 @@
   --glass-edge:rgba(255,245,235,.12);--edge:rgba(150,185,230,.18);
   --hl:inset 0 1px 0 rgba(255,245,235,.12);--hl-line:rgba(255,245,235,.3);--node:rgba(255,255,255,.05);
   --shadow:0 8px 32px rgba(0,0,0,.35);--shadow-in:0 1px 6px rgba(0,0,0,.18);
+  --blur-outer:blur(7px) saturate(160%);--blur-inner:blur(7px) saturate(160%);
   --ink:#e9edf3;--ink2:#a7b2c2;--rule:#2a3850;--grid:#16223a;
   --accent:#8fbcf5;--kaki:#ffa04a;--kaki-soft:#432812;--matsu:#7fd29b;--matsu-soft:#173626;
   --shu:#ff8f84;--shu-soft:#471e1b;--kiiro:#e2c250;--kiiro-soft:#3a3014;--on:#0a0f18;
@@ -54,6 +56,7 @@
   --glass-edge:rgba(255,245,235,.12);--edge:rgba(150,185,230,.18);
   --hl:inset 0 1px 0 rgba(255,245,235,.12);--hl-line:rgba(255,245,235,.3);--node:rgba(255,255,255,.05);
   --shadow:0 8px 32px rgba(0,0,0,.35);--shadow-in:0 1px 6px rgba(0,0,0,.18);
+  --blur-outer:blur(7px) saturate(160%);--blur-inner:blur(7px) saturate(160%);
   --ink:#e9edf3;--ink2:#a7b2c2;--rule:#2a3850;--grid:#16223a;
   --accent:#8fbcf5;--kaki:#ffa04a;--kaki-soft:#432812;--matsu:#7fd29b;--matsu-soft:#173626;
   --shu:#ff8f84;--shu-soft:#471e1b;--kiiro:#e2c250;--kiiro-soft:#3a3014;--on:#0a0f18;
@@ -672,9 +675,14 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     <div class="tune-row" data-k="dark"><label for="tn-panel-d">暗<span class="sr">の中の面</span></label><input type="range" id="tn-panel-d" min="0" max="60" step="1"><output for="tn-panel-d" id="tn-panel-d-o"></output></div>
   </fieldset>
   <fieldset>
-    <legend>ぼかし（明・暗で共通）</legend>
-    <div class="tune-row"><label for="tn-blur-o">外の窓</label><input type="range" id="tn-blur-o" min="0" max="40" step="1"><output for="tn-blur-o" id="tn-blur-o-o"></output></div>
-    <div class="tune-row"><label for="tn-blur-i">中の面</label><input type="range" id="tn-blur-i" min="0" max="40" step="1"><output for="tn-blur-i" id="tn-blur-i-o"></output></div>
+    <legend>外の窓のぼかし</legend>
+    <div class="tune-row" data-k="light"><label for="tn-blur-o-l">明<span class="sr">の外の窓のぼかし</span></label><input type="range" id="tn-blur-o-l" min="0" max="40" step="1"><output for="tn-blur-o-l" id="tn-blur-o-l-o"></output></div>
+    <div class="tune-row" data-k="dark"><label for="tn-blur-o-d">暗<span class="sr">の外の窓のぼかし</span></label><input type="range" id="tn-blur-o-d" min="0" max="40" step="1"><output for="tn-blur-o-d" id="tn-blur-o-d-o"></output></div>
+  </fieldset>
+  <fieldset>
+    <legend>中の面のぼかし</legend>
+    <div class="tune-row" data-k="light"><label for="tn-blur-i-l">明<span class="sr">の中の面のぼかし</span></label><input type="range" id="tn-blur-i-l" min="0" max="40" step="1"><output for="tn-blur-i-l" id="tn-blur-i-l-o"></output></div>
+    <div class="tune-row" data-k="dark"><label for="tn-blur-i-d">暗<span class="sr">の中の面のぼかし</span></label><input type="range" id="tn-blur-i-d" min="0" max="40" step="1"><output for="tn-blur-i-d" id="tn-blur-i-d-o"></output></div>
   </fieldset>
   <div class="tune-acts"><button type="button" id="tune-reset">既定に戻す</button><button type="button" id="tune-copy">値を写す</button></div>
   <p class="tune-note" id="tune-msg" role="status"></p>
@@ -1141,18 +1149,21 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
 <script id="tune-js">
 /* 微調整の窓（モック専用。本番には持ち込まない）
    - スライダーの input で、:root の CSS 変数（--win・--panel・--blur-outer・--blur-inner）を直接書き換える
-   - 塗りは明・暗で別々の値を持ち、いま出ている明暗のほうを書く。明暗が変わると、そちらの値で書き直す
+   - 塗りもぼかしも明・暗で別々の値を持ち、いま出ている明暗のほうを書く。明暗が変わると、そちらの値で書き直す
    - 色味（RGB）はいまの CSS の値のまま、アルファだけ変える
-   - 値は localStorage に残す（使えないときは、残さずに動く）。「既定に戻す」で書き換えを外し、CSS の値に戻す */
+   - 値は localStorage に残す（使えないときは、残さずに動く）。「既定に戻す」で書き換えを外し、CSS の値に戻す
+   - 保存の形を変えたので、キーを v2 にした。古いキーの値は読まずに消す */
 (function () {
   var root = document.documentElement;
-  var KEY = "touryou-mock-tune";
+  var KEY = "touryou-mock-tune-v2";
+  try { localStorage.removeItem("touryou-mock-tune"); } catch (e) { /* 消せなくても動く */ }
   var RGB = { win: { light: "244,241,234", dark: "22,20,18" }, panel: { light: "255,255,255", dark: "22,36,60" } };
   // 既定の値と色味は、上の CSS の 3 か所の定義と合わせておく（CSS を変えたら、ここも変える）
-  var DEF = { winL: 5, winD: 10, panelL: 5, panelD: 5, blurO: 7, blurI: 7 };
-  var MAX = { winL: 60, winD: 60, panelL: 60, panelD: 60, blurO: 40, blurI: 40 };
-  var IDS = { winL: "tn-win-l", winD: "tn-win-d", panelL: "tn-panel-l", panelD: "tn-panel-d", blurO: "tn-blur-o", blurI: "tn-blur-i" };
-  var UNIT = { winL: "%", winD: "%", panelL: "%", panelD: "%", blurO: "px", blurI: "px" };
+  var DEF = { winL: 5, winD: 10, panelL: 5, panelD: 5, blurOL: 7, blurOD: 7, blurIL: 7, blurID: 7 };
+  var MAX = { winL: 60, winD: 60, panelL: 60, panelD: 60, blurOL: 40, blurOD: 40, blurIL: 40, blurID: 40 };
+  var IDS = { winL: "tn-win-l", winD: "tn-win-d", panelL: "tn-panel-l", panelD: "tn-panel-d",
+    blurOL: "tn-blur-o-l", blurOD: "tn-blur-o-d", blurIL: "tn-blur-i-l", blurID: "tn-blur-i-d" };
+  var UNIT = { winL: "%", winD: "%", panelL: "%", panelD: "%", blurOL: "px", blurOD: "px", blurIL: "px", blurID: "px" };
   var VARS = ["--win", "--panel", "--blur-outer", "--blur-inner"];
   var btn = document.getElementById("tune-btn"), panel = document.getElementById("tune");
   var now = document.getElementById("tune-now"), msg = document.getElementById("tune-msg"), out = document.getElementById("tune-out");
@@ -1175,10 +1186,10 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     if (active) {
       root.style.setProperty("--win", rgba("win", th, d ? val.winD : val.winL));
       root.style.setProperty("--panel", rgba("panel", th, d ? val.panelD : val.panelL));
-      root.style.setProperty("--blur-outer", blur(val.blurO));
-      root.style.setProperty("--blur-inner", blur(val.blurI));
+      root.style.setProperty("--blur-outer", blur(d ? val.blurOD : val.blurOL));
+      root.style.setProperty("--blur-inner", blur(d ? val.blurID : val.blurIL));
     }
-    now.textContent = "いま効いているのは「" + (d ? "暗" : "明") + "」の塗りの値です（太字の行）。";
+    now.textContent = "いま効いているのは「" + (d ? "暗" : "明") + "」の塗りとぼかしの値です（太字の行）。";
     panel.querySelectorAll(".tune-row[data-k]").forEach(function (r) { r.classList.toggle("live", r.getAttribute("data-k") === th); });
   }
   function show() {
@@ -1190,9 +1201,10 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   function cssText() {
     return "/* 明（:root） */\n" +
       "--win:" + rgba("win", "light", val.winL) + ";--panel:" + rgba("panel", "light", val.panelL) + ";\n" +
-      "--blur-outer:" + blur(val.blurO) + ";--blur-inner:" + blur(val.blurI) + ";\n" +
+      "--blur-outer:" + blur(val.blurOL) + ";--blur-inner:" + blur(val.blurIL) + ";\n" +
       "/* 暗（prefers-color-scheme:dark と :root[data-theme=\"dark\"] の 2 か所） */\n" +
-      "--win:" + rgba("win", "dark", val.winD) + ";--panel:" + rgba("panel", "dark", val.panelD) + ";";
+      "--win:" + rgba("win", "dark", val.winD) + ";--panel:" + rgba("panel", "dark", val.panelD) + ";\n" +
+      "--blur-outer:" + blur(val.blurOD) + ";--blur-inner:" + blur(val.blurID) + ";";
   }
   function open(on) {
     panel.hidden = !on;
