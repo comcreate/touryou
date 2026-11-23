@@ -62,6 +62,8 @@ export type WorktreeFacts = Omit<ReclaimNodeFacts, "discarded"> & {
   readonly mergedBy?: "ancestor" | "evidence";
   /** 子のブランチ名（一括の回収の候補に出す。CLI が gh で PR を探す手がかり）。 */
   readonly branch?: string;
+  /** 親のブランチ（上流）の名前（CLI が、PR の base ブランチと突き合わせる）。 */
+  readonly base?: string;
 };
 
 /**
@@ -199,15 +201,26 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
   };
 
   /** 記録している統合済みの証拠の先端（なければ空のオプション）。 */
-  const evidenceOpts = (nodeId: string): { mergeEvidenceTip?: string } => {
-    const tip = log.state().nodes.find((n) => n.id === nodeId)?.mergeEvidence?.tip;
+  const evidenceOpts = (
+    nodeId: string,
+    assume?: ReadonlyMap<string, string>,
+  ): { mergeEvidenceTip?: string } => {
+    // `assume`: 一覧の表示だけで、記録したものとして扱う証拠（何も記録しない）。記録がある子は、記録を使う。
+    const tip =
+      log.state().nodes.find((n) => n.id === nodeId)?.mergeEvidence?.tip ?? assume?.get(nodeId);
     return tip === undefined ? {} : { mergeEvidenceTip: tip };
   };
 
   /** いまの先端。`withEvidence: false` は、証拠の記録の前に、証拠を使わずに取る。 */
-  const currentTip = async (nodeId: string, withEvidence = true): Promise<Tip> => {
+  const currentTip = async (
+    nodeId: string,
+    withEvidence = true,
+    assume?: ReadonlyMap<string, string>,
+  ): Promise<Tip> => {
     try {
-      return tipOfFacts(await ports.factsFor(nodeId, withEvidence ? evidenceOpts(nodeId) : {}));
+      return tipOfFacts(
+        await ports.factsFor(nodeId, withEvidence ? evidenceOpts(nodeId, assume) : {}),
+      );
     } catch (e) {
       deps.onFailure?.(nodeId, String(e));
       return { kind: "unknown" };
@@ -279,10 +292,11 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
     open: readonly string[],
     nodeId: string,
     discarded: ReadonlySet<string>,
+    assume?: ReadonlyMap<string, string>,
   ): Promise<{ result: Result<ReclaimAssessment, Failure>; facts?: WorktreeFacts }> {
     const raw = await safely(
       nodeId,
-      () => ports.factsFor(nodeId, evidenceOpts(nodeId)),
+      () => ports.factsFor(nodeId, evidenceOpts(nodeId, assume)),
       undefined,
     );
     // 消すものがない（gone）事実は、人が破棄を決めた停止ノード・受理済み（verified）ノードと、まだ判断のない停止ノード
@@ -678,7 +692,8 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
       req: HandlerRequest<"node.reclaimBatchPreview">,
     ): Promise<R<"node.reclaimBatchPreview">> => {
       if (req.role !== "human") return batchHumanOnly();
-      const { candidates, digest } = await batchCandidates();
+      const assume = new Map((req.params.assumeEvidence ?? []).map((e) => [e.nodeId, e.tip]));
+      const { candidates, digest } = await batchCandidates(assume);
       return { ok: true, value: { candidates, digest } };
     },
 
@@ -728,7 +743,7 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
    * 一括の回収の候補: 受理済み（verified）の子を、配下から先の順に判定する。回収できる子は、あとの判定（親の統合ノード）では回収可能とみなす。
    * 照合の値は、回収できる子の ID と先端（取れなければ、回収できないものとして対象外にする）を畳んだもの。
    */
-  async function batchCandidates(): Promise<{
+  async function batchCandidates(assume?: ReadonlyMap<string, string>): Promise<{
     candidates: {
       nodeId: string;
       eligible: boolean;
@@ -736,6 +751,7 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
       blockers: readonly Blocker[];
       mergedBy?: "ancestor" | "evidence";
       branch?: string;
+      base?: string;
     }[];
     digest: string;
   }> {
@@ -756,6 +772,7 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
       blockers: readonly Blocker[];
       mergedBy?: "ancestor" | "evidence";
       branch?: string;
+      base?: string;
     }[] = [];
     const lines: string[] = [];
     for (const n of order) {
@@ -774,7 +791,13 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
         });
         continue;
       }
-      const { result: r, facts } = await assessNode([...virtual.values()], open, n.id, discarded);
+      const { result: r, facts } = await assessNode(
+        [...virtual.values()],
+        open,
+        n.id,
+        discarded,
+        assume,
+      );
       const mergedBy = facts?.mergedBy;
       if (!r.ok) {
         candidates.push({
@@ -788,7 +811,7 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
       let { unmet } = r.value;
       let eligible = r.value.reclaimable;
       if (eligible) {
-        const tip = await currentTip(n.id);
+        const tip = await currentTip(n.id, true, assume);
         if (tip.kind === "unknown") {
           eligible = false;
           unmet = ["factsMissing"];
@@ -807,6 +830,7 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
         blockers: r.value.blockers,
         ...(mergedBy === undefined ? {} : { mergedBy }),
         ...(facts?.branch === undefined ? {} : { branch: facts.branch }),
+        ...(facts?.base === undefined ? {} : { base: facts.base }),
       });
     }
     const digest = createHash("sha256")

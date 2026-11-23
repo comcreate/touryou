@@ -373,7 +373,13 @@ export interface OperationMap {
    * スカッシュ・リベースでマージした子は、祖先判定では統合済みと分からないので、`notMerged` で対象外に出る（個別の `touryou reclaim` で扱う）。
    */
   "node.reclaimBatchPreview": {
-    params: Record<string, never>;
+    params: {
+      /**
+       * 「この先端の証拠を、記録したものとして」一覧を出す（何も記録しない。CLI が、gh で一致を確かめた結果を、
+       * `--yes` の前の表示と、実行の直前で、同じ照合の値にするため）。先端が、いまの先端と違えば、その子には使わない。
+       */
+      assumeEvidence?: readonly { nodeId: string; tip: string }[];
+    };
     result: {
       candidates: readonly {
         nodeId: string;
@@ -384,6 +390,8 @@ export interface OperationMap {
         mergedBy?: "ancestor" | "evidence";
         /** 子のブランチ名（CLI が、gh でマージ済みの PR を探す手がかり。信頼できる値だが、端末に出す前に整える）。取れなければ省略。 */
         branch?: string;
+        /** 親のブランチ（上流）の名前。CLI は、PR の base がこれと同じものだけを証拠にする。取れなければ省略（証拠を探さない）。 */
+        base?: string;
       }[];
       digest: string;
     };

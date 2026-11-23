@@ -362,8 +362,19 @@ const VALIDATORS: Validators = {
   "node.reclaimPreview": nodeIdOnly,
   "node.reclaim": nodeIdOnly,
   "node.reclaimBatchPreview": (p) => {
-    strict(p, []);
-    return {};
+    const o = strict(p, ["assumeEvidence"]);
+    const v = o.assumeEvidence;
+    if (v === undefined) return {};
+    if (!Array.isArray(v) || v.length > LIMITS.expectNodeIds) {
+      fail(`assumeEvidence は、{nodeId, tip} の配列（${LIMITS.expectNodeIds} 件以下）`);
+    }
+    const list = (v as unknown[]).map((e) => {
+      const r = strict(e, ["nodeId", "tip"]);
+      if (!isCommitSha(r.tip)) fail("tip が不正（40 桁の 16 進のコミット SHA）");
+      return { nodeId: id(r, "nodeId"), tip: r.tip as string };
+    });
+    if (new Set(list.map((e) => e.nodeId)).size !== list.length) fail("assumeEvidence に重複がある");
+    return { assumeEvidence: list };
   },
   "node.reclaimBatch": (p) => {
     const o = strict(p, ["expectDigest"]);

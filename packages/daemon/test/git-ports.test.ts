@@ -281,6 +281,7 @@ describe("createGitPorts（実際の git で、作業ツリーの作成・事実
       merged: true,
       mergedBy: "ancestor",
       branch: expect.stringMatching(/^touryou\/c1-[0-9a-f]+$/),
+      base: "main",
       clean: true,
       worktreePath: p,
       headCommit: expect.stringMatching(/^[0-9a-f]{40}$/),
@@ -878,9 +879,35 @@ describe("統合済みの証拠（スカッシュした子。#239）", () => {
     expect(kept).toBe(tip); // (d) 保管された
     expect(seen).toEqual([tip]);
     const flat = s.calls.flat();
-    expect(flat).toContain("-D"); // (f)
+    // (f) ブランチの削除は、古い値の検査つきの update-ref -d。強制の branch -D・--force は使わない
+    expect(s.calls.some((c) => c.includes("update-ref") && c.includes("-d") && c.includes(tip))).toBe(
+      true,
+    );
+    expect(flat).not.toContain("-D");
     expect(flat).not.toContain("--force");
     expect(flat).not.toContain("-f");
+  });
+
+  it("保管のあと・削除の前に先端が動いたら、ブランチを消さない（保管は残る）", async () => {
+    const s = setup();
+    const p = await provision(s, "c1");
+    const tip = squashMerged(s, p);
+    const r = await s.ports.removeWorktree("c1", {
+      expectedPath: p,
+      mergeEvidenceTip: tip,
+      // 保管した直後に、先端が動く
+      onTip: () => {
+        writeFileSync(join(p, "late.txt"), "late\n");
+        git(p, "add", ".");
+        git(p, "commit", "-q", "-m", "late");
+      },
+    });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("tipMoved");
+    expect(git(s.repoRoot, "branch", "--list", "touryou/*")).not.toBe(""); // ブランチは残る
+    expect(git(s.repoRoot, "for-each-ref", "--format=%(objectname)", "refs/touryou/discarded/")).toBe(
+      tip,
+    );
   });
 
   it("証拠なしなら、スカッシュした子は branchNotMerged で、何も消さない（既存の挙動）", async () => {

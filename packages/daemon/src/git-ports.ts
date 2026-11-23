@@ -186,6 +186,8 @@ export interface GitPorts {
         mergedBy?: "ancestor" | "evidence";
         /** 子のブランチ名。 */
         branch?: string;
+        /** 親のブランチ（上流）の名前。分からなければ省略。 */
+        base?: string;
         clean: boolean;
         worktreePath: string;
         headCommit?: string;
@@ -402,6 +404,14 @@ export function createGitPorts(
     const r = await git(["rev-parse", "--verify", "-q", `refs/heads/${branch}`]);
     const sha = r.stdout.trim();
     return r.code === 0 && isCommitSha(sha) ? sha : undefined;
+  };
+
+  /** 上流の完全な ref 名（`refs/heads/x`・`refs/remotes/<remote>/x`）から、ブランチ名（`x`）を取り出す。分からなければ `undefined`。 */
+  const baseBranchOf = (full: string): string | undefined => {
+    const local = /^refs\/heads\/(.+)$/.exec(full);
+    if (local?.[1] !== undefined) return local[1];
+    const remote = /^refs\/remotes\/[^/]+\/(.+)$/.exec(full);
+    return remote?.[1];
   };
 
   const dirExists = (p: string): boolean => {
@@ -1104,9 +1114,13 @@ export function createGitPorts(
           merged = true;
           mergedBy = "evidence";
         }
+        // 親のブランチ（上流）の名前。CLI が、PR の base ブランチと突き合わせる（別のブランチへのマージを証拠にしない）。
+        const full = await git(["rev-parse", "--symbolic-full-name", `${branchOf(nodeId)}@{upstream}`]);
+        const base = baseBranchOf(full.code === 0 ? full.stdout.trim() : "");
         return {
           merged,
           ...(mergedBy !== undefined ? { mergedBy } : {}),
+          ...(base === undefined ? {} : { base }),
           branch: branchOf(nodeId),
           clean,
           worktreePath: real,
@@ -1185,6 +1199,14 @@ export function createGitPorts(
           const tip = await git(["rev-parse", `refs/heads/${branch}`]);
           const sha = tip.stdout.trim();
           if (tip.code === 0 && isCommitSha(sha)) {
+            // 証拠による削除は、保管する先端が証拠の先端と同じか確かめる（判定のあとに動いていたら、何も消さない）。
+            if (byEvidence && sha !== mergeEvidenceTip) {
+              return fail(
+                "tipMoved",
+                `ブランチ ${branch} の先端が、統合済みの証拠の記録後に動いた（何も消さなかった）`,
+                "回収の判定をやり直す（新しい先端には、証拠が要る）",
+              );
+            }
             const kept = await keepDiscarded(nodeId, sha);
             if (!kept.ok) return kept;
             onTip?.(sha, kept.value.ref);
@@ -1225,8 +1247,16 @@ export function createGitPorts(
               "回収の判定をやり直す（新しい先端には、証拠が要る）",
             );
           }
-          // 統合済みだけ（`-d`）。`-D` は、`force` か、証拠による削除（先端は保管済み）のときだけ。
-          const r = await git(["branch", force === true || byEvidence ? "-D" : "-d", branch]);
+          // 統合済みだけ（`-d`）。`-D` は `force` のときだけ。証拠による削除は、証拠の先端を古い値とする
+          // `update-ref -d`（先端が動いていれば、git が断る。確かめと削除の隙間がない）。先端は保管済み。
+          const r =
+            byEvidence && mergeEvidenceTip !== undefined
+              ? await git(["update-ref", "-d", `refs/heads/${branch}`, mergeEvidenceTip])
+              : await git(["branch", force === true ? "-D" : "-d", branch]);
+          if (r.code === 0 && byEvidence) {
+            // `git branch -D` と同じく、ブランチの設定（上流など）も片付ける。無ければ失敗するが、問題ない。
+            await git(["config", "--remove-section", `branch.${branch}`]);
+          }
           if (r.code !== 0) {
             if (force === true || byEvidence) {
               return fail(

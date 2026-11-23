@@ -299,6 +299,45 @@ describe("node.reclaimInstruct の引数（expectTips）", () => {
   });
 });
 
+describe("node.mergeEvidence の引数（統合済みの証拠。#239）", () => {
+  const ok = (params: unknown) => validateParams("node.mergeEvidence" as never, params).ok;
+  const TIP = "a".repeat(40);
+  it("正しい形: prHead は PR 番号つき、human は PR 番号なし", () => {
+    expect(ok({ nodeId: "a", evidenceKind: "prHead", tip: TIP, prNumber: 12 })).toBe(true);
+    expect(ok({ nodeId: "a", evidenceKind: "human", tip: TIP })).toBe(true);
+  });
+  it("tip: 短縮 SHA・桁数の違う値・大文字・16 進でない文字列は拒否する（64 桁は SHA-256 の正当な値）", () => {
+    expect(ok({ nodeId: "a", evidenceKind: "human", tip: "a".repeat(64) })).toBe(true);
+    for (const tip of ["abc1234", "a".repeat(39), "a".repeat(41), "a".repeat(63), "A".repeat(40), `${"a".repeat(39)}g`, 5, null]) {
+      expect(ok({ nodeId: "a", evidenceKind: "human", tip }), JSON.stringify(tip)).toBe(false);
+    }
+  });
+  it("prNumber・evidenceKind・余計なキーを拒否する", () => {
+    for (const prNumber of [0, -1, 1.5, "12", 1_000_000_000, null]) {
+      expect(ok({ nodeId: "a", evidenceKind: "prHead", tip: TIP, prNumber }), String(prNumber)).toBe(
+        false,
+      );
+    }
+    expect(ok({ nodeId: "a", evidenceKind: "ai", tip: TIP })).toBe(false);
+    expect(ok({ nodeId: "a", tip: TIP })).toBe(false);
+    expect(ok({ nodeId: "a", evidenceKind: "human", tip: TIP, extra: 1 })).toBe(false);
+  });
+});
+
+describe("node.reclaimBatchPreview の引数（assumeEvidence）", () => {
+  const ok = (params: unknown) => validateParams("node.reclaimBatchPreview" as never, params).ok;
+  const TIP = "a".repeat(40);
+  it("引数なし・正しい assumeEvidence は通る。重複・不正な形・余計なキーは拒否する", () => {
+    expect(ok({})).toBe(true);
+    expect(ok({ assumeEvidence: [{ nodeId: "a", tip: TIP }] })).toBe(true);
+    expect(ok({ assumeEvidence: [{ nodeId: "a", tip: TIP }, { nodeId: "a", tip: TIP }] })).toBe(false);
+    expect(ok({ assumeEvidence: [{ nodeId: "a", tip: "abc" }] })).toBe(false);
+    expect(ok({ assumeEvidence: [{ nodeId: "a", tip: TIP, extra: 1 }] })).toBe(false);
+    expect(ok({ assumeEvidence: "x" })).toBe(false);
+    expect(ok({ other: 1 })).toBe(false);
+  });
+});
+
 describe("node.discardedDrop・node.discardedRestore の引数", () => {
   const ok = (op: string, params: unknown) => validateParams(op as never, params).ok;
   const TIP = "a".repeat(40);

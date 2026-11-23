@@ -1285,6 +1285,59 @@ describe("統合済みの子の一括の回収（#234）", () => {
       expect(r.removed).toEqual([]);
     });
 
+    it("assumeEvidence: 記録なしで「記録したものとして」一覧を出し、照合の値は、記録したあとと同じになる", async () => {
+      const r = squashed();
+      const assumed = await human(r, "node.reclaimBatchPreview", {
+        assumeEvidence: [{ nodeId: "c", tip: TIP }],
+      });
+      expect(rowOf(assumed, "c")).toMatchObject({ eligible: true, mergedBy: "evidence" });
+      // 何も記録していない
+      expect(r.s().nodes.find((x) => x.id === "c")?.mergeEvidence).toBeUndefined();
+      await record(r, {});
+      const recorded = await human(r, "node.reclaimBatchPreview");
+      expect(recorded.value.digest).toBe(assumed.value.digest);
+      // 記録したあとの値で、一括の回収ができる
+      const res = await human(r, "node.reclaimBatch", { expectDigest: assumed.value.digest });
+      expect(res.ok).toBe(true);
+      expect(res.value.reclaimed).toContain("c");
+    });
+
+    it("assumeEvidence の先端が、いまの先端と違えば、その子には使わない", async () => {
+      const r = squashed();
+      const res = await human(r, "node.reclaimBatchPreview", {
+        assumeEvidence: [{ nodeId: "c", tip: OTHER }],
+      });
+      expect(rowOf(res, "c")).toMatchObject({ eligible: false, unmet: ["notMerged"] });
+    });
+
+    it("assumeEvidence で一覧を出しても、実行（node.reclaimBatch）は、記録した証拠だけを使う", async () => {
+      const r = squashed();
+      const assumed = await human(r, "node.reclaimBatchPreview", {
+        assumeEvidence: [{ nodeId: "c", tip: TIP }],
+      });
+      const res = await human(r, "node.reclaimBatch", { expectDigest: assumed.value.digest });
+      expect(res.ok).toBe(false);
+      expect(res.error?.code).toBe("digestMismatch");
+      expect(r.removed).toEqual([]);
+    });
+
+    it("候補に、子のブランチと親のブランチ（base）を出す", async () => {
+      const r = rig({
+        facts: {
+          c: {
+            merged: false,
+            clean: true,
+            worktreePath: `${WT}/c`,
+            headCommit: TIP,
+            branch: "touryou/c",
+            base: "main",
+          },
+        },
+      });
+      const res = await human(r, "node.reclaimBatchPreview");
+      expect(rowOf(res, "c")).toMatchObject({ branch: "touryou/c", base: "main" });
+    });
+
     it("単独の回収（node.reclaim）も、証拠による統合済みを根拠にできる", async () => {
       const r = squashed();
       await record(r, {});

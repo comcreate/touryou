@@ -346,6 +346,7 @@ interface BatchPreview {
     readonly unmet: readonly string[];
     readonly mergedBy?: "ancestor" | "evidence";
     readonly branch?: string;
+    readonly base?: string;
   }[];
   readonly digest: string;
 }
@@ -360,7 +361,8 @@ const isBatchPreview = (v: unknown): v is BatchPreview =>
       typeof c.eligible === "boolean" &&
       isStringArray(c.unmet) &&
       (c.mergedBy === undefined || c.mergedBy === "ancestor" || c.mergedBy === "evidence") &&
-      (c.branch === undefined || typeof c.branch === "string"),
+      (c.branch === undefined || typeof c.branch === "string") &&
+      (c.base === undefined || typeof c.base === "string"),
   );
 const isMergeEvidenceResult = (v: unknown): v is { recorded: true; duplicate: boolean } =>
   isRecord(v) && v.recorded === true && typeof v.duplicate === "boolean";
@@ -378,12 +380,25 @@ const FULL_SHA = /^[0-9a-f]{40}$/;
 const PR_NUMBER = /^[1-9][0-9]{0,8}$/;
 
 /** gh の JSON の 1 件から、PR 番号と head の SHA を取り出す。形が違えば `undefined`（信頼しない）。 */
-const mergedPrOf = (x: unknown): (MergedPr & { readonly mergedAt: string }) | undefined => {
+const GH_JSON_FIELDS = "number,headRefOid,mergedAt,baseRefName,isCrossRepository";
+const REPO_NAME = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+
+/**
+ * gh の JSON の 1 件から、PR 番号・head の SHA・base ブランチ・マージ時刻を取り出す。形が違えば `undefined`（信頼しない）。
+ * fork（`isCrossRepository` が偽でない）の PR は、証拠にしない。
+ */
+const mergedPrOf = (
+  x: unknown,
+): (MergedPr & { readonly base: string; readonly mergedAtMs: number }) | undefined => {
   if (!isRecord(x)) return undefined;
-  const { number, headRefOid, mergedAt } = x;
+  const { number, headRefOid, mergedAt, baseRefName, isCrossRepository } = x;
   if (typeof number !== "number" || !Number.isInteger(number) || number < 1) return undefined;
   if (typeof headRefOid !== "string" || !FULL_SHA.test(headRefOid)) return undefined;
-  return { number, tip: headRefOid, mergedAt: typeof mergedAt === "string" ? mergedAt : "" };
+  if (typeof baseRefName !== "string" || baseRefName === "") return undefined;
+  if (isCrossRepository !== false) return undefined;
+  const mergedAtMs = typeof mergedAt === "string" ? Date.parse(mergedAt) : Number.NaN;
+  if (Number.isNaN(mergedAtMs)) return undefined;
+  return { number, tip: headRefOid, base: baseRefName, mergedAtMs };
 };
 
 const parseGhJson = (stdout: string): unknown => {
@@ -396,21 +411,37 @@ const parseGhJson = (stdout: string): unknown => {
 
 const GH_UNAVAILABLE = "gh（GitHub CLI）を実行できない（入っていない・ログインしていない・時間切れ）";
 
-/** ブランチ名に対応する、マージ済みの PR（一番新しいもの）の head の SHA。gh が使えなければ `unavailable`。 */
+/** gh を使うリポジトリ（`<owner>/<repo>`）。gh のすべての呼び出しに `-R` で付ける。使えなければ `unavailable`。 */
+async function ghRepoOf(gh: GhRunner | undefined): Promise<string | "unavailable" | "invalid"> {
+  if (gh === undefined) return "unavailable";
+  const r = await gh(["repo", "view", "--json", "nameWithOwner"]);
+  if (r === undefined || r.code !== 0) return "unavailable";
+  const v = parseGhJson(r.stdout);
+  const name = isRecord(v) ? v.nameWithOwner : undefined;
+  return typeof name === "string" && REPO_NAME.test(name) ? name : "invalid";
+}
+
+/**
+ * ブランチ名に対応する、マージ済みの PR（マージ時刻が一番新しいもの）の head の SHA。
+ * base が親のブランチ（`base`）と同じで、fork でない PR だけを使う。gh が使えなければ `unavailable`。
+ */
 async function findMergedPrByBranch(
   gh: GhRunner | undefined,
+  repo: string,
   branch: string,
+  base: string,
 ): Promise<PrLookup | "unavailable"> {
   if (gh === undefined) return "unavailable";
   const r = await gh([
     "pr",
     "list",
-    "--head",
-    branch,
+    "-R",
+    repo,
+    `--head=${branch}`,
     "--state",
     "merged",
     "--json",
-    "number,headRefOid,mergedAt",
+    GH_JSON_FIELDS,
     "--limit",
     "10",
   ]);
@@ -419,17 +450,26 @@ async function findMergedPrByBranch(
   if (!Array.isArray(list)) return { kind: "none", reason: "gh の応答の形が不正" };
   const prs = list.map(mergedPrOf).filter((p) => p !== undefined);
   if (prs.length === 0) return { kind: "none", reason: "マージ済みの PR が見つからない" };
-  const latest = prs.reduce((a, b) => (b.mergedAt > a.mergedAt ? b : a));
+  const forBase = prs.filter((p) => p.base === base);
+  if (forBase.length === 0) {
+    return { kind: "none", reason: "マージ先（base）が親のブランチと違う PR しかない" };
+  }
+  const latest = forBase.reduce((a, b) => (b.mergedAtMs > a.mergedAtMs ? b : a));
   return { kind: "found", pr: { number: latest.number, tip: latest.tip } };
 }
 
-/** PR 番号から、マージ済みの PR の head の SHA。マージ済みでなければ `none`。gh が使えなければ `unavailable`。 */
+/**
+ * PR 番号から、マージ済みの PR の head の SHA。マージ済みでない・base が親のブランチと違う・fork なら `none`。
+ * gh が使えなければ `unavailable`。
+ */
 async function findMergedPrByNumber(
   gh: GhRunner | undefined,
+  repo: string,
   prNumber: string,
+  base: string,
 ): Promise<PrLookup | "unavailable"> {
   if (gh === undefined) return "unavailable";
-  const r = await gh(["pr", "view", prNumber, "--json", "number,state,headRefOid,mergedAt"]);
+  const r = await gh(["pr", "view", prNumber, "-R", repo, "--json", `state,${GH_JSON_FIELDS}`]);
   if (r === undefined) return "unavailable";
   if (r.code !== 0) return { kind: "none", reason: "PR が見つからない" };
   const v = parseGhJson(r.stdout);
@@ -438,7 +478,10 @@ async function findMergedPrByNumber(
   }
   const pr = mergedPrOf(v);
   if (pr === undefined || String(pr.number) !== prNumber) {
-    return { kind: "none", reason: "gh の応答の形が不正" };
+    return { kind: "none", reason: "gh の応答の形が不正、または fork からの PR" };
+  }
+  if (pr.base !== base) {
+    return { kind: "none", reason: "マージ先（base）が親のブランチと違う" };
   }
   return { kind: "found", pr: { number: pr.number, tip: pr.tip } };
 }
@@ -1234,58 +1277,74 @@ async function runReclaimMerged(
       : unconfirmed((o as { reason: string }).reason, rerun, id);
   let preview = await invoke(deps.client, id, "node.reclaimBatchPreview", {}, isBatchPreview);
   if (preview.kind !== "ok") return fail(preview);
-  // スカッシュ・リベースでマージした子（祖先判定で統合済みと分からない）は、gh でマージ済みの PR の head の SHA を調べ、
-  // 子の先端と一致するときの証拠として記録する（記録は、daemon が先端と照合する。何も消さない）。
+  // スカッシュ・リベースでマージした子（祖先判定で統合済みと分からない）は、gh でマージ済みの PR の head の SHA を調べる。
+  // 子の先端と一致したものは、「記録したものとして」一覧を出す。記録は `--yes --expect` で実行するときだけ（表示では記録しない）。
   const evidenceLines: string[] = [];
   const notMerged = preview.value.candidates.filter(
     (c) => !c.eligible && c.unmet.includes("notMerged") && c.branch !== undefined,
   );
-  let recordedAny = false;
+  const found: { nodeId: string; tip: string; prNumber: number }[] = [];
   let ghUnavailable = false;
+  let repo: string | undefined;
+  if (notMerged.length > 0) {
+    const r = await ghRepoOf(deps.gh);
+    if (r === "unavailable") ghUnavailable = true;
+    else if (r === "invalid") {
+      evidenceLines.push("  gh が返したリポジトリ名の形が不正。証拠を探さなかった");
+    } else repo = r;
+  }
   for (const c of notMerged) {
+    if (repo === undefined) break;
     const who = terminalSafe(c.nodeId, 128);
-    const found = await findMergedPrByBranch(deps.gh, c.branch as string);
-    if (found === "unavailable") {
+    if (c.base === undefined) {
+      evidenceLines.push(`  - ${who}: 統合済みの証拠なし（親のブランチが分からない。証拠を探さない）`);
+      continue;
+    }
+    const lookup = await findMergedPrByBranch(deps.gh, repo, c.branch as string, c.base);
+    if (lookup === "unavailable") {
       ghUnavailable = true;
       break;
     }
-    if (found.kind === "none") {
-      evidenceLines.push(`  - ${who}: 統合済みの証拠なし（${found.reason}）`);
+    if (lookup.kind === "none") {
+      evidenceLines.push(`  - ${who}: 統合済みの証拠なし（${lookup.reason}）`);
       continue;
     }
-    const rec = await invoke(
-      deps.client,
-      `${id}:evidence:${c.nodeId}`,
-      "node.mergeEvidence",
-      { nodeId: c.nodeId, evidenceKind: "prHead", tip: found.pr.tip, prNumber: found.pr.number },
-      isMergeEvidenceResult,
-    );
-    if (rec.kind === "ok") {
-      recordedAny = true;
-      evidenceLines.push(`  - ${who}: PR #${found.pr.number} の head が先端と一致。証拠を記録した`);
-    } else if (rec.kind === "failure") {
-      evidenceLines.push(
-        `  - ${who}: 証拠を記録できなかった（${terminalSafe(rec.failure.code, 40)}。PR #${found.pr.number} の head が、いまの先端と違う可能性がある）`,
-      );
-    } else {
-      return fail(rec);
-    }
+    found.push({ nodeId: c.nodeId, tip: lookup.pr.tip, prNumber: lookup.pr.number });
   }
   if (ghUnavailable) {
     evidenceLines.push(
       `  ${GH_UNAVAILABLE}。親のブランチに取り込み済みと分かる子だけを対象にした（スカッシュ・リベースでマージした子は、対象外のまま）`,
     );
   }
-  if (recordedAny) {
-    preview = await invoke(deps.client, id, "node.reclaimBatchPreview", {}, isBatchPreview);
+  if (found.length > 0) {
+    // 記録なしで、gh の一致の結果を使った一覧にする（先端が違う子には、daemon が使わない）。照合の値は、記録のあとと同じになる。
+    preview = await invoke(
+      deps.client,
+      id,
+      "node.reclaimBatchPreview",
+      { assumeEvidence: found.map((f) => ({ nodeId: f.nodeId, tip: f.tip })) },
+      isBatchPreview,
+    );
     if (preview.kind !== "ok") return fail(preview);
   }
   const { candidates, digest } = preview.value;
+  // 一致を確認できて、一覧で「証拠」になった子だけを、実行のときに記録する。
+  const toRecord = found.filter((f) =>
+    candidates.some((c) => c.nodeId === f.nodeId && c.mergedBy === "evidence"),
+  );
+  for (const f of found) {
+    const who = terminalSafe(f.nodeId, 128);
+    evidenceLines.push(
+      toRecord.includes(f)
+        ? `  - ${who}: PR #${f.prNumber} の head が先端と一致（gh で確認できた。--yes で実行するときに記録する）`
+        : `  - ${who}: PR #${f.prNumber} の head が、いまの先端と違う（証拠にしない）`,
+    );
+  }
   const eligible = candidates.filter((c) => c.eligible);
   const skipped = candidates.filter((c) => !c.eligible);
   const lines = [`統合済みの子の一括の回収（照合の値: ${digest}）`];
   if (evidenceLines.length > 0) {
-    lines.push("統合済みの証拠（gh でマージ済みの PR を調べた結果）:", ...evidenceLines);
+    lines.push("統合済みの証拠（gh でマージ済みの PR を調べた結果。表示だけでは記録しない）:", ...evidenceLines);
   }
   lines.push(
     eligible.length === 0
@@ -1336,7 +1395,25 @@ async function runReclaimMerged(
     };
   }
   if (eligible.length === 0) return { exitCode: 0, stdout: shown, stderr: "" };
-  // 照合の値は、表示した値と同じ（daemon が、実行の直前に計算し直して照合する）。
+  // 実行するときだけ、gh で一致を確認した証拠を記録する（daemon が先端と照合する。記録しても、何も消えない）。
+  for (const f of toRecord) {
+    const rec = await invoke(
+      deps.client,
+      `${id}:evidence:${f.nodeId}`,
+      "node.mergeEvidence",
+      { nodeId: f.nodeId, evidenceKind: "prHead", tip: f.tip, prNumber: f.prNumber },
+      isMergeEvidenceResult,
+    );
+    if (rec.kind === "failure") {
+      return {
+        exitCode: 1,
+        stdout: shown,
+        stderr: `${terminalSafe(f.nodeId, 128)} の証拠を記録できなかった（${terminalSafe(rec.failure.code, 40)}）。何も回収していない。一覧を確かめ直す: "$HOME/.touryou/current/bin/touryou" reclaim-merged\n`,
+      };
+    }
+    if (rec.kind !== "ok") return fail(rec);
+  }
+  // 照合の値は、表示した値と同じ（記録のあとの一覧と同じになる。daemon が、実行の直前に計算し直して照合する）。
   const res = await invoke(
     deps.client,
     id,
@@ -1845,14 +1922,29 @@ export async function runCommand(
     const rerun = `"$HOME/.touryou/current/bin/touryou" reclaim ${nodeId} --merged-as ${as} --request-id ${id}`;
     let params: Req<"node.mergeEvidence">["params"];
     if (PR_NUMBER.test(as)) {
-      const found = await findMergedPrByNumber(deps.gh, as);
-      if (found === "unavailable") {
+      const unavailable: CommandResult = {
+        exitCode: 1,
+        stdout: "",
+        stderr: `${GH_UNAVAILABLE}ので、PR 番号は確かめられない。何も記録していない。gh を使えるようにするか、子の先端の 40 桁の SHA を --merged-as に渡して、人が宣言する\n`,
+      };
+      // PR の base は、子の親のブランチと同じでなければ、証拠にしない（親のブランチは、一覧の候補から取る）。
+      const list = await invoke(deps.client, id, "node.reclaimBatchPreview", {}, isBatchPreview);
+      if (list.kind !== "ok") return fail(list);
+      const base = list.value.candidates.find((c) => c.nodeId === nodeId)?.base;
+      if (base === undefined) {
         return {
           exitCode: 1,
           stdout: "",
-          stderr: `${GH_UNAVAILABLE}ので、PR 番号は確かめられない。何も記録していない。gh を使えるようにするか、子の先端の 40 桁の SHA を --merged-as に渡して、人が宣言する\n`,
+          stderr: "子の親のブランチが分からない（受理済みでない・上流がない、など）ので、PR を証拠にできない。何も記録していない。40 桁の SHA で宣言することはできる\n",
         };
       }
+      const repo = await ghRepoOf(deps.gh);
+      if (repo === "unavailable") return unavailable;
+      if (repo === "invalid") {
+        return { exitCode: 1, stdout: "", stderr: "gh が返したリポジトリ名の形が不正。何も記録していない\n" };
+      }
+      const found = await findMergedPrByNumber(deps.gh, repo, as, base);
+      if (found === "unavailable") return unavailable;
       if (found.kind === "none") {
         return {
           exitCode: 1,
