@@ -46,7 +46,14 @@ export interface ToolServerDeps {
   readonly pending?: boolean;
   /** 受信箱で除外した項目の不備を知らせる（ログに出す）。省略すると知らせない。 */
   readonly onInboxProblems?: (problems: readonly InboxProblem[]) => void;
+  /**
+   * 自動の紐付け（#255）の口。`child_bind` を子の AI が呼ばずに、mcp が自分で紐付けたとき、受け取った relay で、
+   * 道具の一覧を子（統合）のものに切り替える関数を渡す。真に切り替えたとき `"applied"`、すでに紐付いていたとき `"already"`。
+   */
+  readonly onAutoBindReady?: (apply: AutoBindApply) => void;
 }
+
+export type AutoBindApply = (relay: Relay) => Promise<Result<"applied" | "already">>;
 
 /** 受信箱の不備のログ。固定の記号と、識別子の形式の項目 ID だけ（項目の内容は出さない）。 */
 export interface InboxExcludedLog {
@@ -179,12 +186,28 @@ async function whoamiTool(deps: { role: McpRole; relay: Relay; bound?: boolean }
 
 export function createToolServer(init: ToolServerDeps): Server {
   // 紐付け（child_bind）で、ロールと relay が子のものに切り替わる（このプロセスの中だけ）。
-  const deps: { role: McpRole; relay: Relay; bound: boolean; lost: boolean } = {
+  const deps: {
+    role: McpRole;
+    relay: Relay;
+    bound: boolean;
+    lost: boolean;
+    /** 紐付けが、mcp の自動の紐付けで済んだ（子の AI の `child_bind` ではない）。 */
+    auto: boolean;
+    boundId?: unknown;
+  } = {
     role: init.role,
     relay: init.relay,
     bound: false,
     lost: false,
+    auto: false,
   };
+  const boundValue = (nodeId: unknown, role: McpRole) => ({
+    bound: true,
+    nodeId,
+    role,
+    note: BOUND_NOTE,
+    next: "次に inbox_fetch を呼び、ブリーフ（目的・受け入れ基準・範囲）と指示を読んでから、作業を始める",
+  });
   const server = new Server(
     { name: "touryou-mcp", version: touryouVersion() },
     {
@@ -197,10 +220,40 @@ export function createToolServer(init: ToolServerDeps): Server {
     deps.role = init.role;
     deps.relay = init.relay;
     deps.bound = false;
+    deps.auto = false;
     deps.lost = true;
     server.sendToolListChanged().catch(() => undefined);
   });
+  // 自動の紐付け: mcp が自分で紐付けたとき、子の AI の `child_bind` と同じ切り替えをする（ロールは daemon に尋ねて決める）。
+  init.onAutoBindReady?.(async (relay) => {
+    if (deps.bound) return ok("already" as const);
+    const who = await relay.whoami();
+    if (!who.ok) return who;
+    const role = who.value.role;
+    if (role !== "child" && role !== "integrator") {
+      return {
+        ok: false,
+        error: failure(
+          "whoami_role_mismatch",
+          "紐付けで受け取ったトークンのロールが、子でも統合でもない",
+          "作業を始めずに、会話で人（親）に紐付けのやり直しを頼む",
+        ),
+      };
+    }
+    // 尋ねている間に、子の AI の child_bind が先に済ませたなら、重ねない
+    if (deps.bound) return ok("already" as const);
+    deps.role = role;
+    deps.relay = relay;
+    deps.bound = true;
+    deps.auto = true;
+    deps.lost = false;
+    deps.boundId = (relay as { readonly nodeId?: unknown }).nodeId;
+    await server.sendToolListChanged().catch(() => undefined);
+    return ok("applied" as const);
+  });
   const bindTool = async (args: unknown) => {
+    // mcp の自動の紐付けが先に済んでいた: 子の AI の child_bind は、失敗にせず、成功と同じ結果を返す（競合しても失敗扱いにしない）
+    if (deps.bound && deps.auto) return asValue(boundValue(deps.boundId, deps.role));
     if (init.bindChild === undefined || deps.bound) {
       return asError(
         failure(
@@ -245,17 +298,13 @@ export function createToolServer(init: ToolServerDeps): Server {
     deps.role = boundRole;
     deps.relay = r.value;
     deps.bound = true;
+    deps.auto = false;
     deps.lost = false;
     await server.sendToolListChanged().catch(() => undefined);
     // 引数なしの紐付けでは、ノードの ID は mcp が印から読んだもの（relay に添えて返る）
     const boundId = (r.value as { readonly nodeId?: unknown }).nodeId ?? a.nodeId;
-    return asValue({
-      bound: true,
-      nodeId: boundId,
-      role: boundRole,
-      note: BOUND_NOTE,
-      next: "次に inbox_fetch を呼び、ブリーフ（目的・受け入れ基準・範囲）と指示を読んでから、作業を始める",
-    });
+    deps.boundId = boundId;
+    return asValue(boundValue(boundId, boundRole));
   };
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [

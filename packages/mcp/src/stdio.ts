@@ -26,8 +26,14 @@ import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { type Failure, failure, isSessionId, ok, type Result } from "@touryou/core";
 import { aclProblemOfMode, modeString, readSecureFile } from "@touryou/core/fs";
+import { startAutoBind } from "./auto-bind.js";
 import { type CodeFileOps, isCodeShape, readCodeFile, removeCodeFile } from "./bind-code-file.js";
-import { bindChild, type ChildBindOptions, rebindChild } from "./child-bind.js";
+import {
+  bindChild,
+  type ChildBindOptions,
+  type ChildCredential,
+  rebindChild,
+} from "./child-bind.js";
 import { detectOpenMode, type MarkerOps } from "./child-marker.js";
 import { createIdentityVerifier, IDENTITY_FILE } from "./identity.js";
 import { createNodeCredentialStore, type NodeCredentialStore } from "./node-credential.js";
@@ -39,7 +45,12 @@ import {
 } from "./node-subscriber.js";
 import { notificationText, socketFromEnv, writeNotification } from "./notify-socket.js";
 import { createRelay, type Relay } from "./relay.js";
-import { createInboxProblemReporter, createToolServer, openSession } from "./server.js";
+import {
+  type AutoBindApply,
+  createInboxProblemReporter,
+  createToolServer,
+  openSession,
+} from "./server.js";
 
 export const ROOT_TOKEN_FILE = "root-token";
 export const PORT_FILE = "port";
@@ -106,6 +117,23 @@ export interface StdioDeps {
   readonly credentials?: NodeCredentialStore;
   readonly fetch?: typeof fetch;
   readonly sleep?: (ms: number) => Promise<void>;
+  /**
+   * 紐付け待ちの間の自動の紐付け（#255）。渡すと、mcp が自分でコードのファイルを使う・コードなしで結び直す。省略すると働かない
+   * （`runStdio` が渡す。試験では、待ち・間隔・起こす関数を差し替える）。印（`markerNodeId`）がないときは働かない。
+   */
+  readonly autoBind?: AutoBindDeps;
+}
+
+export interface AutoBindDeps {
+  /** 確かめの間隔（既定 60 秒）。 */
+  readonly intervalMs?: number;
+  /** 失敗が続いたときの、daemon を叩く間隔の上限（既定 10 分）。 */
+  readonly maxIntervalMs?: number;
+  readonly sleep?: (ms: number) => Promise<void>;
+  /** 接続が閉じたときの中止の合図。 */
+  readonly signal?: AbortSignal;
+  /** 紐付いて道具が切り替わったあとに 1 回だけ呼ぶ。自分の受信箱のソケットへ固定の 1 行を書く（`runStdio` が渡す）。 */
+  readonly wake?: () => Promise<void>;
 }
 
 export interface StdioTarget {
@@ -415,53 +443,65 @@ export function openPendingStdioSession(
     ...(deps.cwd ? { cwd: deps.cwd } : {}),
     ...(deps.sessionId ? { sessionId: deps.sessionId } : {}),
   });
-  const bind = async (argNodeId: unknown, argCode: unknown): Promise<Result<Relay>> => {
-    // 引数なし: ノードの ID は印から、コードは作業ツリーの git のディレクトリのファイルから読む
-    let nodeId = argNodeId;
-    let code = argCode;
-    let filePath: string | undefined;
-    /** コードを書いた daemon の公開 ID（ファイルの 2 行目。古い形のファイルは、なし）。 */
-    let codeDaemonId: string | undefined;
-    if (argNodeId === undefined && argCode === undefined) {
-      const read = readCodeFile((deps.cwd ?? (() => process.cwd()))(), deps.codeFile ?? {});
-      // コードのファイルがない（使用済み）ときは、`claude attach` で mcp が入れ替わっただけかもしれない。セッションの ID・
-      // 作業ツリー・ノードの ID を送って、つなぎ直す（#145）。daemon が記録と合わないと言えば、下の案内に落とす。
-      if (!read.ok && read.reason === "missing" && deps.markerNodeId !== undefined) {
-        const re = await rebindChild(childBindOptions(), deps.markerNodeId);
-        if (re?.ok === true) return adopt(re.value);
-        // daemon に届かない・本人確認の失敗・失敗の上限は、案内に落とさずそのまま返す（コードの出し直しでは直らない）
-        if (re?.ok === false && re.error.code !== "bind_failed") return re;
+  const cwdOf = (): string => (deps.cwd ?? (() => process.cwd()))();
+  /** 子の AI の `child_bind` と、mcp の自動の紐付けは、同じ道を通る。どちらかが通れば、もう片方は成功として返す（#255）。 */
+  const alreadyBound = (): Result<Relay> | undefined => {
+    const c = store.get();
+    return c === undefined ? undefined : ok(boundRelay(c.nodeId));
+  };
+  /** 引数なしの `child_bind` の本体は同時に 1 つだけ（コードは一度きり。重ねて送ると、片方が使用済みで失敗する）。 */
+  let noArgBinding: Promise<Result<Relay>> | undefined;
+  const bind = (argNodeId: unknown, argCode: unknown): Promise<Result<Relay>> => {
+    if (argNodeId !== undefined || argCode !== undefined) return bindWithArgs(argNodeId, argCode);
+    const bound = alreadyBound();
+    if (bound !== undefined) return Promise.resolve(bound);
+    noArgBinding ??= bindWithoutArgs()
+      // 先に通った側があれば、失敗にしない
+      .then((r) => (r.ok ? r : (alreadyBound() ?? r)))
+      .finally(() => {
+        noArgBinding = undefined;
+      });
+    return noArgBinding;
+  };
+  /** 引数あり（Desktop の文面など）: 渡されたノードの ID とコードで紐付ける。 */
+  const bindWithArgs = async (nodeId: unknown, code: unknown): Promise<Result<Relay>> => {
+    const cred = await bindChild(childBindOptions(), nodeId, code);
+    return cred.ok ? install(cred.value) : cred;
+  };
+  /** 引数なし: ノードの ID は印から、コードは作業ツリーの git のディレクトリのファイルから読む。 */
+  const bindWithoutArgs = async (): Promise<Result<Relay>> => {
+    const read = readCodeFile(cwdOf(), deps.codeFile ?? {});
+    // コードのファイルがない（使用済み）ときは、`claude attach` で mcp が入れ替わっただけかもしれない。セッションの ID・
+    // 作業ツリー・ノードの ID を送って、つなぎ直す（#145）。daemon が記録と合わないと言えば、下の案内に落とす。
+    if (!read.ok && read.reason === "missing" && deps.markerNodeId !== undefined) {
+      const re = await rebindAndInstall(deps.markerNodeId);
+      if (re?.ok === true) return ok(boundRelay(re.value.nodeId));
+      // daemon に届かない・本人確認の失敗・失敗の上限は、案内に落とさずそのまま返す（コードの出し直しでは直らない）
+      if (re?.ok === false && re.error.code !== "bind_failed") return re;
+    }
+    if (!read.ok || deps.markerNodeId === undefined) {
+      if (read.ok === false && read.reason === "unsafe" && read.path !== undefined) {
+        log({ event: "bindCodeFileUnsafe", at: new Date().toISOString() });
       }
-      if (!read.ok || deps.markerNodeId === undefined) {
-        if (read.ok === false && read.reason === "unsafe" && read.path !== undefined) {
-          log({ event: "bindCodeFileUnsafe", at: new Date().toISOString() });
-        }
-        return fail(
-          "bind_code_file_unavailable",
-          read.ok === false && read.reason === "unsafe"
-            ? "紐付けのコードのファイルが安全でない（リンク・持ち主が違う・権限が 0600 でない）ので読まなかった"
-            : "紐付けのコードのファイルがない（使用済み・期限切れ・daemon の再起動のあと）か、このセッションが作業ツリーの一番上で起動されていない。ほかに、子を作った daemon と、この mcp の接続先の daemon が別の可能性もある（plugin が入っていないのとは限らない）",
-          "作業を始めずに、会話で人（親）に「紐付けをやり直して」と頼む（親は node_bindCode でコードを出し直す）。出し直されたら、child_bind を引数なしでもう一度呼ぶ",
-          "出し直しても同じなら、親に、この子を作った daemon と、plugin（mcp）の接続先（--config・TOURYOU_DAEMON_CONFIG・$HOME/.touryou/config.json）が同じかを確かめてもらう",
-          "人が claude attach で子の画面を開いたあとにこうなったなら、MCP がつなぎ直されて紐付けが外れている（#136）。自動のつなぎ直し（#145）は、セッションの ID・作業ツリーが記録と合わない・紐付けの期限が切れた・止められたなどで通らなかった。この場合、daemon が親の受信箱に「紐付けをやり直して」を出している（#186。届かなかったときは、人に頼む）。同じく、親にコードの出し直しを頼む",
-        );
-      }
-      nodeId = deps.markerNodeId;
-      code = read.code;
-      filePath = read.path;
-      codeDaemonId = read.daemonId;
+      return fail(
+        "bind_code_file_unavailable",
+        read.ok === false && read.reason === "unsafe"
+          ? "紐付けのコードのファイルが安全でない（リンク・持ち主が違う・権限が 0600 でない）ので読まなかった"
+          : "紐付けのコードのファイルがない（使用済み・期限切れ・daemon の再起動のあと）か、このセッションが作業ツリーの一番上で起動されていない。ほかに、子を作った daemon と、この mcp の接続先の daemon が別の可能性もある（plugin が入っていないのとは限らない）",
+        "作業を始めずに、会話で人（親）に「紐付けをやり直して」と頼む（親は node_bindCode でコードを出し直す）。出し直されたら、child_bind を引数なしでもう一度呼ぶ",
+        "出し直しても同じなら、親に、この子を作った daemon と、plugin（mcp）の接続先（--config・TOURYOU_DAEMON_CONFIG・$HOME/.touryou/config.json）が同じかを確かめてもらう",
+        "人が claude attach で子の画面を開いたあとにこうなったなら、MCP がつなぎ直されて紐付けが外れている（#136）。自動のつなぎ直し（#145）は、セッションの ID・作業ツリーが記録と合わない・紐付けの期限が切れた・止められたなどで通らなかった。この場合、daemon が親の受信箱に「紐付けをやり直して」を出している（#186。届かなかったときは、人に頼む）。同じく、親にコードの出し直しを頼む",
+      );
     }
     const cred = await bindChild(
-      { ...childBindOptions(), ...(codeDaemonId === undefined ? {} : { codeDaemonId }) },
-      nodeId,
-      code,
+      { ...childBindOptions(), ...(read.daemonId === undefined ? {} : { codeDaemonId: read.daemonId }) },
+      deps.markerNodeId,
+      read.code,
     );
-    if (filePath !== undefined) {
-      // 通ったら消す。通らなくても、形の正しくないコードは消す（読み直しても使えない）
-      if (cred.ok || typeof code !== "string" || !isCodeShape(code)) removeCodeFile(filePath);
-    }
+    // 通ったら消す。通らなくても、形の正しくないコードは消す（読み直しても使えない）
+    if (cred.ok || !isCodeShape(read.code)) removeCodeFile(read.path);
     if (!cred.ok) {
-      if (filePath !== undefined && cred.error.code === "bind_failed") {
+      if (cred.error.code === "bind_failed") {
         return fail(
           "bind_failed",
           "紐付けに失敗した（コードが使用済み・期限切れ・daemon の再起動で無効、または作業ツリーの一番上のセッションでない）",
@@ -470,10 +510,30 @@ export function openPendingStdioSession(
       }
       return cred;
     }
-    return adopt(cred.value);
+    return install(cred.value);
   };
-  /** 受け取った資格情報を入れ物に入れ、子の relay にする。 */
-  const adopt = (cred: { readonly nodeId: string; readonly token: string }): Result<Relay> => {
+  /** いま使っている子の relay（結び直しで、トークンごと差し替える）。 */
+  let inner: Relay = unboundRelay;
+  /**
+   * 子の relay（`inner` を使う）。daemon の 401 は、先に、コードなしの結び直しを試す（`store.reject`）。通れば、新しい資格情報で
+   * 1 回だけ呼び直す（401 は処理の前に断られるので、呼び直しても二重にならない）。通らなければ、入れ物が空になる（購読を止める）。
+   */
+  const boundRelay = (nodeId: string) => {
+    const watch = async <T>(call: (r: Relay) => Promise<Result<T>>): Promise<Result<T>> => {
+      const used = store.get()?.token;
+      const r = await call(inner);
+      if (r.ok || r.error.code !== "unauthenticated" || used === undefined) return r;
+      return (await store.reject(used)) ? call(inner) : r;
+    };
+    return {
+      nodeId,
+      whoami: () => watch((r) => r.whoami()),
+      request: (op: string, params: unknown, o?: { readonly requestId?: string }) =>
+        watch((r) => r.request(op, params, o)),
+    } satisfies Relay & { readonly nodeId: string };
+  };
+  /** 受け取った資格情報を入れ物に入れ、子の relay にする（購読は、入れ物の変更で張り直される）。 */
+  const install = (cred: { readonly nodeId: string; readonly token: string }): Result<Relay> => {
     const made = make({
       daemonUrl: endpoint.daemonUrl,
       identityPath: endpoint.identityPath,
@@ -482,33 +542,13 @@ export function openPendingStdioSession(
     if (!made.ok) return made;
     inner = made.value;
     store.set(cred);
-    // daemon の 401 は、先に、コードなしの結び直しを試す（`store.reject`）。通れば、新しい資格情報で 1 回だけ呼び直す
-    // （401 は処理の前に断られるので、呼び直しても二重にならない）。通らなければ、入れ物が空になる（購読を止める）。
-    const watch = async <T>(call: (r: Relay) => Promise<Result<T>>): Promise<Result<T>> => {
-      const used = store.get()?.token;
-      const r = await call(inner);
-      if (r.ok || r.error.code !== "unauthenticated" || used === undefined) return r;
-      return (await store.reject(used)) ? call(inner) : r;
-    };
-    return ok({
-      nodeId: cred.nodeId,
-      whoami: () => watch((r) => r.whoami()),
-      request: (op, params, o) => watch((r) => r.request(op, params, o)),
-    });
+    return ok(boundRelay(cred.nodeId));
   };
-  /** いま使っている子の relay（結び直しで、トークンごと差し替える）。 */
-  let inner: Relay = unboundRelay;
-  // 結び直し（#185）: 紐付けの印があるときだけ。同時に 1 回だけ走らせ、失敗したら REBIND_RETRY_MS は試さない（再起動の直後に
-  // 401 の連打で daemon を叩かない）。通ったら、新しいトークンに差し替える（購読は、入れ物の変更で張り直される）。
-  let rebinding: Promise<boolean> | undefined;
-  let lastRebindAt: number | undefined;
-  store.setRecover(async () => {
-    if (deps.markerNodeId === undefined) return false;
-    if (rebinding !== undefined) return rebinding;
-    if (lastRebindAt !== undefined && Date.now() - lastRebindAt < REBIND_RETRY_MS) return false;
-    lastRebindAt = Date.now();
-    const nodeId = deps.markerNodeId;
-    rebinding = (async () => {
+  // コードなしの結び直し（#145・#185・#255）: 同時に 1 回だけ走らせる（子の AI の呼び出し・401 の復旧・自動の紐付けで共有）。
+  // 通ったら、新しいトークンに差し替える。
+  let rebinding: Promise<Result<ChildCredential> | undefined> | undefined;
+  const rebindAndInstall = (nodeId: string): Promise<Result<ChildCredential> | undefined> => {
+    rebinding ??= (async (): Promise<Result<ChildCredential> | undefined> => {
       const re = await rebindChild(childBindOptions(), nodeId);
       if (re?.ok !== true) {
         log({
@@ -516,31 +556,87 @@ export function openPendingStdioSession(
           ...(re?.ok === false ? { code: re.error.code } : {}),
           at: new Date().toISOString(),
         });
-        return false;
+        return re;
       }
-      const made = make({
-        daemonUrl: endpoint.daemonUrl,
-        identityPath: endpoint.identityPath,
-        token: re.value.token,
-      });
-      if (!made.ok) return false;
-      inner = made.value;
-      store.set(re.value);
+      const installed = install(re.value);
+      if (!installed.ok) return installed;
       log({ event: "childRebound", at: new Date().toISOString() });
-      return true;
+      return re;
     })().finally(() => {
       rebinding = undefined;
     });
     return rebinding;
+  };
+  // 401 の復旧（#185）: 紐付けの印があるときだけ。失敗したら REBIND_RETRY_MS は試さない（再起動の直後に 401 の連打で daemon を
+  // 叩かない）。通ったら、新しいトークンに差し替える。
+  let lastRebindAt: number | undefined;
+  store.setRecover(async () => {
+    if (deps.markerNodeId === undefined) return false;
+    if (rebinding !== undefined) return (await rebinding)?.ok === true;
+    if (lastRebindAt !== undefined && Date.now() - lastRebindAt < REBIND_RETRY_MS) return false;
+    lastRebindAt = Date.now();
+    return (await rebindAndInstall(deps.markerNodeId))?.ok === true;
   });
-  return createToolServer({
+  // 紐付け待ちに入った理由（次に、原因を特定できるように）。起動はここ、401 で外れたときは入れ物が空になったとき。
+  log({ event: "pendingBindEntered", reason: "startup", at: new Date().toISOString() });
+  let wasBound = false;
+  store.onChange((c) => {
+    if (c !== undefined) {
+      wasBound = true;
+      return;
+    }
+    if (!wasBound) return;
+    wasBound = false;
+    log({ event: "pendingBindEntered", reason: "rejected", at: new Date().toISOString() });
+  });
+  let applyBound: AutoBindApply | undefined;
+  const server = createToolServer({
     role: "child",
     relay: unboundRelay,
     pending: true,
     bindChild: bind,
     credentials: store,
     onInboxProblems: createInboxProblemReporter({ log }),
+    onAutoBindReady: (apply) => {
+      applyBound = apply;
+    },
   });
+  // 自動の紐付け（#255）: 紐付け待ちの間、mcp が自分で結び直し、購読を再開し、自分の受信箱に 1 行書いて子を起こす。
+  const auto = deps.autoBind;
+  if (auto !== undefined && deps.markerNodeId !== undefined) {
+    const nodeId = deps.markerNodeId;
+    void startAutoBind({
+      isBound: () => store.get() !== undefined,
+      codeFile: () => {
+        const r = readCodeFile(cwdOf(), deps.codeFile ?? {});
+        return r.ok ? "present" : r.reason === "missing" ? "missing" : "unusable";
+      },
+      canRebind: isSessionId(deps.sessionId),
+      bindFromFile: () => bind(undefined, undefined),
+      rebind: () => rebindAndInstall(nodeId),
+      onBound: async () => {
+        const c = store.get();
+        if (c === undefined) return;
+        const applied = await applyBound?.(boundRelay(c.nodeId) as Relay);
+        if (applied?.ok !== true) {
+          log({
+            event: "autoBindApplyFailed",
+            ...(applied?.ok === false ? { code: applied.error.code } : {}),
+            at: new Date().toISOString(),
+          });
+          return;
+        }
+        // 子の AI が先に済ませていたなら、起こさない（すでに動いている）。
+        if (applied.value === "applied") await auto.wake?.();
+      },
+      log,
+      ...(auto.intervalMs === undefined ? {} : { intervalMs: auto.intervalMs }),
+      ...(auto.maxIntervalMs === undefined ? {} : { maxIntervalMs: auto.maxIntervalMs }),
+      ...(auto.sleep === undefined ? {} : { sleep: auto.sleep }),
+      ...(auto.signal === undefined ? {} : { signal: auto.signal }),
+    });
+  }
+  return server;
 }
 
 /**
@@ -575,6 +671,8 @@ export async function runStdio(
   // 開き方は、起動したときの作業ディレクトリの印で決める。子の作業ツリーなら、根のトークンを読まない。
   const mode = detectOpenMode((deps.cwd ?? (() => process.cwd()))(), deps.marker);
   let server: Server;
+  /** 接続が閉じたら、自動の紐付けの定期の確かめを止める。 */
+  const autoBindAbort = new AbortController();
   // 知らせの購読: 子は資格情報の入れ物に従う（紐付けと購読で同じ入れ物を使う）。根のモードだけが根のトークンで購読する。
   let child: Parameters<typeof startNotifications>[4];
   if (mode.kind === "pending") {
@@ -587,8 +685,18 @@ export async function runStdio(
       endpoint: () => resolveDaemonEndpoint(argv, env, deps),
       ...(mode.nodeId === undefined ? {} : { markerNodeId: mode.nodeId }),
     };
+    // 自動の紐付け（#255）: 結び直しが通ったら、自分の受信箱のソケットへ固定の 1 行を書いて、手の空いた子を起こす。
+    // 新しいプロセスの購読は「今より後」から始まるので、結び直しの前に積まれた指示は、通知されない。この 1 行が、読ませる。
+    const socket = socketFromEnv(env);
+    const wake = async (): Promise<void> => {
+      const r = await writeNotification(socket, notificationText(0));
+      io.stderr(
+        `${JSON.stringify({ event: "autoBindWake", written: r.written, ...(r.written ? {} : { reason: r.reason }), at: new Date().toISOString() })}\n`,
+      );
+    };
     server = openPendingStdioSession(endpoint.value, io, {
       ...deps,
+      autoBind: { wake, ...deps.autoBind, signal: autoBindAbort.signal },
       credentials,
       ...(mode.nodeId === undefined ? {} : { markerNodeId: mode.nodeId }),
       ...(sessionId === undefined || sessionId === "" ? {} : { sessionId }),
@@ -629,6 +737,7 @@ export async function runStdio(
   io.stderr(`${JSON.stringify({ event: "stdioConnected", at: new Date().toISOString() })}\n`);
   const subscriber = startNotifications(argv, env, io, deps, child);
   await closed;
+  autoBindAbort.abort();
   subscriber?.stop();
   io.stderr(`${JSON.stringify({ event: "stdioClosed", at: new Date().toISOString() })}\n`);
   return 0;
