@@ -2,7 +2,7 @@
 id: "adr-261-prompt-order-telegraph"
 title: "Prompt Order Telegraph（指示の復唱） 決定ログ"
 type: "adr"
-status: "accepted"
+status: "proposed"
 sdd-phase: "plan"
 sdd-version: "5.1.0"
 created: "2026-11-24"
