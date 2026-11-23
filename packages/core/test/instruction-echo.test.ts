@@ -5,6 +5,7 @@ import {
   type EventBody,
   foldEvents,
   inboxMessage,
+  inboxMessageText,
   isEchoShape,
   judgeEcho,
   normalizeInstructionText,
@@ -136,8 +137,8 @@ describe("指示の復唱（#261）: 知らせの文", () => {
     ] as const) {
       const m = inboxMessage(key, args);
       expect([...m.summary].length, key).toBeLessThanOrEqual(200);
+      // 「次にすること」は AI 向けなので node_send・tree_list は書く。受け取りの内部の名前・ハッシュ値は出さない
       for (const word of [
-        "node_send",
         "child_bind",
         "child.inbox",
         "ackThrough",
@@ -146,6 +147,22 @@ describe("指示の復唱（#261）: 知らせの文", () => {
       ]) {
         expect(m.summary, `${key} ${word}`).not.toContain(word);
       }
+    }
+  });
+
+  it("次にすること・古い版の子への手・復唱の説明（一度だけ）が、日英の両方にある", () => {
+    for (const lang of ["ja", "en"] as const) {
+      const mismatch =
+        inboxMessageText(lang, inboxMessage("echoMismatch", { node: "a", seq: 1 }).msg) ?? "";
+      const missing =
+        inboxMessageText(lang, inboxMessage("echoMissing", { node: "a", seq: 1, minutes: 5 }).msg) ??
+        "";
+      expect(mismatch, lang).toContain("node_send");
+      expect(missing, lang).toContain("tree_list");
+      expect(missing, lang).toContain("plugin");
+      // 「復唱」（英語は echo）の言葉は、1 つの文に一度だけ
+      const word = lang === "ja" ? "復唱" : "echo";
+      for (const s of [mismatch, missing]) expect(s.split(word), `${lang} ${s}`).toHaveLength(2);
     }
   });
 });
