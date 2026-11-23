@@ -16,13 +16,15 @@
    ============================================================ */
 :root{
   --bg:#f1f2f3;--bg-glow:#fcfdfd;
-  /* 面: 外の窓（上のバー・3 列の窓・見本帳の台・下のタブ・設定の窓）は、ごく薄い塗り（5%）と --blur のぼかし。
-     中の面（カード・札・図の盤など）は、ぼかさずにごく薄い塗り（5%）と、縁・上辺の光の線で区切る。
+  /* 面: 外の窓（上のバー・3 列の窓・見本帳の台・下のタブ・設定の窓）は、背面の ::before に、ごく薄い塗り（5%）と --blur-outer のぼかし。
+     中の面（カード・札・図の盤など）は、ごく薄い塗り（5%）と --blur-inner のぼかし、縁・上辺の光の線。
      帯（窓の見出し・タブ・窓の下の帯）は塗りなし */
   --win:rgba(244,241,234,.05);--panel:rgba(255,255,255,.05);--strip:transparent;--panel-solid:#fbfaf6;
   --glass-edge:rgba(255,255,255,.45);--edge:rgba(90,100,115,.26);
   --hl:inset 0 1px 0 rgba(255,255,255,.7);--hl-line:rgba(255,255,255,.9);--node:rgba(255,255,255,.08);
-  --shadow:0 4px 16px rgba(0,0,0,.05);--shadow-in:0 1px 4px rgba(20,30,50,.04);--blur:blur(7px) saturate(160%);
+  --shadow:0 4px 16px rgba(0,0,0,.05);--shadow-in:0 1px 4px rgba(20,30,50,.04);
+  /* ぼかしは二重: 外の窓の背面（::before）で 1 回、中の面で もう 1 回。値は利用者が変えられるよう分けている */
+  --blur-outer:blur(7px) saturate(160%);--blur-inner:blur(7px) saturate(160%);
   /* 文字の色は、面が薄くても背景の上で 4.5:1 を保つよう、明では濃いめにしている */
   --ink:#1d1f22;--ink2:#474c53;--rule:#c4c8cd;--grid:#e4e6e9;
   --accent:#24548f;--kaki:#903d00;--kaki-soft:#fbe6d2;--matsu:#275f3c;--matsu-soft:#dcebdf;
@@ -90,11 +92,17 @@ html.gl .bg{display:none}
 @keyframes twinkle{from{opacity:.55}to{opacity:1}}
 
 /* ---------- 面（グラスモーフィズム） ----------
-   ぼかすのは外の窓（上のバー・3 列の窓・見本帳の台・下のタブ）だけ。設定の窓のように、外の窓の外に出る面も同じ扱いにする。
-   backdrop-filter を持つ面は、その中の面にとっての「背景の根」になり、中でぼかしても WebGL の背景まで届かないため、
-   中の面（カード・札・図の盤など）は backdrop-filter を持たず、ごく薄い塗り・縁・上辺の光の線・淡い影で区切る */
-.win,.top,.nav,.sheet,dialog.settings{background:var(--win);border:1px solid var(--glass-edge);box-shadow:var(--hl),var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
-.card,.task,.cmd,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,.inbox li,.pipe{background:var(--panel);border:1px solid var(--edge);box-shadow:var(--hl),var(--shadow-in)}
+   ぼかしは二重にする。窓の中は 1 回、中の面の部分は 2 回ぼけて、中の面が浮いて見える。
+   backdrop-filter を持つ要素は、その中の要素にとっての「背景の根」になり、中のぼかしが WebGL の背景まで届かなくなる。
+   そこで外の窓（上のバー・3 列の窓・見本帳の台・下のタブ・設定の窓）は、窓そのものにはぼかしを付けず、
+   窓の背面に敷いた ::before にぼかしと塗りを持たせる。窓は isolation:isolate で ::before を自分の後ろに回すだけで、
+   背景の根にはならない（窓と、中の面の祖先には filter・opacity<1・mask・clip-path・will-change を付けない）。
+   中の面は、外の窓の ::before がぼかした結果と WebGL の背景を、もう一度ぼかす。
+   中の面の中に入れ子になった中の面（承認の欄の中のコマンドなど）は、外の中の面が背景の根になって届かないので、ぼかさない */
+.win,.top,.nav,.sheet,dialog.settings{position:relative;isolation:isolate;background:transparent;border:1px solid var(--glass-edge);box-shadow:var(--hl),var(--shadow)}
+.win::before,.top::before,.nav::before,.sheet::before,dialog.settings::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;background:var(--win);backdrop-filter:var(--blur-outer);-webkit-backdrop-filter:var(--blur-outer)}
+.card,.task,.cmd,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,.inbox li,.pipe,.board{background:var(--panel);border:1px solid var(--edge);box-shadow:var(--hl),var(--shadow-in);backdrop-filter:var(--blur-inner);-webkit-backdrop-filter:var(--blur-inner)}
+:is(.card,.task,.cmd,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,.inbox li,.pipe,.board) :is(.card,.task,.cmd,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,.inbox li,.pipe,.board){backdrop-filter:none;-webkit-backdrop-filter:none}
 .top{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:8px 14px;height:var(--hd);padding:0 16px;border-width:0 0 1px;border-radius:0;box-shadow:var(--hl)}
 .top h1{margin:0;display:flex;align-items:baseline;gap:10px;min-width:0;white-space:nowrap}
 .top .repo{font:700 15px/1.2 "SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -183,7 +191,7 @@ input[type=text],input[type=password],select,textarea{font:inherit;font-size:14p
 .trunk{fill:none;stroke:var(--ink2);stroke-width:1.6;stroke-linecap:round}
 .pd{fill:var(--c);stroke:var(--panel-solid);stroke-width:1.2}
 .nd{cursor:pointer}
-/* 図の箱は SVG の rect で backdrop-filter が効かないため、半透明の塗り（盤の後ろは外の窓がぼかしている）と、上辺の光の線（.hl）で面にする */
+/* 図の箱は SVG の rect で backdrop-filter が効かないため、半透明の塗り（盤の後ろは、外の窓の ::before と盤そのものが二重にぼかしている）と、上辺の光の線（.hl）で面にする */
 .nd .box{fill:var(--node);stroke:var(--rule);stroke-width:1.2}
 .nd .hl{fill:none;stroke:var(--hl-line);stroke-width:1.2;stroke-linecap:round}
 .nd .stripe{fill:var(--matsu)}
@@ -242,7 +250,7 @@ details>summary{cursor:pointer;font-size:13.5px;color:var(--ink2);min-height:44p
 .trow{display:grid;grid-template-columns:minmax(180px,1.6fr) 150px 1fr 1fr;gap:8px;align-items:center;padding:8px 14px;border-top:1px solid var(--rule);font-size:13.5px;min-width:620px}
 .trow.thead{border-top:0;color:var(--ink2);font-weight:700;font-size:12.5px}
 .trow.turn{background:var(--kaki-soft)}.trow.over{opacity:.7}
-dialog.settings{position:static;display:block;margin:0;color:var(--ink);border-radius:14px;padding:16px 20px;width:min(30rem,100%)}
+dialog.settings{position:relative;display:block;margin:0;color:var(--ink);border-radius:14px;padding:16px 20px;width:min(30rem,100%)}
 dialog.settings h3{margin:0 0 8px;font-size:17px}
 dialog.settings fieldset{border:1px solid var(--rule);border-radius:8px;margin:10px 0;padding:8px 14px;min-width:0}
 dialog.settings legend{font-weight:700;padding:0 4px}
