@@ -31,8 +31,8 @@ import { isSafeId, pauseNodeIdsProblem } from "./ids.js";
 import { type InboxItem, isValidInboxTime } from "./inbox.js";
 import { INBOX_KINDS, type InboxKind, PRIORITIES, type Priority } from "./inbox-kinds.js";
 import { type InboxMessage, isInboxMessage } from "./inbox-messages.js";
-import { isEchoShape } from "./instruction-echo.js";
 import type { NodeRole, NodeState } from "./index.js";
+import { isEchoShape } from "./instruction-echo.js";
 import { isBoundedText, LIMITS } from "./limits.js";
 import { parseRule } from "./permissions.js";
 import {

@@ -36,7 +36,15 @@ describe("指示の復唱（#261）: ハッシュ値", () => {
   });
 
   it("isEchoShape: 小文字の 16 進数 16 桁だけ", () => {
-    for (const bad of ["", "ba7816bf8f01cfe", "ba7816bf8f01cfea0", "BA7816BF8F01CFEA", "zz7816bf8f01cfea", 1, null]) {
+    for (const bad of [
+      "",
+      "ba7816bf8f01cfe",
+      "ba7816bf8f01cfea0",
+      "BA7816BF8F01CFEA",
+      "zz7816bf8f01cfea",
+      1,
+      null,
+    ]) {
       expect(isEchoShape(bad), String(bad)).toBe(false);
     }
     expect(isEchoShape("ba7816bf8f01cfea")).toBe(true);
@@ -64,7 +72,13 @@ describe("指示の復唱（#261）: 配送の記録の echo", () => {
   const SYS = { system: true } as const;
   let n = 0;
   const ev = (body: EventBody): OrchEvent =>
-    ({ seq: ++n, at: "2026-11-24T00:00:00Z", requestId: `r${n}`, actor: SYS, ...body }) as OrchEvent;
+    ({
+      seq: ++n,
+      at: "2026-11-24T00:00:00Z",
+      requestId: `r${n}`,
+      actor: SYS,
+      ...body,
+    }) as OrchEvent;
   const base = (): OrchEvent[] => {
     n = 0;
     return [
@@ -72,7 +86,10 @@ describe("指示の復唱（#261）: 配送の記録の echo", () => {
         type: "node.created",
         payload: { nodeId: "root", role: "integrator", parentId: null, dependsOn: [] },
       } as never),
-      ev({ type: "node.stateChanged", payload: { nodeId: "root", event: { type: "start" } } } as never),
+      ev({
+        type: "node.stateChanged",
+        payload: { nodeId: "root", event: { type: "start" } },
+      } as never),
       ev({ type: "node.instructed", payload: { nodeId: "root", text: "x" } } as never),
     ];
   };
@@ -80,7 +97,10 @@ describe("指示の復唱（#261）: 配送の記録の echo", () => {
 
   it("echo は配送の記録と一緒に、指示の記録に載る。ない記録は復唱なし（古い記録・古い MCP）", () => {
     const echo = instructionEcho("x");
-    const withEcho = fold({ type: "node.instructionDelivered", payload: { instructedSeq: 3, echo } });
+    const withEcho = fold({
+      type: "node.instructionDelivered",
+      payload: { instructedSeq: 3, echo },
+    });
     expect(withEcho.ok && withEcho.value.instructions[0]).toMatchObject({ deliveredSeq: 4, echo });
     const without = fold({ type: "node.instructionDelivered", payload: { instructedSeq: 3 } });
     expect(without.ok && without.value.instructions[0]?.echo).toBeUndefined();
@@ -116,7 +136,14 @@ describe("指示の復唱（#261）: 知らせの文", () => {
     ] as const) {
       const m = inboxMessage(key, args);
       expect([...m.summary].length, key).toBeLessThanOrEqual(200);
-      for (const word of ["node_send", "child_bind", "child.inbox", "ackThrough", "echoes", "sha"]) {
+      for (const word of [
+        "node_send",
+        "child_bind",
+        "child.inbox",
+        "ackThrough",
+        "echoes",
+        "sha",
+      ]) {
         expect(m.summary, `${key} ${word}`).not.toContain(word);
       }
     }

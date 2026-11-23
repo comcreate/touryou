@@ -42,7 +42,14 @@ const stateWith = (instructions: Ins[]): OrchState =>
   }) as unknown as OrchState;
 
 const find = (state: OrchState, afterMin: number, spec: WatchSpec = SPEC) =>
-  watchFindings(state, T0 + afterMin * MIN, { ...spec, sinceMs: T0 - MIN }, undefined, () => true, probe);
+  watchFindings(
+    state,
+    T0 + afterMin * MIN,
+    { ...spec, sinceMs: T0 - MIN },
+    undefined,
+    () => true,
+    probe,
+  );
 
 describe("watchFindings: 復唱が返らない指示（#261）", () => {
   it("配送済みで復唱がない指示は、echoMs を超えると unechoed に入る。echoMs の前は入らない", () => {
@@ -145,7 +152,7 @@ describe("watchFindings: 復唱が返らない知らせの片付け（#261）", 
       nodes: { state: string }[];
       inbox: unknown[];
     };
-    s.nodes[0].state = nodeState;
+    s.nodes[0]!.state = nodeState;
     s.inbox = [
       {
         id: "i1",
@@ -160,9 +167,13 @@ describe("watchFindings: 復唱が返らない知らせの片付け（#261）", 
   };
 
   it("復唱が届いた・指示が消えた・子が動いていないときは解決する。まだ届かず子が動いているときは残す", () => {
-    expect(find(withItem({ seq: 5, deliveredSeq: 6, echo: "ba7816bf8f01cfea" }), 6).resolvedEchoMissing).toEqual(["i1"]);
+    expect(
+      find(withItem({ seq: 5, deliveredSeq: 6, echo: "ba7816bf8f01cfea" }), 6).resolvedEchoMissing,
+    ).toEqual(["i1"]);
     expect(find(withItem(undefined), 6).resolvedEchoMissing).toEqual(["i1"]);
-    expect(find(withItem({ seq: 5, deliveredSeq: 6 }, "done"), 6).resolvedEchoMissing).toEqual(["i1"]);
+    expect(find(withItem({ seq: 5, deliveredSeq: 6 }, "done"), 6).resolvedEchoMissing).toEqual([
+      "i1",
+    ]);
     expect(find(withItem({ seq: 5, deliveredSeq: 6 }), 6).resolvedEchoMissing).toEqual([]);
   });
 });

@@ -182,11 +182,7 @@ export function watchFindings(
       for (const i of state.instructions) {
         // daemon の前置き（`tokenIdleSoon`。#189）は、子が読まなくても構わない知らせなので、読まれていない指示にしない
         if (i.nodeId !== n.id || isPrefaceInstruction(i)) continue;
-        if (
-          i.deliveredSeq === undefined &&
-          !echoCoversUnread &&
-          nowMs - ms(i.at) > spec.unreadMs
-        )
+        if (i.deliveredSeq === undefined && !echoCoversUnread && nowMs - ms(i.at) > spec.unreadMs)
           unread.push({ nodeId: n.id, seq: i.seq });
         // 復唱が返らない指示（#261）。受け取られていない指示は、echoMs が unreadMs 以下のときだけここで知らせる（統合）
         if (

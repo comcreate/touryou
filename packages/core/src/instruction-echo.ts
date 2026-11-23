@@ -17,7 +17,7 @@ const ECHO_SHAPE = /^[0-9a-f]{16}$/;
 export const isEchoShape = (x: unknown): x is string => typeof x === "string" && ECHO_SHAPE.test(x);
 
 /** 改行として扱うもの（CRLF・LF・CR・U+2028・U+2029。daemon の `quote` と同じ）。 */
-const LINE_BREAKS = new RegExp("\\r\\n|[\\n\\r\\u2028\\u2029]");
+const LINE_BREAKS = /\r\n|[\n\r\u2028\u2029]/;
 
 /**
  * 指示の本文を、ハッシュを求める前に正規化する。改行を LF にそろえ、各行の末尾の空白と、

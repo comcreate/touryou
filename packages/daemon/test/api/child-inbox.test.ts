@@ -203,7 +203,11 @@ describe("child.inbox", () => {
       r.call("a", { ackThrough: s1, echoes: { [String(s1)]: echoOf("y を直す") } });
       const items = r.log.state().inbox;
       expect(items).toHaveLength(1);
-      expect(items[0]).toMatchObject({ kind: "failure", nodeId: "a", msg: { key: "echoMismatch" } });
+      expect(items[0]).toMatchObject({
+        kind: "failure",
+        nodeId: "a",
+        msg: { key: "echoMismatch" },
+      });
       expect(items[0]?.msg?.args).toEqual({ node: "a", seq: s1 });
       // 受信箱の文に、ハッシュ値も本文も出ない
       expect(items[0]?.summary).not.toContain(echoOf("y を直す"));
@@ -242,9 +246,8 @@ describe("child.inbox", () => {
       const mine = instructionsFor(r.log.state(), "a");
       // 前置きでないふつうの指示の受け取りは、復唱の有無にかかわらず「前置きだけ」ではない（時計を延ばす）
       expect(readsOnlyPrefaces(mine, { ackThrough: s1 })).toBe(false);
-      expect(
-        readsOnlyPrefaces(mine, { ackThrough: s1, echoes: { [String(s1)]: echoOf("ふつうの指示") } }),
-      ).toBe(false);
+      const withEcho = { ackThrough: s1, echoes: { [String(s1)]: echoOf("ふつうの指示") } };
+      expect(readsOnlyPrefaces(mine, withEcho)).toBe(false);
     });
 
     it("窓口の検査: echoes は ackThrough と一緒のときだけ。キーは番号、値は小文字の 16 進数 16 桁、64 件まで", () => {
@@ -253,10 +256,12 @@ describe("child.inbox", () => {
       expect(validateParams("child.inbox", { echoes: { "3": ok } }).ok).toBe(false);
       expect(validateParams("child.inbox", { ackThrough: 3, echoes: { x: ok } }).ok).toBe(false);
       expect(validateParams("child.inbox", { ackThrough: 3, echoes: { "03": ok } }).ok).toBe(false);
-      expect(validateParams("child.inbox", { ackThrough: 3, echoes: { "3": "短い" } }).ok).toBe(false);
-      expect(validateParams("child.inbox", { ackThrough: 3, echoes: { "3": ok.toUpperCase() } }).ok).toBe(
+      expect(validateParams("child.inbox", { ackThrough: 3, echoes: { "3": "短い" } }).ok).toBe(
         false,
       );
+      expect(
+        validateParams("child.inbox", { ackThrough: 3, echoes: { "3": ok.toUpperCase() } }).ok,
+      ).toBe(false);
       expect(validateParams("child.inbox", { ackThrough: 3, echoes: [ok] }).ok).toBe(false);
       const many = Object.fromEntries(Array.from({ length: 65 }, (_, i) => [String(i), ok]));
       expect(validateParams("child.inbox", { ackThrough: 99, echoes: many }).ok).toBe(false);
