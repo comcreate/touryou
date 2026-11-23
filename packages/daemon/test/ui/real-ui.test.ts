@@ -294,18 +294,30 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
           .map((w) => (w as HTMLElement).dataset.p),
       );
     expect(await shown()).toEqual(["left"]);
-    expect(await page.getAttribute("#nav-yours", "aria-current")).toBe("page");
+    expect(
+      await page.evaluate(() => document.querySelector("#nav-yours")?.getAttribute("aria-current")),
+    ).toBe("page");
     await page.click("#nav-explore");
     expect(await shown()).toEqual(["graph", "right"]);
-    expect(await page.getAttribute("#nav-explore", "aria-current")).toBe("page");
-    expect(await page.getAttribute("#nav-yours", "aria-current")).toBe("false");
+    expect(
+      await page.evaluate(() =>
+        document.querySelector("#nav-explore")?.getAttribute("aria-current"),
+      ),
+    ).toBe("page");
+    expect(
+      await page.evaluate(() => document.querySelector("#nav-yours")?.getAttribute("aria-current")),
+    ).toBe("false");
     // キーボードでも切り替えられる（ボタンなので Enter で押せる）
     await page.focus("#nav-yours");
     await page.keyboard.press("Enter");
     expect(await shown()).toEqual(["left"]);
     // 下のタブの名前と、出番の件数の札
-    expect(await page.getAttribute("#view .nav", "aria-label")).toBe("窓の切り替え");
-    expect(await page.textContent("#nav-count")).toBe(await page.textContent("#now-count"));
+    expect(
+      await page.evaluate(() => document.querySelector("#view .nav")?.getAttribute("aria-label")),
+    ).toBe("窓の切り替え");
+    const countOf = (sel: string) =>
+      page.evaluate((q) => document.querySelector(q)?.textContent ?? "", sel);
+    expect(await countOf("#nav-count")).toBe(await countOf("#now-count"));
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.waitForSelector("#graph .gnode");
   });
