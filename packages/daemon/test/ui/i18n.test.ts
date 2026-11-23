@@ -66,7 +66,9 @@ describe("画面の文字の表（#140）", () => {
     }
     // 画面を見ている人のすること（統合の Claude に頼む）を先に言う。内部の道具の名前は出さない（#264）
     for (const key of ["card.bindExpiredNextDesktop", "card.bindExpiredNextUnknown"] as const) {
-      expect(uiString("ja", key), key).toMatch(/^次の操作: 統合の Claude に、子のつなぎ直しを頼む（.*）$/);
+      expect(uiString("ja", key), key).toMatch(
+        /^次の操作: 統合の Claude に、子のつなぎ直しを頼む（.*）$/,
+      );
       expect(uiString("en", key), key).toMatch(
         /^Next: ask the integrator Claude to reconnect the child \(.*\)$/,
       );

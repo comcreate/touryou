@@ -50,7 +50,7 @@ export const APP_TEXT = {
   },
   "card.bindExpiredNextCli": {
     ja: "次の操作: 統合の Claude が、子をつなぎ直してよいか、あなたに確かめる。承認すると、子が自動でつなぎ直す（あなたがコマンドを打つ必要はない）。10 分たっても直らないときは、このカードの「開き方」にある claude attach をターミナルで実行して、子のセッションを開き直す",
-    en: "Next: the integrator Claude asks you whether it may reconnect the child. Once you approve, the child reconnects automatically (you do not need to type any command). If it is still not fixed after 10 minutes, run the claude attach command shown under \"How to open\" on this card in a terminal to reopen the child's session",
+    en: 'Next: the integrator Claude asks you whether it may reconnect the child. Once you approve, the child reconnects automatically (you do not need to type any command). If it is still not fixed after 10 minutes, run the claude attach command shown under "How to open" on this card in a terminal to reopen the child\'s session',
   },
   "card.bindExpiredNextDesktop": {
     ja: "次の操作: 統合の Claude に、子のつなぎ直しを頼む（統合が新しい紐付けの文面を出し、子がその文面で紐付けを最初からやり直す）",
@@ -66,7 +66,7 @@ export const APP_TEXT = {
   },
   "card.bindLostNext": {
     ja: "次の操作: 統合の Claude が、子をつなぎ直してよいか、あなたに確かめる。承認すると、子が自動でつなぎ直す（あなたがコマンドを打つ必要はない）。10 分たっても直らないときは、このカードの「開き方」にある claude attach をターミナルで実行して、子のセッションを開き直す",
-    en: "Next: the integrator Claude asks you whether it may reconnect the child. Once you approve, the child reconnects automatically (you do not need to type any command). If it is still not fixed after 10 minutes, run the claude attach command shown under \"How to open\" on this card in a terminal to reopen the child's session",
+    en: 'Next: the integrator Claude asks you whether it may reconnect the child. Once you approve, the child reconnects automatically (you do not need to type any command). If it is still not fixed after 10 minutes, run the claude attach command shown under "How to open" on this card in a terminal to reopen the child\'s session',
   },
   "approval.code": { ja: "確認コード", en: "Confirmation code" },
   "approval.done": { ja: "確認して実行しました（{label}）", en: "Confirmed and ran ({label})" },
