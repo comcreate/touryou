@@ -440,7 +440,7 @@ describe("node.bindCode の出し直し（CLI の木）", () => {
     if (res.ok) {
       expect(res.value.instruction).not.toContain(second);
       expect(res.value.instruction).not.toMatch(/[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}/);
-      expect(res.value.instruction).toContain("child_bind を引数なしで");
+      expect(res.value.instruction).toContain("子の MCP が、このファイルを自分で読んで結び直す");
     }
     expect(r.bind.redeem("a", first).ok).toBe(false);
     expect(r.bind.redeem("a", second).ok).toBe(true);
