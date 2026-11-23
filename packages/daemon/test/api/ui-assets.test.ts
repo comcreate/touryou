@@ -446,6 +446,14 @@ describe("画面の資産（走査）", () => {
       "changed",
       "restartRequired",
       "overLimit",
+      // 設定・管理の窓の幕のクリックで閉じる判定（押し始めと離した所の両方が窓の外のときだけ）
+      "getBoundingClientRect",
+      "clientX",
+      "clientY",
+      "left",
+      "right",
+      "top",
+      "bottom",
     ]);
     // 埋め込んだ文字の表（#140。JSON の値で、コードでない）は、走査から除く
     const code = UI_JS.replace(TABLE_LINE, "")
@@ -1675,12 +1683,16 @@ describe("画面の使い勝手（#13）", () => {
     expect(UI_JS).not.toMatch(/\.animate\(|requestAnimationFrame/);
   });
 
-  it("(#89) 管理（最終削除・保留・保管）は、たたんだ欄の中にある", () => {
-    const admin = UI_HTML.indexOf('<details class="admin">');
+  it("(#89) 管理（最終削除・保留・保管）は、管理の窓（dialog）の中にある", () => {
+    const admin = UI_HTML.indexOf('<dialog id="admin"');
     expect(admin).toBeGreaterThan(-1);
     expect(UI_HTML.indexOf('id="purge"')).toBeGreaterThan(admin);
     expect(UI_HTML.indexOf('id="kept"')).toBeGreaterThan(admin);
-    expect(UI_HTML.indexOf('id="todo"')).toBeLessThan(admin);
+    // 作業の一覧（#todo）は管理の窓の外（窓の閉じタグより後）にある
+    const adminEnd = UI_HTML.indexOf("</dialog>", admin);
+    expect(UI_HTML.indexOf('id="purge"')).toBeLessThan(adminEnd);
+    expect(UI_HTML.indexOf('id="kept"')).toBeLessThan(adminEnd);
+    expect(UI_HTML.indexOf('id="todo"')).toBeGreaterThan(adminEnd);
   });
 
   it("(3) 接続できない・取得に失敗したときは、理由と確かめることを言う", () => {

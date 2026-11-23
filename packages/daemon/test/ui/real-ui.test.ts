@@ -565,9 +565,9 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     );
     expect(await page.getByRole("dialog", { name: "設定" }).count()).toBe(1);
     expect(await page.evaluate(() => document.activeElement?.id)).toBe("set-still");
-    // 動きを止める → 明暗（選んだ 1 つ）→ 言語（選んだ 1 つ）→ 閉じる → また動きを止める
+    // 動きを止める → 明暗（選んだ 1 つ）→ 言語（選んだ 1 つ）→ 管理 → 閉じる → また動きを止める
     const order: string[] = [];
-    for (let k = 0; k < 4; k += 1) {
+    for (let k = 0; k < 5; k += 1) {
       await page.keyboard.press("Tab");
       order.push(
         await page.evaluate(() => {
@@ -576,7 +576,13 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
         }),
       );
     }
-    expect(order).toEqual(["set-theme:auto", "set-lang:ja", "close-settings", "set-still"]);
+    expect(order).toEqual([
+      "set-theme:auto",
+      "set-lang:ja",
+      "to-admin",
+      "close-settings",
+      "set-still",
+    ]);
     await page.keyboard.press("Shift+Tab");
     expect(await page.evaluate(() => document.activeElement?.id)).toBe("close-settings");
     await page.keyboard.press("Escape");
@@ -688,7 +694,8 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       "#status",
       "#graph-legend",
       "#view-switch",
-      ".admin > summary",
+      "#admin-title",
+      "#to-admin",
     ])
       expect(cjk.test(await textOf(sel)), sel).toBe(false);
     // 図の箱の状態の言葉・カードの札も英語
