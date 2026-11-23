@@ -4,19 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>touryou 状態画面（モック）</title>
+<title>comcreate/sample-repo — touryou（モック）</title>
 <style>
 /* ============================================================
-   touryou 状態画面 モック（Issue #236 第 1 段階）
+   touryou 状態画面 モック（Issue #236・#238）
    組み方: ref/sample.html（上のバー＋3 列。列の中だけスクロール。スマホは 1 列＋下のタブ）
-   全面の背景: ref/architect_backgrounds.tsx（方眼・大工道具・光の塵）を静的な SVG に移した
+   全面の背景: ref/architect_backgrounds.tsx のシェーダーを、素の JS と WebGL の <canvas> に移した
+   （WebGL が使えないときは、下の静的な SVG を出す）
+   面: グラスモーフィズム（背景に直接載る面だけが backdrop-filter を持ち、中の面は半透明の色＋光の縁）
    外部の通信なし・外部のフォントなし。値はすべてダミー
    ============================================================ */
 :root{
   --bg:#f1f2f3;--bg-glow:#fcfdfd;
-  --win:rgba(251,250,246,.72);--panel:rgba(251,250,246,.93);--panel-solid:#fbfaf6;--edge:rgba(120,128,138,.38);--shadow:0 4px 16px rgba(20,30,50,.08);
+  /* 面の不透明度: 外の面（上のバー・3 列の窓・見本帳の台・下のタブ）48%、中の面（カード・札など）32%、帯（窓の見出し・タブ・図の盤）26% */
+  --win:rgba(250,249,245,.48);--panel:rgba(255,255,255,.32);--strip:rgba(255,255,255,.26);--panel-solid:#fbfaf6;--edge:rgba(110,120,135,.30);
+  --hl:inset 0 1px 0 rgba(255,255,255,.9);--hl-line:rgba(255,255,255,.95);--node:rgba(255,255,255,.5);
+  --shadow:0 8px 28px rgba(20,30,50,.10);--shadow-in:0 2px 10px rgba(20,30,50,.06);--blur:blur(18px) saturate(160%);
   --ink:#1d1f22;--ink2:#51565d;--rule:#cfd2d6;--grid:#e4e6e9;
-  --accent:#2a5fa8;--kaki:#b04a00;--kaki-soft:#fbe6d2;--matsu:#2c6b44;--matsu-soft:#dcebdf;
+  --accent:#2a5fa8;--kaki:#a04300;--kaki-soft:#fbe6d2;--matsu:#2c6b44;--matsu-soft:#dcebdf;
   --shu:#a3261c;--shu-soft:#f7dfdb;--kiiro:#7a5c00;--kiiro-soft:#f3ebc6;--on:#fff;
   --wire-over:#8a9099;--blue:#2a5fa8;
   --bp-sub:#cfd3d8;--bp-main:#a9afb7;--bp-mark:#6b7280;--bp-dust:#5a6a80;
@@ -25,7 +30,9 @@
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#060910;--bg-glow:#0d1a30;
-  --win:rgba(10,18,32,.8);--panel:rgba(10,18,32,.92);--panel-solid:#0c1424;--edge:rgba(150,185,230,.22);--shadow:0 8px 28px rgba(0,0,0,.45);
+  --win:rgba(8,15,28,.52);--panel:rgba(22,36,60,.34);--strip:rgba(22,36,60,.28);--panel-solid:#0c1424;--edge:rgba(150,185,230,.20);
+  --hl:inset 0 1px 0 rgba(190,220,255,.18);--hl-line:rgba(190,220,255,.4);--node:rgba(18,30,50,.6);
+  --shadow:0 10px 36px rgba(0,0,0,.45);--shadow-in:0 2px 12px rgba(0,0,0,.25);
   --ink:#e9edf3;--ink2:#a7b2c2;--rule:#2a3850;--grid:#16223a;
   --accent:#8fbcf5;--kaki:#ffa04a;--kaki-soft:#432812;--matsu:#7fd29b;--matsu-soft:#173626;
   --shu:#ff8f84;--shu-soft:#471e1b;--kiiro:#e2c250;--kiiro-soft:#3a3014;--on:#0a0f18;
@@ -36,7 +43,9 @@
 }}
 :root[data-theme="dark"]{
   --bg:#060910;--bg-glow:#0d1a30;
-  --win:rgba(10,18,32,.8);--panel:rgba(10,18,32,.92);--panel-solid:#0c1424;--edge:rgba(150,185,230,.22);--shadow:0 8px 28px rgba(0,0,0,.45);
+  --win:rgba(8,15,28,.52);--panel:rgba(22,36,60,.34);--strip:rgba(22,36,60,.28);--panel-solid:#0c1424;--edge:rgba(150,185,230,.20);
+  --hl:inset 0 1px 0 rgba(190,220,255,.18);--hl-line:rgba(190,220,255,.4);--node:rgba(18,30,50,.6);
+  --shadow:0 10px 36px rgba(0,0,0,.45);--shadow-in:0 2px 12px rgba(0,0,0,.25);
   --ink:#e9edf3;--ink2:#a7b2c2;--rule:#2a3850;--grid:#16223a;
   --accent:#8fbcf5;--kaki:#ffa04a;--kaki-soft:#432812;--matsu:#7fd29b;--matsu-soft:#173626;
   --shu:#ff8f84;--shu-soft:#471e1b;--kiiro:#e2c250;--kiiro-soft:#3a3014;--on:#0a0f18;
@@ -55,7 +64,11 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13px;word-b
 .skip{position:absolute;left:8px;top:-64px;z-index:50;background:var(--panel-solid);color:var(--ink);padding:10px 14px;border:2px solid var(--accent);border-radius:8px}
 .skip:focus{top:8px}
 
-/* ---------- 全面の背景（architect_backgrounds.tsx の移植） ---------- */
+/* ---------- 全面の背景 ----------
+   WebGL の canvas（.bg-gl）が既定。最初の 1 枚を描けたら html に .gl が付き、静的な SVG（.bg）を隠す。
+   WebGL が使えない・シェーダーが通らない・コンテキストを失ったときは .gl がなく、SVG が出る */
+.bg-gl{position:fixed;inset:0;z-index:-1;width:100%;height:100%;display:block;pointer-events:none}
+html.gl .bg{display:none}
 .bg{position:fixed;inset:0;z-index:-1;pointer-events:none;background:radial-gradient(ellipse 80% 70% at 50% 25%,var(--bg-glow),var(--bg) 75%)}
 .bg svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 .bg .sub{stroke:var(--bp-sub);stroke-width:1}
@@ -70,11 +83,16 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13px;word-b
 @keyframes drift{from{transform:translate(0,0)}to{transform:translate(-40px,28px)}}
 @keyframes twinkle{from{opacity:.55}to{opacity:1}}
 
-/* ---------- 面。窓の枠は背景がうっすら見える半透明、文字を載せる札・カードはほぼ不透明 ---------- */
-.win,.top,.nav,.sheet{background:var(--win);border:1px solid var(--edge);box-shadow:var(--shadow);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
-.card,.task,.cmd,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,dialog.settings,.inbox li,.pipe{background:var(--panel);border:1px solid var(--edge)}
-.top{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:8px 14px;height:var(--hd);padding:0 16px;border-width:0 0 1px;border-radius:0;box-shadow:none}
-.top h1{margin:0;font:500 14px/1.2 "SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.08em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+/* ---------- 面（グラスモーフィズム） ----------
+   背景に直接載る外の面だけが backdrop-filter を持つ。backdrop-filter を持つ面は、その中の面にとっての
+   「背景の根」になり、中で backdrop-filter をかけても WebGL の背景までは届かないため。
+   中の面（カード・札・設定の窓など）は、半透明の色・上辺の光の線・淡い影で重ねる（外の面がぼかした背景が透ける） */
+.win,.top,.nav,.sheet{background:var(--win);border:1px solid var(--edge);box-shadow:var(--hl),var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
+.card,.task,.cmd,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,dialog.settings,.inbox li,.pipe{background:var(--panel);border:1px solid var(--edge);box-shadow:var(--hl),var(--shadow-in)}
+.top{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:8px 14px;height:var(--hd);padding:0 16px;border-width:0 0 1px;border-radius:0;box-shadow:var(--hl)}
+.top h1{margin:0;display:flex;align-items:baseline;gap:10px;min-width:0;white-space:nowrap}
+.top .repo{font:700 15px/1.2 "SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.top .prod{font:500 11px/1.2 "SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.12em;color:var(--ink2);flex:none}
 .top .grow{flex:1 1 0}
 .conn{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2);white-space:nowrap}
 .conn i{width:10px;height:10px;border-radius:50%;background:var(--matsu);animation:breathe 2.4s ease-in-out infinite}
@@ -82,7 +100,7 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13px;word-b
 .top button{min-height:36px;font-size:13px;padding:0 12px;white-space:nowrap}
 
 /* ---------- ボタン ---------- */
-button{font:inherit;font-size:14px;line-height:1.4;min-height:44px;padding:6px 18px;border-radius:999px;border:1px solid var(--rule);background:var(--panel-solid);color:var(--ink);cursor:pointer;transition:transform .12s,border-color .2s}
+button{font:inherit;font-size:14px;line-height:1.4;min-height:44px;padding:6px 18px;border-radius:999px;border:1px solid var(--rule);background:var(--panel);box-shadow:var(--hl);color:var(--ink);cursor:pointer;transition:transform .12s,border-color .2s}
 button:hover{border-color:var(--accent)}button:active{transform:scale(.98)}
 button:disabled{opacity:.5;cursor:not-allowed}
 button.go{background:var(--kaki);border-color:var(--kaki);color:var(--on);font-weight:700}
@@ -110,16 +128,16 @@ input[type=text],input[type=password],select,textarea{font:inherit;font-size:14p
 /* ---------- 3 列の舞台（見本の組み方） ---------- */
 .stage{display:grid;gap:16px;padding:16px 20px;min-width:0}
 .win{display:flex;flex-direction:column;min-height:0;min-width:0;border-radius:var(--rad);overflow:hidden}
-.wh{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 14px;border-bottom:1px solid var(--rule);background:var(--panel)}
+.wh{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 14px;border-bottom:1px solid var(--rule);background:var(--strip);box-shadow:var(--hl)}
 .wh h2{margin:0;font:500 12px/1.6 "SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.14em;color:var(--accent)}
 .wm{font:12px "SFMono-Regular",Menlo,Consolas,monospace;color:var(--ink2)}
-.wt{display:flex;background:var(--panel);border-bottom:1px solid var(--rule)}
+.wt{display:flex;background:var(--strip);border-bottom:1px solid var(--rule)}
 .wtab{flex:1;font:inherit;font-size:13px;min-height:40px;padding:0 8px;border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .wtab:hover{color:var(--ink)}
 .wtab[aria-selected="true"]{color:var(--ink);font-weight:800;border-bottom-color:var(--accent)}
 .wb{padding:12px 14px;overflow:auto;min-height:0;flex:1;min-width:0}
 .wb[hidden]{display:none}
-.wfoot{display:flex;flex-wrap:wrap;gap:2px 14px;padding:5px 14px;border-top:1px solid var(--rule);background:var(--panel);font-size:12.5px;color:var(--ink2)}
+.wfoot{display:flex;flex-wrap:wrap;gap:2px 14px;padding:5px 14px;border-top:1px solid var(--rule);background:var(--strip);font-size:12.5px;color:var(--ink2)}
 .wfoot b{font-size:15px;margin-right:4px}.wfoot .up{color:var(--blue)}.wfoot .dn{color:var(--matsu)}
 
 /* 左：いまあなたがすること */
@@ -146,7 +164,7 @@ input[type=text],input[type=password],select,textarea{font:inherit;font-size:14p
 .inbox .ar{font-weight:800}.ar.up{color:var(--blue)}.ar.dn{color:var(--matsu)}
 
 /* 中央：関係図 */
-.board{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;border:1px solid var(--rule);border-radius:var(--rad);background:var(--panel);overflow:hidden}
+.board{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;border:1px solid var(--edge);border-radius:var(--rad);background:var(--strip);box-shadow:var(--hl);overflow:hidden}
 .tree{display:block;width:100%;flex:1 1 0;min-height:220px;height:100%}
 .zoom{position:absolute;left:8px;top:8px;display:flex;gap:4px}
 .zoom button{min-width:44px;min-height:44px;width:44px;padding:0;font-size:18px;border-radius:10px}
@@ -159,7 +177,9 @@ input[type=text],input[type=password],select,textarea{font:inherit;font-size:14p
 .trunk{fill:none;stroke:var(--ink2);stroke-width:1.6;stroke-linecap:round}
 .pd{fill:var(--c);stroke:var(--panel-solid);stroke-width:1.2}
 .nd{cursor:pointer}
-.nd .box{fill:var(--panel-solid);stroke:var(--rule);stroke-width:1.2}
+/* 図の箱は SVG の rect で backdrop-filter が効かないため、半透明の塗り（盤の後ろは窓がぼかしている）と、上辺の光の線（.hl）で面にする */
+.nd .box{fill:var(--node);stroke:var(--rule);stroke-width:1.2}
+.nd .hl{fill:none;stroke:var(--hl-line);stroke-width:1.2;stroke-linecap:round}
 .nd .stripe{fill:var(--matsu)}
 .nd.wait .box{stroke:var(--kaki);stroke-width:2}.nd.wait .stripe{fill:var(--kaki)}
 .nd.stall .box{stroke:var(--kiiro);stroke-width:2}.nd.stall .stripe{fill:var(--kiiro)}
@@ -232,7 +252,7 @@ dialog.settings legend{font-weight:700;padding:0 4px}
 .admin h3{font-size:15px;margin:14px 0 4px}
 
 /* ---------- スマホの下の切り替え ---------- */
-.nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:none;grid-template-columns:repeat(2,1fr);padding-bottom:env(safe-area-inset-bottom);border-width:1px 0 0;border-radius:0;box-shadow:none}
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:none;grid-template-columns:repeat(2,1fr);padding-bottom:env(safe-area-inset-bottom);border-width:1px 0 0;border-radius:0;box-shadow:var(--hl)}
 .nb{position:relative;font:inherit;font-size:13px;min-height:var(--bar);border:0;border-radius:0;background:transparent;color:var(--ink2);cursor:pointer;display:grid;place-items:center;align-content:center;padding:4px}
 .nb[aria-current="page"]{color:var(--ink);font-weight:800;box-shadow:inset 0 3px 0 var(--accent)}
 .nb .bdg{position:absolute;top:6px;left:calc(50% + 8px)}
@@ -258,6 +278,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
 @media (max-width:640px){
   .top{padding:0 12px;gap:6px}
   .conn .ct{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .top .prod{display:none}
   .top button{min-height:44px;min-width:44px;padding:0 10px}
   .two{grid-template-columns:minmax(0,1fr)}
 }
@@ -277,7 +298,9 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
 </style>
 </head>
 <body data-view="left">
-<!-- 全面の背景: 方眼（細・太の 2 段）、太い方眼の交点の十字、大工道具の輪郭 6 種、光の塵 -->
+<!-- 全面の背景（WebGL）: 下の script（#bg-webgl）が描く。描けないときは透明のままで、次の SVG が見える -->
+<canvas id="bg-gl" class="bg-gl" aria-hidden="true"></canvas>
+<!-- 全面の背景（WebGL が使えないときの代わり）: 方眼（細・太の 2 段）、太い方眼の交点の十字、大工道具の輪郭 6 種、光の塵 -->
 <div class="bg" aria-hidden="true">
 <svg viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice" focusable="false">
   <defs>
@@ -322,7 +345,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
 <p id="live" class="sr" role="status" aria-live="polite"></p>
 
 <header class="top">
-  <h1>touryou 状態画面</h1>
+  <h1><span class="repo" title="開いているリポジトリ">comcreate/sample-repo</span><span class="prod">touryou</span></h1>
   <span class="conn" title="つながっています（変わるとすぐ更新）"><i aria-hidden="true"></i><span class="ct">接続中</span></span>
   <span class="grow"></span>
   <button class="quiet" type="button" id="theme-btn" aria-label="明るさを切り替える（いま：自動）">◐ 自動</button>
@@ -396,7 +419,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     <div class="board" role="region" aria-label="やり取りの図" tabindex="0">
       <svg class="tree" viewBox="0 0 600 360" role="group" aria-label="やり取りの図（親 1・子 4）">
         <g class="nd run" tabindex="0" role="button" aria-label="注文画面。動いています">
-          <rect class="box" x="8" y="155" width="120" height="64" rx="8"/><rect class="stripe" x="11" y="163" width="4" height="48" rx="2"/>
+          <rect class="box" x="8" y="155" width="120" height="64" rx="8"/><path class="hl" d="M17 156.2H119"/><rect class="stripe" x="11" y="163" width="4" height="48" rx="2"/>
           <text class="ttl" x="24" y="181">注文画面</text><text class="st" x="24" y="204">▶ 動いています</text>
         </g>
         <path class="trunk" d="M128 187H147"/>
@@ -411,20 +434,20 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
         <g class="k-req"><path class="ln" d="M159 250H185V327H406"/><path class="tip" d="M402 322L410 327L402 332"/><rect class="pill" x="262" y="318" width="116" height="18" rx="3"/><text class="lab" x="268" y="331.5">↓ 頼み 40 分前</text></g>
         <g><rect class="pd k-ask" x="146.5" y="120.5" width="7" height="7" rx="1"/><rect class="pd k-req" x="146.5" y="138.5" width="7" height="7" rx="1"/><rect class="pd k-prog" x="146.5" y="156.5" width="7" height="7" rx="1"/><rect class="pd k-req" x="146.5" y="174.5" width="7" height="7" rx="1"/><rect class="pd k-done" x="146.5" y="192.5" width="7" height="7" rx="1"/><rect class="pd k-done" x="146.5" y="210.5" width="7" height="7" rx="1"/><rect class="pd k-fail" x="146.5" y="228.5" width="7" height="7" rx="1"/><rect class="pd k-req" x="146.5" y="246.5" width="7" height="7" rx="1"/></g>
         <g class="nd wait" tabindex="0" role="button" aria-label="支払い方法の画面。あなたの答え待ち">
-          <rect class="box" x="412" y="15" width="180" height="64" rx="8"/><rect class="stripe" x="415" y="23" width="4" height="48" rx="2"/>
+          <rect class="box" x="412" y="15" width="180" height="64" rx="8"/><path class="hl" d="M421 16.2H583"/><rect class="stripe" x="415" y="23" width="4" height="48" rx="2"/>
           <text class="ttl" x="428" y="41">支払い方法の画面</text><text class="st" x="428" y="64">● あなたの答え待ち</text>
           <circle class="badge" cx="586" cy="19" r="11"/><text class="bt" x="586" y="23.5" text-anchor="middle">1</text>
         </g>
         <g class="nd run" tabindex="0" role="button" aria-label="確認メール。動いています">
-          <rect class="box" x="412" y="105" width="180" height="64" rx="8"/><rect class="stripe" x="415" y="113" width="4" height="48" rx="2"/>
+          <rect class="box" x="412" y="105" width="180" height="64" rx="8"/><path class="hl" d="M421 106.2H583"/><rect class="stripe" x="415" y="113" width="4" height="48" rx="2"/>
           <text class="ttl" x="428" y="131">確認メール</text><text class="st" x="428" y="154">▶ 動いています</text>
         </g>
         <g class="nd over" tabindex="0" role="button" aria-label="一覧の並び順。済んだ">
-          <rect class="box" x="412" y="195" width="180" height="64" rx="8"/><rect class="stripe" x="415" y="203" width="4" height="48" rx="2"/>
+          <rect class="box" x="412" y="195" width="180" height="64" rx="8"/><path class="hl" d="M421 196.2H583"/><rect class="stripe" x="415" y="203" width="4" height="48" rx="2"/>
           <text class="ttl" x="428" y="221">一覧の並び順</text><text class="st" x="428" y="244">✓ 済んだ</text>
         </g>
         <g class="nd fail" tabindex="0" role="button" aria-label="ありがとうの画面。失敗">
-          <rect class="box" x="412" y="285" width="180" height="64" rx="8"/><rect class="stripe" x="415" y="293" width="4" height="48" rx="2"/>
+          <rect class="box" x="412" y="285" width="180" height="64" rx="8"/><path class="hl" d="M421 286.2H583"/><rect class="stripe" x="415" y="293" width="4" height="48" rx="2"/>
           <text class="ttl" x="428" y="311">ありがとうの画面</text><text class="st" x="428" y="334">✕ 失敗</text>
           <circle class="badge" cx="586" cy="289" r="11"/><text class="bt" x="586" y="293.5" text-anchor="middle">1</text>
         </g>
@@ -547,7 +570,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     <h3 id="set-t">設定</h3>
     <fieldset><legend>アクセシビリティ</legend>
       <label class="opt"><input id="still-ck" type="checkbox"> <span>動きを止める</span></label>
-      <p class="note">新しい項目の入る動き・線を流れる点線・背景のゆるやかな動きを止めます。OS の「視差効果を減らす」を入れているときは、ここを切っていても止まります。</p>
+      <p class="note">新しい項目の入る動き・線を流れる点線・背景の動き（方眼の流れ・道具の回転と浮遊・塵の瞬き）を止めます。背景は、その時点の絵で止まります。OS の「視差効果を減らす」を入れているときは、ここを切っていても止まります。</p>
       <div role="radiogroup" aria-labelledby="th-l"><span id="th-l" class="opts-label">明暗</span>
         <label class="opt"><input type="radio" name="th" value="auto" checked> <span>OS に合わせる</span></label>
         <label class="opt"><input type="radio" name="th" value="light"> <span>明るい</span></label>
@@ -593,6 +616,404 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   </details>
 </div>
 <div style="height:32px"></div>
+
+<script id="bg-webgl">
+/* ============================================================
+   全面の背景（WebGL）。ref/architect_backgrounds.tsx の ModernBlueprintBackground を、React なしの素の JS に移した。
+   シェーダーは見本のまま（違いは、高い精度が使えない端末のための precision の分岐だけ）。
+   この script は、ページのほかの script に頼らない。丸ごと別のファイル（例 /ui/bg-webgl.js）に出せば、
+   CSP が 'self' だけでも動く。ページとのやり取りは次の 4 つだけ:
+   - canvas#bg-gl に描く
+   - html の data-theme（light・dark・なし＝OS に合わせる）と、OS の prefers-color-scheme で明暗を決める
+   - html の .still（設定の「動きを止める」）と、OS の prefers-reduced-motion で時間を止め、静止画にする
+   - 最初の 1 枚を描けたら html に .gl を付ける（CSS が SVG の背景を隠す）。コンテキストを失ったら外す
+   ============================================================ */
+(function () {
+  "use strict";
+
+  // === 頂点シェーダー（全画面クワッド） ===
+  var VERTEX_SHADER = `
+  attribute vec2 a_position;
+  void main() {
+    gl_Position = vec4(a_position, 0.0, 1.0);
+  }
+`;
+
+  // === フラグメントシェーダー（Modern Blueprint + ライト/ダーク対応） ===
+  var FRAGMENT_SHADER = `
+  #ifdef GL_FRAGMENT_PRECISION_HIGH
+  precision highp float;
+  #else
+  precision mediump float;
+  #endif
+
+  uniform vec2 u_resolution;
+  uniform float u_time;
+  uniform float u_isDark; // 1.0 = Dark, 0.0 = Light
+
+  // 高周波フィルムグレイン・ハッシュ関数
+  float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+  }
+
+  // --- 2D距離関数 (SDF) による精密な大工・設計道具の描画 ---
+  float sdBox(vec2 p, vec2 b) {
+    vec2 d = abs(p) - b;
+    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+  }
+
+  float sdSegment(vec2 p, vec2 a, vec2 b) {
+    vec2 pa = p - a, ba = b - a;
+    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+    return length(pa - ba * h);
+  }
+
+  // 6種類の大工・設計道具の形状を返すSDF
+  float sdCarpenterTool(vec2 p, int type) {
+    if (type == 0) {
+      // 1. 差し金 (L字定規)
+      float d1 = sdBox(p - vec2(-0.12, 0.0), vec2(0.035, 0.24));
+      float d2 = sdBox(p - vec2(0.03, -0.205), vec2(0.18, 0.035));
+      return min(d1, d2);
+    } else if (type == 1) {
+      // 2. 製図用コンパス
+      float head = length(p - vec2(0.0, 0.22)) - 0.035;
+      float leg1 = sdSegment(p, vec2(0.0, 0.20), vec2(-0.14, -0.22)) - 0.016;
+      float leg2 = sdSegment(p, vec2(0.0, 0.20), vec2(0.14, -0.22)) - 0.016;
+      float arc  = abs(length(p - vec2(0.0, 0.20)) - 0.16) - 0.008;
+      arc = max(arc, p.y - 0.12);
+      arc = max(arc, -p.y - 0.05);
+      return min(min(head, min(leg1, leg2)), arc);
+    } else if (type == 2) {
+      // 3. 金槌 (ハンマー)
+      float handle = sdBox(p - vec2(0.0, -0.05), vec2(0.022, 0.22));
+      float head   = sdBox(p - vec2(0.0, 0.15), vec2(0.14, 0.038));
+      return min(handle, head);
+    } else if (type == 3) {
+      // 4. ノコギリ (手鋸)
+      float handle = sdBox(p - vec2(-0.18, -0.02), vec2(0.055, 0.032));
+      float blade  = sdBox(p - vec2(0.06, 0.0), vec2(0.20, 0.045));
+      // 刃のギザギザ
+      float teeth  = abs(fract((p.x + 0.14) * 28.0) - 0.5) * 0.025;
+      blade += step(p.y, -0.03) * teeth;
+      return min(handle, blade);
+    } else if (type == 4) {
+      // 5. ノミ (鑿)
+      float grip   = sdBox(p - vec2(0.0, -0.14), vec2(0.032, 0.11));
+      float neck   = sdBox(p - vec2(0.0, 0.0), vec2(0.015, 0.04));
+      float blade  = sdBox(p - vec2(0.0, 0.13), vec2(0.026, 0.10));
+      return min(min(grip, neck), blade);
+    } else {
+      // 6. 製図用鉛筆 / 墨坪の針
+      float body = sdBox(p - vec2(0.0, -0.02), vec2(0.024, 0.20));
+      float tip  = sdSegment(p, vec2(0.0, 0.18), vec2(0.0, 0.26)) - mix(0.024, 0.002, clamp((p.y - 0.18) / 0.08, 0.0, 1.0));
+      return min(body, tip);
+    }
+  }
+
+  void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
+    vec2 p = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / min(u_resolution.x, u_resolution.y);
+    float t = u_time;
+
+    // 1. 大きく引いたアイソメトリック（等角投影）3D空間 (zoomOut = 6.8)
+    float zoomOut = 6.8;
+    float tilt = mix(0.88, 1.0, uv.y);
+    float angle = 0.42;
+    mat2 rot = mat2(cos(angle), -sin(angle), sin(angle), cos(angle));
+
+    vec2 worldXZ = rot * vec2(p.x * tilt * zoomOut, p.y * tilt * 1.15 * zoomOut);
+    worldXZ += vec2(t * 0.03, t * 0.045);
+
+    // 2. 途中で途切れない、均等で美しい2段階の建築方眼グリッド
+    vec2 subGrid = abs(fract(worldXZ * 2.5) - 0.5);
+    float lineSub = 1.0 - smoothstep(0.0, 0.045, min(0.5 - subGrid.x, 0.5 - subGrid.y));
+
+    vec2 mainGrid = abs(fract(worldXZ * 0.5) - 0.5);
+    float lineMain = 1.0 - smoothstep(0.0, 0.016, min(0.5 - mainGrid.x, 0.5 - mainGrid.y));
+
+    // 交点の極小十字マーカー（主グリッドの交点に控えめに配置）
+    vec2 cellLocal = fract(worldXZ * 0.5);
+    float distToCrossX = min(cellLocal.x, 1.0 - cellLocal.x);
+    float distToCrossY = min(cellLocal.y, 1.0 - cellLocal.y);
+    float crossArm = 1.0 - smoothstep(0.006, 0.011, min(distToCrossX, distToCrossY));
+    float crossLen = 1.0 - smoothstep(0.035, 0.042, max(distToCrossX, distToCrossY));
+    float crosshair = crossArm * crossLen;
+
+    // 3. 3D空間に浮遊する大工道具＆光の塵パーティクル（多層パララックス）
+    vec3 toolColorAccum = vec3(0.0);
+    float toolAlphaAccum = 0.0;
+    float dustParticles = 0.0;
+
+    // 3-A. 大工・設計道具のシルエットパーティクル（2レイヤー：手前と奥）
+    for (int i = 0; i < 2; i++) {
+      float fi = float(i);
+      float layerScale = 2.6 + fi * 1.6;
+      vec2 tCoord = p * layerScale + vec2(t * (0.045 - fi * 0.015), -t * (0.055 - fi * 0.02)) + fi * 31.7;
+      vec2 tId = floor(tCoord);
+      vec2 tLocal = fract(tCoord) - 0.5;
+
+      float rnd = hash(tId);
+      // セルの約32%に道具を配置
+      if (rnd > 0.68) {
+        vec2 floatOffset = vec2(
+          sin(t * 0.6 + rnd * 10.0) * 0.14 + (hash(tId + 1.3) - 0.5) * 0.25,
+          cos(t * 0.5 + rnd * 14.0) * 0.14 + (hash(tId + 2.7) - 0.5) * 0.25
+        );
+        vec2 localPos = tLocal - floatOffset;
+
+        float rotAngle = t * (0.25 + (rnd - 0.5) * 0.4) + rnd * 6.28;
+        mat2 tRot = mat2(cos(rotAngle), -sin(rotAngle), sin(rotAngle), cos(rotAngle));
+        localPos = tRot * localPos;
+
+        float itemScale = (0.42 - fi * 0.11);
+        int toolType = int(mod(floor(rnd * 60.0), 6.0));
+        float dTool = sdCarpenterTool(localPos / itemScale, toolType) * itemScale;
+
+        // 道具ごとのカラフルなアクセントカラー割り当て
+        vec3 itemCol = vec3(0.3, 0.7, 1.0);
+        if (toolType == 0) {
+          // 差し金: 真鍮・アンバーゴールド
+          itemCol = u_isDark > 0.5 ? vec3(0.98, 0.75, 0.25) : vec3(0.76, 0.46, 0.02);
+        } else if (toolType == 1) {
+          // コンパス: ブループリント・シアン
+          itemCol = u_isDark > 0.5 ? vec3(0.25, 0.85, 0.98) : vec3(0.04, 0.42, 0.76);
+        } else if (toolType == 2) {
+          // 金槌: テラコッタ・オレンジ
+          itemCol = u_isDark > 0.5 ? vec3(0.98, 0.52, 0.30) : vec3(0.82, 0.28, 0.06);
+        } else if (toolType == 3) {
+          // ノコギリ: エメラルド・グリーン
+          itemCol = u_isDark > 0.5 ? vec3(0.25, 0.90, 0.62) : vec3(0.06, 0.52, 0.32);
+        } else if (toolType == 4) {
+          // ノミ: ロイヤル・バイオレット
+          itemCol = u_isDark > 0.5 ? vec3(0.72, 0.55, 0.98) : vec3(0.38, 0.20, 0.72);
+        } else {
+          // 鉛筆（朱入れ）: コーラル・レッド
+          itemCol = u_isDark > 0.5 ? vec3(0.98, 0.42, 0.52) : vec3(0.78, 0.14, 0.24);
+        }
+
+        float outline = 1.0 - smoothstep(0.0, 0.006, abs(dTool));
+        float fill = 1.0 - smoothstep(-0.005, 0.004, dTool);
+        float fade = 0.65 + 0.35 * sin(t * 0.8 + rnd * 9.0);
+        float alpha = (outline * 0.9 + fill * 0.26) * fade * (0.9 - fi * 0.3);
+
+        toolColorAccum += itemCol * alpha;
+        toolAlphaAccum = clamp(toolAlphaAccum + alpha, 0.0, 1.0);
+      }
+    }
+
+    // 3-B. 空間を漂う微細な光の塵（ダスト）
+    for (int i = 0; i < 2; i++) {
+      float fi = float(i);
+      float layerScale = 7.0 + fi * 4.0;
+      vec2 pCoord = p * layerScale + vec2(t * (0.03 + fi * 0.02), -t * (0.05 + fi * 0.02)) + fi * 17.3;
+      vec2 pId = floor(pCoord);
+      vec2 pLocal = fract(pCoord) - 0.5;
+
+      float rnd = hash(pId);
+      if (rnd > 0.82) {
+        vec2 offset = vec2(hash(pId + 1.1) - 0.5, hash(pId + 2.2) - 0.5) * 0.65;
+        float d = length(pLocal - offset);
+        float twinkle = 0.5 + 0.5 * sin(t * (1.5 + rnd * 2.0) + rnd * 12.0);
+        float dotRadius = 0.028 - fi * 0.005;
+        dustParticles += smoothstep(dotRadius, dotRadius * 0.1, d) * twinkle * (0.7 - fi * 0.2);
+      }
+    }
+
+    // 4. 画面全体へ自然に溶け込む環境光とビネット
+    float edgeMask = 1.0 - smoothstep(0.60, 1.85, length(p * vec2(0.68, 0.88)));
+    vec2 lightCenter = vec2(sin(t * 0.22) * 0.35, 0.15 + cos(t * 0.18) * 0.15);
+    float ambientGlow = exp(-length(p - lightCenter) * 1.05);
+    float paperGrain = (hash(gl_FragCoord.xy) - 0.5) * 0.012;
+
+    vec3 finalColor = vec3(0.0);
+
+    if (u_isDark > 0.5) {
+      // ダーク: 深いブループリント空間 × 均一で上品な方眼 × 浮遊する大工道具
+      vec3 bgBase = vec3(0.022, 0.035, 0.062);
+      vec3 bgGlow = vec3(0.048, 0.095, 0.175);
+      finalColor = mix(bgBase, bgGlow, ambientGlow * 0.85) + paperGrain;
+
+      finalColor += vec3(0.22, 0.48, 0.78) * lineSub * 0.16 * edgeMask;
+      finalColor += vec3(0.32, 0.62, 0.90) * lineMain * 0.28 * edgeMask;
+      finalColor += vec3(0.85, 0.72, 0.45) * crosshair * 0.42 * edgeMask;
+
+      finalColor += toolColorAccum * 0.72 * edgeMask;
+      finalColor += vec3(0.65, 0.85, 1.0) * dustParticles * 0.45;
+    } else {
+      // ライト: 製図用紙の質感 × 均一で繊細なグレー方眼 × カラフルな大工道具パーティクル
+      vec3 bgBase = vec3(0.945, 0.948, 0.952);
+      vec3 bgGlow = vec3(0.99, 0.992, 0.995);
+      finalColor = mix(bgBase, bgGlow, ambientGlow * 0.9) + paperGrain;
+
+      vec3 subLineCol  = vec3(0.81, 0.825, 0.84);
+      vec3 mainLineCol = vec3(0.66, 0.68, 0.71);
+      vec3 markerCol   = vec3(0.42, 0.45, 0.49);
+      vec3 particleCol = vec3(0.35, 0.42, 0.52);
+
+      finalColor = mix(finalColor, subLineCol, lineSub * 0.45 * edgeMask);
+      finalColor = mix(finalColor, mainLineCol, lineMain * 0.55 * edgeMask);
+      finalColor = mix(finalColor, markerCol, crosshair * 0.65 * edgeMask);
+
+      vec3 avgToolCol = toolAlphaAccum > 0.001 ? (toolColorAccum / toolAlphaAccum) : vec3(0.3);
+      finalColor = mix(finalColor, avgToolCol, clamp(toolAlphaAccum * 0.88, 0.0, 0.92) * edgeMask);
+      finalColor = mix(finalColor, particleCol, dustParticles * 0.42);
+    }
+
+    gl_FragColor = vec4(finalColor, 1.0);
+  }
+`;
+
+  var root = document.documentElement;
+  var canvas = document.getElementById("bg-gl");
+  if (!canvas) return;
+  var gl = null;
+  try {
+    gl = canvas.getContext("webgl", { alpha: true, antialias: false, depth: false, stencil: false, powerPreference: "low-power" }) ||
+      canvas.getContext("experimental-webgl");
+  } catch (e) { gl = null; }
+  if (!gl) { canvas.hidden = true; return; } // WebGL がない: SVG の背景のまま
+
+  var mqDark = window.matchMedia("(prefers-color-scheme: dark)");
+  var mqStill = window.matchMedia("(prefers-reduced-motion: reduce)");
+  var loc = {};
+  var t = 24.0;   // 時間（秒）。0 でない値から始め、最初から止まっているときも道具の見える絵にする
+  var last = 0, raf = 0, ready = false, lost = false;
+
+  function compile(type, src) {
+    var s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+      console.warn("背景のシェーダーが通りません:", gl.getShaderInfoLog(s));
+      gl.deleteShader(s);
+      return null;
+    }
+    return s;
+  }
+
+  // シェーダー・頂点の用意。失敗したら false（SVG の背景のまま）
+  function setup() {
+    var vs = compile(gl.VERTEX_SHADER, VERTEX_SHADER);
+    var fs = compile(gl.FRAGMENT_SHADER, FRAGMENT_SHADER);
+    if (!vs || !fs) return false;
+    var program = gl.createProgram();
+    gl.attachShader(program, vs);
+    gl.attachShader(program, fs);
+    gl.linkProgram(program);
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.warn("背景のシェーダーをつなげません:", gl.getProgramInfoLog(program));
+      return false;
+    }
+    var buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+    loc.pos = gl.getAttribLocation(program, "a_position");
+    loc.res = gl.getUniformLocation(program, "u_resolution");
+    loc.time = gl.getUniformLocation(program, "u_time");
+    loc.dark = gl.getUniformLocation(program, "u_isDark");
+    gl.useProgram(program);
+    gl.enableVertexAttribArray(loc.pos);
+    gl.vertexAttribPointer(loc.pos, 2, gl.FLOAT, false, 0, 0);
+    return true;
+  }
+
+  function isDark() {
+    var v = root.getAttribute("data-theme");
+    return v === "dark" || (v !== "light" && mqDark.matches);
+  }
+  function isStill() { return root.classList.contains("still") || mqStill.matches; }
+
+  // 画面の大きさと devicePixelRatio（上限 2）に合わせる
+  function fit() {
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = Math.max(1, Math.round(window.innerWidth * dpr));
+    var h = Math.max(1, Math.round(window.innerHeight * dpr));
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+      gl.viewport(0, 0, w, h);
+    }
+  }
+
+  function draw() {
+    if (!ready || lost) return;
+    fit();
+    gl.uniform2f(loc.res, canvas.width, canvas.height);
+    gl.uniform1f(loc.time, t);
+    gl.uniform1f(loc.dark, isDark() ? 1.0 : 0.0);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+
+  // 時間は積み上げで持つ。止めたあと動かしても、絵が飛ばない（隠れたタブから戻ったときも 0.1 秒までしか進めない）
+  function frame(now) {
+    raf = 0;
+    if (!ready || lost || isStill()) return;
+    if (last) t += Math.min((now - last) / 1000, 0.1);
+    last = now;
+    draw();
+    raf = requestAnimationFrame(frame);
+  }
+
+  // 動く・止まるの切り替え。止まっているときは、明暗・大きさが変わるたびに 1 枚描き直す
+  function update() {
+    if (!ready || lost) return;
+    if (isStill()) {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      last = 0;
+      draw();
+    } else if (!raf) {
+      last = 0;
+      raf = requestAnimationFrame(frame);
+    }
+  }
+
+  function start() {
+    if (!setup()) { canvas.hidden = true; root.classList.remove("gl"); return; }
+    canvas.hidden = false;
+    ready = true;
+    lost = false;
+    draw();
+    root.classList.add("gl");
+    update();
+  }
+
+  function listen(mq, fn) {
+    if (mq.addEventListener) mq.addEventListener("change", fn);
+    else if (mq.addListener) mq.addListener(fn);
+  }
+  function unlisten(mq, fn) {
+    if (mq.removeEventListener) mq.removeEventListener("change", fn);
+    else if (mq.removeListener) mq.removeListener(fn);
+  }
+  // devicePixelRatio の変化（別の画面へ窓を移したときなど）。変わるたびに、今の値で見張り直す
+  function watchDpr() {
+    var mq = window.matchMedia("(resolution: " + (window.devicePixelRatio || 1) + "dppx)");
+    function onChange() { unlisten(mq, onChange); update(); watchDpr(); }
+    listen(mq, onChange);
+  }
+
+  canvas.addEventListener("webglcontextlost", function (e) {
+    e.preventDefault();  // 戻せるようにする
+    lost = true;
+    ready = false;
+    if (raf) { cancelAnimationFrame(raf); raf = 0; }
+    root.classList.remove("gl");  // 戻るまで SVG の背景を出す
+  }, false);
+  canvas.addEventListener("webglcontextrestored", start, false);
+  window.addEventListener("resize", update);
+  listen(mqDark, update);
+  listen(mqStill, update);
+  watchDpr();
+  new MutationObserver(update).observe(root, { attributes: true, attributeFilter: ["data-theme", "class"] });
+
+  start();
+})();
+</script>
 
 <script>
 /* モック用の最小の操作（明暗・動きを止める・窓のタブ・スマホの切り替え）。本番の画面の挙動ではない */
