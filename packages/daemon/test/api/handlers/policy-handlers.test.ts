@@ -358,7 +358,8 @@ describe("scope.decide の alsoLimit（上限にも足して承認）", () => {
   });
 
   it("should 2: 長すぎる規則になる対象は、invalidTarget で断り、承認も記録しない", async () => {
-    const r = rig();
+    // 依頼が根の範囲に収まる（`git` の許可の前方一致）ので、要求の時点では断られない（#249）
+    const r = rig(cfg({ rootScope: { ...ROOT_SCOPE, allowedCommands: ["pnpm test", "git"] } }));
     // 依頼の対象は 1024 字以内に収まるが、Bash(…:*) を付けた規則は 1024 字を超える
     const id = (await r.extend(`git ${"a".repeat(1015)}`)).value.extensionId as string;
     const seq = r.s().lastSeq;
@@ -371,8 +372,9 @@ describe("scope.decide の alsoLimit（上限にも足して承認）", () => {
 
   it("deny に当たる MCP ツールは、alsoLimit でも承認しない", async () => {
     const r = rig();
-    await r.rule("deny", "mcp__chrome__navigate");
+    // 要求のあとに deny を足す（先に足すと、要求の時点で scopeDenied で断られる。#249）
     const id = (await r.extend("mcp__chrome__navigate", "mcp")).value.extensionId as string;
+    await r.rule("deny", "mcp__chrome__navigate");
     const res = await r.decide({ extensionId: id, decision: "approve", alsoLimit: true });
     expect(res.error?.code).toBe("scopeDenied");
     expect(r.s().policyRules.filter((x) => x.list === "allow")).toEqual([]);

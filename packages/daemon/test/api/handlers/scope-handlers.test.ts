@@ -126,7 +126,22 @@ const rig = (
       role: "human",
       params,
     } as unknown as HandlerRequest<"scope.decide">)) as Loose;
-  return { log, extend, decide, decideAsHuman, calls, flags, ev, s: () => log.state() };
+  /**
+   * 要求を、ハンドラを通さずに記録する。`scope.extend` が早期に断る（#249）依頼でも、要求のあとに範囲や規則が
+   * 変わった場合を想定して、`scope.decide` の検査（守り）を確かめるのに使う。
+   */
+  const seed = (
+    nodeId: string,
+    target: { kind: "write" | "command" | "mcp"; value: string },
+  ): string => {
+    const extensionId = `seed-ext-${++n}`;
+    add({
+      type: "scope.extensionRequested",
+      payload: { extensionId, nodeId, target, reason: "r" },
+    });
+    return extensionId;
+  };
+  return { log, extend, decide, decideAsHuman, seed, calls, flags, ev, s: () => log.state() };
 };
 const GIT = { target: { kind: "command", value: "git status" }, reason: "状態を見たい" };
 
@@ -275,10 +290,14 @@ describe("scope.extend（範囲の拡張要求）", () => {
     const r = rig();
     for (let i = 0; i < 10; i++) {
       expect(
-        (await r.extend({ target: { kind: "command", value: `cmd${i}` }, reason: "r" })).ok,
+        (await r.extend({ target: { kind: "command", value: `git status cmd${i}` }, reason: "r" }))
+          .ok,
       ).toBe(true);
     }
-    const res = await r.extend({ target: { kind: "command", value: "cmd10" }, reason: "r" });
+    const res = await r.extend({
+      target: { kind: "command", value: "git status cmd10" },
+      reason: "r",
+    });
     expect(res.error?.code).toBe("tooManyOpenExtensions");
   });
 
@@ -343,14 +362,15 @@ describe("scope.decide（拡張の判定。承認でアダプタの範囲を更�
     const id = await ask(r);
     expect((await r.decide({ extensionId: id, decision: "reject" })).ok).toBe(true);
     expect(r.s().extensions[0]?.status).toBe("rejected");
-    const id2 = await ask(r, { kind: "command", value: "ls" });
+    const id2 = await ask(r, { kind: "command", value: "git status -s" });
     expect((await r.decide({ extensionId: id2, decision: "split" })).ok).toBe(true);
     expect(r.calls.updated).toEqual([]);
   });
 
   it("親の範囲を超える拡張は、承認しない（何も記録しない）", async () => {
     const r = rig();
-    const id = await ask(r, { kind: "command", value: "rm" });
+    // 要求の時点で断られる依頼（#249）を、要求のあとに範囲が変わった場合として直接記録する
+    const id = r.seed("a", { kind: "command", value: "rm" });
     const seq = r.s().lastSeq;
     const res = await r.decide({ extensionId: id, decision: "approve" });
     expect(res.error?.code).toBe("scopeNotSubset");
@@ -420,7 +440,7 @@ describe("scope.decide（拡張の判定。承認でアダプタの範囲を更�
 
     it("deny の規則に当たる MCP ツールは、上限にあっても承認できない（deny が勝つ）", async () => {
       const r = rig({ rootScope: WITH_MCP, denyRules: ["mcp__chrome__navigate"] });
-      const id = (await ask(r, TOOL)).value.extensionId as string;
+      const id = r.seed("c", { kind: "mcp", value: TOOL }); // 要求の時点では断られる（#249）ので、直接記録する
       const res = await r.decide({ extensionId: id, decision: "approve" }, "root");
       expect(res.error?.code).toBe("scopeDenied");
       expect(r.calls.updated).toEqual([]);
@@ -454,7 +474,7 @@ describe("scope.decide（拡張の判定。承認でアダプタの範囲を更�
     expect(r.s().lastSeq).toBe(seq);
     expect(r.calls.updated).toHaveLength(2);
     // 却下済みへの承認は、成功にしない
-    const id2 = await ask(r, { kind: "command", value: "ls" });
+    const id2 = await ask(r, { kind: "command", value: "git status -s" });
     await r.decide({ extensionId: id2, decision: "reject" });
     expect((await r.decide({ extensionId: id2, decision: "approve" })).error?.code).toBe(
       "extensionAlreadyDecided",
@@ -479,7 +499,7 @@ describe("scope.decide（拡張の判定。承認でアダプタの範囲を更�
     expect(r.s().instructions.at(-1)?.nodeId).toBe("a");
     expect(r.s().instructions.at(-1)?.text).toContain("承認");
     expect(r.calls.sent.at(-1)?.[0]).toBe("a");
-    const id2 = await ask(r, { kind: "command", value: "ls" });
+    const id2 = await ask(r, { kind: "command", value: "git status -s" });
     await r.decide({ extensionId: id2, decision: "reject" });
     expect(r.s().instructions.at(-1)?.text).toContain("却下");
   });

@@ -109,11 +109,13 @@ const boot = async () => {
     return { nodeId, token: bound.json.value.token as string };
   };
   /** 子が MCP ツールを頼み、拡張要求の ID を返す。 */
-  const request = async (child: { token: string }, value: string): Promise<string> => {
-    const res = await call(child.token, "scope.extend", {
+  const requestRaw = (child: { token: string }, value: string) =>
+    call(child.token, "scope.extend", {
       target: { kind: "mcp", value },
       reason: "使いたい",
     });
+  const request = async (child: { token: string }, value: string): Promise<string> => {
+    const res = await requestRaw(child, value);
     expect(res.json.ok, JSON.stringify(res.json)).toBe(true);
     return res.json.value.extensionId as string;
   };
@@ -131,19 +133,17 @@ const boot = async () => {
     expect(res.status, JSON.stringify(res.json)).toBe(200);
     return res.json.value as { decision: string; permit?: string };
   };
-  return { childWithToken, request, approveBy, hook, rootToken, humanToken };
+  return { childWithToken, request, requestRaw, approveBy, hook, rootToken, humanToken };
 };
 
 describe("子の MCP ツールの依頼の承認（compose 越し。#194 PR3）", () => {
   it("deny に当たる名前の承認は scopeDenied になる（上限にあっても、人間でも）", async () => {
     const r = await boot();
     const child = await r.childWithToken();
-    const id = await r.request(child, DENIED);
-    for (const token of [r.rootToken, r.humanToken]) {
-      const res = await r.approveBy(token, id);
-      expect(res.json.ok).toBe(false);
-      expect(res.json.error.code).toBe("scopeDenied");
-    }
+    // 要求の時点で断られる（承認の画面に出ない。#249）
+    const res = await r.requestRaw(child, DENIED);
+    expect(res.json.ok).toBe(false);
+    expect(res.json.error.code).toBe("scopeDenied");
     expect((await r.hook(child, DENIED)).decision).toBe("deny");
   });
 
