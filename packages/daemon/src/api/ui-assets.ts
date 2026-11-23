@@ -241,9 +241,9 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .gback{position:absolute;left:0;top:0;pointer-events:none}
 .gnode{box-sizing:border-box;position:relative;width:220px;height:80px;padding:8px 14px 8px 16px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);display:flex;flex-direction:column;justify-content:center;gap:3px;box-shadow:0 1px 2px rgba(0,0,0,.12)}
 .gnode::before{content:"";position:absolute;left:3px;top:10px;bottom:10px;width:3.5px;border-radius:2px;background:var(--ai)}
-.gnode.t-turn{border:2.5px solid var(--kaki)}.gnode.t-turn::before{background:var(--kaki)}
-.gnode.s-stall{border-color:var(--kiiro)}.gnode.s-stall::before{background:var(--kiiro)}
-.gnode.s-fail{border-color:var(--shu)}.gnode.s-fail::before{background:var(--shu)}
+.gnode.t-turn{border:2.5px solid var(--kaki-line)}.gnode.t-turn::before{background:var(--kaki-line)}
+.gnode.s-stall{border-color:var(--kiiro-line)}.gnode.s-stall::before{background:var(--kiiro-line)}
+.gnode.s-fail{border-color:var(--shu-line)}.gnode.s-fail::before{background:var(--shu-line)}
 .gnode.t-over{opacity:.55;background:var(--bg)}.gnode.t-over::before{background:var(--line)}
 
 .gt{font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:14px}

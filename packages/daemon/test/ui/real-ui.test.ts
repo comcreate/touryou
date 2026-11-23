@@ -635,7 +635,10 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
 
   it("管理の窓: 本文で出した確認は、管理の窓を開いて閉じても残る（管理の窓から出した確認だけが、閉じると取り消される）", async () => {
     // 本文のボタンを順に押し、確認の欄（#confirm）が出るものを探す（確認の 2 段目は押さないので、何も送らない）
-    const buttons = page.locator("main button:not([disabled])");
+    // 見せ方の切り替え（#show-list）や「隠す」（#hide-finished）は押さない（押すと、あとの試験の前提の「図」が変わる）
+    const buttons = page.locator(
+      "#approvals button:not([disabled]), #todo button:not([disabled]), #cards button:not([disabled])",
+    );
     const n = Math.min(await buttons.count(), 40);
     let opened = false;
     for (let i = 0; i < n && !opened; i += 1) {
