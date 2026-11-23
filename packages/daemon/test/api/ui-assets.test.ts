@@ -872,11 +872,15 @@ ${fn("failMsgText")}\n${fn("failureText")}\nfailureText`,
 
     it("幅の区切り（#254 の段階 2）: 899px と 900px の境、900px〜の欄の高さの上限と窓の最小の高さ、下のタブの下の余白", () => {
       const narrow = UI_CSS.slice(UI_CSS.indexOf("@media (max-width:899px){"));
-      expect(narrow).toMatch(/^@media \(max-width:899px\)\{\s*main\{padding-bottom:calc\(var\(--bar\) \+ 16px\)\}/);
+      expect(narrow).toMatch(
+        /^@media \(max-width:899px\)\{\s*main\{padding-bottom:calc\(var\(--bar\) \+ 16px\)\}/,
+      );
       const wideAt = UI_CSS.indexOf("@media (min-width:900px){");
       expect(wideAt).toBeGreaterThan(-1);
       const wide = UI_CSS.slice(wideAt, UI_CSS.indexOf("\n}", wideAt));
-      expect(wide).toMatch(/\.approvals\{position:static;max-height:32vh;overflow:auto;flex:none\}/);
+      expect(wide).toMatch(
+        /\.approvals\{position:static;max-height:32vh;overflow:auto;flex:none\}/,
+      );
       expect(wide).toMatch(/#confirm\{max-height:32vh;overflow:auto;flex:none\}/);
       expect(wide).toMatch(/#notice\{max-height:12vh;overflow:auto;flex:none\}/);
       expect(wide).toMatch(/\.stage\{flex:1;min-height:360px\}/);
