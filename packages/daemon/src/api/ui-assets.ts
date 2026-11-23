@@ -618,7 +618,8 @@ export const UI_JS = `'use strict';
   }
   // 確認の欄は、管理の窓が開いているあいだは窓の中（幕の下に出ると押せないため）、閉じているあいだは本文の中に出す
   function renderConfirm() {
-    var adminOpen = document.getElementById('admin').open;
+    // 管理の窓から出した確認（pending.fromAdmin）だけを、窓の中に出す。本文で出した確認は、管理の窓が開いていても本文に残す
+    var adminOpen = document.getElementById('admin').open && Boolean(pending && pending.fromAdmin);
     var box = document.getElementById(adminOpen ? 'confirm-admin' : 'confirm');
     var other = document.getElementById(adminOpen ? 'confirm' : 'confirm-admin');
     clear(other);
@@ -691,7 +692,7 @@ export const UI_JS = `'use strict';
     if (!window.crypto || !window.crypto.randomUUID) { notice(t('err.noCrypto'), true); return; }
     notice('');
     var o = opts || {};
-    pending = { title: title, lines: lines, operation: operation, params: params, done: done, requestId: window.crypto.randomUUID(), sending: false, error: '', retryAt: 0, typed: o.typed, typedValue: '', blocked: o.blocked || '', after: o.after, justOpened: true };
+    pending = { title: title, lines: lines, operation: operation, params: params, done: done, requestId: window.crypto.randomUUID(), sending: false, error: '', retryAt: 0, typed: o.typed, typedValue: '', blocked: o.blocked || '', after: o.after, justOpened: true, fromAdmin: document.getElementById('admin').open };
     renderConfirm();
   }
   // 打ち込みの確認: 打ち込む文字列が決まっていて、入力が完全に一致するときだけ（前後の空白・大文字小文字・全角の違いは、すべて不一致）。
@@ -2400,9 +2401,9 @@ export const UI_JS = `'use strict';
     if (adminBox.open) return;
     openSettings.focus();
   });
-  // 管理の窓を閉じたら、送る前の確認（ID の打ち込み前）は取り消す。送信中のものは残し、本文の欄に出す
+  // 管理の窓を閉じたら、管理の窓から出した確認のうち、送る前のもの（ID の打ち込み前）だけを取り消す。送信中のものは残し、本文の欄に出す。本文で出した確認は残す
   adminBox.addEventListener('close', function () {
-    if (pending && !pending.sending) pending = null;
+    if (pending && pending.fromAdmin && !pending.sending) pending = null;
     renderConfirm();
     openSettings.focus();
   });

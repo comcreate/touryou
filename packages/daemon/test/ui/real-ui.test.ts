@@ -633,6 +633,28 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(problems).toEqual([]);
   });
 
+  it("管理の窓: 本文で出した確認は、管理の窓を開いて閉じても残る（管理の窓から出した確認だけが、閉じると取り消される）", async () => {
+    // 本文のボタンを順に押し、確認の欄（#confirm）が出るものを探す（確認の 2 段目は押さないので、何も送らない）
+    const buttons = page.locator("main button:not([disabled])");
+    const n = Math.min(await buttons.count(), 40);
+    let opened = false;
+    for (let i = 0; i < n && !opened; i += 1) {
+      const b = buttons.nth(i);
+      if (!(await b.isVisible())) continue;
+      await b.click({ timeout: 2000 }).catch(() => undefined);
+      opened = await page.locator("#confirm").isVisible();
+    }
+    if (!opened) return; // この試験データには、確認を開くボタンがない
+    const before = await page.locator("#confirm").innerText();
+    await page.click("#open-settings");
+    await page.click("#to-admin");
+    expect(await page.locator("#confirm-admin").isHidden()).toBe(true); // 管理の窓の側の欄は、出所のない確認を動かさない
+    await page.keyboard.press("Escape");
+    expect(await page.locator("#confirm").isVisible()).toBe(true);
+    expect(await page.locator("#confirm").innerText()).toBe(before);
+    expect(problems).toEqual([]);
+  });
+
   it("設定の窓の「動きを止める」で、図の線も彗星も止まる。戻すと動く。再読み込みのあとも残る", async () => {
     expect((await animations()).some((a) => a !== "none")).toBe(true);
     await page.click("#open-settings");
