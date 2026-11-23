@@ -299,9 +299,9 @@ describe("recordWatchFindings: 受信箱への記録（時計を進める）", (
     // 状態・次にすること（子への 1 行の指示と、トークンが切れたときの出し直し）があり、秘密・コードを含まない
     expect(item?.summary).toContain("いまの状態");
     expect(item?.summary).toContain("次にすること");
-    expect(item?.summary).toContain("node_send");
-    expect(item?.summary).toContain("touryou の child_bind を引数なしで呼んで");
+    expect(item?.summary).toContain("AskUserQuestion");
     expect(item?.summary).toContain("node_bindCode");
+    expect(item?.summary).toContain("子の MCP が自分で結び直す");
     expect(item?.summary).not.toMatch(/session_?id|token=|Bearer/i);
   });
 

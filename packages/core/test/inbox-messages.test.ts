@@ -62,11 +62,18 @@ describe("知らせの文の表（#140）", () => {
       minutes: 1440,
     });
     expect([...m.summary].length).toBeLessThanOrEqual(INBOX_SUMMARY_MAX);
-    for (const word of ["いまの状態", "次にすること", "node_send", "child_bind", "node_bindCode"]) {
+    for (const word of ["いまの状態", "次にすること", "AskUserQuestion", "node_bindCode"]) {
       expect(m.summary).toContain(word);
     }
+    // 利用者に child_bind を打たせる・子に child_bind を呼ばせる文を残さない
+    for (const word of ["node_send", "child_bind", "claude attach"]) {
+      expect(m.summary).not.toContain(word);
+    }
     const en = inboxMessageText("en", m.msg) ?? "";
-    for (const word of ["node_send", "child_bind", "node_bindCode"]) expect(en).toContain(word);
+    for (const word of ["AskUserQuestion", "node_bindCode"]) expect(en).toContain(word);
+    for (const word of ["node_send", "child_bind", "claude attach"]) {
+      expect(en).not.toContain(word);
+    }
   });
 
   it("英語の文には、ひらがな・カタカナ・漢字を入れない。日本語の文には、それを入れる", () => {

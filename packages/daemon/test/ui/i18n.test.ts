@@ -64,12 +64,9 @@ describe("画面の文字の表（#140）", () => {
       expect(uiString("ja", key), key).not.toMatch(/idle/i);
       expect(uiString("en", key), key).not.toMatch(/idle/i);
     }
-    // 画面を見ている人のすること（統合の Claude に頼む）を先に言い、ツール名は括弧の中に置く
-    for (const key of [
-      "card.bindExpiredNextCli",
-      "card.bindExpiredNextDesktop",
-      "card.bindExpiredNextUnknown",
-    ] as const) {
+    // 画面を見ている人のすること（統合の Claude に頼む）を先に言い、ツール名は括弧の中に置く。
+    // CLI の子は、統合の Claude が利用者に確かめ、子の MCP が自分で結び直すので、利用者に打たせない（#255）
+    for (const key of ["card.bindExpiredNextDesktop", "card.bindExpiredNextUnknown"] as const) {
       expect(uiString("ja", key), key).toMatch(
         /^次の操作: 統合の Claude に、紐付けの出し直しを頼む（.*node_bindCode.*）$/,
       );
@@ -77,22 +74,25 @@ describe("画面の文字の表（#140）", () => {
         /^Next: ask the integrator Claude to issue the binding again \(.*node_bindCode.*\)$/,
       );
     }
-    expect(uiString("ja", "card.bindExpiredNextCli")).toContain("child_bind");
-    expect(uiString("en", "card.bindExpiredNextCli")).toContain("child_bind");
+    for (const lang of ["ja", "en"] as const) {
+      expect(uiString(lang, "card.bindExpiredNextCli"), lang).toContain("node_bindCode");
+      expect(uiString(lang, "card.bindExpiredNextCli"), lang).not.toContain("child_bind");
+    }
     expect(uiString("en", "card.bindExpiredNextDesktop")).toContain("node_bindCode");
     expect(uiString("en", "card.bindExpiredNextUnknown")).toContain("node_bindCode");
   });
 
-  it("紐付けが外れているかもしれない子のカードの文: 日英とも、切れた札と別の文で、親が子へ child_bind を呼ばせる手順を言う", () => {
+  it("紐付けが外れているかもしれない子のカードの文: 日英とも、切れた札と別の文で、親が利用者に確かめて node_bindCode で出し直す手順を言う", () => {
     for (const lang of ["ja", "en"] as const) {
       // 札の頭（先頭の 6 文字）が、切れた札（idle・absolute）と違う（一目で見分けられる）
       const head = (key: UiTextKey): string => [...uiString(lang, key)].slice(0, 6).join("");
       expect(head("card.bindLost"), lang).not.toBe(head("card.bindExpiredIdle"));
       expect(head("card.bindLost"), lang).not.toBe(head("card.bindExpiredAbsolute"));
-      expect(uiString(lang, "card.bindLostNext"), lang).toContain("child_bind");
-      expect(uiString(lang, "card.bindLostNext"), lang).toContain("node_send");
-      // 切れた札のカードには出ない（重ならない）ので、トークンが切れたときの案内は入れない
-      expect(uiString(lang, "card.bindLostNext"), lang).not.toContain("node_bindCode");
+      // 統合の Claude が利用者に確かめ、承認後に node_bindCode で出し直す。子の MCP が自分で結び直すので、
+      // 利用者にも子の AI にも child_bind を打たせない（#255）
+      expect(uiString(lang, "card.bindLostNext"), lang).toContain("node_bindCode");
+      expect(uiString(lang, "card.bindLostNext"), lang).not.toContain("child_bind");
+      expect(uiString(lang, "card.bindLostNext"), lang).not.toContain("node_send");
     }
     // 用語: 受信箱の文は「知らせ」（「通知」と言わない）
     expect(uiString("ja", "card.bindLost")).not.toContain("通知");

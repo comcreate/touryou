@@ -155,7 +155,7 @@ describe("起動を、実物の git の口（loadWorktreePorts）を通して確
     expect(existsSync(codePath)).toBe(false);
   });
 
-  it("daemon の再起動のあと: 残ったファイルは起動時に消え、受信箱に「紐付けをやり直して」が出る。node.bindCode でファイルを書き直すと紐付けられる。ほかの子の作業ツリーの cwd は断られる", async () => {
+  it("daemon の再起動のあと: 残ったファイルは起動時に消え、受信箱に「紐付けをやり直す必要がある」が出る。node.bindCode でファイルを書き直すと紐付けられる。ほかの子の作業ツリーの cwd は断られる", async () => {
     const s = setup();
     const boot = async () => {
       const out: string[] = [];
@@ -236,14 +236,14 @@ describe("起動を、実物の git の口（loadWorktreePorts）を通して確
         (i) =>
           i.nodeId === a &&
           i.kind === "failure" &&
-          (i.summary ?? "").includes("紐付けをやり直して"),
+          (i.summary ?? "").includes("紐付けをやり直す必要がある"),
       ),
     ).toBe(true);
-    // 偽の「紐付けをやり直して」を絞る: 同じ子には 10 分に 1 件まで
+    // 偽の「紐付けをやり直す必要がある」を絞る: 同じ子には 10 分に 1 件まで
     const rebindCount = async (id: string) => {
       const r = await call(second.url, `ib-${Math.random()}`, "inbox.fetch", {});
       return ((r.value?.items ?? []) as { nodeId: string; summary?: string }[]).filter(
-        (i) => i.nodeId === id && (i.summary ?? "").includes("紐付けをやり直して"),
+        (i) => i.nodeId === id && (i.summary ?? "").includes("紐付けをやり直す必要がある"),
       ).length;
     };
     expect((await bindAt(second.url, "0123456789ABCDEFGHJKMNPQRS", wtOf(a))).status).toBe(401);

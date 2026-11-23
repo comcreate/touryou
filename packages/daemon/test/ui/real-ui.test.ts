@@ -897,7 +897,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(problems).toEqual([]);
   });
 
-  it("紐付けが外れているかもしれない子（bindLostSuspect）のカードに、札と次にすること（child_bind・node_send。node_bindCode は出さない）が出る（#209）", async () => {
+  it("紐付けが外れているかもしれない子（bindLostSuspect）のカードに、札と次にすること（統合が利用者に確かめ、承認後に node_bindCode で出し直す。コマンドは打たせない）が出る（#209・#255）", async () => {
     const lost = foldEvents([
       ...created("root", "integrator", null, "紐付けの試験をまとめる"),
       ...created("ui-lost", "implement", "root", "紐付けが外れた子"),
@@ -920,8 +920,16 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     const url2 = (await server2.listen(0)).url;
     try {
       for (const [locale, chip, next] of [
-        ["ja-JP", "紐付けの接続が途切れているかも", "次の操作: 統合の Claude に"],
-        ["en-US", "Connection to the binding may be down", "Next: ask the integrator Claude"],
+        [
+          "ja-JP",
+          "紐付けの接続が途切れているかも",
+          "次の操作: 統合の Claude が、あなたに直してよいか確かめる",
+        ],
+        [
+          "en-US",
+          "Connection to the binding may be down",
+          "Next: the integrator Claude asks you whether it may fix this",
+        ],
       ] as const) {
         const ctx = await (browser as Browser).newContext({ locale });
         const p2 = await ctx.newPage();
@@ -949,9 +957,8 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
         );
         const nextText = descs.find((x) => x.includes(next)) ?? "";
         expect(nextText, locale).not.toBe("");
-        expect(nextText).toContain("child_bind");
-        expect(nextText).toContain("node_send");
-        expect(nextText).not.toContain("node_bindCode");
+        expect(nextText).toContain("node_bindCode");
+        expect(nextText).not.toContain("child_bind");
         expect(errs).toEqual([]);
         await ctx.close();
       }
