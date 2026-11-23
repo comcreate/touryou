@@ -63,10 +63,26 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 | `desktopRequireVerifiedHooks` | `true` | Desktop の子で、フックの確認前の起動を拒否する |
 | `touryouCommand` | なし | Desktop の子が `touryou` を起動する語（Desktop の子で必要） |
 | `hookFreshSeconds` | `30` | Desktop の子のフックの鮮度の窓（秒） |
-| `cliWatch` | `{ "stallMinutes": 30, "unreadMinutes": 30, "unboundMinutes": 3, "unsubscribedMinutes": 15, "intervalSec": 60 }` | CLI の子（`runtime` が cli の子。親が起動を報告した子と、採用〔`node_adopt`〕した子。Desktop の子は対象外。#159）の見張り。採用した子の「紐付けていない」は、起動の報告でなく採用の記録の時刻から数える。`unsubscribedMinutes`（1〜1440）分、有効な紐付けのトークンがあるのに、通知を受け取る接続（購読）がない状態が続いた running・waiting の子を「紐付けが外れているかも」として、親の受信箱に出す（`claude attach`・`/mcp` の再接続・mcp の再起動で、子の mcp が認証を失うと、401 は出ず、daemon 側のトークンは有効なまま、購読だけが止まる。使われない子は `child_bind` も呼ばないので、daemon が見つける）。途切れ 1 回につき 1 回だけ。購読が戻る・結び直す（`child_bind` の成功）・トークンが切れる（切れた知らせが別にある）・子が止まると解決にする。daemon の起動の直後は、起動後の最初の見回りから数え始める。ノードごとの 1 日の上限に数える。読み取りだけで、権限や紐付けの条件は変えない。`unboundMinutes` 分、親の起動の報告（done）のあとも紐付け（`child_bind`）がない子を、子ごとに 1 回だけ受信箱に出す（TouRyou の plugin が子の設定の置き場にない見込み。`--plugin-dir` だけでは子に付かない）。`stallMinutes` 分、報告・道具の使用・指示のやり取り（送った時刻も受け取った時刻も）の記録がない子を「止まっているかもしれない」として受信箱に出す（知らせの購読の heartbeat は数えない。トークンの `bindIdle` の時計とは別）。`unreadMinutes` 分、子が受け取らない指示も受信箱に出す。`intervalSec` は見回りの間隔 |
+| `cliWatch` | `{ "stallMinutes": 30, "unreadMinutes": 30, "unboundMinutes": 3, "unsubscribedMinutes": 15, "echoMinutes": 5, "intervalSec": 60 }` | CLI の子（`runtime` が cli の子。親が起動を報告した子と、採用〔`node_adopt`〕した子。Desktop の子は対象外。#159）の見張り。採用した子の「紐付けていない」は、起動の報告でなく採用の記録の時刻から数える。`unsubscribedMinutes`（1〜1440）分、有効な紐付けのトークンがあるのに、通知を受け取る接続（購読）がない状態が続いた running・waiting の子を「紐付けが外れているかも」として、親の受信箱に出す（`claude attach`・`/mcp` の再接続・mcp の再起動で、子の mcp が認証を失うと、401 は出ず、daemon 側のトークンは有効なまま、購読だけが止まる。使われない子は `child_bind` も呼ばないので、daemon が見つける）。途切れ 1 回につき 1 回だけ。購読が戻る・結び直す（`child_bind` の成功）・トークンが切れる（切れた知らせが別にある）・子が止まると解決にする。daemon の起動の直後は、起動後の最初の見回りから数え始める。ノードごとの 1 日の上限に数える。読み取りだけで、権限や紐付けの条件は変えない。`unboundMinutes` 分、親の起動の報告（done）のあとも紐付け（`child_bind`）がない子を、子ごとに 1 回だけ受信箱に出す（TouRyou の plugin が子の設定の置き場にない見込み。`--plugin-dir` だけでは子に付かない）。`stallMinutes` 分、報告・道具の使用・指示のやり取り（送った時刻も受け取った時刻も）の記録がない子を「止まっているかもしれない」として受信箱に出す（知らせの購読の heartbeat は数えない。トークンの `bindIdle` の時計とは別）。`unreadMinutes` 分、子が受け取らない指示も受信箱に出す。`echoMinutes`（1〜1440）分、指示の復唱（受け取った指示を子が言い直して返す確認。#261）が返らない指示を、指示ごとに 1 回だけ受信箱に出す（知らせの名前は `echoMissing`。詳しくは下の「指示の復唱の知らせ」）。`intervalSec` は見回りの間隔 |
 | `hookSettingsCheckSeconds` | `2` | Desktop の子の見張りの間隔（秒） |
 | `hookFirstSeenMinutes` | `5` | Desktop の子でフックが来ないときに知らせるまでの時間（分） |
 | `claudeConfigDirs` | なし | 見張りが守る設定のディレクトリに足す場所（`~/.claude` と `CLAUDE_CONFIG_DIR` に加えて） |
+
+## 指示の復唱の知らせ（`cliWatch.echoMinutes`）
+
+指示の復唱（#261）は、子が指示を受け取ったことを、親が確かめるための仕組み。子の mcp が、記録された本文のハッシュ値（SHA-256 の先頭 16 桁）を、受け取りの知らせに添える。子の AI は計算しない。受信箱の知らせは 2 つある。
+
+- `echoMismatch`（食い違い）: 復唱が、記録した本文から求めた値と合わない。この設定とは関係なく出る。自動の再送はしない。記録された指示の本文と子の返事を見比べ、必要なら `node_send` で送り直す。
+- `echoMissing`（復唱が返らない）: `echoMinutes`（既定 5、1〜1440 の整数）分たっても復唱が返らない。指示ごとに 1 回だけ出る。復唱が届く・指示が消える・子が動いていないと、解決になる。`tree_list` で子の状態を見る。
+
+`unreadMinutes` との重なり（同じ指示に知らせを重ねない）:
+
+| 設定の大小 | 受け取られていない指示 | 受け取ったが復唱がない指示 |
+|:--|:--|:--|
+| `echoMinutes` ≤ `unreadMinutes` | `echoMissing` が兼ねる（`unreadMinutes` の知らせは出さない） | `echoMissing` |
+| `echoMinutes` > `unreadMinutes` | `unreadMinutes` の知らせだけ | `echoMissing` |
+
+復唱を添えない古い版の子（古い mcp）は、受け取った指示ごとに `echoMissing` が出る。plugin を更新して、子を開き直す。
 
 ## 外した項目
 

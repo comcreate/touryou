@@ -572,6 +572,21 @@ describe("touryouCommand", () => {
   });
 });
 
+describe("cliWatch.echoMinutes（#261）", () => {
+  it("1〜1440 の整数（分）だけを受け付ける。ない場合は未設定のまま（既定は compose が 5 分にする）", () => {
+    const ok1 = parseConfig(JSON.stringify({ ...base, cliWatch: { echoMinutes: 5 } }));
+    expect(ok1.ok && ok1.value.cliWatch?.echoMinutes).toBe(5);
+    const none = parseConfig(JSON.stringify({ ...base, cliWatch: {} }));
+    expect(none.ok && none.value.cliWatch?.echoMinutes).toBeUndefined();
+    for (const bad of [0, 1441, 1.5, "5"]) {
+      expect(
+        parseConfig(JSON.stringify({ ...base, cliWatch: { echoMinutes: bad } })).ok,
+        String(bad),
+      ).toBe(false);
+    }
+  });
+});
+
 describe("hookFreshSeconds", () => {
   it("1〜3600 の整数（秒）だけを受け付ける", () => {
     const ok1 = parseConfig(JSON.stringify({ ...base, hookFreshSeconds: 30 }));

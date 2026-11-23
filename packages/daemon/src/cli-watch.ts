@@ -51,6 +51,13 @@ export interface WatchSpec {
    * 起動の直後の猶予は、呼び出し側（compose）が、観測の始まりを daemon の起動から数えることで持つ。
    */
   readonly unsubscribedMs?: number;
+  /**
+   * 指示の復唱（#261）が返らないまま、これだけ超えたら「復唱が返らない」と知らせる時間。未指定なら知らせない（従来どおり、
+   * 受け取られない指示だけを `unreadMs` で知らせる）。`unreadMs` 以下のとき、受け取られていない指示への「受け取っていない」の知らせは、
+   * この知らせに統合する（同じ指示に重ねて出さない）。`unreadMs` より長いときは、受け取られていない指示は従来の知らせに任せ、
+   * この知らせは、受け取られたのに復唱がない指示にだけ出す。
+   */
+  readonly echoMs?: number;
 }
 
 /**
@@ -85,6 +92,10 @@ export interface WatchFindings {
    * 知らせのあとに子の動きがあったもの。
    */
   readonly resolvedStalls?: readonly string[];
+  /** 復唱が返らない指示（#261）。`unread` と同じ指示は含まない（統合。`WatchSpec.echoMs`）。 */
+  readonly unechoed?: readonly { readonly nodeId: string; readonly seq: number }[];
+  /** 解決済みにする「復唱が返らない」の知らせの ID。復唱が届いた・子が動いていない、など。 */
+  readonly resolvedEchoMissing?: readonly string[];
 }
 
 /**
@@ -113,6 +124,9 @@ const isLive = (state: string): boolean => state === "running" || state === "wai
 /** 「紐付けが外れているかも」の知らせの鍵（core の `INBOX_MESSAGES`）。 */
 export const BIND_LOST_KEY = "bindLostSuspect";
 
+/** 「復唱が返らない」の知らせの鍵（core の `INBOX_MESSAGES`。#261）。 */
+export const ECHO_MISSING_KEY = "echoMissing";
+
 export function watchFindings(
   state: OrchState,
   nowMs: number,
@@ -125,6 +139,9 @@ export function watchFindings(
   const unread: { nodeId: string; seq: number }[] = [];
   const unbound: { nodeId: string }[] = [];
   const unsubscribed: { nodeId: string; sinceMs: number }[] = [];
+  const unechoed: { nodeId: string; seq: number }[] = [];
+  // 復唱の知らせが、受け取られていない指示の知らせも兼ねる（統合）。echoMs が unreadMs 以下のときだけ
+  const echoCoversUnread = spec.echoMs !== undefined && spec.echoMs <= spec.unreadMs;
   for (const n of state.nodes) {
     const launch = [...state.parentRequests]
       .reverse()
@@ -164,13 +181,17 @@ export function watchFindings(
     if (n.state === "running" || n.state === "waiting") {
       for (const i of state.instructions) {
         // daemon の前置き（`tokenIdleSoon`。#189）は、子が読まなくても構わない知らせなので、読まれていない指示にしない
-        if (
-          i.nodeId === n.id &&
-          !isPrefaceInstruction(i) &&
-          i.deliveredSeq === undefined &&
-          nowMs - ms(i.at) > spec.unreadMs
-        )
+        if (i.nodeId !== n.id || isPrefaceInstruction(i)) continue;
+        if (i.deliveredSeq === undefined && !echoCoversUnread && nowMs - ms(i.at) > spec.unreadMs)
           unread.push({ nodeId: n.id, seq: i.seq });
+        // 復唱が返らない指示（#261）。受け取られていない指示は、echoMs が unreadMs 以下のときだけここで知らせる（統合）
+        if (
+          spec.echoMs !== undefined &&
+          i.echo === undefined &&
+          (i.deliveredSeq !== undefined || echoCoversUnread) &&
+          nowMs - ms(i.at) > spec.echoMs
+        )
+          unechoed.push({ nodeId: n.id, seq: i.seq });
       }
     }
   }
@@ -200,7 +221,31 @@ export function watchFindings(
             );
           })
           .map((i) => i.id);
-  return { stalled, unread, unbound, unsubscribed, resolvedUnsubscribed, resolvedStalls };
+  // 「復唱が返らない」の片付け（#261）: 復唱が届いた（配送の記録に echo がついた）か、子が動いていないなら解決済みにする
+  const resolvedEchoMissing = state.inbox
+    .filter((i) => i.resolved === undefined && i.msg?.key === ECHO_MISSING_KEY)
+    .filter((i) => {
+      const node = state.nodes.find((x) => x.id === i.nodeId);
+      const seq = i.msg?.args.seq;
+      const instruction = state.instructions.find((x) => x.seq === seq && x.nodeId === i.nodeId);
+      return (
+        node === undefined ||
+        !isLive(node.state) ||
+        instruction === undefined ||
+        instruction.echo !== undefined
+      );
+    })
+    .map((i) => i.id);
+  return {
+    stalled,
+    unread,
+    unbound,
+    unsubscribed,
+    resolvedUnsubscribed,
+    resolvedStalls,
+    unechoed,
+    resolvedEchoMissing,
+  };
 }
 
 /** 見つけたものを受信箱に出す（決まった ID なので、同じものは二度出ない）。出した件数を返す。 */
@@ -253,7 +298,11 @@ export function recordWatchFindings(
     });
   };
   // 同じ子の「止まっているかも」は、未解決のものを 1 件だけにする（#115。最後の動きが進んでも、古い知らせと並べない）
-  const resolving = new Set([...(f.resolvedStalls ?? []), ...(f.resolvedUnsubscribed ?? [])]);
+  const resolving = new Set([
+    ...(f.resolvedStalls ?? []),
+    ...(f.resolvedUnsubscribed ?? []),
+    ...(f.resolvedEchoMissing ?? []),
+  ]);
   for (const itemId of resolving) bodies.push({ type: "inbox.resolved", payload: { itemId } });
   const openStall = new Set(
     log
@@ -282,6 +331,18 @@ export function recordWatchFindings(
         node: u.nodeId,
         seq: u.seq,
         minutes: Math.round(spec.unreadMs / 60_000),
+      }),
+    );
+  }
+  // 復唱が返らない指示（#261）。指示ごとに 1 回だけ（鍵は指示の番号）。1 日の上限は `push` が数える
+  for (const u of f.unechoed ?? []) {
+    push(
+      `echo/${u.seq}`,
+      u.nodeId,
+      notice(ECHO_MISSING_KEY, {
+        node: u.nodeId,
+        seq: u.seq,
+        minutes: Math.round((spec.echoMs ?? 0) / 60_000),
       }),
     );
   }

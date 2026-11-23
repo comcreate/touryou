@@ -16,6 +16,7 @@ import {
   isAgentState,
   isBoundedText,
   isCommitSha,
+  isEchoShape,
   isPrNumber,
   isSafeId,
   isSessionId,
@@ -517,16 +518,33 @@ const VALIDATORS: Validators = {
   "node.hookUnbind": nodeIdOnly,
   "node.hookToken": nodeIdOnly,
   "child.inbox": (p) => {
-    const o = strict(p, ["all", "ackThrough"]);
+    const o = strict(p, ["all", "ackThrough", "echoes"]);
     if (o.all !== undefined && typeof o.all !== "boolean") fail("all は真偽値");
     if (
       o.ackThrough !== undefined &&
       (!Number.isSafeInteger(o.ackThrough) || (o.ackThrough as number) < 0)
     )
       fail("ackThrough は 0 以上の整数");
+    // 復唱（#261）: 指示の番号 → 復唱（小文字の 16 進数 16 桁）。ackThrough と一緒のときだけ受ける
+    let echoes: Record<string, string> | undefined;
+    if (o.echoes !== undefined) {
+      if (o.ackThrough === undefined) fail("echoes は ackThrough と一緒に送る");
+      const e = o.echoes;
+      if (typeof e !== "object" || e === null || Array.isArray(e))
+        fail("echoes は、指示の番号から復唱への表");
+      const entries = Object.entries(e as Record<string, unknown>);
+      if (entries.length > 64) fail("echoes は 64 件まで");
+      echoes = {};
+      for (const [k, v] of entries) {
+        if (!/^(0|[1-9][0-9]{0,15})$/.test(k)) fail("echoes のキーは指示の番号（0 以上の整数）");
+        if (!isEchoShape(v)) fail("echoes の値は、小文字の 16 進数 16 桁");
+        echoes[k] = v as string;
+      }
+    }
     return {
       ...(o.all === undefined ? {} : { all: o.all as boolean }),
       ...(o.ackThrough === undefined ? {} : { ackThrough: o.ackThrough as number }),
+      ...(echoes === undefined ? {} : { echoes }),
     };
   },
   "parent.request": (p) => {

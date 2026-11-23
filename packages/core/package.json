@@ -11,6 +11,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./echo": {
+      "types": "./dist/echo.d.ts",
+      "default": "./dist/echo.js"
+    },
     "./fs": {
       "types": "./dist/fs.d.ts",
       "default": "./dist/fs.js"
