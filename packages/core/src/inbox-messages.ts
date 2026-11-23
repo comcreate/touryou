@@ -118,8 +118,8 @@ export const INBOX_MESSAGES = {
     en: "The read-back confirmation (echo) that child {node} returned for instruction #{seq} does not match the record. Next: compare the recorded instruction text with the child's reply, and resend with node_send if needed",
   },
   echoMissing: {
-    ja: "子 {node} が、指示（番号 {seq}）を言い直して返す確認（復唱）を {minutes} 分たっても返さない。古い版の子は指示ごとにこの知らせが出る（plugin を更新して子を開き直す）。次にすること: tree_list で子の状態を見る",
-    en: "Child {node} has not returned the read-back confirmation (echo) for instruction #{seq} after {minutes} min. An older child version shows this for every instruction (update the plugin and reopen the child). Next: check the child's state with tree_list",
+    ja: "子 {node} が、指示（番号 {seq}）を言い直して返す確認（復唱）を {minutes} 分たっても返さない。指示を受け取っていないか、古い版の子（指示ごとにこの知らせが出る。plugin を更新して子を開き直す）。次にすること: tree_list で子の状態を見る",
+    en: "Child {node} has not returned the read-back confirmation (echo) for instruction #{seq} after {minutes} min. The child may not have received it, or it is an older version that shows this for every instruction (update the plugin and reopen the child). Next: check the child's state with tree_list",
   },
   unbound: {
     ja: "子 {node} が紐付けていない（起動から {minutes} 分）。原因の候補: (1) 接続先違い（--config・TOURYOU_DAEMON_CONFIG を確かめる）(2) plugin 欠落（--plugin-dir の親の子には付かない。/touryou:setup）(3) コード期限切れ（node_bindCode で出し直す）",
