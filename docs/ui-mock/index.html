@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<title>comcreate/sample-repo — touryou（モック）</title>
+<title>comcreate/sample-repo（モック）</title>
 <style>
 /* ============================================================
    touryou 状態画面 モック（Issue #236・#238）
@@ -18,10 +18,12 @@
   --bg:#f1f2f3;--bg-glow:#fcfdfd;
   /* 面: 外の窓（上のバー・3 列の窓・見本帳の台・下のタブ・設定の窓）は、背面の ::before に、薄い塗り（明 10%・暗 20%）と --blur-outer のぼかし。
      中の面（カード・札・図の盤など）は、薄い塗り（明 20%・暗 30%）と --blur-inner のぼかし、縁・上辺の光の線。
-     帯（窓の見出し・タブ・窓の下の帯）は塗りなし */
-  --win:rgba(244,241,234,.10);--panel:rgba(255,255,255,.20);--strip:transparent;--panel-solid:#fbfaf6;
+     帯（窓の見出し・タブ・窓の下の帯）は塗りなし。
+     窓と中の面のほかの部品（ボタン・札・コマンドの欄・入力欄・図の箱・線の上の札・凡例の札など）は、不透明の --panel-solid で塗る。
+     --bar-solid は、親の右の細いバーの色（前の ink2 の 45% を --panel-solid の上に置いた色を、不透明にしたもの） */
+  --win:rgba(244,241,234,.10);--panel:rgba(255,255,255,.20);--strip:transparent;--panel-solid:#fbfaf6;--bar-solid:#aaacad;
   --glass-edge:rgba(255,255,255,.45);--edge:rgba(90,100,115,.26);
-  --hl:inset 0 1px 0 rgba(255,255,255,.7);--hl-line:rgba(255,255,255,.9);--node:rgba(255,255,255,.08);
+  --hl:inset 0 1px 0 rgba(255,255,255,.7);--hl-line:rgba(255,255,255,.9);
   --shadow:0 4px 16px rgba(0,0,0,.05);--shadow-in:0 1px 4px rgba(20,30,50,.04);
   /* ぼかしは二重: 外の窓の背面（::before）で 1 回、中の面で もう 1 回。値は利用者が変えられるよう分け、
      明・暗でも別に持つ（明はここ、暗は下の 2 か所） */
@@ -37,9 +39,9 @@
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#060910;--bg-glow:#0d1a30;
-  --win:rgba(22,20,18,.20);--panel:rgba(22,36,60,.30);--strip:transparent;--panel-solid:#0c1424;
+  --win:rgba(22,20,18,.20);--panel:rgba(22,36,60,.30);--strip:transparent;--panel-solid:#0c1424;--bar-solid:#525b6b;
   --glass-edge:rgba(255,245,235,.12);--edge:rgba(150,185,230,.18);
-  --hl:inset 0 1px 0 rgba(255,245,235,.12);--hl-line:rgba(255,245,235,.3);--node:rgba(255,255,255,.05);
+  --hl:inset 0 1px 0 rgba(255,245,235,.12);--hl-line:rgba(255,245,235,.3);
   --shadow:0 8px 32px rgba(0,0,0,.35);--shadow-in:0 1px 6px rgba(0,0,0,.18);
   --blur-outer:blur(5px) saturate(160%);--blur-inner:blur(10px) saturate(160%);
   --ink:#e9edf3;--ink2:#a7b2c2;--rule:#2a3850;--grid:#16223a;
@@ -52,9 +54,9 @@
 }}
 :root[data-theme="dark"]{
   --bg:#060910;--bg-glow:#0d1a30;
-  --win:rgba(22,20,18,.20);--panel:rgba(22,36,60,.30);--strip:transparent;--panel-solid:#0c1424;
+  --win:rgba(22,20,18,.20);--panel:rgba(22,36,60,.30);--strip:transparent;--panel-solid:#0c1424;--bar-solid:#525b6b;
   --glass-edge:rgba(255,245,235,.12);--edge:rgba(150,185,230,.18);
-  --hl:inset 0 1px 0 rgba(255,245,235,.12);--hl-line:rgba(255,245,235,.3);--node:rgba(255,255,255,.05);
+  --hl:inset 0 1px 0 rgba(255,245,235,.12);--hl-line:rgba(255,245,235,.3);
   --shadow:0 8px 32px rgba(0,0,0,.35);--shadow-in:0 1px 6px rgba(0,0,0,.18);
   --blur-outer:blur(5px) saturate(160%);--blur-inner:blur(10px) saturate(160%);
   --ink:#e9edf3;--ink2:#a7b2c2;--rule:#2a3850;--grid:#16223a;
@@ -101,15 +103,15 @@ html.gl .bg{display:none}
    窓の背面に敷いた ::before にぼかしと塗りを持たせる。窓は isolation:isolate で ::before を自分の後ろに回すだけで、
    背景の根にはならない（窓と、中の面の祖先には filter・opacity<1・mask・clip-path・will-change を付けない）。
    中の面は、外の窓の ::before がぼかした結果と WebGL の背景を、もう一度ぼかす。
-   中の面の中に入れ子になった中の面（承認の欄の中のコマンドなど）は、外の中の面が背景の根になって届かないので、ぼかさない */
+   中の面の中に入れ子になった中の面（承認の欄の中のカードなど）は、外の中の面が背景の根になって届かないので、ぼかさない。
+   透けるのは外の窓と中の面だけ。ほかの部品（ボタン・札・コマンドの欄・入力欄・図の箱など）は --panel-solid で塗りつぶす */
 .win,.top,.nav,.sheet,dialog.settings{position:relative;isolation:isolate;background:transparent;border:1px solid var(--glass-edge);box-shadow:var(--hl),var(--shadow)}
 .win::before,.top::before,.nav::before,.sheet::before,dialog.settings::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;background:var(--win);backdrop-filter:var(--blur-outer);-webkit-backdrop-filter:var(--blur-outer)}
-.card,.task,.cmd,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,.inbox li,.pipe,.board{background:var(--panel);border:1px solid var(--edge);box-shadow:var(--hl),var(--shadow-in);backdrop-filter:var(--blur-inner);-webkit-backdrop-filter:var(--blur-inner)}
-:is(.card,.task,.cmd,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,.inbox li,.pipe,.board) :is(.card,.task,.cmd,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,.inbox li,.pipe,.board){backdrop-filter:none;-webkit-backdrop-filter:none}
+.card,.task,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,.inbox li,.pipe,.board{background:var(--panel);border:1px solid var(--edge);box-shadow:var(--hl),var(--shadow-in);backdrop-filter:var(--blur-inner);-webkit-backdrop-filter:var(--blur-inner)}
+:is(.card,.task,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,.inbox li,.pipe,.board) :is(.card,.task,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,.inbox li,.pipe,.board){backdrop-filter:none;-webkit-backdrop-filter:none}
 .top{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:8px 14px;height:var(--hd);padding:0 16px;border-width:0 0 1px;border-radius:0;box-shadow:var(--hl)}
 .top h1{margin:0;display:flex;align-items:baseline;gap:10px;min-width:0;white-space:nowrap}
 .top .repo{font:700 15px/1.2 "SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.top .prod{font:500 11px/1.2 "SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.12em;color:var(--ink2);flex:none}
 .top .grow{flex:1 1 0}
 .conn{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2);white-space:nowrap}
 .conn i{width:10px;height:10px;border-radius:50%;background:var(--matsu);animation:breathe 2.4s ease-in-out infinite}
@@ -117,13 +119,16 @@ html.gl .bg{display:none}
 .top button{min-height:36px;font-size:13px;padding:0 12px;white-space:nowrap}
 
 /* ---------- ボタン ---------- */
-button{font:inherit;font-size:14px;line-height:1.4;min-height:44px;padding:6px 18px;border-radius:999px;border:1px solid var(--rule);background:var(--panel);box-shadow:var(--hl);color:var(--ink);cursor:pointer;transition:transform .12s,border-color .2s}
+/* ボタンは、枠だけのもの（断る・止める・写す・ズーム・図と一覧の切り替えなど）も含め、不透明の --panel-solid で塗る。
+   柿・松の押すボタンは、色で意味を示すのでそのまま。窓のタブ（.wtab）と下のタブ（.nb）は窓の帯の一部なので、塗りなし */
+button{font:inherit;font-size:14px;line-height:1.4;min-height:44px;padding:6px 18px;border-radius:999px;border:1px solid var(--rule);background:var(--panel-solid);box-shadow:var(--hl);color:var(--ink);cursor:pointer;transition:transform .12s,border-color .2s}
 button:hover{border-color:var(--accent)}button:active{transform:scale(.98)}
-button:disabled{opacity:.5;cursor:not-allowed}
 button.go{background:var(--kaki);border-color:var(--kaki);color:var(--on);font-weight:700}
 button.done{background:var(--matsu);border-color:var(--matsu);color:var(--on)}
-button.danger{border-color:var(--shu);color:var(--shu);background:transparent;box-shadow:none}
-button.quiet{background:transparent;box-shadow:none}
+button.danger{border-color:var(--shu);color:var(--shu);box-shadow:none}
+button.quiet{box-shadow:none}
+/* 押せないボタンは、透けさせず（opacity を使わず）、灰の文字と点線の縁で示す */
+button:disabled{background:var(--panel-solid);border-color:var(--rule);border-style:dashed;color:var(--ink2);cursor:not-allowed}
 button.sm{min-height:36px;font-size:13px;padding:2px 12px}
 /* 答えのボタン: 見本どおり、横幅いっぱいの大きいボタン（広い画面では横に等分） */
 .big{display:flex;flex-wrap:wrap;gap:8px}
@@ -139,7 +144,7 @@ input[type=text],input[type=password],select,textarea{font:inherit;font-size:14p
 .chip{display:inline-flex;align-items:center;gap:4px;font-weight:700;font-size:12.5px;line-height:1.8;padding:0 10px;border-radius:999px;background:var(--grid);color:var(--ink2)}
 .chip.run{background:var(--matsu-soft);color:var(--matsu)}.chip.wait{background:var(--kaki-soft);color:var(--kaki)}
 .chip.fail{background:var(--shu-soft);color:var(--shu)}.chip.stall{background:var(--kiiro-soft);color:var(--kiiro)}
-.chip.lost{background:transparent;color:var(--shu);border:1.5px dashed var(--shu)}
+.chip.lost{background:var(--panel-solid);color:var(--shu);border:1.5px dashed var(--shu)}
 .bdg{min-width:20px;height:20px;border-radius:10px;background:var(--kaki);color:var(--on);font-size:12px;font-weight:800;display:inline-grid;place-items:center;padding:0 5px}
 
 /* ---------- 3 列の舞台（見本の組み方） ---------- */
@@ -166,7 +171,7 @@ input[type=text],input[type=password],select,textarea{font:inherit;font-size:14p
 .task.stall{border-left-color:var(--kiiro)}.task.fail{border-left-color:var(--shu)}
 .who{font-size:13px;color:var(--ink2)}.who b{color:var(--ink)}
 .ask{font-size:15.5px;font-weight:700;line-height:1.6}
-.cmd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px dashed var(--rule);border-radius:8px;padding:6px 10px}
+.cmd{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px dashed var(--rule);border-radius:8px;padding:6px 10px;background:var(--panel-solid)}
 .pipe{display:grid;grid-template-columns:repeat(3,1fr);border-radius:var(--rad);overflow:hidden;list-style:none;margin:12px 0 0;padding:0}
 .pipe li{padding:6px 8px;display:grid;justify-items:center;border-right:1px solid var(--rule);color:var(--ink2);font-size:12.5px}
 .pipe li:last-child{border-right:0}.pipe b{font-size:22px;font-weight:400;color:var(--ink)}
@@ -190,18 +195,19 @@ input[type=text],input[type=password],select,textarea{font:inherit;font-size:14p
 .ln.human{stroke-width:2.8}.ln.over{stroke-width:1.2}.ln.dash{stroke-dasharray:7 5;animation:flow .8s linear infinite}
 .tip{fill:none;stroke:var(--c);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .k-ask{--c:var(--kaki)}.k-prog{--c:var(--blue)}.k-fail{--c:var(--shu)}.k-req{--c:var(--matsu)}.k-done{--c:var(--wire-over)}
-.bar{fill:var(--ink2);opacity:.45}
+.bar{fill:var(--bar-solid)}
 .trunk{fill:none;stroke:var(--ink2);stroke-width:1.6;stroke-linecap:round}
 .pd{fill:var(--c);stroke:var(--panel-solid);stroke-width:1.2}
 .nd{cursor:pointer}
-/* 図の箱は SVG の rect で backdrop-filter が効かないため、半透明の塗り（盤の後ろは、外の窓の ::before と盤そのものが二重にぼかしている）と、上辺の光の線（.hl）で面にする */
-.nd .box{fill:var(--node);stroke:var(--rule);stroke-width:1.2}
+/* 図の箱は、窓でも中の面でもない部品なので、不透明の --panel-solid で塗る。上辺の光の線（.hl）はそのまま */
+.nd .box{fill:var(--panel-solid);stroke:var(--rule);stroke-width:1.2}
 .nd .hl{fill:none;stroke:var(--hl-line);stroke-width:1.2;stroke-linecap:round}
 .nd .stripe{fill:var(--matsu)}
 .nd.wait .box{stroke:var(--kaki);stroke-width:2}.nd.wait .stripe{fill:var(--kaki)}
 .nd.stall .box{stroke:var(--kiiro);stroke-width:2}.nd.stall .stripe{fill:var(--kiiro)}
 .nd.fail .box{stroke:var(--shu);stroke-width:2}.nd.fail .stripe{fill:var(--shu)}
-.nd.over{opacity:.62}.nd.over .stripe{fill:var(--wire-over)}
+/* 済んだ子は、箱を透けさせず、中の文字と帯だけを薄くする */
+.nd.over>:not(.box){opacity:.62}.nd.over .stripe{fill:var(--wire-over)}
 .nd .ttl{font-weight:700;font-size:14px;fill:var(--ink)}.nd .st{font-weight:700;font-size:12.5px;fill:var(--ink2)}
 .nd.wait .st{fill:var(--kaki)}.nd.fail .st{fill:var(--shu)}.nd.stall .st{fill:var(--kiiro)}.nd.run .st{fill:var(--matsu)}
 .nd .badge{fill:var(--kaki)}.nd .bt{font-weight:800;font-size:12.5px;fill:var(--on)}
@@ -211,7 +217,7 @@ input[type=text],input[type=password],select,textarea{font:inherit;font-size:14p
 .legend{margin-top:10px;border-radius:var(--rad);font-size:13px;color:var(--ink2);flex:none}
 .legend summary{cursor:pointer;padding:6px 14px;min-height:44px;display:flex;align-items:center}
 .legend .lgb{display:flex;flex-wrap:wrap;gap:4px 18px;padding:0 14px 10px}
-.lg{display:inline-flex;align-items:center;gap:6px}
+.lg{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;background:var(--panel-solid);border:1px solid var(--rule);border-radius:999px}
 .sw{display:inline-block;width:22px;height:0;border-top:3px solid var(--c)}.sw.dash{border-top-style:dashed}
 .gtools{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;flex:none}
 
@@ -224,7 +230,8 @@ input[type=text],input[type=password],select,textarea{font:inherit;font-size:14p
 .card.run .hd{background:var(--matsu);border-bottom-color:var(--matsu);color:var(--on)}
 .card.run .hd .chip{background:var(--on);color:var(--matsu)}
 .card.wait{border-color:var(--kaki);border-width:1.5px}.card.fail{border-color:var(--shu);border-width:1.5px}.card.stall{border-color:var(--kiiro);border-width:1.5px}
-.card.over{opacity:.78}
+/* 済んだカード・行は、透けさせず（opacity を使わず）、文字を灰にして薄く見せる。中の札は不透明のまま */
+.card.over h3{color:var(--ink2)}
 .card .bd{padding:10px 14px 14px;display:grid;gap:10px}
 .card h3{margin:0;font-size:15px;line-height:1.5}
 .need{font-size:13px;font-weight:700;color:var(--kaki)}.card.run .need{color:var(--on)}
@@ -252,7 +259,7 @@ details>summary{cursor:pointer;font-size:13.5px;color:var(--ink2);min-height:44p
 .tlist{border-radius:var(--rad);overflow-x:auto}
 .trow{display:grid;grid-template-columns:minmax(180px,1.6fr) 150px 1fr 1fr;gap:8px;align-items:center;padding:8px 14px;border-top:1px solid var(--rule);font-size:13.5px;min-width:620px}
 .trow.thead{border-top:0;color:var(--ink2);font-weight:700;font-size:12.5px}
-.trow.turn{background:var(--kaki-soft)}.trow.over{opacity:.7}
+.trow.turn{background:var(--kaki-soft)}.trow.over{color:var(--ink2)}
 dialog.settings{position:relative;display:block;margin:0;color:var(--ink);border-radius:14px;padding:16px 20px;width:min(30rem,100%)}
 dialog.settings h3{margin:0 0 8px;font-size:17px}
 dialog.settings fieldset{border:1px solid var(--rule);border-radius:8px;margin:10px 0;padding:8px 14px;min-width:0}
@@ -295,7 +302,6 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
 @media (max-width:640px){
   .top{padding:0 12px;gap:6px}
   .conn .ct{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
-  .top .prod{display:none}
   .top button{min-height:44px;min-width:44px;padding:0 10px}
   .two{grid-template-columns:minmax(0,1fr)}
 }
@@ -386,7 +392,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
 <p id="live" class="sr" role="status" aria-live="polite"></p>
 
 <header class="top">
-  <h1><span class="repo" title="開いているリポジトリ">comcreate/sample-repo</span><span class="prod">touryou</span></h1>
+  <h1><span class="repo" title="開いているリポジトリ">comcreate/sample-repo</span></h1>
   <span class="conn" title="つながっています（変わるとすぐ更新）"><i aria-hidden="true"></i><span class="ct">接続中</span></span>
   <span class="grow"></span>
   <button class="quiet" type="button" id="theme-btn" aria-label="明るさを切り替える（いま：自動）">◐ 自動</button>
