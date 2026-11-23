@@ -557,7 +557,7 @@ function drawShape(
           y: lane.portY - 3.5,
           width: 7,
           height: 7,
-          rx: 3.5,
+          rx: 1,
         }),
       );
     const mlabel = svgEl(

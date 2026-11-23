@@ -1812,7 +1812,36 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     expect(UI_CSS).toMatch(
       /prefers-reduced-motion: reduce\)\{\*,\*::before\{animation:none!important/,
     );
-    expect(UI_CSS).toContain(".line.g-sent{animation:gflow");
+    expect(UI_CSS).toContain(".line.g-sent{stroke-dasharray:7 5;animation:gflow");
+  });
+  it("関係図の見た目（#254 の段階 ③）: 線は実線が基本で、破線は届いていない線だけ。色は段階 ① の変数で、直書きがない", () => {
+    const start = UI_CSS.indexOf(".gnode{box-sizing");
+    const end = UI_CSS.indexOf("@keyframes galive");
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const graph = UI_CSS.slice(start, end);
+    // 彗星（段階 ④ で置き換える）の色は、この段階では触らない
+    const own = graph
+      .split("\n")
+      .filter((l) => !l.startsWith(".comet"))
+      .join("\n");
+    expect(own).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/);
+    // 線・矢印・端子・札は、同じ --c（上り＝青、下り＝緑、答え待ち＝橙、済んだ＝灰）を使う
+    expect(own).toContain("--c:var(--blue-line)");
+    expect(own).toContain(".down{--c:var(--matsu-line)}");
+    expect(own).toContain(".wait{--c:var(--kaki-line)}");
+    expect(own).toContain("--c:var(--wire-over)");
+    expect(own).toMatch(/\.line\{fill:none;stroke:var\(--c\);stroke-width:1\.8/);
+    expect(own).not.toMatch(/\.line\{[^}]*stroke-dasharray/);
+    expect(own).toMatch(/\.tip\{fill:none;stroke:var\(--c\)/);
+    // 箱は不透明の面で塗り、済んだ子は中の文字と帯だけを薄くする
+    expect(own).toMatch(/\.gnode\{[^}]*background:var\(--sheet\)/);
+    expect(own).toContain(".gnode.t-over>*{opacity:.62}");
+    expect(own).not.toMatch(/\.gnode\.t-over\{[^}]*opacity/);
+    // 凡例は丸薬、破線の見本の説明がある
+    expect(own).toMatch(/\.lg\{[^}]*border-radius:999px/);
+    expect(UI_HTML).toContain('<span class="sw down sent"></span>');
+    expect(UI_HTML).toContain('data-t="legend.sent"');
   });
   it("止めた・済んだ子を隠すトグル（#206）: 図のときだけ出る切り替えボタン。押すと設定に残し、図を描き直す。件数の札は図の中に出る", () => {
     expect(UI_HTML).toContain(

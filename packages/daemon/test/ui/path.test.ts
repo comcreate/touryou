@@ -14,6 +14,7 @@ import {
   stageText,
 } from "../../src/ui/graph-model.js";
 import {
+  ARROW,
   LANE_GAP,
   laneOf,
   pathD,
@@ -70,6 +71,19 @@ describe("graph-path（線の道。幹から子ごとに枝分かれ）", () => 
     // 札は線の上（上り）・下（下り）、段の言葉はその外側
     expect(up.stageY).toBeLessThan(up.labelY);
     expect(down.stageY).toBeGreaterThan(down.labelY);
+  });
+
+  it("矢印は塗らない開いた山形（先から 2 本の線。閉じない）で、底は先から ARROW だけ離れる", () => {
+    const C = must(kids[1]);
+    for (const dir of ["up", "down"] as const) {
+      const tip = laneOf(P, C, dir).tip;
+      expect(tip).not.toContain("Z");
+      expect(tip.match(/M/g)?.length).toBe(2);
+      const n = nums(tip);
+      expect(Math.abs(must(n[2]) - must(n[0]))).toBe(ARROW);
+      expect(must(n[3])).toBeLessThan(must(n[1])); // 上の線
+      expect(must(n[7])).toBeGreaterThan(must(n[1])); // 下の線
+    }
   });
 
   it("上りの矢印の先は、子ごとに違う高さ（1 点に重ならない）。幹は子の高さの全体にのびる", () => {

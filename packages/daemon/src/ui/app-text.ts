@@ -425,6 +425,10 @@ export const APP_TEXT = {
     ja: "箱を押すと、その子のカードへ移ります",
     en: "Click a box to go to that child's card",
   },
+  "legend.sent": {
+    ja: "破線：送った・まだ届いていない",
+    en: "Dashed: sent, not delivered yet",
+  },
   "legend.turn": {
     ja: "あなたの出番（答え待ち・止まっているかも・失敗）",
     en: "Your turn (awaiting answer, may be stuck, failed)",

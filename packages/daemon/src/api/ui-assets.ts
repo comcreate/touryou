@@ -86,7 +86,7 @@ export const UI_HTML = `<!doctype html>
 <section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h3 id="now-title" data-t="now.title">いまあなたがすること</h3><p id="now-lead" class="lead"></p></section>
 <div id="todo" class="todo"></div>
 </div></section>
-<section class="win" data-p="graph" aria-labelledby="flows-title"><header class="wh"><h2 id="flows-title" data-t="flows.title">やり取り</h2></header><div class="wb"><p class="lead" data-t="flows.lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button></div><div id="graph-filter" class="seg" hidden><button id="hide-finished" class="quiet sm" type="button" aria-pressed="false" data-t="view.hideFinished">止めた・済んだ子を隠す</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span><span data-t="legend.up">← 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">→ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></div></section>
+<section class="win" data-p="graph" aria-labelledby="flows-title"><header class="wh"><h2 id="flows-title" data-t="flows.title">やり取り</h2></header><div class="wb"><p class="lead" data-t="flows.lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button></div><div id="graph-filter" class="seg" hidden><button id="hide-finished" class="quiet sm" type="button" aria-pressed="false" data-t="view.hideFinished">止めた・済んだ子を隠す</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span><span data-t="legend.up">← 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">→ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw down sent"></span><span data-t="legend.sent">破線：送った・まだ届いていない</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></div></section>
 <section class="win" data-p="right" aria-labelledby="cards-title"><header class="wh"><h2 id="cards-title" data-t="cards.title">作業ごとのようす</h2></header><div class="wb"><p class="lead" data-t="cards.lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
 <details id="finished" class="finished"><summary id="finished-summary" data-t="cards.finishedTitle">終わった作業</summary><div id="finished-cards" class="cards"></div></details></div></section>
 <nav class="nav" data-t-aria="pane.switch" aria-label="表示の切り替え"><button id="nav-yours" class="nb" type="button" data-view="yours" aria-current="page"><span data-t="pane.yours">あなたの番</span><span id="nav-count" class="bdg" aria-hidden="true" hidden></span><span id="nav-count-sr" class="sr"></span></button><button id="nav-explore" class="nb" type="button" data-view="explore" aria-current="false"><span data-t="pane.navExplore">やり取りと作業</span></button></nav>
@@ -284,37 +284,48 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .ghidden{position:absolute;left:12px;top:10px;z-index:1;pointer-events:none;font-size:12.5px;line-height:1.8;padding:0 10px;border:1px solid var(--line);border-radius:999px;background:var(--sheet);color:var(--muted)}
 .board{position:relative;height:420px;min-height:180px;max-height:720px;overflow:hidden;border:1px solid var(--line);border-radius:12px;background:var(--sheet);user-select:none;-webkit-user-select:none;touch-action:none}
 .gback{position:absolute;left:0;top:0;pointer-events:none}
-.gnode{box-sizing:border-box;position:relative;width:220px;height:80px;padding:8px 14px 8px 16px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);display:flex;flex-direction:column;justify-content:center;gap:3px;box-shadow:0 1px 2px rgba(0,0,0,.12)}
-.gnode::before{content:"";position:absolute;left:3px;top:10px;bottom:10px;width:3.5px;border-radius:2px;background:var(--ai)}
-.gnode.t-turn{border:2.5px solid var(--kaki-line)}.gnode.t-turn::before{background:var(--kaki-line)}
+.gnode{box-sizing:border-box;position:relative;width:220px;height:80px;padding:8px 14px 8px 16px;border:1.2px solid var(--line);border-radius:12px;background:var(--sheet);display:flex;flex-direction:column;justify-content:center;gap:3px;box-shadow:var(--hl)}
+.gnode::before{content:"";position:absolute;left:3px;top:10px;bottom:10px;width:3.5px;border-radius:2px;background:var(--matsu-line)}
+.gnode.t-turn,.gnode.s-stall,.gnode.s-fail{border-width:2px}
+.gnode.t-turn{border-color:var(--kaki-line)}.gnode.t-turn::before{background:var(--kaki-line)}
 .gnode.s-stall{border-color:var(--kiiro-line)}.gnode.s-stall::before{background:var(--kiiro-line)}
 .gnode.s-fail{border-color:var(--shu-line)}.gnode.s-fail::before{background:var(--shu-line)}
-.gnode.t-over{opacity:.55;background:var(--bg)}.gnode.t-over::before{background:var(--line)}
+/* 済んだ子は、箱そのものを透けさせず（図の盤がぼかしの根のため）、中の文字と帯だけを薄くする */
+.gnode.t-over>*{opacity:.62}.gnode.t-over::before{background:var(--wire-over);opacity:.62}
 
-.gt{font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:14px}
+.gt{font-size:14px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:14px}
 .gr{display:flex;align-items:center;gap:6px;min-width:0}.gic{flex:none}
 .role-ic{fill:none;stroke:var(--muted);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .gs{color:var(--muted);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.gst{font-size:11.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.st-wait{color:var(--kaki)}.st-stall{color:var(--kiiro)}.st-fail{color:var(--shu)}.st-done,.st-stopped{color:var(--muted)}
+.gst{font-size:12.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.st-run{color:var(--matsu)}.st-wait{color:var(--kaki)}.st-stall{color:var(--kiiro)}.st-fail{color:var(--shu)}.st-done,.st-stopped{color:var(--muted)}
 .galive{position:absolute;right:10px;top:10px;width:8px;height:8px;border-radius:50%;background:var(--matsu);animation:galive 3s ease-in-out infinite}
 .gbadge{position:absolute;right:-10px;top:-10px;min-width:24px;height:24px;padding:0 4px;box-sizing:border-box;border-radius:12px;background:var(--kaki);color:var(--on-strong);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
 .glink{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
 
-.trunk{fill:none;stroke:var(--ai-3);stroke-width:4;stroke-linecap:round;opacity:.5}
+.trunk{fill:none;stroke:var(--muted);stroke-width:1.6;stroke-linecap:round}
 .twig{fill:none;stroke:var(--muted);stroke-width:1.5;stroke-dasharray:2 5;opacity:.6}
-.line{fill:none;stroke:var(--ai);stroke-width:2.5;stroke-dasharray:6 8}.tip{fill:var(--ai)}.port{fill:var(--ai);stroke:var(--sheet);stroke-width:2}
-.line.down{stroke:var(--ai-2)}.tip.down,.port.down{fill:var(--ai-2)}
-.line.g-sent{animation:gflow .8s linear infinite}.line.g-unknown{animation:gflow 3s linear infinite;stroke-dasharray:3 6}.line.g-delivered{animation:gflow 2.4s linear infinite}
-.line.a1{stroke-width:3}.line.a2{opacity:.85}.line.a3{opacity:.65}.line.a4{opacity:.45}.tip.a3,.port.a3{opacity:.65}.tip.a4,.port.a4{opacity:.45}
-.line.wait{stroke:var(--kaki);stroke-width:3.5;opacity:1}.tip.wait,.port.wait{fill:var(--kaki)}
-.line.over,.tip.over,.port.over,.line.g-done{opacity:.45}
+/* 線の色（見本の k-*）：上り＝青、下り＝緑、答え待ち＝橙、済んだ＝灰。線・矢印・端子・札が同じ --c を使う */
+:is(.line,.tip,.port,.mlabel,.mstage,.sw){--c:var(--blue-line)}
+:is(.line,.tip,.port,.mlabel,.mstage,.sw).down{--c:var(--matsu-line)}
+:is(.line,.tip,.port,.mlabel,.mstage,.sw).wait{--c:var(--kaki-line)}
+:is(.line,.tip,.port,.mlabel,.mstage,.sw).over,:is(.line,.tip,.port).g-done{--c:var(--wire-over)}
+/* 札の文字は、線の色（3:1）でなく、文字の色（4.5:1）を使う */
+.mlabel{--ct:var(--ai)}.mlabel.down{--ct:var(--matsu)}.mlabel.wait{--ct:var(--kaki)}.mlabel.over{--ct:var(--muted)}
+.line{fill:none;stroke:var(--c);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tip{fill:none;stroke:var(--c);stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.port{fill:var(--c);stroke:var(--sheet);stroke-width:1.2}
+/* 実線が基本。破線は、送ったがまだ届いていない線（g-sent）と、届いたか分からない線（g-unknown）だけ */
+.line.g-sent{stroke-dasharray:7 5;animation:gflow .8s linear infinite}.line.g-unknown{stroke-dasharray:3 6;animation:gflow 3s linear infinite}
+.line.a1{stroke-width:2.2}.line.a2{opacity:.85}.line.a3{opacity:.65}.line.a4{opacity:.45}.tip.a3,.port.a3{opacity:.65}.tip.a4,.port.a4{opacity:.45}
+.line.wait{stroke-width:2.8;opacity:1}
+.line.over,.tip.over,.port.over,.line.g-done{opacity:.45}.line.over,.line.g-done{stroke-width:1.2}
 .mlabel,.mstage{paint-order:stroke;stroke:var(--sheet);stroke-width:3px;stroke-linejoin:round}
-.mlabel{font-size:11.5px;font-weight:700;fill:var(--fg)}.mstage{font-size:11px;fill:var(--muted)}.mlabel.wait,.mstage.wait{fill:var(--kaki)}.mlabel.over,.mstage.over{opacity:.6}
-.gnode{cursor:pointer;transition:box-shadow .15s}.gnode:focus-visible{outline:3px solid var(--ai);outline-offset:2px}.gnode:hover{box-shadow:0 0 0 3px var(--grid)}
+.mlabel{font:700 12.5px "SFMono-Regular",Menlo,Consolas,monospace;fill:var(--ct)}.mstage{font-size:11px;fill:var(--muted)}.mlabel.over,.mstage.over{opacity:.6}
+.gnode{cursor:pointer;transition:box-shadow .15s}.gnode:focus-visible{outline:3px solid var(--ai);outline-offset:2px}.gnode:hover,.gnode:focus-visible{border-color:var(--ai);box-shadow:var(--hl),0 0 0 1.5px var(--ai)}
 .board .glink,.board .gback{transition:opacity .15s}.board.hot .glink{opacity:.18}.board.hot .lit .glink{opacity:1}.board.g-instant .glink,.board.g-instant .gback,.board.g-instant .gnode{transition:none}
 .board-wrap{position:relative}.zoom{position:absolute;right:10px;top:10px;display:flex;gap:4px;z-index:2}.zoom button{width:34px;height:34px;padding:0;border-radius:50%;font-size:18px;line-height:1;background:var(--sheet);color:var(--fg);border:1px solid var(--line)}.zoom button.fit{width:auto;padding:0 12px;border-radius:999px;font-size:13px}.zoom button:focus-visible{outline:3px solid var(--ai);outline-offset:2px}
-.legend{display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 0 0;font-size:12.5px;color:var(--muted)}.lg{display:inline-flex;align-items:center;gap:4px}
-.sw{display:inline-block;width:22px;height:0;border-top:2.5px dashed var(--ai)}.sw.down{border-top-color:var(--ai-2)}.sw.a1{border-top-width:3px}.sw.a3{opacity:.65}.sw.a4{opacity:.45}.sw.wait{border-top:3.5px dashed var(--kaki)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 18px;margin:8px 0 0;font-size:13px;color:var(--muted)}.lg{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;background:var(--sheet);border:1px solid var(--line);border-radius:999px}
+.sw{display:inline-block;width:22px;height:0;border-top:3px solid var(--c)}.sw.sent{border-top-style:dashed}.sw.a3{opacity:.65}.sw.a4{opacity:.45}
 .edge{display:inline-block;width:4px;height:14px;border-radius:2px;background:var(--blue-line)}.edge.turn{background:var(--kaki-line)}.edge.stall{background:var(--kiiro-line)}.edge.fail{background:var(--shu-line)}.edge.over{background:var(--wire-over)}
 .comet{fill:none;stroke:var(--ai);stroke-width:5;stroke-linecap:round;filter:drop-shadow(0 0 4px var(--ai))}
 .comet-win{transform-box:fill-box;animation:gcomet 1.6s linear infinite}.comet-win-left{animation-name:gcomet-left}

@@ -103,12 +103,19 @@ export function twigOf(P: LayoutPos, C: LayoutPos): string {
   ]);
 }
 
-/** 矢印の三角。先が (x, y) で、`to` の向き（左・右）を指す。 */
+/**
+ * 矢印（見本の `.tip`：塗らない開いた山形）。先が (x, y) で、`to` の向き（左・右）を指す。
+ * 先から 2 本の線を引く（先を丸い端で結ぶので、角は 1 点に見える）。
+ */
 function tipAt(x: number, y: number, to: "left" | "right"): string {
-  const b = ARROW + 2;
-  return to === "left"
-    ? pathD([["M", x, y], ["L", x + b, y - 5], ["L", x + b, y + 5], ["Z"]])
-    : pathD([["M", x, y], ["L", x - b, y - 5], ["L", x - b, y + 5], ["Z"]]);
+  const b = ARROW;
+  const bx = to === "left" ? x + b : x - b;
+  return pathD([
+    ["M", x, y],
+    ["L", bx, y - 5],
+    ["M", x, y],
+    ["L", bx, y + 5],
+  ]);
 }
 
 /** 役割の印（12×12 の中。見本の `role-ic`）：統合は枝分かれ、ほかは金づち。 */
