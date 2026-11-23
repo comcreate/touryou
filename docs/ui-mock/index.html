@@ -19,7 +19,7 @@
   /* 面の不透明度: 外の面（上のバー・3 列の窓・見本帳の台・下のタブ）48%、中の面（カード・札など）32%、帯（窓の見出し・タブ・図の盤）26% */
   --win:rgba(250,249,245,.48);--panel:rgba(255,255,255,.32);--strip:rgba(255,255,255,.26);--panel-solid:#fbfaf6;--edge:rgba(110,120,135,.30);
   --hl:inset 0 1px 0 rgba(255,255,255,.9);--hl-line:rgba(255,255,255,.95);--node:rgba(255,255,255,.5);
-  --shadow:0 8px 28px rgba(20,30,50,.10);--shadow-in:0 2px 10px rgba(20,30,50,.06);--blur:blur(18px) saturate(160%);
+  --shadow:0 8px 28px rgba(20,30,50,.10);--shadow-in:0 2px 10px rgba(20,30,50,.06);--blur:blur(10px) saturate(160%);
   --ink:#1d1f22;--ink2:#51565d;--rule:#cfd2d6;--grid:#e4e6e9;
   --accent:#2a5fa8;--kaki:#a04300;--kaki-soft:#fbe6d2;--matsu:#2c6b44;--matsu-soft:#dcebdf;
   --shu:#a3261c;--shu-soft:#f7dfdb;--kiiro:#7a5c00;--kiiro-soft:#f3ebc6;--on:#fff;
@@ -105,8 +105,8 @@ button:hover{border-color:var(--accent)}button:active{transform:scale(.98)}
 button:disabled{opacity:.5;cursor:not-allowed}
 button.go{background:var(--kaki);border-color:var(--kaki);color:var(--on);font-weight:700}
 button.done{background:var(--matsu);border-color:var(--matsu);color:var(--on)}
-button.danger{border-color:var(--shu);color:var(--shu);background:transparent}
-button.quiet{background:transparent}
+button.danger{border-color:var(--shu);color:var(--shu);background:transparent;box-shadow:none}
+button.quiet{background:transparent;box-shadow:none}
 button.sm{min-height:36px;font-size:13px;padding:2px 12px}
 /* 答えのボタン: 見本どおり、横幅いっぱいの大きいボタン（広い画面では横に等分） */
 .big{display:flex;flex-wrap:wrap;gap:8px}
@@ -132,7 +132,7 @@ input[type=text],input[type=password],select,textarea{font:inherit;font-size:14p
 .wh h2{margin:0;font:500 12px/1.6 "SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.14em;color:var(--accent)}
 .wm{font:12px "SFMono-Regular",Menlo,Consolas,monospace;color:var(--ink2)}
 .wt{display:flex;background:var(--strip);border-bottom:1px solid var(--rule)}
-.wtab{flex:1;font:inherit;font-size:13px;min-height:40px;padding:0 8px;border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.wtab{flex:1;font:inherit;font-size:13px;min-height:40px;padding:0 8px;border:0;border-bottom:3px solid transparent;border-radius:0;background:transparent;box-shadow:none;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .wtab:hover{color:var(--ink)}
 .wtab[aria-selected="true"]{color:var(--ink);font-weight:800;border-bottom-color:var(--accent)}
 .wb{padding:12px 14px;overflow:auto;min-height:0;flex:1;min-width:0}
@@ -253,7 +253,7 @@ dialog.settings legend{font-weight:700;padding:0 4px}
 
 /* ---------- スマホの下の切り替え ---------- */
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:none;grid-template-columns:repeat(2,1fr);padding-bottom:env(safe-area-inset-bottom);border-width:1px 0 0;border-radius:0;box-shadow:var(--hl)}
-.nb{position:relative;font:inherit;font-size:13px;min-height:var(--bar);border:0;border-radius:0;background:transparent;color:var(--ink2);cursor:pointer;display:grid;place-items:center;align-content:center;padding:4px}
+.nb{position:relative;font:inherit;font-size:13px;min-height:var(--bar);border:0;border-radius:0;background:transparent;box-shadow:none;color:var(--ink2);cursor:pointer;display:grid;place-items:center;align-content:center;padding:4px}
 .nb[aria-current="page"]{color:var(--ink);font-weight:800;box-shadow:inset 0 3px 0 var(--accent)}
 .nb .bdg{position:absolute;top:6px;left:calc(50% + 8px)}
 
@@ -928,11 +928,11 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   }
   function isStill() { return root.classList.contains("still") || mqStill.matches; }
 
-  // 画面の大きさと devicePixelRatio（上限 2）に合わせる
+  // 画面の大きさと devicePixelRatio（上限 2）に合わせる。CSS の箱（全面に固定）の大きさで測る
   function fit() {
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
-    var w = Math.max(1, Math.round(window.innerWidth * dpr));
-    var h = Math.max(1, Math.round(window.innerHeight * dpr));
+    var w = Math.max(1, Math.round((canvas.clientWidth || window.innerWidth) * dpr));
+    var h = Math.max(1, Math.round((canvas.clientHeight || window.innerHeight) * dpr));
     if (canvas.width !== w || canvas.height !== h) {
       canvas.width = w;
       canvas.height = h;
