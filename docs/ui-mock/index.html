@@ -322,8 +322,18 @@ details>summary{cursor:pointer;font-size:13.5px;color:var(--ink2);min-height:44p
    本番（packages/daemon/src/api/ui-assets.ts の dialog#settings）と同じく、<dialog> を showModal で開く。
    幕（::backdrop）の色は本番の値。窓そのものはグラスモーフィズム（塗り --dlg と、ぼかし --blur-dlg）。
    窓の中の部品（カード・空の表示・札・ボタン・入力欄）は不透明にする。窓が backdrop-filter を持つので、中の部品はぼかさない。
-   窓の高さが画面を超えるときは、窓の中がスクロールする（塗りは窓そのものにあるので、スクロールしても欠けない） */
-dialog.settings{color:var(--ink);background:var(--dlg);backdrop-filter:var(--blur-dlg);-webkit-backdrop-filter:var(--blur-dlg);border:1px solid var(--glass-edge);box-shadow:var(--hl),var(--shadow);border-radius:14px;padding:16px 20px;width:min(30rem,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto}
+   窓の高さが画面を超えるときは、窓の中がスクロールする（塗りは窓そのものにあるので、スクロールしても欠けない）。
+   幅: 設定は min(52rem, 画面の幅 − 32px)、管理は中身が少ないので min(38rem, …)。上下は dialog の既定（margin:auto）で中央に置く。
+   1 行の長さ: 全角でおよそ 40 字以内にする。設定の説明の文（.note、13px）は max-width:40em。
+   管理の注意の文（14px）は、窓の幅 38rem から余白を引くと、1 行がおよそ 38 字になる */
+dialog.settings{color:var(--ink);background:var(--dlg);backdrop-filter:var(--blur-dlg);-webkit-backdrop-filter:var(--blur-dlg);border:1px solid var(--glass-edge);box-shadow:var(--hl),var(--shadow);border-radius:14px;padding:16px 20px;width:min(52rem,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto}
+dialog.settings.adm{width:min(38rem,calc(100vw - 32px))}
+dialog.settings .note{max-width:40em}
+/* 設定の中の節の組み方: アクセシビリティと言語は、幅が足りるときだけ 2 列に並べる（1 列の最小 18rem。窓の中身の幅が 2 列ぶん＋間 16px に満たないと 1 列）。
+   画面の幅 640px 以下では、窓の中身の幅が 18rem × 2 に届かないので、必ず 1 列のまま。
+   子の権限の規則は全幅にし、allow・deny・ask の 3 つの組を、幅が足りるときだけ横に並べる（1 つの最小 14rem） */
+.set-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:0 16px;align-items:start}
+.policy-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:0 16px}
 dialog.settings::backdrop{background:rgba(0,0,0,.35)}
 /* 狭い画面（〜640px）: 窓を左上から 16px の位置に置き、幅を画面の幅（100vw）から決める。
    幅 390px の撮影で窓の右が切れて見えたのは、headless のブラウザの表示の幅が最小 500px になるためで、モックのせいではなかった（親が確かめた）。
@@ -701,6 +711,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
 <!-- ============ 窓（ダイアログ）: showModal で開く。ページを下までスクロールしても、中身は並ばない ============ -->
 <dialog id="settings" class="settings" aria-labelledby="set-t">
     <h2 id="set-t">設定</h2>
+    <div class="set-cols">
     <fieldset><legend>アクセシビリティ</legend>
       <label class="opt"><input id="still-ck" type="checkbox"> <span>動きを止める</span></label>
       <p class="note">新しい項目の入る動き・線を流れる点線・背景の動き（方眼の流れ・道具の回転と浮遊・塵の瞬き）を止めます。背景は、その時点の絵で止まります。OS の「視差効果を減らす」を入れているときは、ここを切っていても止まります。</p>
@@ -715,9 +726,11 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
         <label class="opt"><input type="radio" name="lg" value="en"> <span lang="en">English</span></label></div>
       <p class="note">daemon が書く知らせも、選んだ言語で出します。子や統合が書いた文と、古い知らせは、書かれたままの言葉で出します。</p>
     </fieldset>
+    </div>
     <fieldset><legend>子の権限の規則</legend>
       <p class="note">根の方針の規則です。「設定」は設定ファイル（config.json）の値、「実行中」は、いま足した規則です（daemon を起動し直すと、設定の値に戻ります）。deny は allow・ask より強く、ask に当たるツールの承認は、人間だけができます。</p>
       <div class="row" style="margin:6px 0"><button class="sm ib" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 12A9 9 0 1 1 12 3C14.52 3 16.93 4 18.74 5.74L21 8"/><path d="M21 3L21 8L16 8"/></svg><span>設定を読み込み直す</span></button></div>
+      <div class="policy-groups">
       <div class="policy-group"><h4>allow（許す）</h4>
         <div class="policy-item"><span class="chip">設定</span><code>Bash(git status:*)</code></div>
         <div class="policy-item"><span class="chip run">実行中</span><code>Read(docs/**)</code><button class="sm danger" type="button">外す</button></div></div>
@@ -725,6 +738,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
         <div class="policy-item"><span class="chip">設定</span><code>Bash(rm -rf:*)</code></div></div>
       <div class="policy-group"><h4>ask（人に確かめる）</h4>
         <div class="policy-item"><span class="chip">設定</span><code>Bash(git push:*)</code></div></div>
+      </div>
       <div class="policy-add">
         <label class="sr" for="pl">規則の種類</label>
         <select id="pl"><option>allow（許す）</option><option>deny（禁じる）</option><option>ask（人に確かめる）</option><option>autoApprove（自動で承認）</option></select>
