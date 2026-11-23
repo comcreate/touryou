@@ -111,7 +111,9 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(await anim("path.line.g-delivered")).toBe("gflow");
     expect(await anim("path.line.g-done")).toBe("none");
     // 彗星（.comet・mask）は、流星に置き換えたので、もう無い
-    expect(await page.locator("svg.glink .comet, svg.glink mask, svg.glink linearGradient").count()).toBe(0);
+    expect(
+      await page.locator("svg.glink .comet, svg.glink mask, svg.glink linearGradient").count(),
+    ).toBe(0);
     // 流星は、上りの答え待ち（強い）と、下りの未着 sent（弱い。root → m1 の 1 本だけ。unknown は流さない）の 2 本。1 本につき尾・頭・芯の 3 本
     expect(await page.locator("svg.glink path.mh").count()).toBe(2);
     expect(await page.locator("svg.glink path.mh.up.wait").count()).toBe(1);
@@ -129,7 +131,8 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
       const downLine = pick("svg.glink path.line.g-sent");
       const end = (d: string) => (d.match(/-?\d+(?:\.\d+)?/g) ?? []).slice(-2).map(Number);
       const spark = pick("svg.glink g.msp");
-      const num = (e: Element, p: string) => Number.parseFloat(getComputedStyle(e).getPropertyValue(p));
+      const num = (e: Element, p: string) =>
+        Number.parseFloat(getComputedStyle(e).getPropertyValue(p));
       return {
         // 流星は、線と同じ道（d）の重ね線で、長さを 100 と見なす
         strongSameD: strong.getAttribute("d") === upLine.getAttribute("d"),

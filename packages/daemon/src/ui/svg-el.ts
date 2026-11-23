@@ -5,14 +5,7 @@
  * 文字は `text`・`title` の `textContent` だけで入れる。
  */
 const NS = "http://www.w3.org/2000/svg";
-const TAGS: ReadonlySet<string> = new Set([
-  "svg",
-  "g",
-  "path",
-  "rect",
-  "text",
-  "title",
-]);
+const TAGS: ReadonlySet<string> = new Set(["svg", "g", "path", "rect", "text", "title"]);
 const NUMERIC: ReadonlySet<string> = new Set(["x", "y", "width", "height", "rx"]);
 /** 火花の置き場所：`translate(x y)`（数 2 つだけ）。 */
 const TRANSLATE_PATTERN = /^translate\(-?\d+(?:\.\d+)? -?\d+(?:\.\d+)?\)$/;

@@ -56,10 +56,10 @@ describe("図の自前のコード（走査）", () => {
     expect([...all.matchAll(/setAttributeNS/g)]).toHaveLength(1);
     expect(src("svg-el.ts")).toMatch(/document\.createElementNS\(NS, tag\)/);
     const tags = ["svg", "g", "path", "rect", "text", "title"];
-    for (const tag of tags) expect(src("svg-el.ts")).toContain(`"${tag}",`);
+    for (const tag of tags) expect(src("svg-el.ts")).toMatch(new RegExp(`TAGS[^;]*"${tag}"`));
     // 彗星の mask・グラデーションは、流星に置き換えたので、タグも許可しない
     for (const tag of ["defs", "mask", "linearGradient", "stop"])
-      expect(src("svg-el.ts")).not.toContain(`"${tag}",`);
+      expect(src("svg-el.ts")).not.toContain(`"${tag}"`);
     expect(src("svg-el.ts")).toContain('new Set(["x", "y", "width", "height", "rx"])');
   });
 
@@ -81,7 +81,7 @@ describe("図の自前のコード（走査）", () => {
     const el = src("svg-el.ts");
     expect(el).not.toMatch(/comet|mask|maskUnits/i);
     expect(el).toContain("TRANSLATE_PATTERN");
-    expect(el).toContain('if (v !== 100) throw new Error(`svgEl: ${name}`);');
+    expect(el).toContain("if (v !== 100) throw new Error(`svgEl: ${name}`);");
   });
 
   it("合図の受け手は addEventListener だけで付け、どれも destroy で外れる形（signal）。文字列の受け手は使わない", () => {

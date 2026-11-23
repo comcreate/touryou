@@ -1857,7 +1857,9 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     expect(meteor).not.toMatch(/#[0-9a-fA-F]{3,8}\b|rgba?\(/);
     expect(meteor).toContain("--sk1:color-mix(in srgb,var(--c),var(--glint) var(--sk-w1))");
     // 流星の道は、線と同じ道の重ね線（pathLength=100）を、破線の位置で動かす
-    expect(meteor).toMatch(/\.mh\{[^}]*stroke-width:6;[^}]*stroke-dasharray:10 52;[^}]*animation:mt-h 1\.2s/);
+    expect(meteor).toMatch(
+      /\.mh\{[^}]*stroke-width:6;[^}]*stroke-dasharray:10 52;[^}]*animation:mt-h 1\.2s/,
+    );
     expect(meteor).toMatch(/\.mhc\{[^}]*stroke:var\(--glint\)/);
     expect(meteor).toMatch(/\.mtl\{[^}]*stroke-dasharray:30 32;[^}]*opacity:\.45/);
     // 弱い流星（下り）は、頭 4・芯 1.6・尾 30%・1.8 秒
@@ -1868,9 +1870,13 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     // 火花の筋は 3 種の寿命。箱の縁の光は、答え待ち・失敗の箱だけ（触れたとき・焦点のときは出さない）
     for (const k of ["mt-sk1", "mt-sk2", "mt-sk3", "mt-fl", "mt-glow"])
       expect(meteor).toContain(`@keyframes ${k}{`);
-    expect(meteor).toContain(".gnode:is(.t-turn,.s-fail):not(:hover,:focus-visible){animation:mt-glow");
+    expect(meteor).toContain(
+      ".gnode:is(.t-turn,.s-fail):not(:hover,:focus-visible){animation:mt-glow",
+    );
     // 線の色（--c）は、流星・火花にも付く
-    expect(UI_CSS).toContain(":is(.line,.tip,.port,.mlabel,.mstage,.sw,.mh,.mhc,.mtl,.msp){--c:var(--blue-line)}");
+    expect(UI_CSS).toContain(
+      ":is(.line,.tip,.port,.mlabel,.mstage,.sw,.mh,.mhc,.mtl,.msp){--c:var(--blue-line)}",
+    );
     // 白と混ぜる割合は、明・暗で別の値
     expect(UI_CSS).toContain("--glint:#fff;--sk-w1:45%;--sk-w2:22%;--sk-wf:55%");
     expect(UI_CSS).toContain("--glint:#fff;--sk-w1:70%;--sk-w2:40%;--sk-wf:80%");
@@ -1879,7 +1885,7 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     // 凡例に、強い流星・弱い流星・縁の光・止めるときの説明がある（日英）
     for (const k of ["meteorStrong", "meteorWeak", "glow", "meteorStill"]) {
       expect(UI_HTML).toContain(`data-t="legend.${k}"`);
-      const text = UI_TEXT_TABLE[`legend.${k}` as const];
+      const text = UI_TEXT_TABLE[`legend.${k}` as keyof typeof UI_TEXT_TABLE];
       expect(text.ja, k).not.toBe("");
       expect(text.en, k).not.toBe(text.ja);
     }
