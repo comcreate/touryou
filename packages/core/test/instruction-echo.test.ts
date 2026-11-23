@@ -138,13 +138,7 @@ describe("指示の復唱（#261）: 知らせの文", () => {
       const m = inboxMessage(key, args);
       expect([...m.summary].length, key).toBeLessThanOrEqual(200);
       // 「次にすること」は AI 向けなので node_send・tree_list は書く。受け取りの内部の名前・ハッシュ値は出さない
-      for (const word of [
-        "child_bind",
-        "child.inbox",
-        "ackThrough",
-        "echoes",
-        "sha",
-      ]) {
+      for (const word of ["child_bind", "child.inbox", "ackThrough", "echoes", "sha"]) {
         expect(m.summary, `${key} ${word}`).not.toContain(word);
       }
     }
@@ -155,8 +149,10 @@ describe("指示の復唱（#261）: 知らせの文", () => {
       const mismatch =
         inboxMessageText(lang, inboxMessage("echoMismatch", { node: "a", seq: 1 }).msg) ?? "";
       const missing =
-        inboxMessageText(lang, inboxMessage("echoMissing", { node: "a", seq: 1, minutes: 5 }).msg) ??
-        "";
+        inboxMessageText(
+          lang,
+          inboxMessage("echoMissing", { node: "a", seq: 1, minutes: 5 }).msg,
+        ) ?? "";
       expect(mismatch, lang).toContain("node_send");
       expect(missing, lang).toContain("tree_list");
       expect(missing, lang).toContain("plugin");
