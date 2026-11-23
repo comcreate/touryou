@@ -789,6 +789,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     <h3 id="cf-t">確かめてから送ります</h3>
     <p class="irreversible">この操作は、あとから戻せません。</p>
     <div class="kv"><div class="kvr"><span class="k">操作</span><span class="v">アーカイブした作業の最終削除</span></div><div class="kvr"><span class="k">対象</span><span class="v">sample-task-0001</span></div></div>
+    <p class="note">失うもの：この木のノードの記録（イベントの行）と、一緒に保管している破棄した成果が消えます。消した跡（題・結果・最終コミット・日付だけの記録）を残すかは、設定の既定か選びで決まります。</p>
     <p class="note">確かめるため、対象の ID を打ち込んでください：<span class="typed">sample-task-0001</span></p>
     <div class="row"><label class="sr" for="typed">対象の ID</label><input id="typed" type="text" autocomplete="off" spellcheck="false" style="flex:1 1 12em"><button class="danger" type="button" disabled>削除する</button><button type="button">やめる</button></div>
   </section>
@@ -831,7 +832,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
       <p class="note">daemon が書く知らせも、選んだ言語で出します。子や統合が書いた文と、古い知らせは、書かれたままの言葉で出します。</p>
     </fieldset>
     <fieldset class="pol"><legend>子の権限の規則</legend>
-      <p class="note">根の方針の規則です。「設定」は設定ファイル（config.json）の値、「実行中」は、いま足した規則です（daemon を起動し直すと、設定の値に戻ります）。deny は allow・ask より強く、ask に当たるツールの承認は、人間だけができます。</p>
+      <p class="note">子の権限の上限（config.json の rootScope）の規則です。「設定」は設定ファイル（config.json）の値、「実行中」は、いま足した規則です（daemon を起動し直すと、設定の値に戻ります）。deny は allow・ask より強く、ask に当たるツールの承認は、人間だけができます。</p>
       <div class="row" style="margin:6px 0"><button class="sm ib" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 12A9 9 0 1 1 12 3C14.52 3 16.93 4 18.74 5.74L21 8"/><path d="M21 3L21 8L16 8"/></svg><span>設定を読み込み直す</span></button></div>
       <div class="policy-groups">
       <div class="policy-group"><h4>allow（許す）</h4>
@@ -849,10 +850,11 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
         <input id="pr" type="text" maxlength="1024" autocomplete="off" spellcheck="false" placeholder="Bash(git status:*)">
         <button class="sm" type="button">足す</button>
       </div>
-      <p style="color:var(--shu);margin:6px 0">（足せないときの表示）この形の規則は足せません。かっこの中を確かめてください。</p>
+      <p class="note" aria-hidden="true">モックの注記：次の赤い 1 行は、足せないときだけ出る表示の見本です。文中の「かっこの中」は、規則の Bash(…) の丸かっこの中のことです。</p>
+      <p style="color:var(--shu);margin:6px 0">この形の規則は足せません。かっこの中を確かめてください。</p>
     </fieldset>
     </div>
-    <p class="note">選んだものは、このブラウザに残ります。</p>
+    <p class="note">動き・明暗・言語は、このブラウザに残ります。</p>
     <div class="adm-entry"><button class="danger ib" type="button" id="to-admin" aria-haspopup="dialog" aria-controls="admin"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3L22 20L2 20Z"/><path d="M12 9L12 13.5M12 16.9L12 17"/></svg><span>管理（取り消せない操作を含む）…</span></button></div>
     <div class="right"><button type="button" data-close>閉じる</button></div>
 </dialog>
@@ -861,8 +863,10 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     <h2 id="adm-t" tabindex="-1">管理（取り消せない操作を含む）</h2>
     <p class="warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
     <h3>アーカイブした作業の最終削除と、自動の削除の保留</h3>
+    <p class="note">自動の削除は、daemon の設定で有効にしたときだけ動きます（既定はオフ）。アーカイブから保持期間（既定 90 日）が過ぎ、受信箱の予告から所定の日数がたった、最上位の木（統合ノード＝いちばん上の親そのものは対象外）の記録を消します。保留は、この自動の削除だけを、選んだ期限（30 日・90 日・1〜365 日、または無期限）まで止めます。ここからの最終削除は、保留を無視して消します。</p>
     <div class="card" style="padding:10px 16px;gap:8px"><div class="kv"><div class="kvr"><span class="k">作業</span><span class="v">sample-task-0001</span></div><div class="kvr"><span class="k">アーカイブした日</span><span class="v">3 日前</span></div></div><div class="row"><button class="danger" type="button">最終削除…</button><button type="button">自動の削除を保留する</button></div></div>
     <h3>捨てた作業の保管</h3>
+    <p class="note">破棄した作業の成果を、あとで取り出せるよう保管したものです。アーカイブした作業の記録とは別で、その木を最終削除すると、木の分の保管は一緒に消えます。</p>
     <p class="empty">いま、保管している作業はありません。</p>
     <div class="right"><button type="button" data-close>閉じる</button></div>
 </dialog>
