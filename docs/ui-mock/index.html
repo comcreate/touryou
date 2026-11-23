@@ -38,8 +38,9 @@
   --bp-sub:#cfd3d8;--bp-main:#a9afb7;--bp-mark:#6b7280;--bp-dust:#5a6a80;
   --tool-brass:#c27505;--tool-cyan:#0a6cc2;--tool-terra:#d1470f;--tool-green:#0f8552;--tool-violet:#6133b8;--tool-coral:#c7243d;
   --tool-op:.5;--rad:10px;--hd:48px;--bar:60px;
-  /* 火花の粒の塗り: 線の色の割合（残りは白）。明は線の色そのまま（明るい背景の上では暗さで見えるため）、暗は白を多めにして芯を明るくする */
-  --pt-mix:100%;
+  /* 火花の筋の色（熱い順に --sk1 → --sk2 → --sk3 → 線の色）と、閃光の塗り（--sk-fl）・まわりの光（--sk-glow・--sk-glow2）。
+     暗は白 → 黄 → 橙と冷める。明は、白や黄の筋が明るい背景に溶けて見えないので、芯を濃い焦げ茶 → 暗い黄 → 橙にし、橙の光で熱さを出す */
+  --sk1:#4a1d00;--sk2:#8a5800;--sk3:#c2410c;--sk-fl:#ffcf4d;--sk-glow:#e8590c;--sk-glow2:rgba(255,170,0,.55);
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#060910;--bg-glow:#0d1a30;
@@ -55,7 +56,8 @@
   --wire-over:#6b7c96;--blue:#8fbcf5;
   --bp-sub:#183049;--bp-main:#25507a;--bp-mark:#d9b97a;--bp-dust:#a8d4ff;
   --tool-brass:#fabf40;--tool-cyan:#40d9fa;--tool-terra:#fa854d;--tool-green:#40e69e;--tool-violet:#b88cfa;--tool-coral:#fa6b85;
-  --tool-op:.55;--pt-mix:35%;color-scheme:dark;
+  --tool-op:.55;color-scheme:dark;
+  --sk1:#fff;--sk2:#ffe27a;--sk3:#ff9437;--sk-fl:#fff;--sk-glow:#ffb347;--sk-glow2:rgba(255,140,40,.6);
 }}
 :root[data-theme="dark"]{
   --bg:#060910;--bg-glow:#0d1a30;
@@ -71,7 +73,8 @@
   --wire-over:#6b7c96;--blue:#8fbcf5;
   --bp-sub:#183049;--bp-main:#25507a;--bp-mark:#d9b97a;--bp-dust:#a8d4ff;
   --tool-brass:#fabf40;--tool-cyan:#40d9fa;--tool-terra:#fa854d;--tool-green:#40e69e;--tool-violet:#b88cfa;--tool-coral:#fa6b85;
-  --tool-op:.55;--pt-mix:35%;color-scheme:dark;
+  --tool-op:.55;color-scheme:dark;
+  --sk1:#fff;--sk2:#ffe27a;--sk3:#ff9437;--sk-fl:#fff;--sk-glow:#ffb347;--sk-glow2:rgba(255,140,40,.6);
 }
 *{box-sizing:border-box}
 [hidden]{display:none!important}
@@ -249,7 +252,8 @@ input[type=text],input[type=password],select,textarea{font:inherit;font-size:14p
      頭（長さ 10・太さ 6。drop-shadow を 2 重にして強く光らせ、白い芯を重ねる）と尾（長さ 30・太さ 5・薄い）を同じ時間で動かし、濃淡で尾を作る。
      破線の 1 周期を 62 にしたので、1 本の線に流星が 1〜2 つ同時に流れる。1 周期（1.2 秒）で 62 進むので、線の端から端までは約 1.9 秒。
      上り（子から親）は、道を逆向きに書いた path を重ねる。
-   - 火花: 終点に置いたぼけた粒 12 個を、流星の頭が終点に着くころ（時間の 8 割）に飛び散らせて消す。流星と同じ 1.2 秒で、毎回の到着に合う。
+   - 火花: 流星の頭が当たった点（上りは左の出入口の帯、下りは右の箱の縁）に、一瞬の閃光を出し、短く細い光の筋を、流星の来た向きへ跳ね返らせる。
+     流星と同じ 1.2 秒の周期で、毎回の到着（流星の時間の 8 割）に合わせる。
    - 動きを止める設定と prefers-reduced-motion では、流星・火花・枠の光をどれも出さない（破線が周期で並ぶので、animation を切るだけだと線の上で止まって見えるため） */
 .mh,.mhc,.mtl,.msp{display:none}
 html.mt-a .ma,html.mt-b .mb{display:inline}
@@ -261,20 +265,29 @@ html.still :is(.mh,.mhc,.mtl,.msp){display:none!important}
 .mh{fill:none;stroke:var(--c);stroke-width:6;stroke-linecap:round;stroke-dasharray:10 52;stroke-dashoffset:83.6;filter:drop-shadow(0 0 3px var(--c)) drop-shadow(0 0 8px var(--c));animation:mt-h 1.2s linear infinite}
 .mhc{fill:none;stroke:#fff;stroke-width:2.6;stroke-linecap:round;stroke-dasharray:6 56;stroke-dashoffset:79.6;animation:mt-hc 1.2s linear infinite}
 .mtl{fill:none;stroke:var(--c);stroke-width:5;stroke-linecap:round;stroke-dasharray:30 32;stroke-dashoffset:103.6;opacity:.45;animation:mt-t 1.2s linear infinite}
-/* 火花の粒（.msp の g の中の circle.pt を 12 個）: 終点から、ばらばらの向き・距離（.q1〜.q12 の --dx・--dy）・大きさ（r 1.5〜2.9）で飛び散り、
-   飛んだ先で少し落ちて（下へ 6）、薄れて消える。blur と、線の色の drop-shadow 2 重でぼかす。
-   塗り: 明るい背景の上では、粒は暗さで見えるので、明は線の色そのまま（--pt-mix:100%。白を混ぜると背景との比が約 2.4:1 まで下がる）。
-   暗は、線の色 35%・白 65% にして芯を明るくする。
-   本番の CSP の中で作れるよう、SVG の circle（cx・cy・r）と class と、CSS の @keyframes だけで作る（style 属性・グラデーションは使わない）。
-   どの終点でも、多くの粒は左へ飛ぶ（上りの終点では進む向き、下りの終点では箱から跳ね返る向き。右へ飛ぶと、あとから描く箱の下に隠れる） */
-.msp .pt{fill:color-mix(in srgb,var(--c) var(--pt-mix),#fff);opacity:0;transform-box:fill-box;transform-origin:center;filter:blur(.5px) drop-shadow(0 0 1.5px var(--c)) drop-shadow(0 0 4px var(--c));animation:mt-pt 1.2s linear infinite}
-.q1{--dx:-14px;--dy:-6px}.q2{--dx:-9px;--dy:8px}.q3{--dx:-18px;--dy:2px}.q4{--dx:-5px;--dy:-12px}
-.q5{--dx:6px;--dy:-10px}.q6{--dx:-11px;--dy:-12px}.q7{--dx:3px;--dy:11px}.q8{--dx:-16px;--dy:9px}
-.q9{--dx:10px;--dy:4px}.q10{--dx:-7px;--dy:15px}.q11{--dx:-2px;--dy:-17px}.q12{--dx:12px;--dy:-4px}
-/* 位相: 読み込んだ直後の 1 枚に、流星 2 つと火花（粒が出るのは周期の 78% から。始まりは 82% の位置）が入るよう、0.98 秒ぶん進めて始める。
-   2 本目の上りの線（.mt-late）は、さらに半周期（0.6 秒）ずらす */
-.mh,.mhc,.mtl,.msp .pt{animation-delay:-.98s}
-.mt-late,.mt-late .pt{animation-delay:-1.58s}
+/* 火花（.msp の g。高温の鉄粉を鉄板に落としたときのような、壁に当たった光の飛び散り）:
+   - g は transform 属性で当たった点へ動かす（上り: 左の出入口の帯の手前 x 155。下り: 右の箱の縁の手前 x 410 で、scale(-1 1) で左右を返す）。
+     中の形は、当たった点を 0 0 とした座標で書き、どの火花も同じ形を使う。
+   - 閃光（.fl）: 当たった点の小さな円。出た瞬間がいちばん大きく明るく、0.14 秒ほどで縮んで消える。
+   - 筋（.sk）: 当たった点から外へ向かう短い path（pathLength="100"）。破線の 1 つの線分（stroke-dasharray の長さ）と位置（stroke-dashoffset）を動かし、
+     筋が伸びて、飛んで、細く短くなって消えるようにする。色は --sk1 → --sk2 → --sk3 → 線の色（--c）と冷め、translate で少し下へ垂れる。
+     向きは、流星の来た向きへの ±70° の扇で、真後ろに近いほど本数を多く、道を長く（＝速く）する。
+     寿命は 3 種（.sk 0.6 秒・.sk2 0.45 秒・.sk3 0.3 秒）。道の長さ（13〜40）と組み合わせて、長さと速さをばらばらにする。
+   - 下り（.weak）は、上りより弱く: 筋 10 本・道を 7 割・閃光を小さく・全体を 7 割の濃さ。まとめのときは、これまでどおり下りの火花は出さない。
+   - 芯の光: g に drop-shadow を 2 重にかけ、筋と閃光のまわりを弱く光らせる。
+   本番の CSP の中で作れるよう、SVG の g（transform 属性）・path（d・pathLength）と class と、CSS の @keyframes だけで作る（style 属性・グラデーションは使わない） */
+.msp{filter:drop-shadow(0 0 1px var(--sk-glow)) drop-shadow(0 0 3px var(--sk-glow2))}
+.msp.weak{opacity:.7}
+.msp .fl{fill:var(--sk-fl);opacity:0;transform-box:fill-box;transform-origin:center;animation:mt-fl 1.2s ease-out infinite}
+.msp .sk{fill:none;stroke:var(--sk1);stroke-width:1.6;stroke-linecap:round;stroke-dasharray:0 200;opacity:0;animation:mt-sk1 1.2s linear infinite}
+.msp .sk2{animation-name:mt-sk2}.msp .sk3{animation-name:mt-sk3}
+/* 位相: 読み込んだ直後の 1 枚に、流星 2 つと、飛んでいる途中の火花が入るよう、流星を 1.04 秒ぶん進めて始める（周期の 87%。頭が当たってから 0.08 秒）。
+   火花は、流星が当たる時（流星の周期の 80%＝0.96 秒）を自分の 0% にするので、流星より 0.96 秒遅らせる（-1.04 + 0.96 = -0.08 秒）。
+   2 本目の上りの線（.mt-late）は、さらに半周期（0.6 秒）ずらす（流星 -1.64 秒・火花 -0.68 秒） */
+.mh,.mhc,.mtl{animation-delay:-1.04s}
+.msp .fl,.msp .sk{animation-delay:-.08s}
+.mt-late{animation-delay:-1.64s}
+.mt-late .fl,.mt-late .sk{animation-delay:-.68s}
 /* まとめのときの下り（.ma）: 上りより弱く（頭 4・光 1 重・芯 1.6・尾 3.5 で 30%）、遅く（1.8 秒） */
 html.mt-all .mh.ma{stroke-width:4;filter:drop-shadow(0 0 3px var(--c))}
 html.mt-all .mhc.ma{stroke-width:1.6;opacity:.8}
@@ -286,13 +299,36 @@ html.mt-all :is(.mh,.mhc,.mtl).ma{animation-duration:1.8s}
 @keyframes mt-hc{from{stroke-dashoffset:79.6}to{stroke-dashoffset:17.6}}
 /* 尾は、前の端を頭の前の端にそろえる（頭より 20 だけ後ろから始まる） */
 @keyframes mt-t{from{stroke-dashoffset:103.6}to{stroke-dashoffset:41.6}}
-/* 粒: 頭が終点に着くころ（78%）に終点で光り、88% で行き先の 4 分の 3、96% で行き先の近くから下へ落ち始め、100% で 6 落ちて消える */
-@keyframes mt-pt{
-  0%,76%{opacity:0;transform:translate(0,0) scale(1.2)}
-  79%{opacity:1;transform:translate(0,0) scale(1.2)}
-  88%{opacity:1;transform:translate(calc(var(--dx) * .75),calc(var(--dy) * .75)) scale(1)}
-  96%{opacity:.6;transform:translate(calc(var(--dx) * .95),calc(var(--dy) + 3px)) scale(.8)}
-  100%{opacity:0;transform:translate(var(--dx),calc(var(--dy) + 6px)) scale(.6)}}
+/* 閃光: 0%（当たった瞬間）にいちばん大きく、4% で元の大きさ、12%（0.14 秒）で縮んで消える */
+@keyframes mt-fl{
+  0%{opacity:1;transform:scale(1.4)}
+  4%{opacity:1;transform:scale(1)}
+  12%,100%{opacity:0;transform:scale(.3)}}
+/* 筋（寿命 0.6 秒＝周期の 50%）: 当たった点で白く生まれ、6% で一気に伸び（線分 20）、飛びながら黄 → 橙 → 線の色と冷め、
+   細く（1.8 → .4）短く（22 → 4）なって、少し垂れて（下へ 5）消える。線分は道の 96 まで進む。動きは初めが速く、だんだん遅くなる */
+@keyframes mt-sk1{
+  0%{opacity:1;stroke:var(--sk1);stroke-width:1.8;stroke-dasharray:1 200;stroke-dashoffset:0;transform:translate(0,0)}
+  6%{stroke-dasharray:20 200;stroke-dashoffset:-8}
+  20%{stroke:var(--sk2);stroke-width:1.3;stroke-dasharray:22 200;stroke-dashoffset:-44}
+  34%{opacity:.9;stroke:var(--sk3);stroke-width:.9;stroke-dasharray:14 200;stroke-dashoffset:-74;transform:translate(0,2px)}
+  50%{opacity:0;stroke:var(--c);stroke-width:.4;stroke-dasharray:4 200;stroke-dashoffset:-96;transform:translate(0,5px)}
+  50.1%,100%{opacity:0;stroke-dasharray:0 200}}
+/* 筋（寿命 0.45 秒＝37.5%）: mt-sk1 の時間を 4 分の 3 に縮めたもの。垂れは 3 */
+@keyframes mt-sk2{
+  0%{opacity:1;stroke:var(--sk1);stroke-width:1.8;stroke-dasharray:1 200;stroke-dashoffset:0;transform:translate(0,0)}
+  4.5%{stroke-dasharray:20 200;stroke-dashoffset:-8}
+  15%{stroke:var(--sk2);stroke-width:1.3;stroke-dasharray:22 200;stroke-dashoffset:-44}
+  25.5%{opacity:.9;stroke:var(--sk3);stroke-width:.9;stroke-dasharray:14 200;stroke-dashoffset:-74;transform:translate(0,1.5px)}
+  37.5%{opacity:0;stroke:var(--c);stroke-width:.4;stroke-dasharray:4 200;stroke-dashoffset:-96;transform:translate(0,3px)}
+  37.6%,100%{opacity:0;stroke-dasharray:0 200}}
+/* 筋（寿命 0.3 秒＝25%）: mt-sk1 の時間を半分に縮めたもの。垂れは 2 */
+@keyframes mt-sk3{
+  0%{opacity:1;stroke:var(--sk1);stroke-width:1.8;stroke-dasharray:1 200;stroke-dashoffset:0;transform:translate(0,0)}
+  3%{stroke-dasharray:20 200;stroke-dashoffset:-8}
+  10%{stroke:var(--sk2);stroke-width:1.3;stroke-dasharray:22 200;stroke-dashoffset:-44}
+  17%{opacity:.9;stroke:var(--sk3);stroke-width:.9;stroke-dasharray:14 200;stroke-dashoffset:-74;transform:translate(0,1px)}
+  25%{opacity:0;stroke:var(--c);stroke-width:.4;stroke-dasharray:4 200;stroke-dashoffset:-96;transform:translate(0,2px)}
+  25.1%,100%{opacity:0;stroke-dasharray:0 200}}
 /* 案 C: 答え待ち・失敗の箱の縁を、太さ（2 → 5）と光（2px → 14px）をはっきり変えて脈打たせる（線は流さない）。
    読み込んだ直後は強い側から始める（-1s）。まとめのときは、太さ 2 → 3・光 1px → 5px・1.6 秒とひかえめにする（上りの流星を目立たせるため）。
    止めているときは、光を出さない（縁は、ふだんの太さ 2・光なし） */
@@ -614,13 +650,13 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
         </g>
         <path class="trunk" d="M128 187H147"/>
         <rect class="bar" x="147" y="108" width="6" height="158" rx="1"/>
-        <g class="k-ask"><path class="ln human" d="M159 124H185V37H410"/><path class="mtl mb" pathLength="100" d="M410 37H185V124H159"/><path class="mh mb" pathLength="100" d="M410 37H185V124H159"/><path class="mhc mb" pathLength="100" d="M410 37H185V124H159"/><path class="tip" d="M169 119L161 124L169 129"/><g class="msp mb"><circle class="pt q1" cx="159" cy="124" r="2.2"/><circle class="pt q2" cx="159" cy="124" r="1.7"/><circle class="pt q3" cx="159" cy="124" r="2.6"/><circle class="pt q4" cx="159" cy="124" r="1.5"/><circle class="pt q5" cx="159" cy="124" r="1.9"/><circle class="pt q6" cx="159" cy="124" r="2.4"/><circle class="pt q7" cx="159" cy="124" r="1.6"/><circle class="pt q8" cx="159" cy="124" r="2.1"/><circle class="pt q9" cx="159" cy="124" r="1.5"/><circle class="pt q10" cx="159" cy="124" r="1.8"/><circle class="pt q11" cx="159" cy="124" r="2.9"/><circle class="pt q12" cx="159" cy="124" r="1.7"/></g><rect class="pill" x="262" y="28" width="116" height="18" rx="3"/><text class="lab" x="268" y="41.5">↑ 判断 3 分前</text></g>
+        <g class="k-ask"><path class="ln human" d="M159 124H185V37H410"/><path class="mtl mb" pathLength="100" d="M410 37H185V124H159"/><path class="mh mb" pathLength="100" d="M410 37H185V124H159"/><path class="mhc mb" pathLength="100" d="M410 37H185V124H159"/><path class="tip" d="M169 119L161 124L169 129"/><g class="msp mb" transform="translate(155 124)"><path class="fl" d="M-4 0A4 4 0 1 0 4 0A4 4 0 1 0 -4 0Z"/><path class="sk" pathLength="100" d="M0 0L5.2 -13"/><path class="sk" pathLength="100" d="M0 0L10 -13.8"/><path class="sk sk2" pathLength="100" d="M0 0L14.9 -13.4"/><path class="sk" pathLength="100" d="M0 0L20.4 -12.7"/><path class="sk sk2" pathLength="100" d="M0 0L25.8 -10.9"/><path class="sk sk3" pathLength="100" d="M0 0L30.9 -8.3"/><path class="sk sk2" pathLength="100" d="M0 0L35.6 -5"/><path class="sk sk3" pathLength="100" d="M0 0L39.9 -2.1"/><path class="sk sk2" pathLength="100" d="M0 0L38 1.3"/><path class="sk sk3" pathLength="100" d="M0 0L33.8 4.1"/><path class="sk sk2" pathLength="100" d="M0 0L29.2 6.7"/><path class="sk" pathLength="100" d="M0 0L25.4 9.2"/><path class="sk sk2" pathLength="100" d="M0 0L20.3 10.8"/><path class="sk" pathLength="100" d="M0 0L15 11.7"/><path class="sk sk2" pathLength="100" d="M0 0L10.3 12.3"/><path class="sk" pathLength="100" d="M0 0L5.7 11.7"/></g><rect class="pill" x="262" y="28" width="116" height="18" rx="3"/><text class="lab" x="268" y="41.5">↑ 判断 3 分前</text></g>
         <g class="k-req"><path class="ln" d="M159 142H195V57H406"/><path class="tip" d="M402 52L410 57L402 62"/><rect class="pill" x="262" y="48" width="116" height="18" rx="3"/><text class="lab" x="268" y="61.5">↓ 頼み 20 分前</text></g>
         <g class="k-prog"><path class="ln" d="M159 160H205V127H410"/><path class="tip" d="M169 155L161 160L169 165"/><rect class="pill" x="262" y="118" width="116" height="18" rx="3"/><text class="lab" x="268" y="131.5">↑ 進み 6 分前</text></g>
-        <g class="k-req"><path class="ln dash" d="M159 178H215V147H406"/><path class="mtl ma" pathLength="100" d="M159 178H215V147H406"/><path class="mh ma" pathLength="100" d="M159 178H215V147H406"/><path class="mhc ma" pathLength="100" d="M159 178H215V147H406"/><path class="tip" d="M402 142L410 147L402 152"/><g class="msp ma"><circle class="pt q1" cx="406" cy="147" r="2.2"/><circle class="pt q2" cx="406" cy="147" r="1.7"/><circle class="pt q3" cx="406" cy="147" r="2.6"/><circle class="pt q4" cx="406" cy="147" r="1.5"/><circle class="pt q5" cx="406" cy="147" r="1.9"/><circle class="pt q6" cx="406" cy="147" r="2.4"/><circle class="pt q7" cx="406" cy="147" r="1.6"/><circle class="pt q8" cx="406" cy="147" r="2.1"/><circle class="pt q9" cx="406" cy="147" r="1.5"/><circle class="pt q10" cx="406" cy="147" r="1.8"/><circle class="pt q11" cx="406" cy="147" r="2.9"/><circle class="pt q12" cx="406" cy="147" r="1.7"/></g><rect class="pill" x="262" y="138" width="116" height="18" rx="3"/><text class="lab" x="268" y="151.5">↓ 頼み 30 分前</text></g>
+        <g class="k-req"><path class="ln dash" d="M159 178H215V147H406"/><path class="mtl ma" pathLength="100" d="M159 178H215V147H406"/><path class="mh ma" pathLength="100" d="M159 178H215V147H406"/><path class="mhc ma" pathLength="100" d="M159 178H215V147H406"/><path class="tip" d="M402 142L410 147L402 152"/><g class="msp ma weak" transform="translate(410 147) scale(-1 1)"><path class="fl" d="M-3 0A3 3 0 1 0 3 0A3 3 0 1 0 -3 0Z"/><path class="sk" pathLength="100" d="M0 0L7.1 -9.7"/><path class="sk" pathLength="100" d="M0 0L14.4 -9"/><path class="sk sk3" pathLength="100" d="M0 0L21.3 -5.7"/><path class="sk sk2" pathLength="100" d="M0 0L24.8 -3.5"/><path class="sk sk3" pathLength="100" d="M0 0L28 -1.5"/><path class="sk sk2" pathLength="100" d="M0 0L27 0.9"/><path class="sk sk3" pathLength="100" d="M0 0L23.8 2.9"/><path class="sk sk2" pathLength="100" d="M0 0L20.5 4.7"/><path class="sk sk2" pathLength="100" d="M0 0L14.1 7.5"/><path class="sk sk2" pathLength="100" d="M0 0L7.1 8.4"/></g><rect class="pill" x="262" y="138" width="116" height="18" rx="3"/><text class="lab" x="268" y="151.5">↓ 頼み 30 分前</text></g>
         <g class="k-done"><path class="ln over" d="M159 196H215V217H410"/><path class="tip" d="M169 191L161 196L169 201"/><rect class="pill" x="262" y="208" width="116" height="18" rx="3"/><text class="lab" x="268" y="221.5">↑ 済み 55 分前</text></g>
         <g class="k-done"><path class="ln over" d="M159 214H205V237H406"/><path class="tip" d="M402 232L410 237L402 242"/><rect class="pill" x="262" y="228" width="116" height="18" rx="3"/><text class="lab" x="268" y="241.5">↓ 頼み 70 分前</text></g>
-        <g class="k-fail"><path class="ln" d="M159 232H195V307H410"/><path class="mtl mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="mh mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="mhc mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="tip" d="M169 227L161 232L169 237"/><g class="msp mb mt-late"><circle class="pt q1" cx="159" cy="232" r="2.2"/><circle class="pt q2" cx="159" cy="232" r="1.7"/><circle class="pt q3" cx="159" cy="232" r="2.6"/><circle class="pt q4" cx="159" cy="232" r="1.5"/><circle class="pt q5" cx="159" cy="232" r="1.9"/><circle class="pt q6" cx="159" cy="232" r="2.4"/><circle class="pt q7" cx="159" cy="232" r="1.6"/><circle class="pt q8" cx="159" cy="232" r="2.1"/><circle class="pt q9" cx="159" cy="232" r="1.5"/><circle class="pt q10" cx="159" cy="232" r="1.8"/><circle class="pt q11" cx="159" cy="232" r="2.9"/><circle class="pt q12" cx="159" cy="232" r="1.7"/></g><rect class="pill" x="262" y="298" width="116" height="18" rx="3"/><text class="lab" x="268" y="311.5">↑ 失敗 14 分前</text></g>
+        <g class="k-fail"><path class="ln" d="M159 232H195V307H410"/><path class="mtl mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="mh mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="mhc mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="tip" d="M169 227L161 232L169 237"/><g class="msp mb mt-late" transform="translate(155 232)"><path class="fl" d="M-4 0A4 4 0 1 0 4 0A4 4 0 1 0 -4 0Z"/><path class="sk" pathLength="100" d="M0 0L5.2 -13"/><path class="sk" pathLength="100" d="M0 0L10 -13.8"/><path class="sk sk2" pathLength="100" d="M0 0L14.9 -13.4"/><path class="sk" pathLength="100" d="M0 0L20.4 -12.7"/><path class="sk sk2" pathLength="100" d="M0 0L25.8 -10.9"/><path class="sk sk3" pathLength="100" d="M0 0L30.9 -8.3"/><path class="sk sk2" pathLength="100" d="M0 0L35.6 -5"/><path class="sk sk3" pathLength="100" d="M0 0L39.9 -2.1"/><path class="sk sk2" pathLength="100" d="M0 0L38 1.3"/><path class="sk sk3" pathLength="100" d="M0 0L33.8 4.1"/><path class="sk sk2" pathLength="100" d="M0 0L29.2 6.7"/><path class="sk" pathLength="100" d="M0 0L25.4 9.2"/><path class="sk sk2" pathLength="100" d="M0 0L20.3 10.8"/><path class="sk" pathLength="100" d="M0 0L15 11.7"/><path class="sk sk2" pathLength="100" d="M0 0L10.3 12.3"/><path class="sk" pathLength="100" d="M0 0L5.7 11.7"/></g><rect class="pill" x="262" y="298" width="116" height="18" rx="3"/><text class="lab" x="268" y="311.5">↑ 失敗 14 分前</text></g>
         <g class="k-req"><path class="ln" d="M159 250H185V327H406"/><path class="tip" d="M402 322L410 327L402 332"/><rect class="pill" x="262" y="318" width="116" height="18" rx="3"/><text class="lab" x="268" y="331.5">↓ 頼み 40 分前</text></g>
         <g><rect class="pd k-ask" x="146.5" y="120.5" width="7" height="7" rx="1"/><rect class="pd k-req" x="146.5" y="138.5" width="7" height="7" rx="1"/><rect class="pd k-prog" x="146.5" y="156.5" width="7" height="7" rx="1"/><rect class="pd k-req" x="146.5" y="174.5" width="7" height="7" rx="1"/><rect class="pd k-done" x="146.5" y="192.5" width="7" height="7" rx="1"/><rect class="pd k-done" x="146.5" y="210.5" width="7" height="7" rx="1"/><rect class="pd k-fail" x="146.5" y="228.5" width="7" height="7" rx="1"/><rect class="pd k-req" x="146.5" y="246.5" width="7" height="7" rx="1"/></g>
         <g class="nd wait" tabindex="0" role="button" aria-label="支払い方法の画面。あなたの答え待ち">
@@ -1342,8 +1378,8 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   var MT_NAMES = { all: "まとめ", a: "案 A だけ", b: "案 B だけ", c: "案 C だけ" };
   var MT_WHERE = {
     all: "強い流星と火花＝あなたの番／弱い流星＝まだ届かない頼み／縁の光＝答え待ち・失敗",
-    a: "緑の破線（↓ 頼み 30 分前）に流星。右の箱の手前に火花",
-    b: "橙・朱の上りの線に流星。左の出入口に火花",
+    a: "緑の破線（↓ 頼み 30 分前）に流星。右の箱の縁で、弱い火花が左へ跳ね返る",
+    b: "橙・朱の上りの線に流星。左の出入口で、火花が右へ跳ね返る",
     c: "橙・朱の箱の縁が太く光って脈打つ"
   };
   var MT_STILL = "（動きを止めているので出ません）";
