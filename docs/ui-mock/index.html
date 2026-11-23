@@ -310,6 +310,30 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   .win[data-p="left"]{grid-area:left}.win[data-p="graph"]{grid-area:graph}.win[data-p="right"]{grid-area:right}
 }
 </style>
+<style id="tune-css">
+/* ===== 微調整の窓（モック専用。本番には持ち込まない） =====
+   面の透明度とぼかしを、その場で変えて見るための窓。読みやすさを優先して、不透明の面にしている */
+.tune-btn{position:fixed;right:16px;bottom:16px;z-index:60;padding:0 16px;font-size:13px;background:var(--panel-solid);border:1px solid var(--rule);box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.tune{position:fixed;right:16px;bottom:72px;z-index:61;width:min(22rem,calc(100vw - 32px));max-height:calc(100dvh - 136px);overflow:auto;box-sizing:border-box;padding:12px 16px 14px;background:var(--panel-solid);color:var(--ink);border:1px solid var(--rule);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.28);font-size:13.5px}
+.tune[hidden]{display:none}
+.tune-hd{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tune h2{margin:0;font-size:15px}
+.tune fieldset{border:1px solid var(--rule);border-radius:8px;margin:10px 0 0;padding:4px 12px 6px;min-width:0}
+.tune legend{font-weight:700;padding:0 4px}
+.tune-row{display:grid;grid-template-columns:4.5em minmax(0,1fr) 3.4em;align-items:center;gap:8px;min-height:40px}
+.tune-row input[type=range]{width:100%;margin:0;accent-color:var(--accent)}
+.tune-row output{font-variant-numeric:tabular-nums;text-align:right}
+.tune-row.live label{font-weight:700;color:var(--accent)}
+.tune-note{margin:6px 0 0;color:var(--ink2);font-size:12.5px}
+.tune-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.tune-acts button,.tune-hd button{font-size:13px;padding:0 14px}
+.tune textarea{display:block;width:100%;box-sizing:border-box;margin-top:8px;font:12px/1.5 "SFMono-Regular",Menlo,Consolas,monospace;background:var(--panel-solid);color:var(--ink);border:1px solid var(--rule);border-radius:6px;padding:6px 8px;resize:vertical}
+.tune textarea[hidden]{display:none}
+@media (max-width:899px){
+  .tune-btn{bottom:calc(var(--bar) + 12px + env(safe-area-inset-bottom))}
+  .tune{bottom:calc(var(--bar) + 68px + env(safe-area-inset-bottom));max-height:calc(100dvh - var(--bar) - 136px)}
+}
+</style>
 </head>
 <body data-view="left">
 <!-- 全面の背景（WebGL）: 下の script（#bg-webgl）が描く。描けないときは透明のままで、次の SVG が見える -->
@@ -630,6 +654,32 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   </details>
 </div>
 <div style="height:32px"></div>
+
+<!-- 微調整の窓（モック専用。本番には持ち込まない）: 面の透明度とぼかしを、その場で変えて見るためのもの。
+     #tune-css・この窓・#tune-js の 3 つを消せば、まるごと外せる -->
+<button class="tune-btn" id="tune-btn" type="button" aria-expanded="false" aria-controls="tune">調整</button>
+<section class="tune" id="tune" role="dialog" aria-modal="false" aria-labelledby="tune-t" hidden>
+  <div class="tune-hd"><h2 id="tune-t">面の調整（モック専用）</h2><button type="button" id="tune-close" aria-label="調整の窓を閉じる">閉じる</button></div>
+  <p class="tune-note" id="tune-now"></p>
+  <fieldset>
+    <legend>外の窓の塗りの濃さ（不透明度）</legend>
+    <div class="tune-row" data-k="light"><label for="tn-win-l">明<span class="sr">の外の窓</span></label><input type="range" id="tn-win-l" min="0" max="60" step="1"><output for="tn-win-l" id="tn-win-l-o"></output></div>
+    <div class="tune-row" data-k="dark"><label for="tn-win-d">暗<span class="sr">の外の窓</span></label><input type="range" id="tn-win-d" min="0" max="60" step="1"><output for="tn-win-d" id="tn-win-d-o"></output></div>
+  </fieldset>
+  <fieldset>
+    <legend>中の面の塗りの濃さ（不透明度）</legend>
+    <div class="tune-row" data-k="light"><label for="tn-panel-l">明<span class="sr">の中の面</span></label><input type="range" id="tn-panel-l" min="0" max="60" step="1"><output for="tn-panel-l" id="tn-panel-l-o"></output></div>
+    <div class="tune-row" data-k="dark"><label for="tn-panel-d">暗<span class="sr">の中の面</span></label><input type="range" id="tn-panel-d" min="0" max="60" step="1"><output for="tn-panel-d" id="tn-panel-d-o"></output></div>
+  </fieldset>
+  <fieldset>
+    <legend>ぼかし（明・暗で共通）</legend>
+    <div class="tune-row"><label for="tn-blur-o">外の窓</label><input type="range" id="tn-blur-o" min="0" max="40" step="1"><output for="tn-blur-o" id="tn-blur-o-o"></output></div>
+    <div class="tune-row"><label for="tn-blur-i">中の面</label><input type="range" id="tn-blur-i" min="0" max="40" step="1"><output for="tn-blur-i" id="tn-blur-i-o"></output></div>
+  </fieldset>
+  <div class="tune-acts"><button type="button" id="tune-reset">既定に戻す</button><button type="button" id="tune-copy">値を写す</button></div>
+  <p class="tune-note" id="tune-msg" role="status"></p>
+  <textarea id="tune-out" rows="6" readonly aria-label="写す値（CSS 変数の宣言）" hidden></textarea>
+</section>
 
 <script id="bg-webgl">
 /* ============================================================
@@ -1085,6 +1135,112 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
       window.scrollTo(0, 0);
     });
   });
+})();
+</script>
+
+<script id="tune-js">
+/* 微調整の窓（モック専用。本番には持ち込まない）
+   - スライダーの input で、:root の CSS 変数（--win・--panel・--blur-outer・--blur-inner）を直接書き換える
+   - 塗りは明・暗で別々の値を持ち、いま出ている明暗のほうを書く。明暗が変わると、そちらの値で書き直す
+   - 色味（RGB）はいまの CSS の値のまま、アルファだけ変える
+   - 値は localStorage に残す（使えないときは、残さずに動く）。「既定に戻す」で書き換えを外し、CSS の値に戻す */
+(function () {
+  var root = document.documentElement;
+  var KEY = "touryou-mock-tune";
+  var RGB = { win: { light: "244,241,234", dark: "22,20,18" }, panel: { light: "255,255,255", dark: "22,36,60" } };
+  // 既定の値と色味は、上の CSS の 3 か所の定義と合わせておく（CSS を変えたら、ここも変える）
+  var DEF = { winL: 5, winD: 10, panelL: 5, panelD: 5, blurO: 7, blurI: 7 };
+  var MAX = { winL: 60, winD: 60, panelL: 60, panelD: 60, blurO: 40, blurI: 40 };
+  var IDS = { winL: "tn-win-l", winD: "tn-win-d", panelL: "tn-panel-l", panelD: "tn-panel-d", blurO: "tn-blur-o", blurI: "tn-blur-i" };
+  var UNIT = { winL: "%", winD: "%", panelL: "%", panelD: "%", blurO: "px", blurI: "px" };
+  var VARS = ["--win", "--panel", "--blur-outer", "--blur-inner"];
+  var btn = document.getElementById("tune-btn"), panel = document.getElementById("tune");
+  var now = document.getElementById("tune-now"), msg = document.getElementById("tune-msg"), out = document.getElementById("tune-out");
+  var mq = window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)") : null;
+  var val = {}, active = false;
+
+  function clamp(v, max) { v = Math.round(Number(v)); return isFinite(v) ? Math.min(max, Math.max(0, v)) : null; }
+  function load() {
+    try { var s = JSON.parse(localStorage.getItem(KEY) || "null"); return s && typeof s === "object" ? s : null; } catch (e) { return null; }
+  }
+  function save() { try { localStorage.setItem(KEY, JSON.stringify(val)); } catch (e) { /* 残せなくても動く */ } }
+  function forget() { try { localStorage.removeItem(KEY); } catch (e) { /* 同上 */ } }
+  function isDark() { var t = root.getAttribute("data-theme"); return t === "dark" || (t !== "light" && !!(mq && mq.matches)); }
+  function alpha(n) { return String(n / 100).replace(/^0(?=\.)/, ""); }   // 5 → ".05"・0 → "0"
+  function blur(px) { return "blur(" + px + "px) saturate(160%)"; }
+  function rgba(kind, theme, n) { return "rgba(" + RGB[kind][theme] + "," + alpha(n) + ")"; }
+
+  function apply() {
+    var d = isDark(), th = d ? "dark" : "light";
+    if (active) {
+      root.style.setProperty("--win", rgba("win", th, d ? val.winD : val.winL));
+      root.style.setProperty("--panel", rgba("panel", th, d ? val.panelD : val.panelL));
+      root.style.setProperty("--blur-outer", blur(val.blurO));
+      root.style.setProperty("--blur-inner", blur(val.blurI));
+    }
+    now.textContent = "いま効いているのは「" + (d ? "暗" : "明") + "」の塗りの値です（太字の行）。";
+    panel.querySelectorAll(".tune-row[data-k]").forEach(function (r) { r.classList.toggle("live", r.getAttribute("data-k") === th); });
+  }
+  function show() {
+    Object.keys(IDS).forEach(function (k) {
+      document.getElementById(IDS[k]).value = val[k];
+      document.getElementById(IDS[k] + "-o").textContent = val[k] + UNIT[k];
+    });
+  }
+  function cssText() {
+    return "/* 明（:root） */\n" +
+      "--win:" + rgba("win", "light", val.winL) + ";--panel:" + rgba("panel", "light", val.panelL) + ";\n" +
+      "--blur-outer:" + blur(val.blurO) + ";--blur-inner:" + blur(val.blurI) + ";\n" +
+      "/* 暗（prefers-color-scheme:dark と :root[data-theme=\"dark\"] の 2 か所） */\n" +
+      "--win:" + rgba("win", "dark", val.winD) + ";--panel:" + rgba("panel", "dark", val.panelD) + ";";
+  }
+  function open(on) {
+    panel.hidden = !on;
+    btn.setAttribute("aria-expanded", on ? "true" : "false");
+    if (on) { apply(); document.getElementById(IDS.winL).focus(); } else btn.focus();
+  }
+
+  var saved = load();
+  Object.keys(DEF).forEach(function (k) {
+    var v = saved ? clamp(saved[k], MAX[k]) : null;
+    val[k] = v === null ? DEF[k] : v;
+  });
+  active = !!saved;
+  show(); apply();
+
+  Object.keys(IDS).forEach(function (k) {
+    document.getElementById(IDS[k]).addEventListener("input", function (e) {
+      val[k] = clamp(e.target.value, MAX[k]);
+      active = true;
+      document.getElementById(IDS[k] + "-o").textContent = val[k] + UNIT[k];
+      apply(); save();
+    });
+  });
+  btn.addEventListener("click", function () { open(panel.hidden); });
+  document.getElementById("tune-close").addEventListener("click", function () { open(false); });
+  panel.addEventListener("keydown", function (e) { if (e.key === "Escape") { e.preventDefault(); open(false); } });
+  document.getElementById("tune-reset").addEventListener("click", function () {
+    Object.keys(DEF).forEach(function (k) { val[k] = DEF[k]; });
+    active = false;
+    VARS.forEach(function (n) { root.style.removeProperty(n); });
+    forget(); show(); apply();
+    out.hidden = true;
+    msg.textContent = "既定の値に戻しました。";
+  });
+  document.getElementById("tune-copy").addEventListener("click", function () {
+    var text = cssText();
+    out.value = text;
+    function fallback() {
+      out.hidden = false; out.focus(); out.select();
+      msg.textContent = "クリップボードに写せなかったので、下の欄に出しました。選んで写してください。";
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { out.hidden = false; msg.textContent = "値をクリップボードに写しました（下の欄と同じ内容）。"; }, fallback);
+    } else fallback();
+  });
+  // 明暗が変わったら、その明暗の値で書き直す（style の書き換えでは呼ばれないよう、data-theme だけを見る）
+  new MutationObserver(apply).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+  if (mq) { if (mq.addEventListener) mq.addEventListener("change", apply); else if (mq.addListener) mq.addListener(apply); }
 })();
 </script>
 </body>
