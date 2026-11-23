@@ -1,6 +1,6 @@
 /**
  * 関係図の線（#89。設計の下書き 7 節）。`d` は数だけで組む（命令 M・L・Q・Z）。
- * 彗星は、線と同じ `d` の path に mask をかけて描く（`cometSpanOf` は、その走る範囲を `d` から読む）。
+ * 流星は、線と同じ `d` の path を重ね、破線の位置を CSS で動かして描く（`meteorEndOf` は、火花が当たる点を `d` から読む）。
  */
 import { BOX_H, BOX_W, type Layout, type LayoutPos, MARGIN, ROW_H } from "./graph-layout.js";
 import { PATH_PATTERN } from "./svg-el.js";
@@ -29,7 +29,7 @@ export function pathD(cmds: readonly (readonly [string, ...number[]])[]): string
 export type Dir = "up" | "down";
 
 export interface Lane {
-  /** 線の道（矢印の手前まで）。彗星もこの道を走る。 */
+  /** 線の道（矢印の手前まで）。流星もこの道を走る。 */
   readonly d: string;
   /** 矢印の三角。 */
   readonly tip: string;
@@ -142,16 +142,36 @@ export function roleIconOf(integrator: boolean): string {
       ]);
 }
 
-/** 彗星の尾の長さ（x 方向）。 */
-export const COMET_TAIL = 140;
+/**
+ * 流星が着く点（道 `d` の最後の点。命令 M・L・Q の引数は、すべて x y の組）。上りの火花は、ここへ当てる。
+ */
+export function meteorEndOf(d: string): { readonly x: number; readonly y: number } {
+  const nums = (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+  if (!PATH_PATTERN.test(d) || /[AC]/.test(d) || nums.length < 2 || nums.length % 2 !== 0)
+    throw new Error("path: meteor");
+  return { x: nums[nums.length - 2] as number, y: nums[nums.length - 1] as number };
+}
 
 /**
- * 彗星が走る道の、始点と終点の x。`d` の最初と最後の点（命令 M・L・Q・C の引数は、すべて x y の組）。
- * 終点が始点より左なら、彗星は左へ走る。曲線は端の点だけを見る（尾は、線と同じ `d` の mask で切るので、線から外れない）。
+ * 上りの火花（当たった点 0 0 から、流星の来た向き＝右側へ跳ね返る光の筋）。`[d, 寿命の種類]`。
+ * 寿命は `sk`（0.6 秒）・`sk2`（0.45 秒）・`sk3`（0.3 秒）。真後ろに近いほど本数が多く、道が長い（docs/ui-mock/index.html の「まとめ」と同じ形）。
  */
-export function cometSpanOf(d: string): { readonly from: number; readonly to: number } {
-  const nums = (d.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
-  if (!PATH_PATTERN.test(d) || /A/.test(d) || nums.length < 2 || nums.length % 2 !== 0)
-    throw new Error("path: comet");
-  return { from: nums[0] as number, to: nums[nums.length - 2] as number };
-}
+export const SPARK_FLASH = "M-4 0A4 4 0 1 0 4 0A4 4 0 1 0 -4 0Z";
+export const SPARK_STREAKS: readonly (readonly [string, "sk" | "sk sk2" | "sk sk3"])[] = [
+  ["M0 0L6.7 -16.7", "sk"],
+  ["M0 0L11.8 -16.2", "sk"],
+  ["M0 0L15.6 -14.1", "sk sk2"],
+  ["M0 0L20.4 -12.7", "sk"],
+  ["M0 0L25.8 -10.9", "sk sk2"],
+  ["M0 0L30.9 -8.3", "sk sk3"],
+  ["M0 0L35.6 -5", "sk sk2"],
+  ["M0 0L39.9 -2.1", "sk sk3"],
+  ["M0 0L38 1.3", "sk sk2"],
+  ["M0 0L33.8 4.1", "sk sk3"],
+  ["M0 0L29.2 6.7", "sk sk2"],
+  ["M0 0L25.4 9.2", "sk"],
+  ["M0 0L20.3 10.8", "sk sk2"],
+  ["M0 0L15.8 12.3", "sk"],
+  ["M0 0L12.2 14.6", "sk sk2"],
+  ["M0 0L7.9 16.2", "sk"],
+];

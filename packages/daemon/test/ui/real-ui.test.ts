@@ -168,7 +168,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   const csp = () => page.evaluate(() => (window as Win).__csp ?? []);
   const animations = () =>
     page.evaluate(() =>
-      [...document.querySelectorAll("#graph path.line, #graph .comet-win")].map(
+      [...document.querySelectorAll("#graph path.line, #graph .msp .sk")].map(
         (e) => getComputedStyle(e).animationName,
       ),
     );
@@ -745,11 +745,19 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(problems).toEqual([]);
   });
 
-  it("設定の窓の「動きを止める」で、図の線も彗星も止まる。戻すと動く。再読み込みのあとも残る", async () => {
+  it("設定の窓の「動きを止める」で、図の線も流星・火花も止まる（流星・火花は出ない）。戻すと動く。再読み込みのあとも残る", async () => {
+    const meteors = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll("#graph :is(.mh, .mhc, .mtl, .msp)")].map(
+          (e) => getComputedStyle(e).display,
+        ),
+      );
     expect((await animations()).some((a) => a !== "none")).toBe(true);
+    expect((await meteors()).some((d) => d !== "none")).toBe(true);
     await page.click("#open-settings");
     await page.click("#set-still");
     expect(new Set(await animations())).toEqual(new Set(["none"]));
+    expect(new Set(await meteors())).toEqual(new Set(["none"]));
     await page.click("#close-settings");
     await reopen();
     expect(new Set(await animations())).toEqual(new Set(["none"]));

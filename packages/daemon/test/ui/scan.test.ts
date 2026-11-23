@@ -56,28 +56,32 @@ describe("図の自前のコード（走査）", () => {
     expect([...all.matchAll(/setAttributeNS/g)]).toHaveLength(1);
     expect(src("svg-el.ts")).toMatch(/document\.createElementNS\(NS, tag\)/);
     const tags = ["svg", "g", "path", "rect", "text", "title"];
-    for (const tag of [...tags, "defs", "mask", "linearGradient", "stop"])
-      expect(src("svg-el.ts")).toContain(`"${tag}",`);
+    for (const tag of tags) expect(src("svg-el.ts")).toContain(`"${tag}",`);
+    // 彗星の mask・グラデーションは、流星に置き換えたので、タグも許可しない
+    for (const tag of ["defs", "mask", "linearGradient", "stop"])
+      expect(src("svg-el.ts")).not.toContain(`"${tag}",`);
     expect(src("svg-el.ts")).toContain('new Set(["x", "y", "width", "height", "rx"])');
   });
 
-  it("要素の style・offsetPath には触らない（彗星は SVG の mask と CSS のクラスだけで動く）", () => {
+  it("要素の style・offsetPath には触らない（流星・火花は SVG の path・g と CSS のクラスだけで動く）", () => {
     expect([...all.matchAll(/offsetPath/g)]).toHaveLength(0);
     expect([...all.matchAll(/\.style\b/g)]).toHaveLength(0);
   });
 
-  it("彗星の線は、g-sent の線と同じ d の重ね線で、mask・id は comet-mask-N・comet-fade-N の形だけ", () => {
+  it("流星は、線と同じ d の重ね線（pathLength=100）で、彗星（mask・id）は残っていない。属性は pathLength=100 と translate だけ", () => {
     const entry = src("graph-entry.ts");
-    // 重ね線は、線の `d` をそのまま使い、mask で切る（尾は線から外れない）
-    expect(entry).toContain('svgEl("path", { class: "comet", d, mask: `url(#${mask})` })');
-    expect(entry).toContain('look.endsWith("g-sent")) svg.append(...cometOf(s.d, w, h))');
-    expect(entry).toContain("const fade = `comet-fade-${seq}`;");
-    expect(entry).toContain("const mask = `comet-mask-${seq}`;");
-    // mask の範囲は図の座標（水平線の外接箱は高さ 0 で、既定の範囲では描かれない）
-    expect(entry).toContain('maskUnits: "userSpaceOnUse"');
+    // 重ね線は、線の `d` をそのまま使う（尾・頭・芯の 3 本）
+    expect(entry).toContain('svgEl("path", { class: `${k} ${cls}`, d: s.d, pathLength: 100 })');
+    expect(entry).toContain("if (s.meteor !== undefined) svg.append(...meteorOf(s, look));");
+    // 火花は、強い流星（上りの答え待ち）だけ
+    expect(entry).toContain('if (s.meteor === "strong") svg.append(sparkOf(s, look));');
+    // 流す本数の上限は、上り 3 本・下り 2 本
+    expect(entry).toContain("{ strong: 3, weak: 2 }");
+    expect(entry).not.toMatch(/comet/i);
     const el = src("svg-el.ts");
-    expect(el).toContain("/^comet-(?:mask|fade)-\\d+$/");
-    expect(el).toContain("/^url\\(#(comet-(?:mask|fade)-\\d+)\\)$/");
+    expect(el).not.toMatch(/comet|mask|maskUnits/i);
+    expect(el).toContain("TRANSLATE_PATTERN");
+    expect(el).toContain('if (v !== 100) throw new Error(`svgEl: ${name}`);');
   });
 
   it("合図の受け手は addEventListener だけで付け、どれも destroy で外れる形（signal）。文字列の受け手は使わない", () => {

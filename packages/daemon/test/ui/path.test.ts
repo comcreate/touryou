@@ -17,8 +17,11 @@ import {
   ARROW,
   LANE_GAP,
   laneOf,
+  meteorEndOf,
   pathD,
   roleIconOf,
+  SPARK_FLASH,
+  SPARK_STREAKS,
   trunkOf,
   trunkXOf,
   twigOf,
@@ -114,6 +117,15 @@ describe("svgEl の値の検査", () => {
     expect(svgAttrValue("class", "line ")).toBe("line");
     expect(svgAttrValue("d", "M 1 2 L 3 4 Z")).toBe("M 1 2 L 3 4 Z");
     expect(svgAttrValue("viewBox", "0 0 100 50")).toBe("0 0 100 50");
+    // 流星・火花（段階 ④）：pathLength は 100 だけ、transform は translate(x y) だけ
+    expect(svgAttrValue("pathLength", 100)).toBe("100");
+    expect(svgAttrValue("transform", "translate(155 -124.5)")).toBe("translate(155 -124.5)");
+    expect(svgAttrValue("class", "mh up wait weak late")).toBe("mh up wait weak late");
+    expect(svgAttrValue("class", "msp up wait")).toBe("msp up wait");
+    expect(svgAttrValue("class", "sk sk2")).toBe("sk sk2");
+    expect(svgAttrValue("d", "M-4 0A4 4 0 1 0 4 0A4 4 0 1 0 -4 0Z")).toBe(
+      "M-4 0A4 4 0 1 0 4 0A4 4 0 1 0 -4 0Z",
+    );
     for (const [k, v] of [
       ["x", "1"],
       ["x", Number.POSITIVE_INFINITY],
@@ -125,11 +137,46 @@ describe("svgEl の値の検査", () => {
       ["d", "M 0 0 url(#x)"],
       ["d", "M0 0');x:y"],
       ["viewBox", "0 0 1"],
+      ["pathLength", "100"],
+      ["pathLength", 99],
+      ["transform", "scale(2)"],
+      ["transform", "translate(1 2) rotate(3)"],
+      ["mask", "url(#comet-mask-1)"],
+      ["id", "comet-mask-1"],
       ["href", "javascript:alert(1)"],
       ["onclick", "x"],
       ["style", "x"],
     ] as const)
       expect(() => svgAttrValue(k, v), `${k}=${String(v)}`).toThrow();
+  });
+});
+
+describe("流星・火花（段階 ④）", () => {
+  it("meteorEndOf は、道の最後の点。上りの道は子から親へ書いてあるので、親の幹の側（左）の端になる", () => {
+    const L = layoutOf([
+      { id: "r", parentId: null },
+      { id: "a", parentId: "r" },
+    ]);
+    const P = must(L.pos.get("r"));
+    const C = must(L.pos.get("a"));
+    const up = laneOf(P, C, "up");
+    expect(meteorEndOf(up.d)).toEqual({ x: trunkXOf(P) + ARROW, y: C.cy - LANE_GAP });
+    const down = laneOf(P, C, "down");
+    expect(meteorEndOf(down.d)).toEqual({ x: C.x - ARROW, y: C.cy + LANE_GAP });
+    // 曲線・円弧は、端の点が決まらないので受けない
+    expect(() => meteorEndOf("M 0 0 C 1 1 2 2 3 3")).toThrow();
+    expect(() => meteorEndOf("M 0 0 A 1 1 0 1 0 2 0")).toThrow();
+  });
+  it("火花の形は、svgEl が通す d で、筋は 16 本・寿命は 3 種、道は当たった点から右側（流星の来た向き）へ向かう", () => {
+    expect(PATH_PATTERN.test(SPARK_FLASH)).toBe(true);
+    expect(SPARK_STREAKS).toHaveLength(16);
+    for (const [d, k] of SPARK_STREAKS) {
+      expect(PATH_PATTERN.test(d), d).toBe(true);
+      expect(d.startsWith("M0 0L"), d).toBe(true);
+      expect(nums(d)[2], d).toBeGreaterThan(0); // x は右向き
+      expect(["sk", "sk sk2", "sk sk3"]).toContain(k);
+    }
+    expect(new Set(SPARK_STREAKS.map(([, k]) => k)).size).toBe(3);
   });
 });
 

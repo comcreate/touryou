@@ -70,6 +70,19 @@ depends-on: ["spec-touryou-ui"]
 - **凡例**：丸薬（不透明の面・細い縁・角の丸 999px）。線の見方の 3 行（`legend.delivered` 実線・`legend.sent` 破線・`legend.unknown` 点線。日英）を足した（線を実線にしたので、線の形に意味が付いたため）。文言は「・」で 2 つの状態に読めないようにし、形は見本の線で示す。
 - **入れなかったもの**：親の右の細いバー（`.bar`）・モックの折れ線（本番の線は直線）・拡大縮小のボタンの 44px 化と左上への移動（`FIT_TOP`・隠した件数の札の位置に関わるので、段階 2 の窓の組み直しのあとに別に決める）・凡例の `details` 化。
 
+# 5.6 段階 4 の設計（流星・火花・枠の光。描画の層だけ）
+
+- **範囲**：`svg-el.ts`・`graph-path.ts`・`graph-entry.ts`・`app-text.ts`（凡例の文）・`ui-assets.ts`（CSS と凡例の HTML）。API・表示モデル（`ui-view.ts`・`graph-model.ts`）・保存先は変えない。束 `ui-graph-js.ts` は触らない（親が作り直す）。調整の窓・`#meteor=` の比べる用の選びは入れない（「まとめ」の姿だけ）。段階 5（全面の背景）には触らない。
+- **置き換え**：本番の彗星（`g-sent` の `.comet`・mask・`linearGradient`・`@keyframes gcomet`・`COMET_TAIL`・`cometSpanOf`・`svg-el.ts` の `comet-*` の id と `url(#…)`）を消し、モックの流星に置き換えて 1 つにする。`svg-el.ts` のタグから `defs`・`mask`・`linearGradient`・`stop` を外し、属性は `pathLength`（100 だけ）と `transform`（`translate(x y)` だけ）を足した。クラスは `mh`・`mhc`・`mtl`・`msp`・`weak`・`late`・`fl`・`sk`・`sk2`・`sk3`。
+- **どの線に流すか**（`laneShape`）：上りで答え待ち（`l.dir === "up" && l.waiting`）の線は **強い**（流星＋火花）。下りで段が `sent`（届いたか分からない `unknown` は除く＝破線の `g-sent`）の線は **弱い**（流星のみ）。済んだ子の線・それ以外は流さない。上限は上り 3 本・下り 2 本で、`capMeteors` が、`ago.at`（送った時刻）の新しい順に選ぶ（時刻のない線は最後）。強い流星の 2 本目以降は、半周期ずらす（`late`。モックの `.mt-late`）。
+- **流星**：線と同じ `d` の重ね線を 3 本（尾 `mtl`・頭 `mh`・白い芯 `mhc`）、`pathLength=100` で破線の位置（`stroke-dashoffset`）を `@keyframes mt-h`・`mt-hc`・`mt-t` で動かす。本番の上り `d` は子から親へ、下り `d` は親から子へ書いてあるので、道を逆向きに書く必要はない。強い：頭 6・光 2 重・芯 2.6・尾 5 で 45%・1.2 秒。弱い（`.weak`）：頭 4・光 1 重・芯 1.6（80%）・尾 3.5 で 30%・1.8 秒。色は線の色（`--c`。上り・下り・答え待ちの既存の変数を、`.mh,.mhc,.mtl,.msp` にも当てる）。
+- **火花**：強い流星の道の終わり（`meteorEndOf(d)`。上りは親の幹の矢印の根元）に `g.msp`（`transform="translate(x y)"`）を置く。中は閃光 `path.fl` 1 つと光の筋 `path.sk` 16 本（形は `SPARK_FLASH`・`SPARK_STREAKS`。流星の来た向き＝右側へ跳ね返る。寿命 3 種）。下りの火花は「まとめ」では出さない。
+- **箱の縁の光**：本番の箱は HTML の `.gnode` なので、モックの SVG の `stroke-width` の代わりに `box-shadow` を動かす。`.gnode.t-turn`（答え待ち。`--kaki-line`）と `.gnode.s-fail`（失敗。`--shu-line`）に、`mt-glow`（1 つ目の影 1px → 縁の外へ 1px の輪と 5px の光、1.6 秒、往復）。触れたとき・焦点のとき（`:hover`・`:focus-visible`）は、ふだんの縁にする。
+- **動きを止める**：`.still *` と `@media (prefers-reduced-motion: reduce)` の `animation:none!important` で、箱の光は出ない（縁はふだんの太さ 2・光なし）。流星・火花は、破線が周期で並び、animation を切るだけだと線の上に止まって見えるので、`display:none`（`.still :is(.mh,.mhc,.mtl,.msp)` と、reduce の `@media` の中）。
+- **色**：直書きなし。白は新しい変数 `--glint`（明・暗とも `#fff`。`--on-strong` は暗で濃い色になるため使えない）、火花の白の混ぜ方は `--sk-w1`・`--sk-w2`・`--sk-wf`（明 45・22・55%、暗 70・40・80%）で、いずれも `:root` の 3 か所（明・暗の media・`.theme-dark`）の定義に置いた（流星・火花・箱の光の CSS 本体には色の値を書かない）。`color-mix` は段階 1 の決めのとおり、使えない古いブラウザは対象外。
+- **凡例**：4 項目（`legend.meteorStrong`・`legend.meteorWeak`・`legend.glow`・`legend.meteorStill`。日英）。見本は CSS の `linear-gradient`・`box-shadow` で描く（`.sw.mtsw`・`.sw.mtsw.soft`・`.sw.mtglow`）。モックの「強い流星と火花：判断・失敗」は、本番の線の色が上り＝青・下り＝緑・答え待ち＝橙の 3 つで、失敗（朱）の線を持たない（表示モデルを変えない決め）ので、「あなたの答え待ちの頼み」とした。失敗は箱の縁の光で示す。
+- **本番とモックの違い（意図したもの）**：①比べる用の選び・微調整の窓・`#mt-note`・`.mt-cap` の JS はない（本数の上限は `capMeteors`）。②火花の当たる点は、モックの左の出入口の帯でなく、本番の上りの道の終わり。③モックの「失敗の線（朱）」は、本番では箱の光だけで示す。④モックの始まりの位相（`-1.04s`・火花 `-.08s`）は、そのまま持ってきた（読み込み直後の 1 枚に流星と火花が写る）。
+
 # 6. 確かめ（段階 1）
 
 - 試験：`real-ui.test.ts` の設定の窓の Tab の順に「管理」を足し、管理の見出しの言語の確認を替えた。

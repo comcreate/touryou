@@ -100,7 +100,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(box?.width).toBeGreaterThan(50);
   });
 
-  it("段で流れ方が変わる。sent だけに彗星が走り、線と同じ形の重ね線に mask がかかる。終わった子の線は止まる", async () => {
+  it("段で流れ方が変わる。上りの答え待ちに強い流星と火花、下りの未着（sent）に弱い流星が、線と同じ形の重ね線で流れる。終わった子の線は止まる", async () => {
     const anim = (sel: string) =>
       page.evaluate(
         (s: string) => getComputedStyle(document.querySelector(s) as Element).animationName,
@@ -110,47 +110,61 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(await anim("path.line.g-unknown")).toBe("gflow");
     expect(await anim("path.line.g-delivered")).toBe("gflow");
     expect(await anim("path.line.g-done")).toBe("none");
-    // sent は root → m1 の 1 本だけ（unknown は届いたか分からないので彗星を走らせない）
-    expect(await page.locator("svg.glink path.comet").count()).toBe(1);
-    const comet = await page.evaluate(() => {
-      const c = document.querySelector("svg.glink path.comet") as SVGGraphicsElement;
-      const line = document.querySelector("svg.glink path.line.g-sent") as Element;
-      const maskId = /^url\("?#(.+?)"?\)$/.exec(c.getAttribute("mask") ?? "")?.[1] ?? "";
-      const mask = document.getElementById(maskId);
-      const win = mask?.querySelector("rect") as SVGGraphicsElement;
-      const fillId = /^url\("?#(.+?)"?\)$/.exec(win.getAttribute("fill") ?? "")?.[1] ?? "";
+    // 彗星（.comet・mask）は、流星に置き換えたので、もう無い
+    expect(await page.locator("svg.glink .comet, svg.glink mask, svg.glink linearGradient").count()).toBe(0);
+    // 流星は、上りの答え待ち（強い）と、下りの未着 sent（弱い。root → m1 の 1 本だけ。unknown は流さない）の 2 本。1 本につき尾・頭・芯の 3 本
+    expect(await page.locator("svg.glink path.mh").count()).toBe(2);
+    expect(await page.locator("svg.glink path.mh.up.wait").count()).toBe(1);
+    expect(await page.locator("svg.glink path.mh.down.weak").count()).toBe(1);
+    expect(await page.locator("svg.glink path.mhc, svg.glink path.mtl").count()).toBe(4);
+    // 火花は、強い流星の着く点だけ（閃光 1 つと筋 16 本）
+    expect(await page.locator("svg.glink g.msp").count()).toBe(1);
+    expect(await page.locator("svg.glink g.msp path.fl").count()).toBe(1);
+    expect(await page.locator("svg.glink g.msp path.sk").count()).toBe(16);
+    const meteor = await page.evaluate(() => {
+      const pick = (sel: string) => document.querySelector(sel) as SVGGraphicsElement;
+      const strong = pick("svg.glink path.mh.up.wait");
+      const weak = pick("svg.glink path.mh.down.weak");
+      const upLine = pick("svg.glink path.line.up.wait");
+      const downLine = pick("svg.glink path.line.g-sent");
+      const end = (d: string) => (d.match(/-?\d+(?:\.\d+)?/g) ?? []).slice(-2).map(Number);
+      const spark = pick("svg.glink g.msp");
+      const num = (e: Element, p: string) => Number.parseFloat(getComputedStyle(e).getPropertyValue(p));
       return {
-        // 尾が線から外れない: 重ね線は、線と同じ d
-        sameD: c.getAttribute("d") === line.getAttribute("d"),
-        // 水平の線でも描かれる: 線の外接箱は高さ 0 だが、mask の範囲は図の座標で、窓は幅も高さもある
-        lineBoxHeight: (line as SVGGraphicsElement).getBBox().height,
-        maskUnits: mask?.getAttribute("maskUnits"),
-        winW: win.getBBox().width,
-        winH: win.getBBox().height,
-        stops: [...document.querySelectorAll(`#${fillId} stop`)].map((s) => [
-          s.getAttribute("offset"),
-          getComputedStyle(s).stopOpacity,
-        ]),
-        winAnimation: getComputedStyle(win).animationName,
-        cometDisplay: getComputedStyle(c).display,
-        painted: c.getBoundingClientRect().width > 0,
+        // 流星は、線と同じ道（d）の重ね線で、長さを 100 と見なす
+        strongSameD: strong.getAttribute("d") === upLine.getAttribute("d"),
+        weakSameD: weak.getAttribute("d") === downLine.getAttribute("d"),
+        pathLength: strong.getAttribute("pathLength"),
+        // 火花は、上りの道の終わりの点に置く
+        sparkAt: spark.getAttribute("transform"),
+        upEnd: end(upLine.getAttribute("d") ?? ""),
+        strongWidth: num(strong, "stroke-width"),
+        weakWidth: num(weak, "stroke-width"),
+        strongAnim: getComputedStyle(strong).animationName,
+        weakAnim: getComputedStyle(weak).animationName,
+        weakDuration: getComputedStyle(weak).animationDuration,
+        strongDisplay: getComputedStyle(strong).display,
+        sparkDisplay: getComputedStyle(spark).display,
+        painted: strong.getBoundingClientRect().width > 0,
       };
     });
-    expect(comet.sameD).toBe(true);
-    expect(comet.lineBoxHeight).toBe(0);
-    expect(comet.maskUnits).toBe("userSpaceOnUse");
-    expect(comet.winW).toBeGreaterThan(0);
-    expect(comet.winH).toBeGreaterThan(0);
-    // 頭が最も明るく、尾が薄れる（右向き: 0 → 0 → .8 → 1 → 0。左向きは鏡写し）。止まり位置は小さい順
-    const ops = comet.stops.map(([, o]) => o);
-    expect(ops).toHaveLength(5);
-    expect(ops.includes("0.8") && ops.includes("1")).toBe(true);
-    expect(ops.filter((o) => o === "1")).toHaveLength(1);
-    const offs = comet.stops.map(([o]) => Number(o));
-    expect(offs).toEqual([...offs].sort((a, b) => a - b));
-    expect(comet.winAnimation).toMatch(/^gcomet/);
-    expect(comet.cometDisplay).not.toBe("none");
-    expect(comet.painted).toBe(true);
+    expect(meteor.strongSameD).toBe(true);
+    expect(meteor.weakSameD).toBe(true);
+    expect(meteor.pathLength).toBe("100");
+    expect(meteor.sparkAt).toBe(`translate(${meteor.upEnd[0]} ${meteor.upEnd[1]})`);
+    // 強いほうが太く（頭 6 ＞ 4）、弱いほうは遅い（1.8 秒）
+    expect(meteor.strongWidth).toBeGreaterThan(meteor.weakWidth);
+    expect(meteor.strongAnim).toBe("mt-h");
+    expect(meteor.weakAnim).toBe("mt-h");
+    expect(meteor.weakDuration).toBe("1.8s");
+    expect(meteor.strongDisplay).not.toBe("none");
+    expect(meteor.sparkDisplay).not.toBe("none");
+    expect(meteor.painted).toBe(true);
+    // 答え待ちの箱（子 c）の縁に、光の animation が付く
+    const glow = await page.evaluate(
+      () => getComputedStyle(document.querySelector(".gnode.t-turn") as Element).animationName,
+    );
+    expect(glow).toBe("mt-glow");
   });
 
   it("読み取り専用：箱は引っぱっても動かない。拡大（ホイール）は効く", async () => {
@@ -182,19 +196,22 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(problems).toEqual([]);
   });
 
-  it("prefers-reduced-motion のとき、線も彗星も動かず、彗星は隠れる", async () => {
+  it("prefers-reduced-motion のとき、線も箱の光も動かず、流星と火花は隠れる", async () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     const names = await page.evaluate(() =>
-      [...document.querySelectorAll("#g path.line, #g .comet-win")].map(
+      [...document.querySelectorAll("#g path.line, #g .gnode, #g .msp .sk")].map(
         (e) => getComputedStyle(e).animationName,
       ),
     );
     expect(names.length).toBeGreaterThan(0);
     expect(new Set(names)).toEqual(new Set(["none"]));
     const shown = await page.evaluate(() =>
-      [...document.querySelectorAll("#g .comet")].map((e) => getComputedStyle(e).display),
+      [...document.querySelectorAll("#g :is(.mh, .mhc, .mtl, .msp)")].map(
+        (e) => getComputedStyle(e).display,
+      ),
     );
-    expect(shown).toEqual(["none"]);
+    expect(shown.length).toBeGreaterThan(0);
+    expect(new Set(shown)).toEqual(new Set(["none"]));
     await page.emulateMedia({ reducedMotion: "no-preference" });
   });
 

@@ -19,11 +19,12 @@ import {
   stageText,
 } from "./graph-model.js";
 import {
-  COMET_TAIL,
-  cometSpanOf,
   type Lane,
   laneOf,
+  meteorEndOf,
   roleIconOf,
+  SPARK_FLASH,
+  SPARK_STREAKS,
   trunkOf,
   twigOf,
 } from "./graph-path.js";
@@ -54,11 +55,20 @@ interface ReteConn {
 }
 type Schemes = GetSchemes<ReteNode, ReteConn>;
 
+/** 流星の強さ。strong＝上りの「あなたの番」になる線（火花つき）、weak＝下りのまだ届いていない線。 */
+type Meteor = "strong" | "weak";
+/** 流す本数の上限（新しい順に選ぶ）。 */
+const METEOR_MAX: Readonly<Record<Meteor, number>> = { strong: 3, weak: 2 };
+
 interface Shape {
   readonly kind: "twig" | "lane";
   readonly d: string;
   readonly lane?: Lane;
   readonly look?: string;
+  /** 流星を流す線（上限を超えたものは、`capMeteors` が外す）。 */
+  meteor?: Meteor | undefined;
+  /** 2 本目以降の強い流星は、半周期ずらす（そろって動かない）。 */
+  late?: boolean;
   /** 札（種類と「何分前」）と、その外側の段の言葉。 */
   readonly label?: string;
   readonly stage?: string;
@@ -289,6 +299,7 @@ export async function draw(
       }
     });
   }
+  capMeteors(shapes);
   // 人の箱は置かない（利用者の決め）。人の答えなどは、親から子への下りの線の札で表す
   const width = L.width;
   const height = L.height;
@@ -463,10 +474,19 @@ function laneShape(
   const arrow = l.dir === "up" ? "← " : "→ ";
   const label = l.at === null ? `${arrow}${l.label}` : laneAgoText(arrow, l.label, l.at, now, lang);
   const stageWords = stageText(l, lang);
+  // 流星：上りで答え待ちの線は強く（火花つき）、下りでまだ届いていない線（g-sent）は弱く。それ以外は流さない
+  const meteor: Meteor | undefined = finished
+    ? undefined
+    : l.dir === "up" && l.waiting
+      ? "strong"
+      : l.dir === "down" && stage === "sent"
+        ? "weak"
+        : undefined;
   return {
     kind: "lane",
     d: lane.d,
     lane,
+    ...(meteor === undefined ? {} : { meteor }),
     look: `${l.dir}${extra} g-${stage}`,
     label,
     stage: stageWords,
@@ -546,9 +566,10 @@ function drawShape(
     const line = svgEl("path", { class: `line ${look}`, d: s.d });
     line.append(svgEl("title", {}, s.title ?? ""));
     svg.append(line);
-    // 彗星は g-sent の線だけ。線と同じ `d` の重ね線に、尾の薄い窓（mask）をかけて走らせる
-    if (look.endsWith("g-sent")) svg.append(...cometOf(s.d, w, h));
+    // 流星は、線と同じ `d` の重ね線（尾・頭・芯）で、破線の位置を CSS で動かす
+    if (s.meteor !== undefined) svg.append(...meteorOf(s, look));
     svg.append(svgEl("path", { class: `tip ${look}`, d: lane.tip }));
+    if (s.meteor === "strong") svg.append(sparkOf(s, look));
     if (lane.portX !== undefined && lane.portY !== undefined)
       svg.append(
         svgEl("rect", {
@@ -600,59 +621,54 @@ function drawShape(
   element.append(svg);
 }
 
-/** 彗星の mask・グラデーションの `id` の通し番号（線ごとに一意にする）。 */
-let cometSeq = 0;
+/**
+ * 流す本数に上限を付ける（上り 3 本・下り 2 本。新しい順に選び、超えた線は流さない）。
+ * 強い流星は、2 本目以降を半周期ずらす。
+ */
+function capMeteors(shapes: readonly Shape[]): void {
+  for (const kind of ["strong", "weak"] as const) {
+    const at = (s: Shape): number => s.ago?.at ?? Number.NEGATIVE_INFINITY;
+    const sorted = shapes.filter((s) => s.meteor === kind).sort((a, b) => at(b) - at(a));
+    sorted.forEach((s, i) => {
+      if (i >= METEOR_MAX[kind]) s.meteor = undefined;
+      else if (kind === "strong" && i % 2 === 1) s.late = true;
+    });
+  }
+}
+
+/** 線の色（`--c`）を決めるクラスだけ（向きと答え待ち）。濃さ（a1〜a4）は流星に要らない。 */
+const colorOf = (look: string): string =>
+  look
+    .split(" ")
+    .filter((c) => c === "up" || c === "down" || c === "wait")
+    .join(" ");
 
 /**
- * 線 `d` の上を走る彗星：defs（グラデーション・mask）と、`d` と同じ形の重ね線。
- * mask の中の窓（rect）は、走る範囲＋尾の長さ。CSS の translate（幅の 100%）で動かす。
- * 窓は幅が 0 でない rect なので、水平・垂直の線でも描かれる。
+ * 線 `d` の上を流れる流星：`d` と同じ道の重ね線 3 本（尾・頭・白い芯）。
+ * `pathLength` を 100 と見なし、破線の位置（`stroke-dashoffset`）を CSS の keyframes で動かす（線ごとに長さを測らない）。
+ * 上りの `d` は子から親へ、下りは親から子へ書いてあるので、向きはそのまま流れる向きになる。
  */
-function cometOf(d: string, w: number, h: number): SVGElement[] {
-  const { from, to } = cometSpanOf(d);
-  const seq = ++cometSeq;
-  const fade = `comet-fade-${seq}`;
-  const mask = `comet-mask-${seq}`;
-  const right = to >= from;
-  const len = Math.abs(to - from);
-  const span = len + COMET_TAIL;
-  // 頭が最も明るく、尾が薄れる（0 透明 → 70% で .8 → 95% で 1 → 100% で透明）。頭は進む向きの端
-  const t = COMET_TAIL / span;
-  const stops: readonly (readonly [number, string])[] = right
-    ? [
-        [0, "comet-clear"],
-        [1 - t, "comet-clear"],
-        [1 - t + 0.7 * t, "comet-mid"],
-        [1 - t + 0.95 * t, "comet-lit"],
-        [1, "comet-clear"],
-      ]
-    : [
-        [0, "comet-clear"],
-        [0.05 * t, "comet-lit"],
-        [0.3 * t, "comet-mid"],
-        [t, "comet-clear"],
-        [1, "comet-clear"],
-      ];
-  const gradient = svgEl("linearGradient", { id: fade });
-  for (const [offset, cls] of stops) gradient.append(svgEl("stop", { offset, class: cls }));
-  const win = svgEl("rect", {
-    class: right ? "comet-win" : "comet-win comet-win-left",
-    x: right ? from - span : from,
-    y: 0,
-    width: span,
-    height: h,
-    fill: `url(#${fade})`,
-  });
-  const maskEl = svgEl("mask", {
-    id: mask,
-    maskUnits: "userSpaceOnUse",
-    x: 0,
-    y: 0,
-    width: w,
-    height: h,
-  });
-  maskEl.append(win);
-  const defs = svgEl("defs");
-  defs.append(gradient, maskEl);
-  return [defs, svgEl("path", { class: "comet", d, mask: `url(#${mask})` })];
+function meteorOf(s: Shape, look: string): SVGElement[] {
+  const cls = [colorOf(look), s.meteor === "weak" ? "weak" : "", s.late === true ? "late" : ""]
+    .filter((c) => c !== "")
+    .join(" ");
+  return ["mtl", "mh", "mhc"].map((k) =>
+    svgEl("path", { class: `${k} ${cls}`, d: s.d, pathLength: 100 }),
+  );
+}
+
+/**
+ * 上りの流星が着く点（道の終わり）の火花：閃光 1 つと、流星の来た向き（右側）へ跳ね返る光の筋 16 本。
+ * `g` を `transform` で当たった点へ動かし、中の形は当たった点を `0 0` とした座標で書く。
+ */
+function sparkOf(s: Shape, look: string): SVGElement {
+  const { x, y } = meteorEndOf(s.d);
+  const cls = ["msp", colorOf(look), s.late === true ? "late" : ""]
+    .filter((c) => c !== "")
+    .join(" ");
+  const at = `translate(${Math.round(x * 10) / 10} ${Math.round(y * 10) / 10})`;
+  const g = svgEl("g", { class: cls, transform: at });
+  g.append(svgEl("path", { class: "fl", d: SPARK_FLASH }));
+  for (const [d, k] of SPARK_STREAKS) g.append(svgEl("path", { class: k, d, pathLength: 100 }));
+  return g;
 }
