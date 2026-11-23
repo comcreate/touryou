@@ -45,8 +45,9 @@ export const UI_HTML = `<!doctype html>
 <link rel="stylesheet" href="/ui/app.css">
 </head>
 <body>
-<p id="live" class="sr" aria-live="polite"></p><header class="top"><h1 data-t="page.title">touryou 状態画面</h1><span id="status" class="status" data-t="conn.none">未接続</span><span id="daemon-where" class="status" hidden></span><span class="tools"><button id="open-settings" class="quiet sm gear" type="button" data-t-aria="settings.title" data-t-title="settings.title" aria-label="設定" title="設定" aria-haspopup="dialog" aria-controls="settings"><span aria-hidden="true">⚙</span></button></span></header>
+<p id="live" class="sr" aria-live="polite"></p><header class="top"><h1 data-t="page.title">touryou 状態画面</h1><span id="status" class="status" data-t="conn.none">未接続</span><span id="daemon-where" class="status" hidden></span><span class="tools"><button id="open-settings" class="quiet sm gear ib" type="button" data-t-aria="settings.title" data-t-title="settings.title" aria-label="設定" title="設定" aria-haspopup="dialog" aria-controls="settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path class="teeth" d="M12 2L12 5M12 19L12 22M2 12L5 12M19 12L22 12M4.9 4.9L7 7M17 17L19.1 19.1M4.9 19.1L7 17M17 7L19.1 4.9"/><path d="M12 5A7 7 0 1 0 12 19A7 7 0 1 0 12 5Z"/><path d="M12 9A3 3 0 1 0 12 15A3 3 0 1 0 12 9Z"/></svg></button></span></header>
 <dialog id="settings" class="settings" aria-labelledby="settings-title"><h2 id="settings-title" data-t="settings.title">設定</h2>
+<div class="set-cols">
 <fieldset><legend data-t="settings.a11y">アクセシビリティ</legend>
 <label class="opt"><input id="set-still" type="checkbox"> <span data-t="settings.still">動きを止める</span></label><p class="note" data-t="settings.stillNote">新しい項目の入る動き・線を流れる彗星・光る縁などを止めます。OS の「視差効果を減らす」を入れているときは、ここを切っていても止まります。</p>
 <div role="radiogroup" aria-labelledby="set-theme-label" class="opts"><span id="set-theme-label" class="opts-label" data-t="settings.theme">明暗</span>
@@ -62,8 +63,15 @@ export const UI_HTML = `<!doctype html>
 <div class="policy-row"><button id="policy-reload" class="sm" type="button" data-t="policy.reload">設定を読み込み直す</button></div>
 <div id="policy-rules" class="policy-rules"></div>
 <div class="policy-add"><label for="policy-list" class="sr" data-t="policy.listLabel">規則の種類</label><select id="policy-list"><option value="allow" data-t="policy.allow">allow（許す）</option><option value="deny" data-t="policy.deny">deny（禁じる）</option><option value="ask" data-t="policy.ask">ask（人に確かめる）</option><option value="autoApprove" data-t="policy.autoApprove">autoApprove（自動で承認）</option></select><label for="policy-rule" class="sr" data-t="policy.ruleLabel">足す規則</label><input id="policy-rule" type="text" maxlength="1024" autocomplete="off" spellcheck="false" placeholder="Bash(git status:*)"><button id="policy-add" class="sm" type="button" data-t="policy.add">足す</button></div><p id="policy-problem" class="error" hidden></p></fieldset>
+</div>
 <p class="note" data-t="settings.kept">選んだものは、このブラウザに残ります。</p>
+<div class="set-admin"><button id="to-admin" class="danger ib" type="button" aria-haspopup="dialog" aria-controls="admin"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3L22 20L2 20Z"/><path d="M12 9L12 14"/><path d="M12 17L12 17.5"/></svg><span data-t="admin.open">管理（取り消せない操作を含む）…</span></button></div>
 <div class="settings-actions"><button id="close-settings" type="button" data-t="settings.close">閉じる</button></div></dialog>
+<dialog id="admin" class="settings admin-dlg" aria-labelledby="admin-title"><h2 id="admin-title" tabindex="-1" data-t="admin.title">管理（取り消せない操作を含む）</h2><p class="warn" data-t="admin.warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
+<section id="confirm-admin" class="confirm" hidden></section>
+<h3 data-t="admin.purge">アーカイブした作業の最終削除と、自動の削除の保留</h3><div id="purge"></div>
+<h3 data-t="admin.kept">捨てた作業の保管</h3><div id="kept"></div>
+<div class="settings-actions"><button id="close-admin" type="button" data-t="admin.close">閉じる</button></div></dialog>
 <main>
 <section id="auth" hidden>
 <h2 data-t="auth.title">人間のトークン</h2>
@@ -79,9 +87,6 @@ export const UI_HTML = `<!doctype html>
 <section class="sec"><h2 data-t="flows.title">やり取り</h2><p class="lead" data-t="flows.lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button></div><div id="graph-filter" class="seg" hidden><button id="hide-finished" class="quiet sm" type="button" aria-pressed="false" data-t="view.hideFinished">止めた・済んだ子を隠す</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span><span data-t="legend.up">← 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">→ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
 <section class="sec"><h2 data-t="cards.title">作業ごとのようす</h2><p class="lead" data-t="cards.lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
 <details id="finished" class="finished"><summary id="finished-summary" data-t="cards.finishedTitle">終わった作業</summary><div id="finished-cards" class="cards"></div></details></section>
-<details class="admin"><summary data-t="admin.title">管理（まれに使う操作）</summary><p class="warn" data-t="admin.warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
-<h2 data-t="admin.purge">アーカイブした作業の最終削除と、自動の削除の保留</h2><div id="purge"></div>
-<h2 data-t="admin.kept">捨てた作業の保管</h2><div id="kept"></div></details>
 </section>
 </main>
 <script src="/ui/app.js"></script>
@@ -90,9 +95,9 @@ export const UI_HTML = `<!doctype html>
 </html>
 `;
 
-export const UI_CSS = `:root{color-scheme:light dark;--bg:#f3efe6;--sheet:#fbf9f4;--fg:#22201c;--muted:#5b5650;--line:#d8d0c0;--card:#fbf9f4;--blocking:#a3261c;--failed:#a3261c;--ok:#2f6b45;--ai:#2a4f8f;--ai-2:#4b6492;--ai-3:#6b7891;--kaki:#b85200;--kaki-soft:#fbe6d2;--kiiro:#7a6000;--kiiro-soft:#f4ecc8;--shu:#a3261c;--shu-soft:#f7dfdb;--matsu:#2f6b45;--matsu-soft:#dcebdf;--grid:#e7e0d1;--on-strong:#fff}
-@media (prefers-color-scheme: dark){:root:not(.theme-light){--bg:#16181c;--sheet:#1e2126;--fg:#ebe6dc;--muted:#a39d93;--line:#363a42;--card:#1e2126;--blocking:#ff8c80;--failed:#ff8c80;--ok:#7fc495;--ai:#8fb0ea;--ai-2:#8aa2cc;--ai-3:#8d97aa;--kaki:#ff9a3c;--kaki-soft:#3b2614;--kiiro:#d9b84a;--kiiro-soft:#332b10;--shu:#ff8c80;--shu-soft:#3d1b18;--matsu:#7fc495;--matsu-soft:#18301f;--grid:#23262c;--on-strong:#16181c}}
-:root.theme-dark{color-scheme:dark;--bg:#16181c;--sheet:#1e2126;--fg:#ebe6dc;--muted:#a39d93;--line:#363a42;--card:#1e2126;--blocking:#ff8c80;--failed:#ff8c80;--ok:#7fc495;--ai:#8fb0ea;--ai-2:#8aa2cc;--ai-3:#8d97aa;--kaki:#ff9a3c;--kaki-soft:#3b2614;--kiiro:#d9b84a;--kiiro-soft:#332b10;--shu:#ff8c80;--shu-soft:#3d1b18;--matsu:#7fc495;--matsu-soft:#18301f;--grid:#23262c;--on-strong:#16181c}
+export const UI_CSS = `:root{color-scheme:light dark;--bg:#f1f2f3;--sheet:#fbfbfa;--fg:#1d1f22;--muted:#474c53;--line:#c4c8cd;--card:#fbfbfa;--blocking:#d0210f;--failed:#d0210f;--ok:#0f7d44;--ai:#0066d9;--ai-2:#3f5f96;--ai-3:#6b7891;--kaki:#b54c00;--kaki-soft:#fdeee0;--kiiro:#806100;--kiiro-soft:#f3ebc6;--shu:#d0210f;--shu-soft:#fde8e4;--matsu:#0f7d44;--matsu-soft:#e4f4e9;--kaki-line:#e06400;--matsu-line:#10994f;--blue-line:#2b7fea;--shu-line:#e8341f;--kiiro-line:#a87e00;--wire-over:#78828f;--grid:#e4e6e9;--on-strong:#fff;--dlg:rgba(244,244,242,.6);--blur-dlg:blur(16px) saturate(160%);--glass-edge:rgba(255,255,255,.45);--shadow:0 4px 16px rgba(0,0,0,.05);--hl:inset 0 1px 0 rgba(255,255,255,.7)}
+@media (prefers-color-scheme: dark){:root:not(.theme-light){--bg:#060910;--sheet:#0c1424;--fg:#e9edf3;--muted:#a7b2c2;--line:#2a3850;--card:#0c1424;--blocking:#ff8f84;--failed:#ff8f84;--ok:#7fd29b;--ai:#8fbcf5;--ai-2:#8aa2cc;--ai-3:#8d97aa;--kaki:#ffa04a;--kaki-soft:#432812;--kiiro:#e2c250;--kiiro-soft:#3a3014;--shu:#ff8f84;--shu-soft:#471e1b;--matsu:#7fd29b;--matsu-soft:#173626;--kaki-line:var(--kaki);--matsu-line:var(--matsu);--blue-line:var(--ai);--shu-line:var(--shu);--kiiro-line:var(--kiiro);--wire-over:#6b7c96;--grid:#16223a;--on-strong:#0a0f18;--dlg:rgba(22,20,18,.6);--glass-edge:rgba(255,245,235,.12);--shadow:0 8px 32px rgba(0,0,0,.35);--hl:inset 0 1px 0 rgba(255,245,235,.12)}}
+:root.theme-dark{color-scheme:dark;--bg:#060910;--sheet:#0c1424;--fg:#e9edf3;--muted:#a7b2c2;--line:#2a3850;--card:#0c1424;--blocking:#ff8f84;--failed:#ff8f84;--ok:#7fd29b;--ai:#8fbcf5;--ai-2:#8aa2cc;--ai-3:#8d97aa;--kaki:#ffa04a;--kaki-soft:#432812;--kiiro:#e2c250;--kiiro-soft:#3a3014;--shu:#ff8f84;--shu-soft:#471e1b;--matsu:#7fd29b;--matsu-soft:#173626;--kaki-line:var(--kaki);--matsu-line:var(--matsu);--blue-line:var(--ai);--shu-line:var(--shu);--kiiro-line:var(--kiiro);--wire-over:#6b7c96;--grid:#16223a;--on-strong:#0a0f18;--dlg:rgba(22,20,18,.6);--glass-edge:rgba(255,245,235,.12);--shadow:0 8px 32px rgba(0,0,0,.35);--hl:inset 0 1px 0 rgba(255,245,235,.12)}
 :root.theme-light{color-scheme:light}
 *{box-sizing:border-box}
 html{background:var(--bg)}
@@ -113,9 +118,25 @@ button.primary,button.go{background:var(--kaki);border-color:var(--kaki);color:v
 button.quiet{background:transparent}
 button.sm{font-size:12.5px;padding:2px 10px}
 button.gear{font-size:16px;line-height:1;padding:3px 8px}
-dialog.settings{background:var(--sheet);color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:16px 20px;width:min(28rem,calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto}
+.ib{display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.ic{width:1.15em;height:1.15em;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.gear .ic{width:20px;height:20px}.gear .teeth{stroke-width:4;stroke-linecap:butt}
+button.gear{min-width:44px;min-height:44px;padding:0;border:1.5px solid var(--muted);border-radius:50%;background:var(--sheet)}button.gear:hover{border-color:var(--ai)}
+dialog.settings{background:var(--dlg);-webkit-backdrop-filter:var(--blur-dlg);backdrop-filter:var(--blur-dlg);color:var(--fg);border:1px solid var(--glass-edge);border-radius:12px;box-shadow:var(--shadow),var(--hl);padding:16px 20px;width:calc(100vw - 96px);max-width:calc(100vw - 96px);max-height:calc(100dvh - 96px);overflow:auto}
 dialog.settings::backdrop{background:rgba(0,0,0,.35)}
+dialog.settings p{max-width:40em}
 dialog.settings h2{margin:0 0 8px;font-size:17px}
+dialog.settings h2:focus{outline:none}
+dialog.settings button:not(.primary):not(.go):not(.done):not(.danger):not(.quiet),dialog.settings .card,dialog.settings .empty{background:var(--sheet)}
+.set-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:0 20px}
+@media (min-width:1020px){.set-cols{grid-template-columns:repeat(2,minmax(0,1fr))}.set-cols>#set-policy,.set-cols>#set-desktop{grid-column:1/-1}}
+@media (min-width:1500px){.set-cols{grid-template-columns:repeat(3,minmax(0,1fr))}.set-cols>#set-policy{grid-column:auto}.set-cols>#set-desktop{grid-column:1/-1}}
+.set-admin{margin-top:12px;padding-top:12px;border-top:2px solid var(--shu-line)}
+dialog.admin-dlg{width:min(38rem,calc(100vw - 32px));max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px);border:2px solid var(--shu-line)}
+dialog.admin-dlg h2{color:var(--shu)}
+dialog.admin-dlg h3{font-size:15px;margin:16px 0 4px}
+dialog.admin-dlg .warn{margin:0 0 12px;font-size:14px;color:var(--shu);background:var(--shu-soft);border-radius:8px;padding:8px 12px}
+dialog.admin-dlg .confirm{margin:12px 0}
 dialog.settings fieldset{border:1px solid var(--line);border-radius:8px;margin:10px 0;padding:8px 12px}
 dialog.settings legend{font-weight:600;padding:0 4px}
 .settings .opt{display:flex;align-items:center;gap:8px;margin:4px 0}
@@ -149,8 +170,8 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .now .count.bump-a{animation:bump-a .6s cubic-bezier(.3,1.6,.5,1)}.now .count.bump-b{animation:bump-b .6s cubic-bezier(.3,1.6,.5,1)}
 .now h2{margin:0;font-size:21px}.now .lead{margin:0}
 .todo{display:grid;gap:10px;margin:12px 0 0}
-.task{background:var(--sheet);border:1px solid var(--line);border-left:5px solid var(--kaki);border-radius:4px 12px 12px 4px;padding:12px 16px;overflow-wrap:anywhere}
-.task.stall{border-left-color:var(--kiiro)}.task.request{border-left-color:var(--muted)}.task.closed{border-left-color:var(--line);opacity:.75}
+.task{background:var(--sheet);border:1px solid var(--line);border-left:5px solid var(--kaki-line);border-radius:4px 12px 12px 4px;padding:12px 16px;overflow-wrap:anywhere}
+.task.stall{border-left-color:var(--kiiro-line)}.task.request{border-left-color:var(--muted)}.task.closed{border-left-color:var(--line);opacity:.75}
 .task.new,.entry.new{animation:arrive .5s ease-out both}
 .who{font-size:13px;color:var(--muted)}.strong{font-weight:700;color:var(--fg)}
 .ask{font-size:16px;font-weight:700;margin:2px 0 4px;white-space:pre-wrap}
@@ -160,7 +181,7 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .card.blocking{border-left:4px solid var(--blocking)}.card.request{border-left:4px solid var(--muted)}.card.failed{border-left:4px solid var(--failed)}
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;align-items:start}
 .cards .card{margin:0;display:grid;gap:6px;scroll-margin-top:16px}
-.card.turn{border-color:var(--kaki);border-left:5px solid var(--kaki)}.card.turn.stall{border-color:var(--kiiro);border-left-color:var(--kiiro)}.card.finished{opacity:.8}
+.card.turn{border-color:var(--kaki-line);border-left:5px solid var(--kaki-line)}.card.turn.stall{border-color:var(--kiiro-line);border-left-color:var(--kiiro-line)}.card.finished{opacity:.8}
 .card.picked{outline:3px solid var(--ai);outline-offset:2px}.card.picked:focus{outline:3px solid var(--ai)}
 .card.picked.pa{animation:pickA 1.5s ease-out}.card.picked.pb{animation:pickB 1.5s ease-out}
 .ctitle,.card h3{font-weight:700;font-size:15.5px;line-height:1.5;margin:0}
@@ -203,10 +224,6 @@ textarea{display:block;width:100%;min-height:64px;margin:6px 0;font:inherit;padd
 .typed-value{font-family:ui-monospace,monospace;user-select:all;-webkit-user-select:all;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:0 4px;overflow-wrap:anywhere}
 .confirm-title{font-weight:600;margin:10px 0 6px}.confirm-line{margin:4px 0;white-space:pre-wrap;overflow-wrap:anywhere}
 .error{color:var(--blocking);margin:6px 0;white-space:pre-wrap;overflow-wrap:anywhere}.notice{color:var(--ok);margin:12px 0}.notice.bad{color:var(--blocking)}
-.admin{margin-top:40px;border:2px solid var(--shu);border-radius:14px;padding:4px 16px 12px;background:var(--sheet)}
-.admin>summary{font-size:16px;font-weight:700;color:var(--shu);padding:10px 0}
-.admin .warn{margin:0 0 12px;font-size:14px;color:var(--shu);background:var(--shu-soft);border-radius:8px;padding:8px 12px}
-.admin h2{font-size:15px}
 input,button{font:inherit}
 input{padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
 form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
@@ -224,9 +241,9 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .gback{position:absolute;left:0;top:0;pointer-events:none}
 .gnode{box-sizing:border-box;position:relative;width:220px;height:80px;padding:8px 14px 8px 16px;border:1.5px solid var(--line);border-radius:12px;background:var(--card);display:flex;flex-direction:column;justify-content:center;gap:3px;box-shadow:0 1px 2px rgba(0,0,0,.12)}
 .gnode::before{content:"";position:absolute;left:3px;top:10px;bottom:10px;width:3.5px;border-radius:2px;background:var(--ai)}
-.gnode.t-turn{border:2.5px solid var(--kaki)}.gnode.t-turn::before{background:var(--kaki)}
-.gnode.s-stall{border-color:var(--kiiro)}.gnode.s-stall::before{background:var(--kiiro)}
-.gnode.s-fail{border-color:var(--shu)}.gnode.s-fail::before{background:var(--shu)}
+.gnode.t-turn{border:2.5px solid var(--kaki-line)}.gnode.t-turn::before{background:var(--kaki-line)}
+.gnode.s-stall{border-color:var(--kiiro-line)}.gnode.s-stall::before{background:var(--kiiro-line)}
+.gnode.s-fail{border-color:var(--shu-line)}.gnode.s-fail::before{background:var(--shu-line)}
 .gnode.t-over{opacity:.55;background:var(--bg)}.gnode.t-over::before{background:var(--line)}
 
 .gt{font-size:13.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:14px}
@@ -253,7 +270,7 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .board-wrap{position:relative}.zoom{position:absolute;right:10px;top:10px;display:flex;gap:4px;z-index:2}.zoom button{width:34px;height:34px;padding:0;border-radius:50%;font-size:18px;line-height:1;background:var(--sheet);color:var(--fg);border:1px solid var(--line)}.zoom button.fit{width:auto;padding:0 12px;border-radius:999px;font-size:13px}.zoom button:focus-visible{outline:3px solid var(--ai);outline-offset:2px}
 .legend{display:flex;flex-wrap:wrap;gap:4px 16px;margin:8px 0 0;font-size:12.5px;color:var(--muted)}.lg{display:inline-flex;align-items:center;gap:4px}
 .sw{display:inline-block;width:22px;height:0;border-top:2.5px dashed var(--ai)}.sw.down{border-top-color:var(--ai-2)}.sw.a1{border-top-width:3px}.sw.a3{opacity:.65}.sw.a4{opacity:.45}.sw.wait{border-top:3.5px dashed var(--kaki)}
-.edge{display:inline-block;width:4px;height:14px;border-radius:2px;background:var(--ai)}.edge.turn{background:var(--kaki)}.edge.stall{background:var(--kiiro)}.edge.fail{background:var(--shu)}.edge.over{background:var(--line)}
+.edge{display:inline-block;width:4px;height:14px;border-radius:2px;background:var(--blue-line)}.edge.turn{background:var(--kaki-line)}.edge.stall{background:var(--kiiro-line)}.edge.fail{background:var(--shu-line)}.edge.over{background:var(--wire-over)}
 .comet{fill:none;stroke:var(--ai);stroke-width:5;stroke-linecap:round;filter:drop-shadow(0 0 4px var(--ai))}
 .comet-win{transform-box:fill-box;animation:gcomet 1.6s linear infinite}.comet-win-left{animation-name:gcomet-left}
 .comet-clear{stop-color:#fff;stop-opacity:0}.comet-mid{stop-color:#fff;stop-opacity:.8}.comet-lit{stop-color:#fff;stop-opacity:1}
@@ -262,7 +279,7 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .still *,.still *::before{animation:none!important;transition:none!important}
 .still .comet{display:none}
 @media (prefers-reduced-motion: reduce){*,*::before{animation:none!important;transition:none!important}.comet{display:none}}
-@media (max-width:640px){.now .count{font-size:44px}.now h2{font-size:18px}.top .tools{margin-left:0}button.sm,button.copy,button.gear,.settings .policy-add select,.settings .policy-add input{min-height:44px}.zoom{top:4px}.zoom button{min-width:44px;min-height:44px}.seg button{min-width:44px}}
+@media (max-width:640px){dialog.settings{width:calc(100vw - 32px);max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px)}.now .count{font-size:44px}.now h2{font-size:18px}.top .tools{margin-left:0}button.sm,button.copy,button.gear,.settings .policy-add select,.settings .policy-add input{min-height:44px}.zoom{top:4px}.zoom button{min-width:44px;min-height:44px}.seg button{min-width:44px}}
 `;
 
 // 根に出る、Desktop の子を人が確かめる依頼（daemon の再起動のあとの整合。external-check.ts）の文面の先頭。画面は、これを「停止の代行依頼」と同じ扱いにする
@@ -599,8 +616,14 @@ export const UI_JS = `'use strict';
     if (code === 'tipMismatch' || code === 'tipUnknown') return t('fail.tipMismatch');
     return '';
   }
+  // 確認の欄は、管理の窓が開いているあいだは窓の中（幕の下に出ると押せないため）、閉じているあいだは本文の中に出す
   function renderConfirm() {
-    var box = document.getElementById('confirm');
+    // 管理の窓から出した確認（pending.fromAdmin）だけを、窓の中に出す。本文で出した確認は、管理の窓が開いていても本文に残す
+    var adminOpen = document.getElementById('admin').open && Boolean(pending && pending.fromAdmin);
+    var box = document.getElementById(adminOpen ? 'confirm-admin' : 'confirm');
+    var other = document.getElementById(adminOpen ? 'confirm' : 'confirm-admin');
+    clear(other);
+    other.hidden = true;
     clear(box);
     if (!pending) { box.hidden = true; return; }
     box.hidden = false;
@@ -669,7 +692,7 @@ export const UI_JS = `'use strict';
     if (!window.crypto || !window.crypto.randomUUID) { notice(t('err.noCrypto'), true); return; }
     notice('');
     var o = opts || {};
-    pending = { title: title, lines: lines, operation: operation, params: params, done: done, requestId: window.crypto.randomUUID(), sending: false, error: '', retryAt: 0, typed: o.typed, typedValue: '', blocked: o.blocked || '', after: o.after, justOpened: true };
+    pending = { title: title, lines: lines, operation: operation, params: params, done: done, requestId: window.crypto.randomUUID(), sending: false, error: '', retryAt: 0, typed: o.typed, typedValue: '', blocked: o.blocked || '', after: o.after, justOpened: true, fromAdmin: document.getElementById('admin').open };
     renderConfirm();
   }
   // 打ち込みの確認: 打ち込む文字列が決まっていて、入力が完全に一致するときだけ（前後の空白・大文字小文字・全角の違いは、すべて不一致）。
@@ -2362,22 +2385,57 @@ export const UI_JS = `'use strict';
     stillBox.focus();
   }
   openSettings.addEventListener('click', showSettings);
-  document.getElementById('close-settings').addEventListener('click', function () { settingsBox.close(); });
-  // Esc でも閉じる（dialog の既定）。閉じたら、開く前のボタンへ focus を戻す
-  settingsBox.addEventListener('close', function () { openSettings.focus(); });
-  // 窓の中は Tab で回る（最後から最初へ、最初から最後へ）
-  settingsBox.addEventListener('keydown', function (e) {
-    if (e.key !== 'Tab') return;
-    var f = [];
-    settingsBox.querySelectorAll('input:not([disabled]),select:not([disabled]),button:not([disabled])').forEach(function (x) {
-      if (x.type !== 'radio' || x.checked) f.push(x);
-    });
-    if (f.length === 0) return;
-    var first = f[0];
-    var last = f[f.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  // 管理の窓（取り消せない操作を含む）。設定の窓の下のボタンから開く（窓を重ねない: 設定を閉じてから管理を開く）。閉じたら、焦点は歯車へ戻す
+  var adminBox = document.getElementById('admin');
+  var toAdmin = document.getElementById('to-admin');
+  toAdmin.addEventListener('click', function () {
+    settingsBox.close();
+    adminBox.showModal();
+    renderConfirm();
+    document.getElementById('admin-title').focus();
   });
+  document.getElementById('close-settings').addEventListener('click', function () { settingsBox.close(); });
+  document.getElementById('close-admin').addEventListener('click', function () { adminBox.close(); });
+  // Esc でも閉じる（dialog の既定）。閉じたら、開く前のボタンへ focus を戻す（管理へ移るときは動かさない。close の知らせはあとから届くので、そのときに管理の窓が開いているかで見分ける）
+  settingsBox.addEventListener('close', function () {
+    if (adminBox.open) return;
+    openSettings.focus();
+  });
+  // 管理の窓を閉じたら、管理の窓から出した確認のうち、送る前のもの（ID の打ち込み前）だけを取り消す。送信中のものは残し、本文の欄に出す。本文で出した確認は残す
+  adminBox.addEventListener('close', function () {
+    if (pending && pending.fromAdmin && !pending.sending) pending = null;
+    renderConfirm();
+    openSettings.focus();
+  });
+  // 窓の中は Tab で回る（最後から最初へ、最初から最後へ）。幕のクリックでも閉じる（押し始めと離した所の両方が幕の上のときだけ）
+  function wireDialog(box) {
+    box.addEventListener('keydown', function (e) {
+      if (e.key !== 'Tab') return;
+      var f = [];
+      box.querySelectorAll('input:not([disabled]),select:not([disabled]),button:not([disabled])').forEach(function (x) {
+        if (x.type !== 'radio' || x.checked) f.push(x);
+      });
+      if (f.length === 0) return;
+      var first = f[0];
+      var last = f[f.length - 1];
+      // 開いた直後は見出し（h2）に焦点があるので、その Shift+Tab も末尾へ回す
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === box.querySelector('h2'))) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+    var downOnBackdrop = false;
+    function onBackdrop(e) {
+      if (e.target !== box) return false;
+      var r = box.getBoundingClientRect();
+      return e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+    }
+    box.addEventListener('pointerdown', function (e) { downOnBackdrop = onBackdrop(e); });
+    box.addEventListener('click', function (e) {
+      if (downOnBackdrop && onBackdrop(e)) box.close();
+      downOnBackdrop = false;
+    });
+  }
+  wireDialog(settingsBox);
+  wireDialog(adminBox);
   document.getElementById('policy-reload').addEventListener('click', startConfigReload);
   document.getElementById('policy-add').addEventListener('click', startPolicyAdd);
   document.getElementById('policy-rule').addEventListener('keydown', function (e) { if (e.isComposing) return; if (e.key === 'Enter') { e.preventDefault(); startPolicyAdd(); } });

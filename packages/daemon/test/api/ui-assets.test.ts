@@ -446,6 +446,18 @@ describe("画面の資産（走査）", () => {
       "changed",
       "restartRequired",
       "overLimit",
+      // 設定・管理の窓の幕のクリックで閉じる判定（押し始めと離した所の両方が窓の外のときだけ）
+      "getBoundingClientRect",
+      "clientX",
+      "clientY",
+      "left",
+      "right",
+      "top",
+      "bottom",
+      // 窓の見出し（h2）に焦点があるときの Shift+Tab を末尾へ回す判定（querySelectorAll と同じ読み取りの検索）
+      "querySelector",
+      // 確認の出所の印（管理の窓から出した確認だけ true。pending の中の真偽値）
+      "fromAdmin",
     ]);
     // 埋め込んだ文字の表（#140。JSON の値で、コードでない）は、走査から除く
     const code = UI_JS.replace(TABLE_LINE, "")
@@ -1675,12 +1687,40 @@ describe("画面の使い勝手（#13）", () => {
     expect(UI_JS).not.toMatch(/\.animate\(|requestAnimationFrame/);
   });
 
-  it("(#89) 管理（最終削除・保留・保管）は、たたんだ欄の中にある", () => {
-    const admin = UI_HTML.indexOf('<details class="admin">');
+  it("(#89) 管理（最終削除・保留・保管）は、管理の窓（dialog）の中にある", () => {
+    const admin = UI_HTML.indexOf('<dialog id="admin"');
     expect(admin).toBeGreaterThan(-1);
     expect(UI_HTML.indexOf('id="purge"')).toBeGreaterThan(admin);
     expect(UI_HTML.indexOf('id="kept"')).toBeGreaterThan(admin);
-    expect(UI_HTML.indexOf('id="todo"')).toBeLessThan(admin);
+    // 作業の一覧（#todo）は管理の窓の外（窓の閉じタグより後）にある
+    const adminEnd = UI_HTML.indexOf("</dialog>", admin);
+    expect(UI_HTML.indexOf('id="purge"')).toBeLessThan(adminEnd);
+    expect(UI_HTML.indexOf('id="kept"')).toBeLessThan(adminEnd);
+    expect(UI_HTML.indexOf('id="todo"')).toBeGreaterThan(adminEnd);
+  });
+
+  it("窓の中のボタンの地（--sheet）は、primary・go・done・danger・quiet の地を上書きしない", () => {
+    expect(UI_CSS).toContain(
+      "dialog.settings button:not(.primary):not(.go):not(.done):not(.danger):not(.quiet)",
+    );
+    expect(UI_CSS).not.toMatch(/dialog\.settings button,/);
+    expect(UI_CSS).toContain("button.primary,button.go{background:var(--kaki)");
+  });
+
+  it("管理の窓は、焦点が見出しのときの Shift+Tab も末尾へ回し、閉じたら送る前の確認を取り消す", () => {
+    expect(UI_JS).toContain("document.activeElement === box.querySelector('h2')");
+    expect(UI_JS).not.toContain("toAdminSwitching");
+    expect(UI_JS).toContain(
+      "if (pending && pending.fromAdmin && !pending.sending) pending = null;",
+    );
+  });
+
+  it("確認の出所: 管理の窓が開いている間に出した確認だけに fromAdmin を付け、窓の中に出す。本文の確認は取り消さない", () => {
+    expect(UI_JS).toContain("fromAdmin: document.getElementById('admin').open");
+    expect(UI_JS).toContain(
+      "document.getElementById('admin').open && Boolean(pending && pending.fromAdmin)",
+    );
+    expect(UI_JS).not.toContain("if (pending && !pending.sending) pending = null;");
   });
 
   it("(3) 接続できない・取得に失敗したときは、理由と確かめることを言う", () => {

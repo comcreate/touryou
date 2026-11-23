@@ -9,7 +9,15 @@ export const APP_TEXT = {
     ja: "アーカイブした作業の最終削除と、自動の削除の保留",
     en: "Final deletion of archived work, and holding automatic deletion",
   },
-  "admin.title": { ja: "管理（まれに使う操作）", en: "Admin (rarely used actions)" },
+  "admin.title": {
+    ja: "管理（取り消せない操作を含む）",
+    en: "Admin (includes actions that cannot be undone)",
+  },
+  "admin.open": {
+    ja: "管理（取り消せない操作を含む）…",
+    en: "Admin (includes actions that cannot be undone)…",
+  },
+  "admin.close": { ja: "閉じる", en: "Close" },
   "admin.warn": {
     ja: "ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。",
     en: "Most actions here cannot be undone later. Pressing one opens a box to check the details. Actions that cannot be undone are sent only after you type the target ID.",

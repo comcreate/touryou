@@ -15,11 +15,14 @@ export interface Loc {
   getAttribute(name: string): Promise<string | null>;
   allTextContents(): Promise<string[]>;
   locator(selector: string): Loc;
+  nth(index: number): Loc;
   textContent(): Promise<string | null>;
+  innerText(): Promise<string>;
   boundingBox(): Promise<Box | null>;
   isVisible(): Promise<boolean>;
+  isHidden(): Promise<boolean>;
   focus(): Promise<void>;
-  click(): Promise<void>;
+  click(o?: { timeout?: number }): Promise<void>;
   isDisabled(): Promise<boolean>;
   isChecked(): Promise<boolean>;
   evaluate<R>(f: (e: Element) => R): Promise<R>;

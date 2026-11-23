@@ -565,9 +565,9 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     );
     expect(await page.getByRole("dialog", { name: "設定" }).count()).toBe(1);
     expect(await page.evaluate(() => document.activeElement?.id)).toBe("set-still");
-    // 動きを止める → 明暗（選んだ 1 つ）→ 言語（選んだ 1 つ）→ 閉じる → また動きを止める
+    // 動きを止める → 明暗（選んだ 1 つ）→ 言語（選んだ 1 つ）→ 管理 → 閉じる → また動きを止める
     const order: string[] = [];
-    for (let k = 0; k < 4; k += 1) {
+    for (let k = 0; k < 5; k += 1) {
       await page.keyboard.press("Tab");
       order.push(
         await page.evaluate(() => {
@@ -576,7 +576,13 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
         }),
       );
     }
-    expect(order).toEqual(["set-theme:auto", "set-lang:ja", "close-settings", "set-still"]);
+    expect(order).toEqual([
+      "set-theme:auto",
+      "set-lang:ja",
+      "to-admin",
+      "close-settings",
+      "set-still",
+    ]);
     await page.keyboard.press("Shift+Tab");
     expect(await page.evaluate(() => document.activeElement?.id)).toBe("close-settings");
     await page.keyboard.press("Escape");
@@ -592,6 +598,64 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(await page.evaluate(() => document.activeElement?.id)).toBe("open-settings");
     // 言語の欄（#140）。English も選べる
     expect(await page.locator('input[name="set-lang"][value="en"]').isDisabled()).toBe(false);
+  });
+
+  it("管理の窓: 設定の窓の「管理」から開く。確認の欄は窓の中に出て、送るボタンが読める。Shift+Tab は窓の外へ抜けず、Esc で閉じて歯車へ focus が戻る", async () => {
+    await page.click("#open-settings");
+    await page.click("#to-admin");
+    const isOpen = (id: string) => page.locator(id).evaluate((d) => (d as HTMLDialogElement).open);
+    expect(await isOpen("#admin")).toBe(true);
+    expect(await isOpen("#settings")).toBe(false); // 窓は重ねない
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("admin-title");
+    // 開いた直後（見出しに focus）の Shift+Tab は、窓の末尾へ回る
+    await page.keyboard.press("Shift+Tab");
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("close-admin");
+    // 確認の欄は管理の窓の中（#confirm-admin）。送るボタン（primary）は、文字と地が同じ色にならない（窓の中の button の地が勝たない）
+    const colors = await page.evaluate(() => {
+      const box = document.getElementById("confirm-admin") as HTMLElement;
+      box.hidden = false;
+      const b = document.createElement("button");
+      b.className = "primary";
+      b.textContent = "x";
+      box.appendChild(b);
+      const s = getComputedStyle(b);
+      const r = { fg: s.color, bg: s.backgroundColor, inside: box.closest("dialog")?.id };
+      b.remove();
+      box.hidden = true;
+      return r;
+    });
+    expect(colors.inside).toBe("admin");
+    expect(colors.fg).not.toBe(colors.bg);
+    await page.keyboard.press("Escape");
+    expect(await isOpen("#admin")).toBe(false);
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("open-settings");
+    expect(await csp()).toEqual([]);
+    expect(problems).toEqual([]);
+  });
+
+  it("管理の窓: 本文で出した確認は、管理の窓を開いて閉じても残る（管理の窓から出した確認だけが、閉じると取り消される）", async () => {
+    // 本文のボタンを順に押し、確認の欄（#confirm）が出るものを探す（確認の 2 段目は押さないので、何も送らない）
+    // 見せ方の切り替え（#show-list）や「隠す」（#hide-finished）は押さない（押すと、あとの試験の前提の「図」が変わる）
+    const buttons = page.locator(
+      "#approvals button:not([disabled]), #todo button:not([disabled]), #cards button:not([disabled])",
+    );
+    const n = Math.min(await buttons.count(), 40);
+    let opened = false;
+    for (let i = 0; i < n && !opened; i += 1) {
+      const b = buttons.nth(i);
+      if (!(await b.isVisible())) continue;
+      await b.click({ timeout: 2000 }).catch(() => undefined);
+      opened = await page.locator("#confirm").isVisible();
+    }
+    if (!opened) return; // この試験データには、確認を開くボタンがない
+    const before = await page.locator("#confirm").innerText();
+    await page.click("#open-settings");
+    await page.click("#to-admin");
+    expect(await page.locator("#confirm-admin").isHidden()).toBe(true); // 管理の窓の側の欄は、出所のない確認を動かさない
+    await page.keyboard.press("Escape");
+    expect(await page.locator("#confirm").isVisible()).toBe(true);
+    expect(await page.locator("#confirm").innerText()).toBe(before);
+    expect(problems).toEqual([]);
   });
 
   it("設定の窓の「動きを止める」で、図の線も彗星も止まる。戻すと動く。再読み込みのあとも残る", async () => {
@@ -688,7 +752,8 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       "#status",
       "#graph-legend",
       "#view-switch",
-      ".admin > summary",
+      "#admin-title",
+      "#to-admin",
     ])
       expect(cjk.test(await textOf(sel)), sel).toBe(false);
     // 図の箱の状態の言葉・カードの札も英語
