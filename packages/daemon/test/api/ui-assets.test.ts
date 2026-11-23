@@ -1870,9 +1870,7 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     // 火花の筋は 3 種の寿命。箱の縁の光は、答え待ち・失敗の箱だけ（触れたとき・焦点のときは出さない）
     for (const k of ["mt-sk1", "mt-sk2", "mt-sk3", "mt-fl", "mt-glow"])
       expect(meteor).toContain(`@keyframes ${k}{`);
-    expect(meteor).toContain(
-      ".gnode.glow:not(:hover,:focus-visible){animation:mt-glow",
-    );
+    expect(meteor).toContain(".gnode.glow:not(:hover,:focus-visible){animation:mt-glow");
     // 線の色（--c）は、流星・火花にも付く
     expect(UI_CSS).toContain(
       ":is(.line,.tip,.port,.mlabel,.mstage,.sw,.mh,.mhc,.mtl,.msp){--c:var(--blue-line)}",
