@@ -1285,6 +1285,20 @@ describe("統合済みの子の一括の回収（#234）", () => {
       expect(r.removed).toEqual([]);
     });
 
+    it("証拠の行は、PR 番号と先端の短い表記（先頭 12 桁）を持つ。祖先判定の行は持たない。パスは出さない", async () => {
+      const r = squashed();
+      await record(r, {});
+      const res = await human(r, "node.reclaimBatchPreview");
+      expect(rowOf(res, "c")).toMatchObject({
+        mergedBy: "evidence",
+        evidencePrNumber: 7,
+        evidenceTip: TIP.slice(0, 12),
+      });
+      expect(rowOf(res, "a")).not.toHaveProperty("evidenceTip");
+      expect(rowOf(res, "a")).not.toHaveProperty("evidencePrNumber");
+      expect(JSON.stringify(res.value)).not.toContain(WT);
+    });
+
     it("assumeEvidence: 記録なしで「記録したものとして」一覧を出し、照合の値は、記録したあとと同じになる", async () => {
       const r = squashed();
       const assumed = await human(r, "node.reclaimBatchPreview", {
@@ -1496,6 +1510,44 @@ describe("受理済み（verified）の破棄（#239）", () => {
     expect(r.s().nodes.find((x) => x.id === "a")?.discarded?.noTip).toBe(true);
     const res = await r.call("node.reclaim", { nodeId: "a" });
     expect(res.ok).toBe(true);
+    expect(stateOf(r.s(), "a")).toBe("archived");
+  });
+
+  it("実体のない（gone）verified は、一括の対象に入らず、一括でも閉じない。単独の reclaimInstruct の道だけで archived になる", async () => {
+    const gone: WorktreeFacts = {
+      merged: false,
+      clean: true,
+      worktreePath: `${WT}/a`,
+      gone: true,
+    };
+    const r = rig({ facts: { a: gone } });
+    type Row = { nodeId: string; eligible: boolean; unmet: string[] };
+    const rows = async () =>
+      (
+        (await r.call("node.reclaimBatchPreview", {}, "", `q-${++n}`, "human")).value as {
+          candidates: Row[];
+        }
+      ).candidates;
+    // 判断がない gone: 対象外（事実がないもの）
+    expect((await rows()).find((c) => c.nodeId === "a")).toMatchObject({ eligible: false });
+    // 人が破棄を判断した gone: 一括では、対象外（discardRequired）のまま
+    expect((await humanInstruct(r, "a", {})).ok).toBe(true);
+    expect((await rows()).find((c) => c.nodeId === "a")).toMatchObject({
+      eligible: false,
+      unmet: ["discardRequired"],
+    });
+    const pre = await r.call("node.reclaimBatchPreview", {}, "", `q-${++n}`, "human");
+    const batch = await r.call(
+      "node.reclaimBatch",
+      { expectDigest: (pre.value as { digest: string }).digest },
+      "",
+      `q-${++n}`,
+      "human",
+    );
+    expect((batch.value as { reclaimed: string[] }).reclaimed).not.toContain("a");
+    expect(stateOf(r.s(), "a")).toBe("verified");
+    // 単独の道では閉じられる
+    expect((await r.call("node.reclaim", { nodeId: "a" })).ok).toBe(true);
     expect(stateOf(r.s(), "a")).toBe("archived");
   });
 

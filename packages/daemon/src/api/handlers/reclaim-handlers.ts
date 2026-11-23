@@ -211,6 +211,19 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
     return tip === undefined ? {} : { mergeEvidenceTip: tip };
   };
 
+  /** 一覧に出す証拠の見え方: PR の番号（記録にあるときだけ）と、証拠の先端の先頭 12 桁。パス・トークンは含めない。 */
+  const evidenceView = (
+    nodeId: string,
+    assume?: ReadonlyMap<string, string>,
+  ): { evidencePrNumber?: number; evidenceTip?: string } => {
+    const rec = log.state().nodes.find((n) => n.id === nodeId)?.mergeEvidence;
+    const tip = rec?.tip ?? assume?.get(nodeId);
+    return {
+      ...(rec?.prNumber === undefined ? {} : { evidencePrNumber: rec.prNumber }),
+      ...(tip === undefined ? {} : { evidenceTip: tip.slice(0, 12) }),
+    };
+  };
+
   /** いまの先端。`withEvidence: false` は、証拠の記録の前に、証拠を使わずに取る。 */
   const currentTip = async (
     nodeId: string,
@@ -750,6 +763,8 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
       unmet: readonly UnmetReason[];
       blockers: readonly Blocker[];
       mergedBy?: "ancestor" | "evidence";
+      evidencePrNumber?: number;
+      evidenceTip?: string;
       branch?: string;
       base?: string;
     }[];
@@ -771,6 +786,8 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
       unmet: readonly UnmetReason[];
       blockers: readonly Blocker[];
       mergedBy?: "ancestor" | "evidence";
+      evidencePrNumber?: number;
+      evidenceTip?: string;
       branch?: string;
       base?: string;
     }[] = [];
@@ -818,7 +835,7 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
         } else {
           // 証拠による統合済みは、照合の値にも印を入れる（根拠が変われば、一覧の確認をやり直させる）。
           lines.push(
-            `${n.id}:${tip.kind === "tip" ? tip.sha : "none"}${mergedBy === "evidence" ? ":evidence" : ""}`,
+            `${n.id}:${tip.kind === "tip" ? tip.sha : "none"}${mergedBy === "evidence" ? `:evidence:${evidenceView(n.id, assume).evidenceTip ?? ""}` : ""}`,
           );
         }
       }
@@ -829,6 +846,7 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
         unmet,
         blockers: r.value.blockers,
         ...(mergedBy === undefined ? {} : { mergedBy }),
+        ...(mergedBy === "evidence" ? evidenceView(n.id, assume) : {}),
         ...(facts?.branch === undefined ? {} : { branch: facts.branch }),
         ...(facts?.base === undefined ? {} : { base: facts.base }),
       });

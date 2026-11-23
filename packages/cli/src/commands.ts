@@ -345,6 +345,8 @@ interface BatchPreview {
     readonly eligible: boolean;
     readonly unmet: readonly string[];
     readonly mergedBy?: "ancestor" | "evidence";
+    readonly evidencePrNumber?: number;
+    readonly evidenceTip?: string;
     readonly branch?: string;
     readonly base?: string;
   }[];
@@ -361,6 +363,8 @@ const isBatchPreview = (v: unknown): v is BatchPreview =>
       typeof c.eligible === "boolean" &&
       isStringArray(c.unmet) &&
       (c.mergedBy === undefined || c.mergedBy === "ancestor" || c.mergedBy === "evidence") &&
+      (c.evidencePrNumber === undefined || typeof c.evidencePrNumber === "number") &&
+      (c.evidenceTip === undefined || typeof c.evidenceTip === "string") &&
       (c.branch === undefined || typeof c.branch === "string") &&
       (c.base === undefined || typeof c.base === "string"),
   );
@@ -1357,12 +1361,20 @@ async function runReclaimMerged(
       ? "回収できる子: なし"
       : `回収できる子（${eligible.length} 件。作業ツリーとブランチを、強制せずに消す）:`,
   );
-  for (const c of eligible) {
-    const basis =
-      c.mergedBy === "evidence"
-        ? "（根拠: 統合済みの証拠。先端を保管してから、ブランチを消す）"
-        : "（根拠: 親のブランチに取り込み済み）";
-    lines.push(`  - ${terminalSafe(c.nodeId, 128)} ${basis}`);
+  if (eligible.length > 0) {
+    // 表: ノード / mergedBy / 根拠の詳細（証拠のときは、PR の番号と先端の先頭 12 桁。先端を保管してから消す）
+    lines.push("  ノード | mergedBy | 詳細");
+    for (const c of eligible) {
+      // 記録前（assumeEvidence の一覧）は、daemon が PR 番号を知らないので、gh で確かめた番号を使う。
+      const pr = c.evidencePrNumber ?? found.find((f) => f.nodeId === c.nodeId)?.prNumber;
+      const detail =
+        c.mergedBy === "evidence"
+          ? `証拠${pr === undefined ? "" : ` PR #${pr}`}${c.evidenceTip === undefined ? "" : ` 先端 ${terminalSafe(c.evidenceTip, 12)}`}（先端を保管してから、ブランチを消す）`
+          : "親のブランチに取り込み済み";
+      lines.push(
+        `  ${terminalSafe(c.nodeId, 128)} | ${c.mergedBy === undefined ? "-" : c.mergedBy} | ${detail}`,
+      );
+    }
   }
   if (skipped.length > 0) {
     lines.push(`対象外（${skipped.length} 件）:`);

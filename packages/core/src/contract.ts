@@ -388,6 +388,10 @@ export interface OperationMap {
         blockers: readonly Blocker[];
         /** 統合済みの根拠（統合済みと判定できたものだけ）。`ancestor`: 祖先判定。`evidence`: 統合済みの証拠（`node.mergeEvidence`）。 */
         mergedBy?: "ancestor" | "evidence";
+        /** `mergedBy: "evidence"` のときの、証拠の PR の番号（記録に番号があるときだけ）。 */
+        evidencePrNumber?: number;
+        /** `mergedBy: "evidence"` のときの、証拠の先端の短い表記（先頭 12 桁）。パス・トークンは含まない。 */
+        evidenceTip?: string;
         /** 子のブランチ名（CLI が、gh でマージ済みの PR を探す手がかり。信頼できる値だが、端末に出す前に整える）。取れなければ省略。 */
         branch?: string;
         /** 親のブランチ（上流）の名前。CLI は、PR の base がこれと同じものだけを証拠にする。取れなければ省略（証拠を探さない）。 */

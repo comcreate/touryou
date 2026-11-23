@@ -246,6 +246,14 @@ describe("統合済みの証拠（#239: スカッシュ・リベースでマー�
     expect(r.stderr).toContain("--yes --expect bbbbbbbbbbbb");
   });
 
+  it("回収できる子の表に mergedBy の列を出し、証拠の行には PR 番号と先端の短い表記を出す", async () => {
+    const { client } = evidenceClient();
+    const r = await runCommand(["reclaim-merged"], withGh(client, ghFound()));
+    expect(r.stdout).toContain("ノード | mergedBy | 詳細");
+    expect(r.stdout).toContain("ok1 | ancestor | 親のブランチに取り込み済み");
+    expect(r.stdout).toContain("sq1 | evidence | 証拠 PR #9");
+  });
+
   it("reclaim-merged --yes --expect: 一致を確かめた証拠を記録してから、同じ値で一括の回収を送る", async () => {
     const { client, sent } = evidenceClient();
     const r = await runCommand(
