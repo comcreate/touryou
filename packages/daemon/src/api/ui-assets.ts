@@ -624,6 +624,8 @@ export const UI_JS = `'use strict';
     var cmd = attachCommandByRef(n) || attachCommand(n);
     return cmd === '' ? [] : [cmd];
   }
+  // 採用した子で、セッション番号が分からないもの。開き方に claude attach が出ないので、カードの文も作業ツリーで案内する
+  function adoptedNoRef(n) { return n.runtime === 'cli' && typeof n.adoptedWorktree === 'string' && !attachCommandByRef(n); }
   // ノードの呼び名（題がなければ ID）。
   function nodeLabel(n, max) { return n && typeof n.title === 'string' && n.title !== '' ? cleanText(n.title, max) : n ? n.id : ''; }
   function el(tag, cls, text) {
@@ -978,6 +980,7 @@ export const UI_JS = `'use strict';
   }
   // たたむ欄。描き直しても、開いた欄は開いたままにする（key ごとに覚える）
   var openFolds = new Set();
+  var guidedFolds = new Set();
   function fold(key, label) {
     var d = el('details', '');
     d.open = openFolds.has(key);
@@ -1205,9 +1208,9 @@ export const UI_JS = `'use strict';
     card.appendChild(head);
     card.appendChild(el('h3', '', nodeLabel(n, 200)));
     if (bindExpired) {
-      card.appendChild(el('p', 'desc', t(n.runtime === 'cli' ? 'card.bindExpiredNextCli' : n.runtime === 'desktop' ? 'card.bindExpiredNextDesktop' : 'card.bindExpiredNextUnknown')));
+      card.appendChild(el('p', 'desc', t(n.runtime === 'cli' ? (adoptedNoRef(n) ? 'card.bindNextAdopted' : 'card.bindExpiredNextCli') : n.runtime === 'desktop' ? 'card.bindExpiredNextDesktop' : 'card.bindExpiredNextUnknown')));
     }
-    if (bindLost) card.appendChild(el('p', 'desc', t('card.bindLostNext')));
+    if (bindLost) card.appendChild(el('p', 'desc', t(n.runtime === 'desktop' ? 'card.bindExpiredNextDesktop' : n.runtime === 'cli' ? (adoptedNoRef(n) ? 'card.bindNextAdopted' : 'card.bindLostNext') : 'card.bindExpiredNextUnknown')));
     var meta = el('div', 'meta');
     var parent = n.parentId === null ? null : byId.get(n.parentId);
     meta.appendChild(el('span', '', n.parentId === null ? t('card.roleTop', { role: name(ROLE_NAMES, n.role) }) : t('card.roleParent', { role: name(ROLE_NAMES, n.role), parent: parent ? nodeLabel(parent, 13) : n.parentId })));
@@ -1233,7 +1236,10 @@ export const UI_JS = `'use strict';
     if (stall && attachCommand(n) && !attachCommandByRef(n)) card.appendChild(el('p', 'desc', t('stall.noRef')));
     // 子の実行環境（記録のあるものだけ）の開き方と安全面の注記（#159）。たたむ
     if (n.runtime === 'cli' || n.runtime === 'desktop') {
-      var rt = fold('runtime-' + n.id, t(n.runtime === 'cli' ? 'runtime.cli' : 'runtime.desktop'));
+      // 案内の文が「開き方」を指す子（紐付けが切れた・途切れた CLI の子）は、最初の 1 回だけ開いておく（あとは利用者がたたんだままにできる）
+      var rtKey = 'runtime-' + n.id;
+      if (n.runtime === 'cli' && (bindExpired || bindLost) && !guidedFolds.has(rtKey)) { guidedFolds.add(rtKey); openFolds.add(rtKey); }
+      var rt = fold(rtKey, t(n.runtime === 'cli' ? 'runtime.cli' : 'runtime.desktop'));
       // 採用した子（#159）は、起動の報告がないので、sessionRef があれば番号で、なければ作業ツリーの場所で開き方を出す
       var openText = n.runtime !== 'cli' ? t('runtime.openDesktop')
         : typeof n.adoptedWorktree !== 'string' ? t('runtime.openCli', { id: n.id })

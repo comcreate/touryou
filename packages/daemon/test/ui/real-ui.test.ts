@@ -1010,12 +1010,12 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
         [
           "ja-JP",
           "紐付けの接続が途切れているかも",
-          "次の操作: 統合の Claude が、子をつなぎ直してよいか、あなたに確かめる",
+          "次の操作: 統合の Claude に、子のつなぎ直しを頼む",
         ],
         [
           "en-US",
           "Connection to the binding may be down",
-          "Next: the integrator Claude asks you whether it may reconnect the child",
+          "Next: ask the integrator Claude to reconnect the child",
         ],
       ] as const) {
         const ctx = await (browser as Browser).newContext({ locale });
@@ -1042,14 +1042,89 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
         const descs = await p2.evaluate(() =>
           [...document.querySelectorAll("#card-ui-lost > p.desc")].map((e) => e.textContent ?? ""),
         );
+        // runtime の記録がない子は、runtime 不明の文（統合の Claude に頼む）。CLI の文（claude attach）は出さない（#264）
         const nextText = descs.find((x) => x.includes(next)) ?? "";
         expect(nextText, locale).not.toBe("");
-        expect(nextText).toContain("claude attach");
+        expect(nextText).not.toContain("claude attach");
         expect(nextText).not.toContain("node_bindCode");
         expect(nextText).not.toContain("child_bind");
         expect(errs).toEqual([]);
         await ctx.close();
       }
+    } finally {
+      await server2.close();
+    }
+  });
+
+  it("知らせの接続が途切れた子のカードの次の操作は、runtime ごとに分かれ、CLI の子は「開き方」の欄が開いた状態で出る（#264）", async () => {
+    const withRuntime = (nodeId: string, runtime: "cli" | "desktop") =>
+      created(nodeId, "implement", "root", `紐付けが外れた ${runtime} の子`).map((e) =>
+        e.type === "node.created" ? ({ ...e, payload: { ...e.payload, runtime } } as OrchEvent) : e,
+      );
+    const lostNotice = (id: string, nodeId: string) =>
+      ev({
+        type: "inbox.added",
+        payload: {
+          id,
+          kind: "info",
+          nodeId,
+          ...inboxMessage("bindLostSuspect", { node: nodeId, minutes: 12 }),
+        },
+      });
+    const lost = foldEvents([
+      ...created("root", "integrator", null, "紐付けの試験をまとめる"),
+      ...withRuntime("ui-lost-cli", "cli"),
+      ...withRuntime("ui-lost-dt", "desktop"),
+      lostNotice("blc", "ui-lost-cli"),
+      lostNotice("bld", "ui-lost-dt"),
+    ]);
+    if (!lost.ok) throw new Error(lost.error.cause);
+    const server2 = createApiServer({
+      credentials: createCredentialStore({ humanToken: HUMAN }),
+      getState: () => lost.value,
+      handlers: {},
+    });
+    const url2 = (await server2.listen(0)).url;
+    try {
+      const ctx = await (browser as Browser).newContext({ locale: "ja-JP" });
+      const p2 = await ctx.newPage();
+      const errs: string[] = [];
+      p2.on("pageerror", (e: Error) => errs.push(e.message));
+      const res = await fetch(`${url2}/v1/ui/ticket`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${HUMAN}` },
+      });
+      const t = ((await res.json()) as { value: { ticket: string } }).value.ticket;
+      await p2.goto(`${url2}/ui#ticket=${t}`);
+      await p2.waitForSelector("#card-ui-lost-cli");
+      await p2.waitForSelector("#card-ui-lost-dt");
+      const descsOf = (id: string) =>
+        p2.evaluate(
+          (sel) =>
+            [...document.querySelectorAll(`${sel} > p.desc`)].map((e) => e.textContent ?? ""),
+          `#card-${id}`,
+        );
+      const cli = await descsOf("ui-lost-cli");
+      expect(
+        cli.some((x) => x.includes("「つなぎ直してよいか」に答える")),
+        cli.join(" / "),
+      ).toBe(true);
+      expect(cli.some((x) => x.includes("「開き方」の claude attach"))).toBe(true);
+      const dt = await descsOf("ui-lost-dt");
+      expect(
+        dt.some((x) => x.includes("次の操作: 統合の Claude に、子のつなぎ直しを頼む")),
+        dt.join(" / "),
+      ).toBe(true);
+      expect(dt.some((x) => x.includes("claude attach"))).toBe(false);
+      // CLI の子は、案内の先（「開き方」の claude attach）が、たたまれずに見える
+      const openFold = await p2.evaluate(() =>
+        [...document.querySelectorAll("#card-ui-lost-cli details")].some(
+          (d) => (d as HTMLDetailsElement).open && (d.textContent ?? "").includes("claude attach"),
+        ),
+      );
+      expect(openFold).toBe(true);
+      expect(errs).toEqual([]);
+      await ctx.close();
     } finally {
       await server2.close();
     }
