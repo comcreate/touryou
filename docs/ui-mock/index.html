@@ -21,7 +21,7 @@
      帯（窓の見出し・タブ・窓の下の帯）は塗りなし。
      窓と中の面のほかの部品（ボタン・札・コマンドの欄・入力欄・図の箱・線の上の札・凡例の札など）は、不透明の --panel-solid で塗る。
      --bar-solid は、親の右の細いバーの色（前の ink2 の 45% を --panel-solid の上に置いた色を、不透明にしたもの） */
-  --win:rgba(244,241,234,.10);--panel:rgba(255,255,255,.20);--strip:transparent;--panel-solid:#fbfaf6;--bar-solid:#aaacad;
+  --win:rgba(244,244,242,.10);--panel:rgba(255,255,255,.20);--strip:transparent;--panel-solid:#fbfbfa;--bar-solid:#aaacad;
   --glass-edge:rgba(255,255,255,.45);--edge:rgba(90,100,115,.26);
   --hl:inset 0 1px 0 rgba(255,255,255,.7);--hl-line:rgba(255,255,255,.9);
   --shadow:0 4px 16px rgba(0,0,0,.05);--shadow-in:0 1px 4px rgba(20,30,50,.04);
@@ -29,18 +29,25 @@
      明・暗でも別に持つ（明はここ、暗は下の 2 か所） */
   --blur-outer:blur(3px) saturate(160%);--blur-inner:blur(6px) saturate(160%);
   /* 窓（設定・管理の dialog）: 幕の上で、後ろの 3 列の文字が透けて読みにくくならないよう、外の窓より濃い塗りと強いぼかし */
-  --dlg:rgba(244,241,234,.60);--blur-dlg:blur(16px) saturate(160%);
+  --dlg:rgba(244,244,242,.60);--blur-dlg:blur(16px) saturate(160%);
   /* 文字の色は、面が薄くても背景の上で 4.5:1 を保つよう、明では濃いめにしている */
   --ink:#1d1f22;--ink2:#474c53;--rule:#c4c8cd;--grid:#e4e6e9;
-  --accent:#24548f;--kaki:#903d00;--kaki-soft:#fbe6d2;--matsu:#275f3c;--matsu-soft:#dcebdf;
-  --shu:#a3261c;--shu-soft:#f7dfdb;--kiiro:#6b5000;--kiiro-soft:#f3ebc6;--on:#fff;
-  --wire-over:#8a9099;--blue:#24548f;
+  /* #238: 線と状態の色は、くすみを抜くため彩度と明度を上げた（旧の値は下の :root.pal-old。#palette=old で旧に戻して比べられる） */
+  --accent:#1d5fbd;--kaki:#b04a00;--kaki-soft:#fbe6d2;--matsu:#1d7442;--matsu-soft:#dcebdf;
+  --shu:#c3271b;--shu-soft:#f7dfdb;--kiiro:#7a5c00;--kiiro-soft:#f3ebc6;--on:#fff;
+  --wire-over:#78828f;--blue:#1d5fbd;
   --bp-sub:#cfd3d8;--bp-main:#a9afb7;--bp-mark:#6b7280;--bp-dust:#5a6a80;
   --tool-brass:#c27505;--tool-cyan:#0a6cc2;--tool-terra:#d1470f;--tool-green:#0f8552;--tool-violet:#6133b8;--tool-coral:#c7243d;
   --tool-op:.5;--rad:10px;--hd:48px;--bar:60px;
   /* 火花の筋の色（熱い順に --sk1 → --sk2 → --sk3 → 線の色）と、閃光の塗り（--sk-fl）・まわりの光（--sk-glow・--sk-glow2）。
      暗は白 → 黄 → 橙と冷める。明は、白や黄の筋が明るい背景に溶けて見えないので、芯を濃い焦げ茶 → 暗い黄 → 橙にし、橙の光で熱さを出す */
   --sk1:#4a1d00;--sk2:#8a5800;--sk3:#c2410c;--sk-fl:#ffcf4d;--sk-glow:#e8590c;--sk-glow2:rgba(255,170,0,.55);
+}
+/* #238 の比べる用（モック専用・一時的）: 明の旧の配色。暗の 2 か所より前に置き、暗では暗の値が勝つ */
+:root.pal-old{
+  --win:rgba(244,241,234,.10);--panel-solid:#fbfaf6;--dlg:rgba(244,241,234,.60);
+  --accent:#24548f;--kaki:#903d00;--matsu:#275f3c;--shu:#a3261c;--kiiro:#6b5000;
+  --wire-over:#8a9099;--blue:#24548f;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#060910;--bg-glow:#0d1a30;
@@ -896,6 +903,12 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     <p class="note">関係図の窓の上の端に、いまの選びの短い説明が出ます。明・暗は、上のバーの明暗のボタンで切り替えて比べます（#meteor=b&amp;theme=dark のようにアドレスでも開けます。値は all・a・b・c・off）。</p>
     <p class="tune-note">中央の窓の関係図で見えます。「動きを止める」と OS の「視差効果を減らす」では止まります。この選びは残しません。</p>
   </fieldset>
+  <fieldset>
+    <legend>明の配色（#238・一時的）</legend>
+    <label class="opt"><input type="radio" name="tn-pal" value="new" checked> <span>新（既定）：くすみを抜いた色</span></label>
+    <label class="opt"><input type="radio" name="tn-pal" value="old"> <span>旧：前の配色</span></label>
+    <p class="tune-note">明のときだけ変わります（暗は同じ）。#palette=old でも旧で開けます。</p>
+  </fieldset>
   <div class="tune-acts"><button type="button" id="tune-reset">既定に戻す</button><button type="button" id="tune-copy">値を写す</button></div>
   <p class="tune-note" id="tune-msg" role="status"></p>
   <textarea id="tune-out" rows="6" readonly aria-label="写す値（CSS 変数の宣言）" hidden></textarea>
@@ -1416,6 +1429,18 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   document.querySelectorAll("input[name=tn-mt]").forEach(function (r) { r.addEventListener("change", function () { setMt(r.value); }); });
   var mm = /meteor=(all|[abc]|off)/.exec(location.hash);
   setMt(mm ? mm[1] : "all");
+  // #238 の比べる用: 明の配色の新・旧（#palette=old で旧）
+  function setPal(v) {
+    root.classList.toggle("pal-old", v === "old");
+    document.querySelectorAll("input[name=tn-pal]").forEach(function (r) { r.checked = r.value === v; });
+  }
+  document.querySelectorAll("input[name=tn-pal]").forEach(function (r) { r.addEventListener("change", function () { setPal(r.value); }); });
+  var pm = /palette=(old|new)/.exec(location.hash);
+  setPal(pm ? pm[1] : "new");
+  window.addEventListener("hashchange", function () {
+    var p = /palette=(old|new)/.exec(location.hash);
+    if (p) setPal(p[1]);
+  });
   // 同じタブでアドレスの # のうしろだけを書き換えても、ページは読み込み直されない。そのときも、明暗と案を合わせ直す
   window.addEventListener("hashchange", function () {
     var t = /theme=(light|dark|auto)/.exec(location.hash);
@@ -1469,7 +1494,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   var root = document.documentElement;
   var KEY = "touryou-mock-tune-v2";
   try { localStorage.removeItem("touryou-mock-tune"); } catch (e) { /* 消せなくても動く */ }
-  var RGB = { win: { light: "244,241,234", dark: "22,20,18" }, panel: { light: "255,255,255", dark: "22,36,60" } };
+  var RGB = { win: { light: "244,244,242", dark: "22,20,18" }, panel: { light: "255,255,255", dark: "22,36,60" } };
   // 既定の値と色味は、上の CSS の 3 か所の定義と合わせておく（CSS を変えたら、ここも変える）
   var DEF = { winL: 10, winD: 20, panelL: 20, panelD: 30, blurOL: 3, blurOD: 5, blurIL: 6, blurID: 10 };
   var MAX = { winL: 60, winD: 60, panelL: 60, panelD: 60, blurOL: 40, blurOD: 40, blurIL: 40, blurID: 40 };
