@@ -8,7 +8,15 @@
  *   一覧の形が不正・repoRoot の外を指す（`..`・絶対パス・リンク経由）・通常のファイルでない → 失敗。元のファイルがない → 記録してスキップ。
  * - 作業ツリー側にすでにある（追跡されているファイル）ものは、上書きしない（スキップ）。
  */
-import { copyFileSync, lstatSync, mkdirSync, readFileSync, realpathSync, statSync } from "node:fs";
+import {
+  constants,
+  copyFileSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
 import { dirname, isAbsolute, join, normalize, sep } from "node:path";
 import { type Failure, failure, isPathUnder, type Result } from "@touryou/core";
 
@@ -129,7 +137,8 @@ export function copySeed(
       } catch (e) {
         if (!isFileNotFound(e)) throw e;
       }
-      copyFileSync(join(repoRoot, rel), dest); // 権限（0600 など）も写る
+      // 権限（0600 など）も写る。APFS ではクローン（容量・時間を使わない）、使えない環境では通常のコピーになる。
+      copyFileSync(join(repoRoot, rel), dest, constants.COPYFILE_FICLONE);
       copied.push(rel);
     } catch {
       skipped.push(rel);

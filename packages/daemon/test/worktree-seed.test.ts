@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -35,7 +36,7 @@ const setup = (seedList?: unknown) => {
   mkdirSync(repoRoot);
   mkdirSync(worktreeRoot);
   git(repoRoot, "init", "-q", "-b", "main");
-  writeFileSync(join(repoRoot, ".gitignore"), ".envrc\n.claude/settings.local.json\n");
+  writeFileSync(join(repoRoot, ".gitignore"), ".envrc\n.claude/settings.local.json\nbin/\nsecret\n");
   git(repoRoot, "add", ".");
   git(repoRoot, "commit", "-q", "-m", "init");
   writeFileSync(join(repoRoot, ".envrc"), "export A=1\n", { mode: 0o600 });
@@ -121,6 +122,54 @@ describe("作業ツリーへの設定ファイルのコピー", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe("seedOutsideRepo");
     expect(git(repoRoot, "worktree", "list").split("\n")).toHaveLength(1);
+  });
+
+  it("丸ごと gitignore のディレクトリの中のバイナリ（Renga の actionlint の形）も写り、回収の判定できれいとみなす", async () => {
+    const { repoRoot, ports, events } = setup({
+      files: ["bin/actionlint-aarch64-apple-darwin"],
+    });
+    mkdirSync(join(repoRoot, "bin"));
+    writeFileSync(join(repoRoot, "bin", "actionlint-aarch64-apple-darwin"), "binary\n", {
+      mode: 0o755,
+    });
+    const r = await ports.provisionWorktree({ parentId: "root", nodeId: "c1" });
+    if (!r.ok) throw new Error(r.error.cause);
+    const dest = join(r.value.worktreePath, "bin", "actionlint-aarch64-apple-darwin");
+    expect(readFileSync(dest, "utf8")).toBe("binary\n");
+    expect(statSync(dest).mode & 0o777).toBe(0o755);
+    expect(events[0]?.copied).toEqual(["bin/actionlint-aarch64-apple-darwin"]);
+    expect((await ports.factsFor("c1"))?.clean).toBe(true);
+    expect((await ports.lossFor("c1"))?.untracked).toBe(0);
+    // 一覧にないファイルが同じディレクトリにあれば、きれいでない（隠さない）
+    writeFileSync(join(r.value.worktreePath, "bin", "other"), "x\n");
+    expect((await ports.factsFor("c1"))?.clean).toBe(false);
+    expect((await ports.lossFor("c1"))?.untracked).toBe(1);
+  });
+
+  it("元のファイルがなければ、写さずに作業ツリーは作る（missing に記録する）", async () => {
+    const { ports, events } = setup({ files: ["bin/actionlint-aarch64-apple-darwin"] });
+    const r = await ports.provisionWorktree({ parentId: "root", nodeId: "c1" });
+    if (!r.ok) throw new Error(r.error.cause);
+    expect(existsSync(join(r.value.worktreePath, "bin"))).toBe(false);
+    expect(events).toEqual([
+      { nodeId: "c1", copied: [], skipped: [], missing: ["bin/actionlint-aarch64-apple-darwin"] },
+    ]);
+  });
+
+  it("コピーに失敗したファイルは、skipped に記録して、作業ツリーは作る", async () => {
+    const { repoRoot, ports, events } = setup({ files: ["secret", ".envrc"] });
+    const src = join(repoRoot, "secret");
+    writeFileSync(src, "s\n");
+    chmodSync(src, 0o000); // 読めないので、コピーに失敗する
+    try {
+      const r = await ports.provisionWorktree({ parentId: "root", nodeId: "c1" });
+      if (!r.ok) throw new Error(r.error.cause);
+      expect(existsSync(join(r.value.worktreePath, "secret"))).toBe(false);
+      expect(events[0]?.skipped).toEqual(["secret"]);
+      expect(events[0]?.copied).toEqual([".envrc"]);
+    } finally {
+      chmodSync(src, 0o600);
+    }
   });
 
   it("作業ツリー側にすでにあるファイルは、上書きしない", async () => {

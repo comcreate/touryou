@@ -436,34 +436,53 @@ export function createGitPorts(
     }
   };
 
+  /**
+   * 作業ツリーの `git status --porcelain` の行（空行を除く）。調べられなければ `undefined`。
+   * `--ignored=matching` は、丸ごと gitignore のディレクトリを `!! dir/` の 1 行にまとめる。一覧（`seeded`）のファイルがその中にあるときは、
+   * 中身が一覧のファイルだけかを確かめられないので、そのディレクトリだけ、ファイルごとの行に開く（`--ignored=traditional`）。
+   * 一覧のファイルを含まないディレクトリ（`node_modules/` など）は、開かない（行が膨らむため）。
+   * fsmonitor・フックは使わない（作業ツリーの設定に、コマンドを走らせない）。
+   */
+  const statusLines = async (
+    path: string,
+    seeded: ReadonlySet<string>,
+  ): Promise<string[] | undefined> => {
+    const base = ["-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "status"];
+    const status = await git(
+      [...base, "--porcelain", "--untracked-files=all", "--ignored=matching"],
+      path,
+    );
+    if (status.code !== 0) return undefined;
+    const lines: string[] = [];
+    for (const l of status.stdout.split("\n")) {
+      if (l === "") continue;
+      const dir = l.startsWith("!! ") && l.endsWith("/") ? l.slice(3) : undefined;
+      if (dir === undefined || ![...seeded].some((s) => s.startsWith(dir))) {
+        lines.push(l);
+        continue;
+      }
+      const inner = await git(
+        [...base, "--porcelain", "--untracked-files=all", "--ignored=traditional", "--", dir],
+        path,
+      );
+      if (inner.code !== 0) return undefined;
+      lines.push(...inner.stdout.split("\n").filter((x) => x !== ""));
+    }
+    return lines;
+  };
+
   /** きれいか: 未保存の変更・未追跡のファイルがなく、gitignore の対象は、再生成できるもの（許可リスト）かリンクだけ。調べられなければ false。 */
   const isClean = async (path: string): Promise<boolean> => {
     const seeded = seededPaths();
-    // fsmonitor・フックは使わない（作業ツリーの設定に、コマンドを走らせない）。
-    const status = await git(
-      [
-        "-c",
-        "core.fsmonitor=false",
-        "-c",
-        "core.hooksPath=/dev/null",
-        "status",
-        "--porcelain",
-        "--untracked-files=all",
-        "--ignored=matching",
-      ],
-      path,
-    );
+    const lines = await statusLines(path, seeded);
     return (
-      status.code === 0 &&
-      status.stdout
-        .split("\n")
-        .filter((l) => l !== "")
-        .every(
-          (l) =>
-            ((l.startsWith("!! ") || l.startsWith("?? ")) && seeded.has(l.slice(3))) ||
-            (l.startsWith("!! ") && regenerable.has(l.slice(3).split("/")[0] ?? "")) ||
-            isIgnoredLink(path, l),
-        )
+      lines !== undefined &&
+      lines.every(
+        (l) =>
+          ((l.startsWith("!! ") || l.startsWith("?? ")) && seeded.has(l.slice(3))) ||
+          (l.startsWith("!! ") && regenerable.has(l.slice(3).split("/")[0] ?? "")) ||
+          isIgnoredLink(path, l),
+      )
     );
   };
 
@@ -511,25 +530,11 @@ export function createGitPorts(
       }
     }
     if (branchOnly) return out; // 作業ツリーがないので、未保存の変更・未追跡のファイルは、ない
-    // fsmonitor・フックは使わない（作業ツリーの設定に、コマンドを走らせない）。
-    const status = await git(
-      [
-        "-c",
-        "core.fsmonitor=false",
-        "-c",
-        "core.hooksPath=/dev/null",
-        "status",
-        "--porcelain",
-        "--untracked-files=all",
-        "--ignored=matching",
-      ],
-      path,
-    );
-    if (status.code !== 0) out.workingTreeUnknown = true;
+    const seeded = seededPaths();
+    const lines = await statusLines(path, seeded);
+    if (lines === undefined) out.workingTreeUnknown = true;
     else {
-      const seeded = seededPaths();
-      for (const line of status.stdout.split("\n")) {
-        if (line === "") continue;
+      for (const line of lines) {
         if ((line.startsWith("!! ") || line.startsWith("?? ")) && seeded.has(line.slice(3)))
           continue;
         if (line.startsWith("?? ")) out.untracked += 1;

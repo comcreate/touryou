@@ -4,6 +4,7 @@
 
 ### 利用者に見える変更
 
+- **再生成できる ignored のファイル（Renga の actionlint のバイナリなど）を、新しい作業ツリーに置く手順を整えた**（#250）。既存の `.claude/touryou-worktree-files.json` で足りると確かめ（新しい設定・コマンドは足していない）、コピーを APFS のクローンにして（できなければ通常のコピー）、丸ごと gitignore のディレクトリの中の一覧のファイルも、回収の「きれいか」の判定から外れるようにした（`dir/` にまとまって出る形だと、一覧にあっても「きれいでない」になる場合があった）。手順は `docs/plugin.md`。
 - **別の daemon につなぐ MCP を、設定ごとの名前（`touryou-<名前>`）・`--config` 固定で登録できるようにした**（#224）。`touryou launchd init --config <設定> [--name <名前>]` が、`claude mcp add touryou-<名前> -- …/touryou-mcp --stdio --config <設定>` の命令を「【MCP を登録する】」に出す（実行はしない）。既定の設定の daemon と、plugin の `node` の経路は変わらない。統合セッションの `whoami` の `daemon.repoRoot`・`daemonId` で、つながった daemon を確かめられる（子には出さない）。理由は `.sdd/adr/touryou-224-mcp-per-daemon.md`、使い方は `docs/launchd.md`。
 - **状態画面の失敗の帯を、表示言語（日本語・英語）に合わせた**（#141）。daemon は失敗の種類と値（msg）も返し、英語の画面では日英の表から文を作る。CLI・skill・MCP が読む日本語の cause は変えていない。
 - **状態画面のヘッダーに、どの daemon の画面かを出した**（#197）。複数の daemon を使うときに見分けられる。`touryou launchd status --json` を足した。

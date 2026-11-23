@@ -257,6 +257,30 @@ TouRyou は、**セッションを起動しません**。**Anthropic の認証�
   - 作業ディレクトリの上のフォルダに、読めない `.git` がないかも確かめる。
 - 既知の残り: 子の Bash は同じユーザーなので、`<stateDir>/root-token` をファイルとして読めてしまう。フックの範囲の判定で、state のディレクトリを禁止の場所に入れて防ぐ。
 
+## 再生成できる ignored のファイルを、新しい作業ツリーに置く（#250）
+
+gitignore の対象で、チェックアウトでは来ないファイル（`.envrc`、ダウンロードしたバイナリなど）は、`<repoRoot>/.claude/touryou-worktree-files.json` の `files` に書くと、daemon が作業ツリーを作るときに**コピー**する。TouRyou に新しい設定・コマンドは要らない（任意のコマンドを走らせる経路は、足していない。理由は `.sdd/task/250/design.md`）。
+
+例（Renga。`packages/editor/src-tauri/binaries/actionlint-aarch64-apple-darwin` が、`cargo test` と `pnpm e2e` に要る）:
+
+1. 本体の作業ツリー（`repoRoot`）で、1 回だけ、`scripts/fetch-actionlint` を実行してバイナリを取る。
+2. `repoRoot` に `.claude/touryou-worktree-files.json` を置く（人が書く。子は `.claude/` を書けない）:
+
+   ```json
+   { "files": ["packages/editor/src-tauri/binaries/actionlint-aarch64-apple-darwin"] }
+   ```
+
+3. 以後、新しい子の作業ツリーには、このバイナリが入る（権限も写る）。子は、`scripts/fetch-actionlint` の許可を頼まなくてよい。
+
+決まり:
+
+- **コピーであって、リンクではない**。子が書き換えても、`repoRoot` のファイルは変わらない。APFS（macOS の既定）では、クローンになるので、大きなファイルでも時間と容量を使わない（クローンできない環境では、通常のコピー）。
+- 一覧は、50 件まで。相対パスだけ（`..`・絶対パス・`.git` の中・`repoRoot` の外を指すリンクは、作業ツリーを作らずに失敗する）。一覧の形が不正なときも、同じ。
+- `repoRoot` に元のファイルがなければ、写さずに作業ツリーを作る（daemon の標準エラーの `worktreeSeeded` の行に、`missing` として出る）。その場合は、`repoRoot` で取り直してから、子を作る（すでにある子には、写らない）。
+- コピーに失敗したファイル（読めないなど）は、写さずに作業ツリーを作る（`worktreeSeeded` の `skipped`）。作業ツリー側にすでにある（追跡されている）ファイルは、上書きしない（同じく `skipped`）。
+- 一覧のファイルは、回収の「きれいか」の判定（未保存の変更・未追跡のファイル）に数えない。子が書き換えていても、回収は止まらない。同じディレクトリにある、一覧にないファイル（取り直したファイルの置き忘れなど）は、これまでどおり数える。
+- 一覧のファイルは、**再生成できるものだけ**にする。秘密（`.env` など）を一覧に入れると、子の作業ツリーに写り、回収の判定からも外れる。
+
 ## Desktop
 
 Desktop の子へのフックの継承と、接続設定の引き継ぎは、`docs/desktop-runtime.md` を見る。この節は、CLI の分だけ。
