@@ -72,7 +72,7 @@ ID は、短縮せずに、そのまま渡します（作業ツリーのディ�
 | 理由 | 意味 | 満たす手順 |
 | --- | --- | --- |
 | `stateNotEligible` | ノードが `verified`・`stopped`・`reclaimable` のどれでもない（動作中・`done`・`archived` など） | 状態が進むのを待つ。`done` の子は先に `node_review` で受理する。`archived` は回収済み |
-| `discardRequired` | `stopped` のノードで、成果を捨てる判断がない | 人が `touryou reclaim <nodeId>` の表示を見て、`--yes --expect` で破棄を決める（`docs/reclaim-loss.md`）。自分では決めない |
+| `discardRequired` | `stopped` のノードで、成果を捨てる判断がない | 人が `touryou reclaim <nodeId>` の表示を見て、`--yes --expect` で破棄を決める（`docs/reclaim-loss.md`）。自分では決めない。受理済み（`verified`）でも、`notMerged` で止まり、統合済みにならない（スカッシュ後など）子や、作業ツリーもブランチもない子は、同じく人が破棄を決める（`node.reclaimInstruct` は人間だけ。実体のない子は `noTip` の記録で `archived` になる）。あなたは state.db を書き換えない |
 | `factsMissing` | **作業ツリーが daemon の `worktreeRoot` の外にある、または git に登録されていない**（ノードの記録と一致する path・ブランチで `git worktree list` にない、または git を調べられない）。作業ツリーの事実が取れず、ほかの条件（`notMerged`・`dirty`・プロセス）は判定できない | 下の「`factsMissing` のとき」 |
 | `notMerged` | 成果がまだ親のブランチに統合されていない（`reclaimable` で統合済みでない場合も） | `node_integrate` で統合する。`notFastForward`・`targetDirty` のときは `decision_present` で人に聞く。成果を捨てるなら、人が破棄を決める |
 | `dirty` | 作業ツリーに未保存の変更がある | 残すものを子に取り出させ（コミット）、不要な変更は人が片付ける。破棄は人が決める |
@@ -147,7 +147,7 @@ CLI の子（`runtime` が `cli` の子）は、TouRyou が起動しません。
 ## 守ること
 
 - 最終削除・保留・保管の取り出しなど、取り消せない操作は、あなたの操作に含まれません。人間が `touryou` コマンドか画面で行います。必要なら、人間に頼みます。
-- 統合済みの子をまとめて片付けたいときは、人間に `touryou reclaim-merged`（一覧の確認のあと `--yes --expect <digest>`）を頼む。一括の回収は人間だけが実行でき、あなたは呼べない。スカッシュ・リベースでマージした子は一括の対象外（一覧に「統合されていない」と出る）なので、個別の `touryou reclaim <nodeId>` を案内する。詳しくは `docs/reclaim-loss.md`。
+- 統合済みの子をまとめて片付けたいときは、人間に `touryou reclaim-merged`（一覧の確認のあと `--yes --expect <digest>`）を頼む。一括の回収は人間だけが実行でき、あなたは呼べない。スカッシュ・リベースでマージした子は一括の対象外（一覧に「統合されていない」と出る）なので、個別の `touryou reclaim <nodeId>` を案内する。一括は強制しない（`-D` を使わない）ので、自分か配下に、人が破棄を判断したノードがある子は、一括の対象外（`discardRequired`）になる。これも個別に案内する。詳しくは `docs/reclaim-loss.md`。
 - 範囲違反（受信箱の `violation`。要約が「範囲違反（フックが拒んだ・…）」のもの）を人に伝えるときは、「フックが拒んだ」をその言葉のまま伝える（操作は実行されていない）。「記録が 1 件」「実害なし」だけに言い換えない。拡張の要求（「範囲の拡張要求」）は、拒まれた操作ではなく、判定を待つ要求として伝える。
 - `node_spawn` が `scopeNotSubset` で失敗したら、まず子の `forbiddenLocations` に、親の禁止の場所がすべて入っているかを確かめる（`node_state` で親の範囲を見て、抜けているものを足して作り直す）。`writableLocations`・`allowedCommands` が親の範囲に収まっているかも確かめる。
 - `node_spawn`・`scope_decide` が `scopeNotSubset` で失敗し、`cause` に `config.json` の `rootScope` とあるとき（上限が根の範囲のとき）は、根の範囲が足りない。黙って子の範囲を削らずに、人に、`config.json` の `rootScope` を広げて daemon を起動し直すか、子の範囲を絞るかを尋ねる。

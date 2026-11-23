@@ -15,6 +15,8 @@
  *   ただし、破棄の判断を経た停止（`stopped` で `discarded`）は、成果を捨てることを含めて判断済みなので、
  *   条件 1 と条件 2 を免除する（人間への未保存の変更の提示は、判断の画面の責務。spec 5.8）。
  *   `reclaimable` は、`merged` でなければ破棄の経路とみなし、`discarded` を要する。
+ *   受理済み（`verified`）も、人が破棄を判断して `discarded` が記録されていれば、同じ破棄の経路にする（条件 1・2 を免除）。
+ *   `discarded` の記録がない `verified` は、これまでどおり `merged`・`clean` を要する。
  * - 条件 3 の「未完了」は、依存元が `COMPLETED_STATES`（`verified`・`reclaimable`・`archived`）以外であること。
  *   入力の `nodes` に含まれない木の外からの依存は、daemon が実行時に再判定して拾う。
  * - 条件 5: 統合ノードは、配下がすべて `reclaimable` または `archived` であること。
@@ -238,9 +240,12 @@ export function assessReclaim(
       (validAbs(root) &&
         isPathUnder(normalizePath("/", facts.worktreePath), normalizePath("/", root))));
 
-  // 破棄の経路: 停止したノード、または統合済みでない（＝破棄で回収可能になった）回収可能ノード。
+  // 破棄の経路: 停止したノード、人が破棄を判断した受理済み（verified）のノード、または統合済みでない
+  // （＝破棄で回収可能になった）回収可能ノード。verified は、破棄の記録がなければ通常の経路（merged・clean を要する）。
   const discardPath =
-    node.state === "stopped" || (node.state === "reclaimable" && facts?.merged !== true);
+    node.state === "stopped" ||
+    (node.state === "verified" && facts?.discarded === true) ||
+    (node.state === "reclaimable" && facts?.merged !== true);
   const discardedOk = discardPath && facts?.discarded === true;
   if (discardPath && !discardedOk) {
     unmet.push(node.state === "stopped" ? "discardRequired" : "notMerged");

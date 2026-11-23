@@ -14,6 +14,13 @@ describe("回収の事前確認の loss", () => {
     expect(ROLE_OPERATIONS.child).not.toContain("node.reclaimPreview");
     expect(ROLE_OPERATIONS.integrator).not.toContain("node.reclaimInstruct");
     expect(ROLE_OPERATIONS.integrator).not.toContain("node.purge");
+    // 受理済み（verified）の破棄の指示（#239）と一括の回収（#234）も、人間のロールだけ
+    expect(ROLE_OPERATIONS.human).toContain("node.reclaimInstruct");
+    for (const role of ["integrator", "child"] as const) {
+      expect(ROLE_OPERATIONS[role]).not.toContain("node.reclaimInstruct");
+      expect(ROLE_OPERATIONS[role]).not.toContain("node.reclaimBatch");
+      expect(ROLE_OPERATIONS[role]).not.toContain("node.reclaimBatchPreview");
+    }
     expect(INTEGRATOR_OPERATION_CLASS["node.reclaimPreview"]).toBe("subtree");
   });
 

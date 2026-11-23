@@ -210,9 +210,10 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
     return tip.kind === "none" ? "ok" : "mismatch";
   };
 
-  /** 強制の対象になりうるノード（停止した、または、そこから回収可能にした）。 */
+  /** 強制の対象になりうるノード（停止した、人が破棄を判断した受理済み〔verified〕、または、そこから回収可能にした）。 */
   const forceCandidate = (n: NodeRecord | undefined): n is NodeRecord =>
-    n !== undefined && (n.state === "stopped" || n.state === "reclaimable");
+    n !== undefined &&
+    (n.state === "stopped" || n.state === "verified" || n.state === "reclaimable");
 
   /**
    * 先端の不一致。原因・次の操作・監査のログに出すのは、ノード ID だけ（SHA は出さない）。
@@ -264,11 +265,13 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
     discarded: ReadonlySet<string>,
   ): Promise<{ result: Result<ReclaimAssessment, Failure>; facts?: WorktreeFacts }> {
     const raw = await safely(nodeId, () => ports.factsFor(nodeId), undefined);
-    // 消すものがない（gone）事実は、人が破棄を決めた停止ノードと、まだ判断のない停止ノード（判断が要ると示すため）にだけ使う。
+    // 消すものがない（gone）事実は、人が破棄を決めた停止ノード・受理済み（verified）ノードと、まだ判断のない停止ノード
+    // （判断が要ると示すため）にだけ使う。破棄の判断がない verified は、これまでどおり事実がないもの（factsMissing）。
     const self = nodes.find((n) => n.id === nodeId);
     const goneUsable =
       self !== undefined &&
-      (self.state === "stopped" || (self.state === "reclaimable" && discarded.has(nodeId)));
+      (self.state === "stopped" ||
+        ((self.state === "verified" || self.state === "reclaimable") && discarded.has(nodeId)));
     const found = raw?.gone === true && !goneUsable ? undefined : raw;
     let processes: readonly ProcessInfo[] | null = null;
     // プロセスの調査は、そのノードの作業ツリーだけに絞る（置き場全体を `lsof +D` で走査すると、時間切れで全ノードが不明になる）。
@@ -427,10 +430,10 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
       if (node.discarded !== undefined && !forceCandidate(node)) {
         return { ok: true, value: { accepted: true } }; // 記録済み（冪等）
       }
-      if (node.state !== "stopped" && node.discarded === undefined) {
+      if (node.state !== "stopped" && node.state !== "verified" && node.discarded === undefined) {
         return fail(
           "notStopped",
-          `ノード ${nodeId} は ${node.state} で、破棄を判断できない（停止済み〔stopped〕のノードだけ）`,
+          `ノード ${nodeId} は ${node.state} で、破棄を判断できない（停止済み〔stopped〕か、受理済み〔verified〕のノードだけ）`,
           node.state === "done"
             ? `済んだと報告した（done）子は、受理しないなら、人が先に止める: "$HOME/.touryou/current/bin/touryou" stop ${nodeId} --yes（停止を確かめたあとに、もう一度これを実行する）`
             : "先に node.stop で止めて、停止を確認してから判断する",
@@ -643,7 +646,7 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
         for (const c of candidates) {
           if (!c.eligible) continue;
           // 1 件ずつ、通常の回収（強制なし）。`execute` が、削除の直前に再判定する（未コミット・未統合に変わっていれば、飛ばす）。
-          const r = await execute(`${req.requestId}/${c.nodeId}`, { human: true }, c.nodeId);
+          const r = await execute(`${req.requestId}/${c.nodeId}`, { human: true }, c.nodeId, true);
           if (r.ok) reclaimed.push(...r.value.reclaimed.filter((id) => !reclaimed.includes(id)));
           else failed.push({ nodeId: c.nodeId, code: r.error.code, cause: r.error.cause });
         }
@@ -694,6 +697,20 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
     const lines: string[] = [];
     for (const n of order) {
       if (n.state !== "verified") continue;
+      // 自分か配下に、人が破棄を判断した（discarded 記録つきの）ノードがあれば、一括の対象にしない。一括は強制を使わず、
+      // 破棄の判断は、一覧・照合の値に出ない。1 件ずつ、touryou reclaim で確かめて回収する。
+      const hasDiscarded = postOrder(state.nodes, n.id).some(
+        (x) => x.state !== "archived" && x.discarded !== undefined,
+      );
+      if (hasDiscarded) {
+        candidates.push({
+          nodeId: n.id,
+          eligible: false,
+          unmet: ["discardRequired"],
+          blockers: [],
+        });
+        continue;
+      }
       const { result: r } = await assessNode([...virtual.values()], open, n.id, discarded);
       if (!r.ok) {
         candidates.push({
@@ -727,6 +744,7 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
     requestId: string,
     actor: Actor,
     nodeId: string,
+    noForce?: true,
   ): Promise<Result<{ reclaimed: readonly string[] }, Failure>> {
     const { plan, unmet } = await assess(log.state(), nodeId);
     if (unmet.length > 0) return notReclaimable(unmet);
@@ -850,9 +868,9 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
           // 強制（作業ツリーの `--force`・ブランチの `-D`）は、記録上、人間が破棄を判断した（`discarded`）、停止した
           // （stopped・そこから回収可能にした）ノードだけ（仕様 5.8）。判断は、ここで行う。ポートは渡された `force` を実行するだけ。
           const record = log.state().nodes.find((x) => x.id === n.id);
+          // 一括の回収（noForce）は、記録があっても強制しない（一覧・照合の値に出ない配下を、強制で消さないため）。
           const force =
-            record?.discarded !== undefined &&
-            (record.state === "stopped" || record.state === "reclaimable");
+            noForce !== true && forceCandidate(record) && record.discarded !== undefined;
           removed = await ports.removeWorktree(n.id, {
             expectedPath: again.facts.worktreePath,
             ...(force ? { force: true, onTip } : {}),

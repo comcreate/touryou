@@ -2221,19 +2221,23 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
             "判断の結果を確認する",
           );
         }
-        if (node.state !== "stopped" && node.state !== "reclaimable") {
+        if (
+          node.state !== "stopped" &&
+          node.state !== "verified" &&
+          node.state !== "reclaimable"
+        ) {
           return reject(
             seq,
             "invalidTransition",
-            `状態 ${node.state} のノードの破棄の判断は、更新できない（stopped・reclaimable のときだけ）`,
+            `状態 ${node.state} のノードの破棄の判断は、更新できない（stopped・verified・reclaimable のときだけ）`,
             "ノードの状態を確認する",
           );
         }
-      } else if (node.state !== "stopped") {
+      } else if (node.state !== "stopped" && node.state !== "verified") {
         return reject(
           seq,
           "invalidTransition",
-          `状態 ${node.state} のノードに破棄の判断は記録できない（stopped のときだけ）`,
+          `状態 ${node.state} のノードに破棄の判断は記録できない（stopped・verified のときだけ）`,
           "ノードの状態を確認する",
         );
       }

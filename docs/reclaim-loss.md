@@ -44,10 +44,19 @@ touryou reclaim <nodeId> --yes --expect <digest>    # 表示した照合の値�
 止まった子の作業ツリーとブランチが、もう消えていることがある（前から残っていた CLI の子を、人が `touryou confirm-stopped` で止めたと宣言した、など）。
 
 - daemon は、作業ツリーの一覧（`git worktree list`）を取れて、そのノードの登録がなく、作業ツリーの場所にディレクトリもなく、ブランチ（`touryou/…`）もないときだけ、**消すものがない**（事実の `gone`）とみなす。一覧を取れない・場所にディレクトリが残っている、などは、これまでどおり `factsMissing`（回収不可）。
-- 消すものがないとみなすのは、**停止したノード（stopped）と、そこから破棄で回収可能にしたノードだけ**。検証済みのノードなど、破棄の判断の経路でないノードは、これまでどおり `factsMissing`。
+- 消すものがないとみなすのは、**停止したノード（stopped）と、人が破棄を判断した受理済み（verified）のノード、そこから破棄で回収可能にしたノードだけ**。破棄の判断がない `verified` や、破棄の判断の経路でないノードは、これまでどおり `factsMissing`（下の「受理済み（verified）の破棄」）。
 - 停止したノードは、判断がなければ `discardRequired` だけになる（`factsMissing` にしない）。`touryou reclaim` は、「失われるもの: なし」と、先端の行「なし（ブランチがない）」と、照合の値（ふだんと同じ 12 桁）を出す。`--yes --expect` で破棄を決めると（`noTip: true` を記録）、統合ノードの回収（`node.reclaim`）が、消すものがないことを確かめ直してから、**記録だけを archived にする**（保管する先端もない。`lastCommit` は記録しない）。
 - ブランチがあるうちに破棄を決め、そのあとブランチが消えた場合は、先端の照合で止まる（`tipMismatch`）。もう一度 `touryou reclaim` で確かめ直して、決め直す。
 - **daemon が作業ツリーの情報を確かめられないノード（`factsMissing`）は、`touryou reclaim` が破棄を指示しない**（`--yes` でも。終了コード 1。「回収できない」と理由・次の操作を出す）。画面も、同じとき指示させない。破棄を決めても回収できず、「破棄を指示済み」の表示と、統合の事前確認が食い違うため。
+
+## 受理済み（verified）の破棄と、実体のない verified の閉じ方（#239）
+
+スカッシュ・リベースでマージされた、PR が閉じられた、別の方法で取り込んだ、などで、受理済み（`verified`）の子が「統合済み」と判定されず、通常の回収（`notMerged`）で止まることがある。人が内容を確かめて捨ててよいと決めるための道を、`stopped` と同じ記録の上に作った。
+
+- **破棄の指示**（`node.reclaimInstruct`）は、`stopped` に加えて `verified` の子も受ける。記録は `node.discardDecided`（`expectTip` か `noTip`）で、`stopped` と同じ形。**人間のロールだけ**が呼べる（統合ノード・子の AI は呼べない。ロール表と試験で確かめている）。先端の照合（`expectTips`）と、`-D` の直前の保管・再照合も、`stopped` と同じ。状態は `verified` のまま（受理の意味は変えない。依存元は、これまでどおり完了とみなす）。
+- **判定**（`assessReclaim`）は、`verified` で破棄の記録があるときだけ、条件 1（統合済み）と条件 2（未保存の変更なし）を免除する。記録がない `verified` は、これまでどおり `notMerged`・`dirty`。条件 3 以降（依存元・未回答の判断・配下・プロセス）は免除しない。
+- **実行**（`node.reclaim`）は、破棄を判断した `verified` を、`stopped` と同じく、`--force`・`-D` で消す（先に先端を保管する）。
+- **実体のない `verified`**（作業ツリー・ブランチ・登録がどれもない。`gone`）は、`noTip: true` の破棄を決めると、`stopped` の `gone` と同じ道で、記録だけを `archived` にする。state.db を直接書き換えない。`gone` でない `verified` には、`noTip`（先端がなかったという記録）は断られる（先端があるので `tipMismatch`）。破棄の記録がない `gone` の `verified` は、これまでどおり `factsMissing`。
 
 ## 回収の事前確認の `unmet` の理由と、満たす手順（#235）
 
@@ -56,7 +65,7 @@ touryou reclaim <nodeId> --yes --expect <digest>    # 表示した照合の値�
 | 理由 | 意味 | 満たす手順 |
 | --- | --- | --- |
 | `stateNotEligible` | ノードが `verified`・`stopped`・`reclaimable` のどれでもない | 状態が進むのを待つ。`done` の子は先に受理する。`archived` は回収済み |
-| `discardRequired` | `stopped` のノードで、成果を捨てる判断がない | `touryou reclaim <nodeId>` の表示を見て、人が `--yes --expect` で破棄を決める |
+| `discardRequired` | `stopped` のノードで、成果を捨てる判断がない。一括の回収（`reclaim-merged`）では、自分か配下に、人が破棄を判断したノードがある `verified` の子も | `touryou reclaim <nodeId>` の表示を見て、人が `--yes --expect` で破棄を決める。一括の対象外の子は、個別に `touryou reclaim <nodeId>` で確かめる |
 | `factsMissing` | 作業ツリーが daemon の `worktreeRoot` の外にある、または git に登録されていない（ノードの path とブランチが `git worktree list` にない、git を調べられない、を含む） | 下の「`factsMissing` のとき」 |
 | `notMerged` | 成果が親のブランチに統合されていない | `node_integrate` で統合する。成果を捨てるなら、人が破棄を決める |
 | `dirty` | 作業ツリーに未保存の変更がある | 残すものを取り出し（コミット）、不要な変更を片付ける |
@@ -124,7 +133,7 @@ PR がマージされた子の作業ツリーとローカルブランチ（`tour
 - **対象**: 状態が `verified` で、祖先の判定で統合済み（`merged: true`）と分かり、作業ツリーが未コミットでないもの。配下の子から先に判定する。
 - **対象外（理由つきで表示）**: 未コミット（`dirty`）、統合されていない（`notMerged`）、状態を調べられない、など。未コミット・未統合の成果は、一括では消さない。
 - **スカッシュ・リベースでマージした子は、対象外になる**。統合済みの判定が祖先の判定（`merge-base --is-ancestor`）のため、スカッシュ・リベースは検出できない。一覧に「統合されていない」と出た子は、個別に確かめて回収する: `touryou reclaim <nodeId>`。
-- **強制しない**: 通常の回収と同じく、`git worktree remove`・`git branch -d` だけ（`--force`・`-D` は使わない）。git 自身も、未コミット・未統合の成果を拒む。
+- **強制しない**: 通常の回収と同じく、`git worktree remove`・`git branch -d` だけ（`--force`・`-D` は使わない）。git 自身も、未コミット・未統合の成果を拒む。**一括からは、実行（`execute`）に「強制不可」を渡し、記録があっても強制しない**。さらに、対象の子の**自分か配下に、人が破棄を判断した（`discarded` の記録がある）ノードがあれば、その子は一括の対象にしない**（`discardRequired`）。破棄を判断した配下は、一覧・照合の値・CLI の表示に出ないため、一括が強制で消してしまわないようにする。単独の回収（`node.reclaim`）の強制は、これまでどおり。
 - **照合の値（`--expect`）**: 一覧の内容（回収できる子と、その先端）から daemon が計算する値。`--yes` には、表示した値が要る。表示のあとで対象や先端が変わると、値が合わず（`digestMismatch`）、何も消さない。
 - **「未 push」の意味と限界**: リモートへの push は見ていない。親のブランチへの統合（`notMerged`）と未コミット（`dirty`）で、成果の取りこぼしを防ぐ。
 - **リポジトリごと**: daemon が管理する作業ツリーの置き場（`worktreeRoot`）の単位で閉じる。ほかのリポジトリの作業ツリーには触らない。

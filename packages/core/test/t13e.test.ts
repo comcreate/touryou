@@ -232,6 +232,52 @@ describe("node.discardDecided（破棄の判断。停止したノードだけ）
     expect(code(foldEvents([...stopped(), discard("a b")]))).toBe("invalidPayload");
   });
 
+  describe("受理済み（verified）のノード（#239）", () => {
+    const verified = (): OrchEvent[] => [
+      ...base(),
+      changed("a", { type: "reportDone" }),
+      changed("a", { type: "accept" }),
+    ];
+    const T1 = "1".repeat(40);
+    const T2 = "2".repeat(40);
+    const dec = (payload: Record<string, unknown> = {}) =>
+      ev({ type: "node.discardDecided", payload: { nodeId: "a", ...payload } } as never, {
+        actor: HUMAN,
+      });
+    const recOf = (s: OrchState) => s.nodes.find((n) => n.id === "a");
+
+    it("破棄の判断を記録できる（stopped と同じ形）。状態は verified のまま。先端の記録の更新もできる", () => {
+      const s = must(foldEvents([...verified(), dec({ expectTip: T1 })]));
+      expect(recOf(s)?.state).toBe("verified");
+      expect(recOf(s)?.discarded?.expectTip).toBe(T1);
+      expect(recOf(s)?.discarded?.by).toEqual(HUMAN);
+      const s2 = must(foldEvents([...verified(), dec({ expectTip: T1 }), dec({ expectTip: T2 })]));
+      expect(recOf(s2)?.discarded?.expectTip).toBe(T2);
+      const s3 = must(foldEvents([...verified(), dec({ noTip: true })]));
+      expect(recOf(s3)?.discarded?.noTip).toBe(true);
+      expect(code(foldEvents([...verified(), dec({}), dec({})]))).toBe("alreadyDiscarded");
+    });
+
+    it("判断のあとの markReclaimable で reclaimable になり、archive で archived になる。判断がなくても verified は markReclaimable を通る（遷移の表は変えない）", () => {
+      // 各イベントの seq は作った順に増える。使う直前に作る（先に作ると、seq が前後する）。
+      const mark = () => changed("a", { type: "markReclaimable", discarded: false });
+      const withDecision = must(
+        foldEvents([
+          ...verified(),
+          dec({ noTip: true }),
+          mark(),
+          changed("a", { type: "archive" }),
+        ]),
+      );
+      expect(recOf(withDecision)?.state).toBe("archived");
+      expect(recOf(must(foldEvents([...verified(), mark()])))?.state).toBe("reclaimable");
+    });
+
+    it("実行中（running）には、これまでどおり記録できない", () => {
+      expect(code(foldEvents([...base(), dec()]))).toBe("invalidTransition");
+    });
+  });
+
   it("二度目の判断は拒否する（先に確定した判断を残す）", () => {
     expect(code(foldEvents([...stopped(), discard("a"), discard("a")]))).toBe("alreadyDiscarded");
   });

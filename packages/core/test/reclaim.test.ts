@@ -230,10 +230,24 @@ describe("状態の前提と破棄判断（遷移表と整合）", () => {
     expect(stopped({ discarded: true, openDecision: true } as never).reclaimable).toBe(true);
   });
 
-  it("verified のノードの discarded は条件 1 を免除しない", () => {
+  it("verified のノードは、破棄の記録がなければ条件 1・2 を要する（notMerged・dirty）。記録があれば免除する（#239）", () => {
+    const verified = (over: Partial<ReclaimNodeFacts>) =>
+      assess(input({ facts: { a: goodFacts({ merged: false, clean: false, ...over }) } }));
+    expect(verified({ discarded: false }).unmet).toEqual(["notMerged", "dirty"]);
+    const discarded = verified({ discarded: true });
+    expect(discarded.reclaimable).toBe(true);
+    expect(discarded.unmet).toEqual([]);
+    // 条件 3 以降は免除されない
     expect(
-      assess(input({ facts: { a: goodFacts({ merged: false, discarded: true }) } })).unmet,
-    ).toEqual(["notMerged"]);
+      assess(
+        input({
+          nodes: [root(), node("a", "verified"), node("d", "running", { dependsOn: ["a"] })],
+          facts: { a: goodFacts({ merged: false, clean: false, discarded: true }) },
+        }),
+      ).unmet,
+    ).toEqual(["dependentsIncomplete"]);
+    // 事実がない（factsMissing）ときは、破棄の記録があっても回収できない
+    expect(assess(input({ facts: {} })).unmet).toEqual(["factsMissing"]);
   });
 });
 
@@ -292,10 +306,17 @@ describe("フェイルクローズと回収の実行直前の再判定", () => {
   it("事実は === true のときだけ満たしたとみなす（truthy な値は満たさない）", () => {
     const a = assess(
       input({
-        facts: { a: { merged: "yes", clean: 1, discarded: true, worktreePath: WT } as never },
+        facts: { a: { merged: "yes", clean: 1, discarded: false, worktreePath: WT } as never },
       }),
     );
     expect(a.unmet).toEqual(["notMerged", "dirty"]);
+    // discarded も === true のときだけ（truthy な値は、破棄の判断とみなさない）
+    const b = assess(
+      input({
+        facts: { a: { merged: false, clean: false, discarded: "yes", worktreePath: WT } as never },
+      }),
+    );
+    expect(b.unmet).toEqual(["notMerged", "dirty"]);
   });
 
   it("hasOpenFiles は === false のときだけ開いていないとみなす（unknown・未定義・null は動作中）", () => {

@@ -595,19 +595,20 @@ describe("node.reclaimPreview（回収の事前確認。何も変えない）", 
     });
   });
 
-  it("停止していないノードの破棄の判断は、日本語の理由と次の操作つきで失敗する", async () => {
+  it("停止していない・受理済みでもないノードの破棄の判断は、日本語の理由と次の操作つきで失敗する", async () => {
     const r = rig();
+    // m1 は統合ノードで、実行中（running）
     const res = (await (r.handlers["node.reclaimInstruct"] as never as (q: unknown) => unknown)({
       requestId: "ri-x",
       operation: "node.reclaimInstruct",
       role: "human",
-      params: { nodeId: "a" },
+      params: { nodeId: "m1" },
     })) as { ok: boolean; error?: Failure };
     expect(res.ok).toBe(false);
     expect(res.error?.code).toBe("notStopped");
     expect(res.error?.cause).toContain("停止済み");
     expect(res.error?.nextActions.length).toBeGreaterThan(0);
-    expect(r.s().nodes.find((n) => n.id === "a")?.discarded).toBeUndefined();
+    expect(r.s().nodes.find((n) => n.id === "m1")?.discarded).toBeUndefined();
   });
 
   it("統合ノードは、配下の回収可能性を連鎖して見る（配下が回収可能なら、統合ノードも回収可能）。配下に不可があれば名指しする", async () => {
@@ -1165,5 +1166,149 @@ describe("統合済みの子の一括の回収（#234）", () => {
       }
     }
     expect(r.removed).toEqual([]);
+  });
+
+  /** root ─ mx（統合。受理済み）─ x（実装。停止 → 破棄を判断 → 回収可能）。x に、人の破棄の記録がある。 */
+  const withDiscardedDescendant = () => {
+    const r = rig();
+    const append = (body: EventBody, human = false): void => {
+      const res = r.log.append({
+        requestId: `seed-${++n}`,
+        actor: human ? { human: true } : SYS,
+        body,
+      });
+      if (!res.ok) throw new Error(`${res.error.code} ${res.error.cause}`);
+    };
+    append({
+      type: "node.created",
+      payload: { nodeId: "mx", role: "integrator", parentId: "root", dependsOn: [] },
+    });
+    r.ev("mx", { type: "start" });
+    append({
+      type: "node.created",
+      payload: { nodeId: "x", role: "implement", parentId: "mx", dependsOn: [] },
+    });
+    r.ev("x", { type: "start" });
+    r.ev("x", { type: "stop", mode: "immediate" });
+    r.ev("x", { type: "confirmStopped" });
+    append({ type: "node.discardDecided", payload: { nodeId: "x", noTip: true } }, true);
+    r.ev("x", { type: "markReclaimable", discarded: true });
+    r.ev("mx", { type: "reportDone" });
+    r.ev("mx", { type: "accept" });
+    r.state.facts.mx = { merged: true, clean: true, worktreePath: `${WT}/mx` };
+    r.state.facts.x = { merged: false, clean: false, worktreePath: `${WT}/x` };
+    return r;
+  };
+
+  it("配下に、人が破棄を判断した（discarded つきの）ノードがある子は、対象にせず discardRequired を出す。一括は、その配下を強制で消さない", async () => {
+    const r = withDiscardedDescendant();
+    const pre = await human(r, "node.reclaimBatchPreview");
+    expect(rowOf(pre, "mx")).toMatchObject({ eligible: false, unmet: ["discardRequired"] });
+    const res = await human(r, "node.reclaimBatch", { expectDigest: pre.value.digest });
+    expect(res.ok).toBe(true);
+    expect(res.value.reclaimed.sort()).toEqual(["a", "b", "c"]);
+    expect(r.removed).not.toContain("x");
+    expect(r.removed).not.toContain("mx");
+    expect(r.forces.every(([, f]) => f === undefined)).toBe(true);
+    expect(stateOf(r.s(), "x")).toBe("reclaimable");
+  });
+
+  it("人が破棄を判断した受理済み（verified）の子自身も、一括の対象にしない", async () => {
+    const r = rig({ facts: { a: { merged: false, clean: false, worktreePath: `${WT}/a` } } });
+    expect((await humanInstruct(r, "a", {})).ok).toBe(true);
+    const pre = await human(r, "node.reclaimBatchPreview");
+    expect(rowOf(pre, "a")).toMatchObject({ eligible: false, unmet: ["discardRequired"] });
+    await human(r, "node.reclaimBatch", { expectDigest: pre.value.digest });
+    expect(r.removed).not.toContain("a");
+    expect(stateOf(r.s(), "a")).toBe("verified");
+  });
+
+  it("単独の node.reclaim は、これまでどおり、破棄を判断した配下を強制で消す", async () => {
+    const r = withDiscardedDescendant();
+    const res = await r.call("node.reclaim", { nodeId: "mx" }, "root");
+    expect(res.ok).toBe(true);
+    expect(r.forces).toContainEqual(["x", true]);
+    expect(stateOf(r.s(), "x")).toBe("archived");
+  });
+});
+
+describe("受理済み（verified）の破棄（#239）", () => {
+  const T1 = "1".repeat(40);
+  const T2 = "2".repeat(40);
+  const unmerged = (id: string, tip?: string): WorktreeFacts => ({
+    merged: false,
+    clean: false,
+    worktreePath: `${WT}/${id}`,
+    ...(tip === undefined ? {} : { headCommit: tip }),
+  });
+
+  it("破棄の記録がない verified は、これまでどおり notMerged で回収できない", async () => {
+    const r = rig({ facts: { a: unmerged("a", T1) } });
+    const res = await r.call("node.reclaim", { nodeId: "a" });
+    expect(res.error?.code).toBe("notReclaimable");
+    expect(res.error?.cause).toContain("統合されていない");
+    expect(r.removed).toEqual([]);
+  });
+
+  it("reclaimInstruct が verified を受け、stopped と同じ形（expectTip）で記録する。再送は何も変えない", async () => {
+    const r = rig({ facts: { a: unmerged("a", T1) } });
+    const res = await humanInstruct(r, "a", { a: T1 }, "same");
+    expect(res.ok).toBe(true);
+    expect(stateOf(r.s(), "a")).toBe("verified");
+    expect(r.s().nodes.find((x) => x.id === "a")?.discarded?.expectTip).toBe(T1);
+    const seq = r.s().lastSeq;
+    expect((await humanInstruct(r, "a", { a: T1 }, "same")).ok).toBe(true);
+    expect(r.s().lastSeq).toBe(seq);
+  });
+
+  it("先端が違えば、何も記録せず tipMismatch（expectTips の照合）。取得に失敗したら tipUnknown", async () => {
+    const r = rig({ facts: { a: unmerged("a", T1) } });
+    const before = r.s().lastSeq;
+    expect((await humanInstruct(r, "a", { a: T2 })).error?.code).toBe("tipMismatch");
+    expect((await humanInstruct(r, "a", {})).error?.code).toBe("tipMismatch"); // noTip は、先端がある verified には断られる
+    r.state.facts.a = { ...unmerged("a"), headUnknown: true };
+    expect((await humanInstruct(r, "a", {})).error?.code).toBe("tipUnknown");
+    expect(r.s().lastSeq).toBe(before);
+    expect(r.s().nodes.find((x) => x.id === "a")?.discarded).toBeUndefined();
+  });
+
+  it("破棄を判断した verified は、merged・clean でなくても回収でき、先端を渡して強制で消す。判断のあとに先端が動いたら、何も消さない", async () => {
+    const r = rig({ facts: { a: unmerged("a", T1) }, tips: { a: T1 } });
+    expect((await humanInstruct(r, "a", { a: T1 })).ok).toBe(true);
+    r.state.facts.a = unmerged("a", T2);
+    const moved = await r.call("node.reclaim", { nodeId: "a" });
+    expect(moved.error?.code).toBe("tipMismatch");
+    expect(r.removed).toEqual([]);
+    r.state.facts.a = unmerged("a", T1);
+    const done = await r.call("node.reclaim", { nodeId: "a" });
+    expect(done.ok).toBe(true);
+    expect(r.forces).toContainEqual(["a", true]);
+    expect(stateOf(r.s(), "a")).toBe("archived");
+  });
+
+  it("実体のない（gone）verified は、noTip の破棄で archived になる。判断がなければ、これまでどおり factsMissing", async () => {
+    const gone: WorktreeFacts = {
+      merged: false,
+      clean: true,
+      worktreePath: `${WT}/a`,
+      gone: true,
+    };
+    const r = rig({ facts: { a: gone } });
+    const no = await r.call("node.reclaim", { nodeId: "a" });
+    expect(no.error?.code).toBe("notReclaimable");
+    expect(no.error?.cause).toContain("作業ツリーの情報を確認できない");
+    expect((await humanInstruct(r, "a", {})).ok).toBe(true);
+    expect(r.s().nodes.find((x) => x.id === "a")?.discarded?.noTip).toBe(true);
+    const res = await r.call("node.reclaim", { nodeId: "a" });
+    expect(res.ok).toBe(true);
+    expect(stateOf(r.s(), "a")).toBe("archived");
+  });
+
+  it("実行中（running）や停止中（stopping）の子は、これまでどおり notStopped で断る", async () => {
+    const r = rig();
+    expect((await humanInstruct(r, "m2", {})).error?.code).toBe("notStopped"); // running
+    r.ev("m2", { type: "stop", mode: "immediate" });
+    expect((await humanInstruct(r, "m2", {})).error?.code).toBe("notStopped"); // stopping
+    expect(r.s().nodes.find((x) => x.id === "m2")?.discarded).toBeUndefined();
   });
 });
