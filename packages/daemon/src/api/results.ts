@@ -36,6 +36,7 @@ export const RESULT_KEYS: ResultKeys = {
   "node.reclaim": ["reclaimed"],
   "node.reclaimBatchPreview": ["candidates", "digest"],
   "node.reclaimBatch": ["reclaimed", "failed"],
+  "node.mergeEvidence": ["recorded", "duplicate"],
   "node.integrate": ["alreadyIntegrated", "target", "tip"],
   "node.capabilities": ["operations"],
   "decision.get": [

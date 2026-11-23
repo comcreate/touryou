@@ -124,6 +124,7 @@ export function purgeEventSeqs(
       case "node.toolDenied":
       case "node.exited":
       case "node.discardDecided":
+      case "node.mergeEvidenceRecorded":
       case "node.lastCommit":
       case "node.purgeHeld":
       case "node.purgeHoldReleased":

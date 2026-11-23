@@ -257,6 +257,24 @@ export type EventBody =
     }
   | {
       /**
+       * 統合済みの証拠（#239。スカッシュ・リベースでマージした子を、祖先判定でなく、証拠で「統合済み」と判定するための記録）。
+       * 記録した者は封筒の `actor`（人間だけ。操作 `node.mergeEvidence` が人間のロールに限る）。状態は変えない。
+       * `tip` は、証拠が指す子のブランチの先端（`isCommitSha`）。**先端に紐付く**ので、先端が動いたら、この記録は無効（daemon が回収の
+       * 判定・削除の直前に、今の先端と照合する）。`evidenceKind`: `prHead` は、マージ済みの PR の head の SHA（人間の CLI が `gh` で取った）。
+       * `human` は、人が「この先端は統合済み」と宣言した。`prNumber` は、PR の番号（任意）。
+       * すでに同じ記録（`evidenceKind`・`tip`・`prNumber` が同じ）があれば `alreadyRecorded` で断る。先端が違う記録は、置き換える。
+       * 未知の型は再生で拒否する決まりなので、このイベントを記録した daemon の記録は、古い版の daemon では再生できない。
+       */
+      readonly type: "node.mergeEvidenceRecorded";
+      readonly payload: {
+        readonly nodeId: string;
+        readonly evidenceKind: MergeEvidenceKind;
+        readonly tip: string;
+        readonly prNumber?: number;
+      };
+    }
+  | {
+      /**
        * ノードの最終コミット（作業ツリーを消す直前の、ブランチの先端）の記録。回収のときに記録する。状態は変えない（記録のみ）。
        * 後の記録が前の記録を置き換える。最終削除の墓標の `lastCommit` の情報源。
        */
@@ -391,6 +409,16 @@ export type EventBody =
       readonly payload: { readonly decisionId: string };
     };
 
+/** 統合済みの証拠の種類。`prHead`: マージ済みの PR の head の SHA。`human`: 人の宣言。 */
+export const MERGE_EVIDENCE_KINDS = ["prHead", "human"] as const;
+export type MergeEvidenceKind = (typeof MERGE_EVIDENCE_KINDS)[number];
+export const isMergeEvidenceKind = (x: unknown): x is MergeEvidenceKind =>
+  typeof x === "string" && (MERGE_EVIDENCE_KINDS as readonly string[]).includes(x);
+/** PR の番号の上限（GitHub の番号は正の整数。極端に大きい値は、不正な形として断る）。 */
+export const MAX_PR_NUMBER = 999_999_999;
+export const isPrNumber = (x: unknown): x is number =>
+  typeof x === "number" && Number.isInteger(x) && x >= 1 && x <= MAX_PR_NUMBER;
+
 /** 最終削除の墓標（1 行の要約）。 */
 export interface PurgeTombstone {
   readonly title: string;
@@ -501,6 +529,15 @@ export interface NodeRecord {
     readonly expectTip?: string;
     /** 判断のときに、先端がなかった（ブランチがなかった）。今の先端が取れるなら、回収のときに拒否する。 */
     readonly noTip?: true;
+  };
+  /** 統合済みの証拠（`node.mergeEvidenceRecorded`。人間だけが記録できる）。`tip` に紐付く。先端が動いたら無効（回収の判定が、今の先端と照合する）。 */
+  readonly mergeEvidence?: {
+    readonly seq: number;
+    readonly at: string;
+    readonly by: Actor;
+    readonly evidenceKind: MergeEvidenceKind;
+    readonly tip: string;
+    readonly prNumber?: number;
   };
   /** 採用した既存の作業ツリー（`node.adopted`）。ある間、作業ツリー・ブランチは導出でなくこの値。回収では作業ツリー・ブランチを消さない。 */
   readonly adopted?: {
@@ -815,6 +852,7 @@ export type FoldFailureCode =
   | "unknownRef"
   | "duplicateExtension"
   | "alreadyDiscarded"
+  | "alreadyRecorded"
   | "invalidDigestOwner"
   | "notPurgeRoot"
   | "invalidPurgeHoldUntil"
@@ -2249,6 +2287,57 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
       });
       // 人が破棄を決めた子の open の判断も、答えても届かないので閉じる（止まった時点で閉じていれば、残りはない）。
       closeOpenDecisions(d, nodeId, "discarded", raw.at as string);
+      return commit();
+    }
+
+    case "node.mergeEvidenceRecorded": {
+      const { nodeId, evidenceKind, tip, prNumber } = p;
+      if (!isId(nodeId)) return invalid(seq, "node.mergeEvidenceRecorded の nodeId");
+      if (!isMergeEvidenceKind(evidenceKind)) {
+        return invalid(seq, "node.mergeEvidenceRecorded の evidenceKind（prHead か human）");
+      }
+      if (!isCommitSha(tip)) {
+        return invalid(seq, "node.mergeEvidenceRecorded の tip（小文字の 16 進で 40 桁か 64 桁）");
+      }
+      if (prNumber !== undefined && !isPrNumber(prNumber)) {
+        return invalid(seq, "node.mergeEvidenceRecorded の prNumber（1 以上の整数）");
+      }
+      const node = nodeAt(d, nodeId);
+      if (node === undefined) return unknownNode(seq, nodeId);
+      // 証拠の対象は、回収の判定の入口になる状態だけ（受理済み・停止・回収可能）。
+      if (node.state !== "verified" && node.state !== "stopped" && node.state !== "reclaimable") {
+        return reject(
+          seq,
+          "invalidTransition",
+          `状態 ${node.state} のノードに、統合済みの証拠は記録できない（verified・stopped・reclaimable のときだけ）`,
+          "ノードの状態を確認する",
+        );
+      }
+      const prev = node.mergeEvidence;
+      if (
+        prev !== undefined &&
+        prev.evidenceKind === evidenceKind &&
+        prev.tip === tip &&
+        prev.prNumber === prNumber
+      ) {
+        return reject(
+          seq,
+          "alreadyRecorded",
+          `ノード ${nodeId} の統合済みの証拠は、同じ内容で記録済み`,
+          "判断の結果を確認する",
+        );
+      }
+      d.nodes[d.nodeIdx.get(nodeId) as number] = freezeRecord({
+        ...node,
+        mergeEvidence: Object.freeze({
+          seq,
+          at: raw.at as string,
+          by: actor,
+          evidenceKind,
+          tip,
+          ...(prNumber === undefined ? {} : { prNumber }),
+        }),
+      });
       return commit();
     }
 

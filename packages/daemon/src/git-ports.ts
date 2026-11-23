@@ -175,9 +175,17 @@ export interface LossFacts {
 export interface GitPorts {
   /** 強制の回収で失われるもの。作業ツリーが登録されていなければ（調べられなければ）`undefined`。 */
   lossFor(nodeId: string): Promise<LossFacts | undefined>;
-  factsFor(nodeId: string): Promise<
+  /** `opts.mergeEvidenceTip`: 統合済みの証拠の先端。ブランチの先端と一致すれば、祖先判定が偽でも `merged`（`mergedBy: "evidence"`）。 */
+  factsFor(
+    nodeId: string,
+    opts?: { mergeEvidenceTip?: string },
+  ): Promise<
     | {
         merged: boolean;
+        /** `merged` の根拠。祖先判定か、統合済みの証拠か。 */
+        mergedBy?: "ancestor" | "evidence";
+        /** 子のブランチ名。 */
+        branch?: string;
         clean: boolean;
         worktreePath: string;
         headCommit?: string;
@@ -193,6 +201,8 @@ export interface GitPorts {
       expectedPath: string;
       force?: boolean;
       onTip?: (tip: string, ref?: string) => void;
+      /** 統合済みの証拠の先端（`force` とは別の経路）。先端が一致するときだけ、保管してから `-D` で消す。 */
+      mergeEvidenceTip?: string;
     },
   ): Promise<Result<undefined, Failure>>;
   /**
@@ -386,6 +396,13 @@ export function createGitPorts(
 
   const branchExists = async (branch: string): Promise<boolean> =>
     (await git(["show-ref", "--verify", "--quiet", `refs/heads/${branch}`])).code === 0;
+
+  /** ブランチの先端（コミット SHA）。取得できなければ `undefined`。 */
+  const tipOfBranch = async (branch: string): Promise<string | undefined> => {
+    const r = await git(["rev-parse", "--verify", "-q", `refs/heads/${branch}`]);
+    const sha = r.stdout.trim();
+    return r.code === 0 && isCommitSha(sha) ? sha : undefined;
+  };
 
   const dirExists = (p: string): boolean => {
     try {
@@ -1037,7 +1054,7 @@ export function createGitPorts(
         (await isRegistered(nodeId)) === true ? realOrUndefined(pathOf(nodeId)) : undefined,
       ),
 
-    factsFor: (nodeId) =>
+    factsFor: (nodeId, opts) =>
       serial(async () => {
         const path = pathOf(nodeId);
         const registered = await isRegistered(nodeId);
@@ -1077,10 +1094,27 @@ export function createGitPorts(
           ]);
           merged = anc.code === 0;
         }
-        return { merged, clean, worktreePath: real, ...(await headFields(nodeId)) };
+        // 祖先判定が偽でも、統合済みの証拠の先端が、いまの先端と一致すれば統合済み（スカッシュ後）。
+        let mergedBy: "ancestor" | "evidence" | undefined = merged ? "ancestor" : undefined;
+        if (
+          !merged &&
+          opts?.mergeEvidenceTip !== undefined &&
+          (await tipOfBranch(branchOf(nodeId))) === opts.mergeEvidenceTip
+        ) {
+          merged = true;
+          mergedBy = "evidence";
+        }
+        return {
+          merged,
+          ...(mergedBy !== undefined ? { mergedBy } : {}),
+          branch: branchOf(nodeId),
+          clean,
+          worktreePath: real,
+          ...(await headFields(nodeId)),
+        };
       }),
 
-    removeWorktree: (nodeId, { expectedPath, force, onTip }) =>
+    removeWorktree: (nodeId, { expectedPath, force, onTip, mergeEvidenceTip }) =>
       serial(async () => {
         const path = pathOf(nodeId);
         // 判定に使った実パスと、削除するパスが同じか（違えば何もしない）。
@@ -1114,13 +1148,22 @@ export function createGitPorts(
         const branch = branchOf(nodeId);
         // 削除の前に、ブランチが統合済みか確かめる。統合されていなければ、作業ツリーも消さずに失敗する（成果を失わない）。
         // `force`（破棄の判断を経た停止ノード。判断は呼び出し側が行う）のときは、成果を捨てる判断済みなので、確かめない。
+        // 祖先判定が通らなくても、統合済みの証拠（PR の head・人の宣言）の先端が、いまの先端と一致すれば通す（`byEvidence`）。
+        // 証拠による削除は、先端を保管してから `-D` で消す。`force`（破棄）とは別の経路。
+        let byEvidence = false;
         if (force !== true && (registered || (await branchExists(branch)))) {
           const up = await git(["rev-parse", "--abbrev-ref", `${branch}@{upstream}`]);
           const anc =
             up.code === 0 && up.stdout.trim() !== ""
               ? await git(["merge-base", "--is-ancestor", branch, up.stdout.trim()])
               : undefined;
-          if (anc === undefined || anc.code !== 0) {
+          if (
+            (anc === undefined || anc.code !== 0) &&
+            mergeEvidenceTip !== undefined &&
+            (await tipOfBranch(branch)) === mergeEvidenceTip
+          ) {
+            byEvidence = true;
+          } else if (anc === undefined || anc.code !== 0) {
             return fail(
               "branchNotMerged",
               `ブランチ ${branch} が、上流に統合済みと確認できない（作業ツリーもブランチも残した）`,
@@ -1138,7 +1181,7 @@ export function createGitPorts(
         }
         // 強制で消す前に、ブランチの先端を残す（捨てる成果を、あとから辿れるように）。
         // 先端は、`refs/touryou/discarded/<名前>` に付け替えて保管する（gc で消えない）。保管できなければ、何も消さずに失敗する。
-        if (force === true && (await branchExists(branch))) {
+        if ((force === true || byEvidence) && (await branchExists(branch))) {
           const tip = await git(["rev-parse", `refs/heads/${branch}`]);
           const sha = tip.stdout.trim();
           if (tip.code === 0 && isCommitSha(sha)) {
@@ -1174,10 +1217,18 @@ export function createGitPorts(
           );
         }
         if (await branchExists(branch)) {
-          // 統合済みだけ（`-d`）。`-D` は、`force` のときだけ。
-          const r = await git(["branch", force === true ? "-D" : "-d", branch]);
+          // 証拠による削除は、実行直前に先端が証拠と一致することを照合する（動いていたら、何も消さない）。
+          if (byEvidence && (await tipOfBranch(branch)) !== mergeEvidenceTip) {
+            return fail(
+              "tipMoved",
+              `ブランチ ${branch} の先端が、統合済みの証拠の記録後に動いた（ブランチを残した）`,
+              "回収の判定をやり直す（新しい先端には、証拠が要る）",
+            );
+          }
+          // 統合済みだけ（`-d`）。`-D` は、`force` か、証拠による削除（先端は保管済み）のときだけ。
+          const r = await git(["branch", force === true || byEvidence ? "-D" : "-d", branch]);
           if (r.code !== 0) {
-            if (force === true) {
+            if (force === true || byEvidence) {
               return fail(
                 "removeFailed",
                 `作業ツリーは消えたが、ブランチ ${branch} だけ残った: ${r.stderr.trim().slice(0, 200)}`,

@@ -184,7 +184,10 @@ export const pluginDirPortsOf = (
 
 /** git の作業ツリーに関わる口（実装は git を呼ぶ。テストはフェイク）。 */
 export interface WorktreePorts {
-  factsFor(nodeId: string): Promise<WorktreeFacts | undefined>;
+  factsFor(
+    nodeId: string,
+    opts?: { mergeEvidenceTip?: string },
+  ): Promise<WorktreeFacts | undefined>;
   /** 強制の回収で失われるもの（省略すると、回収の事前確認に `loss` を出さない）。 */
   lossFor?(nodeId: string): Promise<LossFacts | undefined>;
   removeWorktree(
@@ -193,6 +196,7 @@ export interface WorktreePorts {
       expectedPath: string;
       force?: boolean;
       onTip?: (tip: string, ref?: string) => void;
+      mergeEvidenceTip?: string;
     },
   ): Promise<Result<undefined, Failure>>;
   /** 保管している、破棄した成果。省略すると、保管の操作（`node.discarded*`）と最終削除での掃除は無効（`notSupported`）。 */
@@ -1826,7 +1830,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
   const cwdOf = async (nodeId: string): Promise<string | undefined> =>
     nodeId === config.rootNodeId ? config.rootCwd : deps.worktree.cwdOf(nodeId);
   const reclaim: ReclaimPorts = {
-    factsFor: (id) => deps.worktree.factsFor(id),
+    factsFor: (id, opts) => deps.worktree.factsFor(id, opts),
     ...(deps.worktree.lossFor === undefined
       ? {}
       : {

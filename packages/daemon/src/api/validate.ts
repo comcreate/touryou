@@ -20,8 +20,11 @@ import {
   isSessionId,
   isSessionRef,
   isValidInboxTime,
+  isPrNumber,
   LIMITS,
   MAX_GRACE_MS,
+  MAX_PR_NUMBER,
+  MERGE_EVIDENCE_KINDS,
   NODE_ROLES,
   NODE_RUNTIMES,
   type OperationMap,
@@ -365,6 +368,21 @@ const VALIDATORS: Validators = {
   "node.reclaimBatch": (p) => {
     const o = strict(p, ["expectDigest"]);
     return { expectDigest: id(o, "expectDigest") };
+  },
+  "node.mergeEvidence": (p) => {
+    const o = strict(p, ["nodeId", "evidenceKind", "tip", "prNumber"]);
+    const tip = o.tip;
+    if (!isCommitSha(tip)) fail("tip が不正（40 桁の 16 進のコミット SHA）");
+    const out: OperationMap["node.mergeEvidence"]["params"] = {
+      nodeId: id(o, "nodeId"),
+      evidenceKind: oneOf(o, "evidenceKind", MERGE_EVIDENCE_KINDS),
+      tip: tip as string,
+    };
+    if (o.prNumber !== undefined) {
+      if (!isPrNumber(o.prNumber)) fail(`prNumber が不正（1〜${MAX_PR_NUMBER} の整数）`);
+      return { ...out, prNumber: o.prNumber as number };
+    }
+    return out;
   },
   "node.integrate": nodeIdOnly,
   "node.capabilities": nodeIdOnly,

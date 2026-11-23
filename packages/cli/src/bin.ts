@@ -23,7 +23,7 @@ import { resolveVersion, versionLine } from "@touryou/core";
 import { readSecureFile } from "@touryou/core/fs";
 import { createIdentityVerifier, createRelay, IDENTITY_FILE } from "@touryou/mcp/relay";
 import { runChild } from "./child.js";
-import { type CommandResult, runCommand } from "./commands.js";
+import { type CommandResult, type GhRunner, runCommand } from "./commands.js";
 import { DEV_BUILD } from "./dev-build.js";
 import { runHook } from "./hook.js";
 import { createHttpClient } from "./http-client.js";
@@ -45,6 +45,8 @@ export interface BinDeps {
   /** 秘密のファイル（stateDir の port・human-token）の読み取り（試験用）。既定は、自分だけが読める・リンクでないファイルだけ。 */
   readonly readSecret?: (path: string) => string;
   readonly newRequestId?: () => string;
+  /** gh の実行（試験用。既定は、gh を子プロセスで実行する）。 */
+  readonly gh?: GhRunner;
   /** 標準入力の全部（`touryou child hook` のフック入力）。 */
   readonly readStdin?: () => Promise<string>;
   /** `touryou hook` のフック入力。読み取りの上限で切れたら、`truncated: true`（途中までの `text`）。 */
@@ -74,6 +76,26 @@ const checkConfigBySpawn = (
     stdout: r.stdout ?? "",
     stderr: r.error === undefined ? (r.stderr ?? "") : `起動できない（${r.error.message}）`,
   };
+};
+
+/**
+ * gh を、引数の配列で実行する（シェルを通さない）。見つからない・時間切れ・起動できないときは `undefined`。
+ * 環境は、PATH と HOME（gh の認証の場所）だけ。呼んだ側のトークン類（TOURYOU_HUMAN_TOKEN など）は渡さない。
+ */
+const ghBySpawn: GhRunner = async (args) => {
+  const env: Record<string, string> = {};
+  for (const k of ["PATH", "HOME", "GH_TOKEN", "GH_HOST", "GH_CONFIG_DIR"]) {
+    const v = process.env[k];
+    if (v !== undefined) env[k] = v;
+  }
+  const r = spawnSync("gh", [...args], {
+    encoding: "utf8",
+    timeout: 30_000,
+    maxBuffer: 1_000_000,
+    env,
+  });
+  if (r.error !== undefined || r.status === null) return undefined;
+  return { code: r.status, stdout: r.stdout ?? "" };
 };
 
 const usage = (cause: string): CommandResult => ({
@@ -309,6 +331,7 @@ export async function runBin(argv: readonly string[], deps: BinDeps): Promise<Co
     client: createHttpClient(relay.value),
     newRequestId: deps.newRequestId ?? (() => `touryou-${randomUUID()}`),
     isTTY: deps.isTTY,
+    gh: deps.gh ?? ghBySpawn,
   });
   return redact(result, token);
 }
