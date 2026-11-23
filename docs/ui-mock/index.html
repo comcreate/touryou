@@ -137,7 +137,8 @@ button:disabled{background:var(--panel-solid);border-color:var(--rule);border-st
 button.sm{min-height:36px;font-size:13px;padding:2px 12px}
 /* 答えのボタン: 見本どおり、横幅いっぱいの大きいボタン（広い画面では横に等分） */
 .big{display:flex;flex-wrap:wrap;gap:8px}
-.big button{flex:1 1 9em;min-height:48px;border-radius:var(--rad);font-size:15px;padding:8px 18px}
+/* 基準の幅は 6em。左の列（320〜380px）の中にスクロールバーが出て幅が減っても、2 つが横に並ぶ（9em では縦に積まれた） */
+.big button{flex:1 1 6em;min-height:48px;border-radius:var(--rad);font-size:15px;padding:8px 18px}
 input[type=text],input[type=password],select,textarea{font:inherit;font-size:14px;min-height:44px;padding:6px 12px;border:1px solid var(--rule);border-radius:8px;background:var(--panel-solid);color:var(--ink);min-width:0}
 .seg{display:inline-flex;gap:4px}.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
@@ -219,6 +220,26 @@ input[type=text],input[type=password],select,textarea{font:inherit;font-size:14p
 .nd:focus-visible{outline:none}.nd:focus-visible .box,.nd:hover .box{stroke:var(--accent);stroke-width:3}
 .pill{fill:var(--panel-solid);stroke:var(--c);stroke-width:1}
 .lab{font:700 12.5px "SFMono-Regular",Menlo,Consolas,monospace;fill:var(--c)}
+/* 試作: 線の流星（lightswind の animated-meteors-link を参考に、独自に作った別の案。既定は切）。
+   html に .mt-a・.mt-b・.mt-c のどれかが付いたときだけ出る（微調整の窓のラジオ、または #meteor=a・b・c で切り替える）。
+   - 流星: 線と同じ道に重ねた path（pathLength="100" で、長さを 100 と見なす）の破線の位置（stroke-dashoffset）を動かす。
+     頭（短く太く明るい。drop-shadow で光らせる）と尾（長く細く薄い）の 2 本を同じ時間で動かし、濃淡で尾を作る。
+     上り（子から親）は、道を逆向きに書いた path を重ねる。
+   - 火花: 終点に置いた短い線 8 本を、流星の頭が終点に着くころ（時間の 8 割）に広げて消す。
+   - 動きを止める設定と prefers-reduced-motion では、下の決めで animation が切れる。流星は道の始まりより前（見えない位置）、火花は透明のまま止まる */
+.mh,.mtl,.msp{display:none}
+html.mt-a .ma,html.mt-b .mb{display:inline}
+.mh{fill:none;stroke:var(--c);stroke-width:3;stroke-linecap:round;stroke-dasharray:8 300;stroke-dashoffset:20;filter:drop-shadow(0 0 2px var(--c));animation:mt-h 3s linear infinite}
+.mtl{fill:none;stroke:var(--c);stroke-width:2;stroke-linecap:round;stroke-dasharray:24 300;stroke-dashoffset:36;opacity:.45;animation:mt-t 3s linear infinite}
+.msp{fill:none;stroke:var(--c);stroke-width:1.5;stroke-linecap:round;opacity:0;transform-box:fill-box;transform-origin:center;animation:mt-sp 3s linear infinite}
+.mt-late{animation-delay:-1.5s}
+@keyframes mt-h{from{stroke-dashoffset:8}to{stroke-dashoffset:-116}}
+@keyframes mt-t{from{stroke-dashoffset:24}to{stroke-dashoffset:-100}}
+@keyframes mt-sp{0%,78%{opacity:0;transform:scale(.3)}84%{opacity:1;transform:scale(.6)}100%{opacity:0;transform:scale(1.5)}}
+/* 案 C: 答え待ち・失敗の箱の縁を、ゆっくり光らせる（線は流さない）。止めているときは、弱く光ったまま */
+.nd.wait{--g:var(--kaki)}.nd.fail{--g:var(--shu)}
+html.mt-c .nd.wait .box,html.mt-c .nd.fail .box{filter:drop-shadow(0 0 3px var(--g));animation:mt-glow 2.4s ease-in-out infinite alternate}
+@keyframes mt-glow{from{filter:drop-shadow(0 0 1px var(--g))}to{filter:drop-shadow(0 0 7px var(--g))}}
 .legend{margin-top:10px;border-radius:var(--rad);font-size:13px;color:var(--ink2);flex:none}
 .legend summary{cursor:pointer;padding:6px 14px;min-height:44px;display:flex;align-items:center}
 .legend .lgb{display:flex;flex-wrap:wrap;gap:4px 18px;padding:0 14px 10px}
@@ -272,6 +293,10 @@ details>summary{cursor:pointer;font-size:13.5px;color:var(--ink2);min-height:44p
    窓の高さが画面を超えるときは、窓の中がスクロールする（塗りは窓そのものにあるので、スクロールしても欠けない） */
 dialog.settings{color:var(--ink);background:var(--dlg);backdrop-filter:var(--blur-dlg);-webkit-backdrop-filter:var(--blur-dlg);border:1px solid var(--glass-edge);box-shadow:var(--hl),var(--shadow);border-radius:14px;padding:16px 20px;width:min(30rem,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto}
 dialog.settings::backdrop{background:rgba(0,0,0,.35)}
+/* 狭い画面（〜640px）: 左右の中央寄せ（margin:auto）は、固定の配置の基準になる表示域の幅に頼る。
+   スマホで表示域がページの幅に合わせて画面より広くなると、窓が右へずれて切れる。
+   そこで、左から 16px の位置に置き、幅を画面の幅（100vw）から決める。表示域が広がっても、窓は画面の中に収まる */
+@media (max-width:640px){dialog.settings{margin:auto auto auto 16px;width:calc(100vw - 32px);max-width:calc(100vw - 32px)}}
 dialog.settings :is(.card,.empty){background:var(--panel-solid);backdrop-filter:none;-webkit-backdrop-filter:none}
 dialog.settings h2{margin:0 0 8px;font-size:17px}
 dialog.settings h2:focus{outline:none}dialog.settings h2:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
@@ -485,13 +510,13 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
         </g>
         <path class="trunk" d="M128 187H147"/>
         <rect class="bar" x="147" y="108" width="6" height="158" rx="1"/>
-        <g class="k-ask"><path class="ln human" d="M159 124H185V37H410"/><path class="tip" d="M169 119L161 124L169 129"/><rect class="pill" x="262" y="28" width="116" height="18" rx="3"/><text class="lab" x="268" y="41.5">↑ 判断 3 分前</text></g>
+        <g class="k-ask"><path class="ln human" d="M159 124H185V37H410"/><path class="mtl mb" pathLength="100" d="M410 37H185V124H159"/><path class="mh mb" pathLength="100" d="M410 37H185V124H159"/><path class="tip" d="M169 119L161 124L169 129"/><path class="msp mb" d="M159 118v-3M159 130v3M153 124h-3M165 124h3M155 120l-2-2M163 128l2 2M155 128l-2 2M163 120l2-2"/><rect class="pill" x="262" y="28" width="116" height="18" rx="3"/><text class="lab" x="268" y="41.5">↑ 判断 3 分前</text></g>
         <g class="k-req"><path class="ln" d="M159 142H195V57H406"/><path class="tip" d="M402 52L410 57L402 62"/><rect class="pill" x="262" y="48" width="116" height="18" rx="3"/><text class="lab" x="268" y="61.5">↓ 頼み 20 分前</text></g>
         <g class="k-prog"><path class="ln" d="M159 160H205V127H410"/><path class="tip" d="M169 155L161 160L169 165"/><rect class="pill" x="262" y="118" width="116" height="18" rx="3"/><text class="lab" x="268" y="131.5">↑ 進み 6 分前</text></g>
-        <g class="k-req"><path class="ln dash" d="M159 178H215V147H406"/><path class="tip" d="M402 142L410 147L402 152"/><rect class="pill" x="262" y="138" width="116" height="18" rx="3"/><text class="lab" x="268" y="151.5">↓ 頼み 30 分前</text></g>
+        <g class="k-req"><path class="ln dash" d="M159 178H215V147H406"/><path class="mtl ma" pathLength="100" d="M159 178H215V147H406"/><path class="mh ma" pathLength="100" d="M159 178H215V147H406"/><path class="tip" d="M402 142L410 147L402 152"/><path class="msp ma" d="M406 141v-3M406 153v3M400 147h-3M412 147h3M402 143l-2-2M410 151l2 2M402 151l-2 2M410 143l2-2"/><rect class="pill" x="262" y="138" width="116" height="18" rx="3"/><text class="lab" x="268" y="151.5">↓ 頼み 30 分前</text></g>
         <g class="k-done"><path class="ln over" d="M159 196H215V217H410"/><path class="tip" d="M169 191L161 196L169 201"/><rect class="pill" x="262" y="208" width="116" height="18" rx="3"/><text class="lab" x="268" y="221.5">↑ 済み 55 分前</text></g>
         <g class="k-done"><path class="ln over" d="M159 214H205V237H406"/><path class="tip" d="M402 232L410 237L402 242"/><rect class="pill" x="262" y="228" width="116" height="18" rx="3"/><text class="lab" x="268" y="241.5">↓ 頼み 70 分前</text></g>
-        <g class="k-fail"><path class="ln" d="M159 232H195V307H410"/><path class="tip" d="M169 227L161 232L169 237"/><rect class="pill" x="262" y="298" width="116" height="18" rx="3"/><text class="lab" x="268" y="311.5">↑ 失敗 14 分前</text></g>
+        <g class="k-fail"><path class="ln" d="M159 232H195V307H410"/><path class="mtl mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="mh mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="tip" d="M169 227L161 232L169 237"/><path class="msp mb mt-late" d="M159 226v-3M159 238v3M153 232h-3M165 232h3M155 228l-2-2M163 236l2 2M155 236l-2 2M163 228l2-2"/><rect class="pill" x="262" y="298" width="116" height="18" rx="3"/><text class="lab" x="268" y="311.5">↑ 失敗 14 分前</text></g>
         <g class="k-req"><path class="ln" d="M159 250H185V327H406"/><path class="tip" d="M402 322L410 327L402 332"/><rect class="pill" x="262" y="318" width="116" height="18" rx="3"/><text class="lab" x="268" y="331.5">↓ 頼み 40 分前</text></g>
         <g><rect class="pd k-ask" x="146.5" y="120.5" width="7" height="7" rx="1"/><rect class="pd k-req" x="146.5" y="138.5" width="7" height="7" rx="1"/><rect class="pd k-prog" x="146.5" y="156.5" width="7" height="7" rx="1"/><rect class="pd k-req" x="146.5" y="174.5" width="7" height="7" rx="1"/><rect class="pd k-done" x="146.5" y="192.5" width="7" height="7" rx="1"/><rect class="pd k-done" x="146.5" y="210.5" width="7" height="7" rx="1"/><rect class="pd k-fail" x="146.5" y="228.5" width="7" height="7" rx="1"/><rect class="pd k-req" x="146.5" y="246.5" width="7" height="7" rx="1"/></g>
         <g class="nd wait" tabindex="0" role="button" aria-label="支払い方法の画面。あなたの答え待ち">
@@ -712,6 +737,14 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     <legend>中の面のぼかし</legend>
     <div class="tune-row" data-k="light"><label for="tn-blur-i-l">明<span class="sr">の中の面のぼかし</span></label><input type="range" id="tn-blur-i-l" min="0" max="40" step="1"><output for="tn-blur-i-l" id="tn-blur-i-l-o"></output></div>
     <div class="tune-row" data-k="dark"><label for="tn-blur-i-d">暗<span class="sr">の中の面のぼかし</span></label><input type="range" id="tn-blur-i-d" min="0" max="40" step="1"><output for="tn-blur-i-d" id="tn-blur-i-d-o"></output></div>
+  </fieldset>
+  <fieldset>
+    <legend>線の流星（試作・既定は切）</legend>
+    <label class="opt"><input type="radio" name="tn-mt" value="" checked> <span>切（いまの見た目）</span></label>
+    <label class="opt"><input type="radio" name="tn-mt" value="a"> <span>案 A：届いていない線（破線）だけ流す</span></label>
+    <label class="opt"><input type="radio" name="tn-mt" value="b"> <span>案 B：あなたの番に向かう線（判断・失敗の上り）だけ流す</span></label>
+    <label class="opt"><input type="radio" name="tn-mt" value="c"> <span>案 C：答え待ち・失敗の箱の縁を光らせる（線は流さない）</span></label>
+    <p class="tune-note">中央の窓の関係図で見えます。「動きを止める」と OS の「視差効果を減らす」では止まります。この選びは残しません。</p>
   </fieldset>
   <div class="tune-acts"><button type="button" id="tune-reset">既定に戻す</button><button type="button" id="tune-copy">値を写す</button></div>
   <p class="tune-note" id="tune-msg" role="status"></p>
@@ -1165,6 +1198,14 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     b.addEventListener("click", function () { openDlg(b.dataset.open, b); });
   });
   // 確かめ用: index.html#open=settings（または admin）で開くと、その窓を開いた状態で始まる（スクリーンショットを撮るため）
+  // 試作: 線の流星（既定は切）。微調整の窓のラジオか、index.html#meteor=a（b・c）で切り替える
+  function setMt(v) {
+    ["a", "b", "c"].forEach(function (k) { root.classList.toggle("mt-" + k, k === v); });
+    document.querySelectorAll("input[name=tn-mt]").forEach(function (r) { r.checked = r.value === v; });
+  }
+  document.querySelectorAll("input[name=tn-mt]").forEach(function (r) { r.addEventListener("change", function () { setMt(r.value); }); });
+  var mm = /meteor=([abc])/.exec(location.hash);
+  if (mm) setMt(mm[1]);
   var om = /open=(settings|admin)/.exec(location.hash);
   if (om) openDlg(om[1], om[1] === "settings" ? document.getElementById("gear") : null);
   // 窓のタブ
