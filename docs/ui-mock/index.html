@@ -238,24 +238,32 @@ input[type=text],input[type=password],select,textarea{font:inherit;font-size:14p
 /* 試作: 線の流星（lightswind の animated-meteors-link を参考に、独自に作った別の案。既定は切）。
    html に .mt-a・.mt-b・.mt-c のどれかが付いたときだけ出る（微調整の窓のラジオ、または #meteor=a・b・c で切り替える）。
    - 流星: 線と同じ道に重ねた path（pathLength="100" で、長さを 100 と見なす）の破線の位置（stroke-dashoffset）を動かす。
-     頭（短く太く明るい。drop-shadow で光らせる）と尾（長く細く薄い）の 2 本を同じ時間で動かし、濃淡で尾を作る。
+     頭（長さ 10・太さ 5。drop-shadow を 2 重にして強く光らせる）と尾（長さ 30・太さ 3・薄い）の 2 本を同じ時間で動かし、濃淡で尾を作る。
+     破線の 1 周期を 62 にしたので、1 本の線に流星が 1〜2 つ同時に流れる。1 周期（1.2 秒）で 62 進むので、線の端から端までは約 1.9 秒。
      上り（子から親）は、道を逆向きに書いた path を重ねる。
-   - 火花: 終点に置いた短い線 8 本を、流星の頭が終点に着くころ（時間の 8 割）に広げて消す。
-   - 動きを止める設定と prefers-reduced-motion では、下の決めで animation が切れる。流星は道の始まりより前（見えない位置）、火花は透明のまま止まる */
+   - 火花: 終点に置いた線 8 本（半径 5〜11）を、流星の頭が終点に着くころ（時間の 8 割）に広げて消す。流星と同じ 1.2 秒で、毎回の到着に合う。
+   - 動きを止める設定と prefers-reduced-motion では、流星と火花を出さない（破線が周期で並ぶので、animation を切るだけだと線の上で止まって見えるため） */
 .mh,.mtl,.msp{display:none}
 html.mt-a .ma,html.mt-b .mb{display:inline}
-.mh{fill:none;stroke:var(--c);stroke-width:3;stroke-linecap:round;stroke-dasharray:8 300;stroke-dashoffset:20;filter:drop-shadow(0 0 2px var(--c));animation:mt-h 3s linear infinite}
-.mtl{fill:none;stroke:var(--c);stroke-width:2;stroke-linecap:round;stroke-dasharray:24 300;stroke-dashoffset:36;opacity:.45;animation:mt-t 3s linear infinite}
-.msp{fill:none;stroke:var(--c);stroke-width:1.5;stroke-linecap:round;opacity:0;transform-box:fill-box;transform-origin:center;animation:mt-sp 3s linear infinite}
-.mt-late{animation-delay:-1.5s}
-/* 負の stroke-dashoffset を避け、破線の 1 周期（頭 308・尾 324）を足した正の値で書く（8 → −116 と同じ動き） */
-@keyframes mt-h{from{stroke-dashoffset:316}to{stroke-dashoffset:192}}
-@keyframes mt-t{from{stroke-dashoffset:348}to{stroke-dashoffset:224}}
-@keyframes mt-sp{0%,78%{opacity:0;transform:scale(.3)}84%{opacity:1;transform:scale(.6)}100%{opacity:0;transform:scale(1.5)}}
-/* 案 C: 答え待ち・失敗の箱の縁を、ゆっくり光らせる（線は流さない）。止めているときは、弱く光ったまま */
+html.still :is(.mh,.mtl,.msp){display:none!important}
+@media (prefers-reduced-motion:reduce){:is(.mh,.mtl,.msp){display:none!important}}
+.mh{fill:none;stroke:var(--c);stroke-width:5;stroke-linecap:round;stroke-dasharray:10 52;stroke-dashoffset:83.6;filter:drop-shadow(0 0 3px var(--c)) drop-shadow(0 0 8px var(--c));animation:mt-h 1.2s linear infinite}
+.mtl{fill:none;stroke:var(--c);stroke-width:3;stroke-linecap:round;stroke-dasharray:30 32;stroke-dashoffset:103.6;opacity:.5;animation:mt-t 1.2s linear infinite}
+.msp{fill:none;stroke:var(--c);stroke-width:2.2;stroke-linecap:round;opacity:0;transform-box:fill-box;transform-origin:center;filter:drop-shadow(0 0 3px var(--c));animation:mt-sp 1.2s linear infinite}
+.mt-late{animation-delay:-.6s}
+/* 頭の前の端が、時間の 8 割で道の終わり（100）に着くように始まりの位置を決め、1 周期（62）だけ減らす。値はどれも正 */
+@keyframes mt-h{from{stroke-dashoffset:83.6}to{stroke-dashoffset:21.6}}
+/* 尾は、前の端を頭の前の端にそろえる（頭より 20 だけ後ろから始まる） */
+@keyframes mt-t{from{stroke-dashoffset:103.6}to{stroke-dashoffset:41.6}}
+@keyframes mt-sp{0%,74%{opacity:0;transform:scale(.4)}82%{opacity:1;transform:scale(.9)}100%{opacity:0;transform:scale(1.7)}}
+/* 案 C: 答え待ち・失敗の箱の縁を、太さ（2 → 5）と光（2px → 14px）をはっきり変えて脈打たせる（線は流さない）。
+   止めているときは、太さ 3・弱い光のまま */
 .nd.wait{--g:var(--kaki)}.nd.fail{--g:var(--shu)}
-html.mt-c .nd.wait .box,html.mt-c .nd.fail .box{filter:drop-shadow(0 0 3px var(--g));animation:mt-glow 2.4s ease-in-out infinite alternate}
-@keyframes mt-glow{from{filter:drop-shadow(0 0 1px var(--g))}to{filter:drop-shadow(0 0 7px var(--g))}}
+html.mt-c .nd.wait .box,html.mt-c .nd.fail .box{stroke-width:3;filter:drop-shadow(0 0 3px var(--g));animation:mt-glow 1s ease-in-out infinite alternate}
+@keyframes mt-glow{from{stroke-width:2;filter:drop-shadow(0 0 2px var(--g))}to{stroke-width:5;filter:drop-shadow(0 0 6px var(--g)) drop-shadow(0 0 14px var(--g))}}
+/* 案の名前と、どこを見ればよいかを、関係図の窓の上の端に 1 行で出す（案を選んだときだけ。JS が中身を書く） */
+.mt-note{flex:none;margin:0;padding:6px 14px;font-size:13px;line-height:1.5;color:var(--ink);background:var(--panel-solid);border-bottom:2px solid var(--accent)}
+.mt-note b{color:var(--accent)}
 .legend{margin-top:10px;border-radius:var(--rad);font-size:13px;color:var(--ink2);flex:none}
 .legend summary{cursor:pointer;padding:6px 14px;min-height:44px;display:flex;align-items:center}
 .legend .lgb{display:flex;flex-wrap:wrap;gap:4px 18px;padding:0 14px 10px}
@@ -329,8 +337,10 @@ dialog.settings.adm{border:2px solid var(--shu)}
 .adm h2{color:var(--shu)}
 .adm .warn{margin:0 0 12px;font-size:14px;color:var(--shu);background:var(--shu-soft);border-radius:8px;padding:8px 12px}
 .adm h3{font-size:15px;margin:14px 0 4px}
-/* 設定の窓の最下部の、管理の入口: 上に朱の区切りの線を引き、ボタンも朱（取り消せない操作の窓を開くため） */
+/* 設定の窓の下の、管理の入口: 上に朱の区切りの線を引き、ボタンも朱（取り消せない操作の窓を開くため）。
+   「閉じる」は、その下（窓のいちばん下・右寄せ） */
 .adm-entry{margin-top:14px;padding-top:12px;border-top:2px solid var(--shu)}
+.adm-entry+.right{margin-top:12px}
 
 /* ---------- スマホの下の切り替え ---------- */
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:none;grid-template-columns:repeat(2,1fr);padding-bottom:env(safe-area-inset-bottom);border-width:1px 0 0;border-radius:0;box-shadow:var(--hl)}
@@ -515,6 +525,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
 <!-- 中央：やり取りの図 -->
 <section class="win" data-p="graph" aria-label="やり取りの図">
   <header class="wh"><h2>やり取りの図</h2><span class="wm">8</span></header>
+  <p class="mt-note" id="mt-note" role="status" hidden></p>
   <div class="wb" style="display:flex;flex-direction:column">
     <div class="gtools">
       <div class="seg" role="group" aria-label="見せ方"><button class="sm" type="button" aria-pressed="true">図</button><button class="sm" type="button" aria-pressed="false">一覧</button></div>
@@ -528,13 +539,13 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
         </g>
         <path class="trunk" d="M128 187H147"/>
         <rect class="bar" x="147" y="108" width="6" height="158" rx="1"/>
-        <g class="k-ask"><path class="ln human" d="M159 124H185V37H410"/><path class="mtl mb" pathLength="100" d="M410 37H185V124H159"/><path class="mh mb" pathLength="100" d="M410 37H185V124H159"/><path class="tip" d="M169 119L161 124L169 129"/><path class="msp mb" d="M159 118v-3M159 130v3M153 124h-3M165 124h3M155 120l-2-2M163 128l2 2M155 128l-2 2M163 120l2-2"/><rect class="pill" x="262" y="28" width="116" height="18" rx="3"/><text class="lab" x="268" y="41.5">↑ 判断 3 分前</text></g>
+        <g class="k-ask"><path class="ln human" d="M159 124H185V37H410"/><path class="mtl mb" pathLength="100" d="M410 37H185V124H159"/><path class="mh mb" pathLength="100" d="M410 37H185V124H159"/><path class="tip" d="M169 119L161 124L169 129"/><path class="msp mb" d="M159 119L159 113M159 129L159 135M154 124L148 124M164 124L170 124M155.46 120.46L151.22 116.22M162.54 127.54L166.78 131.78M155.46 127.54L151.22 131.78M162.54 120.46L166.78 116.22"/><rect class="pill" x="262" y="28" width="116" height="18" rx="3"/><text class="lab" x="268" y="41.5">↑ 判断 3 分前</text></g>
         <g class="k-req"><path class="ln" d="M159 142H195V57H406"/><path class="tip" d="M402 52L410 57L402 62"/><rect class="pill" x="262" y="48" width="116" height="18" rx="3"/><text class="lab" x="268" y="61.5">↓ 頼み 20 分前</text></g>
         <g class="k-prog"><path class="ln" d="M159 160H205V127H410"/><path class="tip" d="M169 155L161 160L169 165"/><rect class="pill" x="262" y="118" width="116" height="18" rx="3"/><text class="lab" x="268" y="131.5">↑ 進み 6 分前</text></g>
-        <g class="k-req"><path class="ln dash" d="M159 178H215V147H406"/><path class="mtl ma" pathLength="100" d="M159 178H215V147H406"/><path class="mh ma" pathLength="100" d="M159 178H215V147H406"/><path class="tip" d="M402 142L410 147L402 152"/><path class="msp ma" d="M406 141v-3M406 153v3M400 147h-3M412 147h3M402 143l-2-2M410 151l2 2M402 151l-2 2M410 143l2-2"/><rect class="pill" x="262" y="138" width="116" height="18" rx="3"/><text class="lab" x="268" y="151.5">↓ 頼み 30 分前</text></g>
+        <g class="k-req"><path class="ln dash" d="M159 178H215V147H406"/><path class="mtl ma" pathLength="100" d="M159 178H215V147H406"/><path class="mh ma" pathLength="100" d="M159 178H215V147H406"/><path class="tip" d="M402 142L410 147L402 152"/><path class="msp ma" d="M406 142L406 136M406 152L406 158M401 147L395 147M411 147L417 147M402.46 143.46L398.22 139.22M409.54 150.54L413.78 154.78M402.46 150.54L398.22 154.78M409.54 143.46L413.78 139.22"/><rect class="pill" x="262" y="138" width="116" height="18" rx="3"/><text class="lab" x="268" y="151.5">↓ 頼み 30 分前</text></g>
         <g class="k-done"><path class="ln over" d="M159 196H215V217H410"/><path class="tip" d="M169 191L161 196L169 201"/><rect class="pill" x="262" y="208" width="116" height="18" rx="3"/><text class="lab" x="268" y="221.5">↑ 済み 55 分前</text></g>
         <g class="k-done"><path class="ln over" d="M159 214H205V237H406"/><path class="tip" d="M402 232L410 237L402 242"/><rect class="pill" x="262" y="228" width="116" height="18" rx="3"/><text class="lab" x="268" y="241.5">↓ 頼み 70 分前</text></g>
-        <g class="k-fail"><path class="ln" d="M159 232H195V307H410"/><path class="mtl mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="mh mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="tip" d="M169 227L161 232L169 237"/><path class="msp mb mt-late" d="M159 226v-3M159 238v3M153 232h-3M165 232h3M155 228l-2-2M163 236l2 2M155 236l-2 2M163 228l2-2"/><rect class="pill" x="262" y="298" width="116" height="18" rx="3"/><text class="lab" x="268" y="311.5">↑ 失敗 14 分前</text></g>
+        <g class="k-fail"><path class="ln" d="M159 232H195V307H410"/><path class="mtl mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="mh mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="tip" d="M169 227L161 232L169 237"/><path class="msp mb mt-late" d="M159 227L159 221M159 237L159 243M154 232L148 232M164 232L170 232M155.46 228.46L151.22 224.22M162.54 235.54L166.78 239.78M155.46 235.54L151.22 239.78M162.54 228.46L166.78 224.22"/><rect class="pill" x="262" y="298" width="116" height="18" rx="3"/><text class="lab" x="268" y="311.5">↑ 失敗 14 分前</text></g>
         <g class="k-req"><path class="ln" d="M159 250H185V327H406"/><path class="tip" d="M402 322L410 327L402 332"/><rect class="pill" x="262" y="318" width="116" height="18" rx="3"/><text class="lab" x="268" y="331.5">↓ 頼み 40 分前</text></g>
         <g><rect class="pd k-ask" x="146.5" y="120.5" width="7" height="7" rx="1"/><rect class="pd k-req" x="146.5" y="138.5" width="7" height="7" rx="1"/><rect class="pd k-prog" x="146.5" y="156.5" width="7" height="7" rx="1"/><rect class="pd k-req" x="146.5" y="174.5" width="7" height="7" rx="1"/><rect class="pd k-done" x="146.5" y="192.5" width="7" height="7" rx="1"/><rect class="pd k-done" x="146.5" y="210.5" width="7" height="7" rx="1"/><rect class="pd k-fail" x="146.5" y="228.5" width="7" height="7" rx="1"/><rect class="pd k-req" x="146.5" y="246.5" width="7" height="7" rx="1"/></g>
         <g class="nd wait" tabindex="0" role="button" aria-label="支払い方法の画面。あなたの答え待ち">
@@ -673,8 +684,8 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   <p class="note" style="margin-top:0">設定は、本番と同じく、歯車から開くダイアログです（幕が背景を覆い、Esc か「閉じる」で閉じ、Tab は窓の中を回ります）。</p>
   <div class="row"><button type="button" data-open="settings" aria-haspopup="dialog" aria-controls="settings">設定を開く</button></div>
 
-  <h2>06 管理 <small>まれに使う操作</small></h2>
-  <p class="note" style="margin-top:0">設定の窓の最下部にある「管理（まれに使う操作）…」から開くダイアログです（設定の窓を閉じてから開き、閉じると焦点は上のバーの歯車に戻ります）。</p>
+  <h2>06 管理 <small>取り消せない操作を含む</small></h2>
+  <p class="note" style="margin-top:0">設定の窓の下のほう（朱の区切りの線の下）にある「管理（取り消せない操作を含む）…」から開くダイアログです（設定の窓を閉じてから開き、閉じると焦点は上のバーの歯車に戻ります）。</p>
   <div class="row"><button type="button" data-open="admin" aria-haspopup="dialog" aria-controls="admin">管理を開く</button></div>
 </div>
 <div style="height:32px"></div>
@@ -716,12 +727,12 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
       <p style="color:var(--shu);margin:6px 0">（足せないときの表示）この形の規則は足せません。かっこの中を確かめてください。</p>
     </fieldset>
     <p class="note">選んだものは、このブラウザに残ります。</p>
+    <div class="adm-entry"><button class="danger ib" type="button" id="to-admin" aria-haspopup="dialog" aria-controls="admin"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3L22 20L2 20Z"/><path d="M12 9L12 13.5M12 16.9L12 17"/></svg><span>管理（取り消せない操作を含む）…</span></button></div>
     <div class="right"><button type="button" data-close>閉じる</button></div>
-    <div class="adm-entry"><button class="danger ib" type="button" id="to-admin" aria-haspopup="dialog" aria-controls="admin"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3L22 20L2 20Z"/><path d="M12 9L12 13.5M12 16.9L12 17"/></svg><span>管理（まれに使う操作）…</span></button></div>
 </dialog>
 
 <dialog id="admin" class="settings adm" aria-labelledby="adm-t">
-    <h2 id="adm-t" tabindex="-1">管理（まれに使う操作）</h2>
+    <h2 id="adm-t" tabindex="-1">管理（取り消せない操作を含む）</h2>
     <p class="warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
     <h3>アーカイブした作業の最終削除と、自動の削除の保留</h3>
     <div class="card" style="padding:10px 16px;gap:8px"><div class="kv"><div class="kvr"><span class="k">作業</span><span class="v">sample-task-0001</span></div><div class="kvr"><span class="k">アーカイブした日</span><span class="v">3 日前</span></div></div><div class="row"><button class="danger" type="button">最終削除…</button><button type="button">自動の削除を保留する</button></div></div>
@@ -762,6 +773,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     <label class="opt"><input type="radio" name="tn-mt" value="a"> <span>案 A：届いていない線（破線）だけ流す</span></label>
     <label class="opt"><input type="radio" name="tn-mt" value="b"> <span>案 B：あなたの番に向かう線（判断・失敗の上り）だけ流す</span></label>
     <label class="opt"><input type="radio" name="tn-mt" value="c"> <span>案 C：答え待ち・失敗の箱の縁を光らせる（線は流さない）</span></label>
+    <p class="note">選ぶと、関係図の窓の上の端に、案の名前と見るところが出ます。明・暗は、上のバーの明暗のボタンで切り替えて比べます（#meteor=b&amp;theme=dark のようにアドレスでも開けます）。</p>
     <p class="tune-note">中央の窓の関係図で見えます。「動きを止める」と OS の「視差効果を減らす」では止まります。この選びは残しません。</p>
   </fieldset>
   <div class="tune-acts"><button type="button" id="tune-reset">既定に戻す</button><button type="button" id="tune-copy">値を写す</button></div>
@@ -1216,7 +1228,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     });
   });
   gear.addEventListener("click", function () { openDlg("settings", gear); });
-  // 設定の窓の最下部の「管理」: 設定を閉じてから管理を開く。設定の close では焦点を動かさず、管理を閉じたら歯車へ戻す
+  // 設定の窓の下の「管理」（「閉じる」の上）: 設定を閉じてから管理を開く。設定の close では焦点を動かさず、管理を閉じたら歯車へ戻す
   document.getElementById("to-admin").addEventListener("click", function () {
     openers.settings = null;
     document.getElementById("settings").close();
@@ -1227,10 +1239,34 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   });
   // 確かめ用: index.html#open=settings（または admin）で開くと、その窓を開いた状態で始まる（スクリーンショットを撮るため）
   // 試作: 線の流星（既定は切）。微調整の窓のラジオか、index.html#meteor=a（b・c）で切り替える
+  // 案を選んだときだけ、関係図の窓の上の端に、案の名前と見るところを 1 行で出す
+  var MT_NAMES = { a: "案 A", b: "案 B", c: "案 C" };
+  var MT_WHERE = {
+    a: "緑の破線（↓ 頼み 30 分前。まだ届いていない頼み）に、親から子へ流星。右の箱（確認メール）の手前に火花",
+    b: "橙（↑ 判断）と朱（↑ 失敗）の上りの線に、子から親へ流星。左の出入口（親の右の細いバー）に火花",
+    c: "答え待ち（橙・支払い方法の画面）と失敗（朱・ありがとうの画面）の箱の縁が、太さと光を変えて脈打つ。線は流さない"
+  };
+  var mtNote = document.getElementById("mt-note"), mtCur = "";
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  function drawMtNote() {
+    if (!mtCur) { mtNote.hidden = true; mtNote.textContent = ""; return; }
+    var b = document.createElement("b");
+    b.textContent = MT_NAMES[mtCur] + "：";
+    mtNote.textContent = "";
+    mtNote.appendChild(b);
+    var s = MT_WHERE[mtCur];
+    if (root.classList.contains("still") || reduce.matches) s += "（いまは動きを止めているので、流星と火花は出ず、光は弱いまま止まります）";
+    mtNote.appendChild(document.createTextNode(s));
+    mtNote.hidden = false;
+  }
   function setMt(v) {
+    mtCur = v;
     ["a", "b", "c"].forEach(function (k) { root.classList.toggle("mt-" + k, k === v); });
     document.querySelectorAll("input[name=tn-mt]").forEach(function (r) { r.checked = r.value === v; });
+    drawMtNote();
   }
+  document.getElementById("still-ck").addEventListener("change", drawMtNote);
+  if (reduce.addEventListener) reduce.addEventListener("change", drawMtNote);
   document.querySelectorAll("input[name=tn-mt]").forEach(function (r) { r.addEventListener("change", function () { setMt(r.value); }); });
   var mm = /meteor=([abc])/.exec(location.hash);
   if (mm) setMt(mm[1]);
