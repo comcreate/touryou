@@ -279,6 +279,8 @@ describe("createGitPorts（実際の git で、作業ツリーの作成・事実
     const p = await provision(s, "c1");
     expect(await s.ports.factsFor("c1")).toEqual({
       merged: true,
+      mergedBy: "ancestor",
+      branch: expect.stringMatching(/^touryou\/c1-[0-9a-f]+$/),
       clean: true,
       worktreePath: p,
       headCommit: expect.stringMatching(/^[0-9a-f]{40}$/),
@@ -817,6 +819,117 @@ describe("破棄した成果の保管", () => {
     expect(r.deleted).toHaveLength(2);
     expect(r.failed).toEqual([]);
     expect(refs(s)).toEqual([`refs/touryou/discarded/${s.ports.discardedKeyOf("c2")}`]);
+  });
+});
+
+/** 子の作業ツリーでコミットし、親（main）にスカッシュで取り込む（祖先判定では統合済みと分からない）。子の先端を返す。 */
+const squashMerged = (s: ReturnType<typeof setup>, p: string): string => {
+  writeFileSync(join(p, "work.txt"), "work\n");
+  git(p, "add", ".");
+  git(p, "commit", "-q", "-m", "work");
+  const tip = git(p, "rev-parse", "HEAD");
+  const branch = git(p, "rev-parse", "--abbrev-ref", "HEAD");
+  git(s.repoRoot, "merge", "--squash", branch);
+  git(s.repoRoot, "commit", "-q", "-m", "squash");
+  return tip;
+};
+
+describe("統合済みの証拠（スカッシュした子。#239）", () => {
+  it("(a)(b)(c) 祖先判定は false。証拠の先端が一致すれば merged: true・mergedBy: evidence。先端が動けば証拠は無効", async () => {
+    const s = setup();
+    const p = await provision(s, "c1");
+    const tip = squashMerged(s, p);
+    const none = await s.ports.factsFor("c1");
+    expect(none?.merged).toBe(false); // (a)
+    expect(none?.mergedBy).toBeUndefined();
+    const ev = await s.ports.factsFor("c1", { mergeEvidenceTip: tip });
+    expect(ev?.merged).toBe(true); // (b)
+    expect(ev?.mergedBy).toBe("evidence");
+    writeFileSync(join(p, "more.txt"), "more\n");
+    git(p, "add", ".");
+    git(p, "commit", "-q", "-m", "after merge");
+    const moved = await s.ports.factsFor("c1", { mergeEvidenceTip: tip });
+    expect(moved?.merged).toBe(false); // (c)
+    expect(moved?.mergedBy).toBeUndefined();
+  });
+
+  it("祖先判定で統合済みなら、証拠があっても mergedBy は ancestor", async () => {
+    const s = setup();
+    const p = await provision(s, "c1");
+    const tip = git(p, "rev-parse", "HEAD");
+    const f = await s.ports.factsFor("c1", { mergeEvidenceTip: tip });
+    expect(f?.mergedBy).toBe("ancestor");
+  });
+
+  it("(d)(f) 証拠による削除: 先端を refs/touryou/discarded/ に保管してから、-D で消す。--force は使わず、onTip で先端を渡す", async () => {
+    const s = setup();
+    const p = await provision(s, "c1");
+    const tip = squashMerged(s, p);
+    const seen: string[] = [];
+    const r = await s.ports.removeWorktree("c1", {
+      expectedPath: p,
+      mergeEvidenceTip: tip,
+      onTip: (t) => seen.push(t),
+    });
+    expect(r.ok).toBe(true);
+    expect(existsSync(p)).toBe(false);
+    expect(git(s.repoRoot, "branch", "--list", "touryou/*")).toBe(""); // ブランチは消えた
+    const kept = git(s.repoRoot, "for-each-ref", "--format=%(objectname)", "refs/touryou/discarded/");
+    expect(kept).toBe(tip); // (d) 保管された
+    expect(seen).toEqual([tip]);
+    const flat = s.calls.flat();
+    expect(flat).toContain("-D"); // (f)
+    expect(flat).not.toContain("--force");
+    expect(flat).not.toContain("-f");
+  });
+
+  it("証拠なしなら、スカッシュした子は branchNotMerged で、何も消さない（既存の挙動）", async () => {
+    const s = setup();
+    const p = await provision(s, "c1");
+    squashMerged(s, p);
+    const r = await s.ports.removeWorktree("c1", { expectedPath: p });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("branchNotMerged");
+    expect(existsSync(p)).toBe(true);
+    expect(git(s.repoRoot, "branch", "--list", "touryou/*")).not.toBe("");
+    expect(s.calls.flat()).not.toContain("-D");
+  });
+
+  it("(e) 保管に失敗したら、何も消さずに失敗する", async () => {
+    const s = setup({ failUpdateRef: true });
+    const p = await provision(s, "c1");
+    const tip = squashMerged(s, p);
+    const r = await s.ports.removeWorktree("c1", { expectedPath: p, mergeEvidenceTip: tip });
+    expect(r.ok).toBe(false);
+    expect(existsSync(p)).toBe(true);
+    expect(git(s.repoRoot, "branch", "--list", "touryou/*")).not.toBe("");
+    expect(s.calls.flat()).not.toContain("-D");
+  });
+
+  it("証拠の先端が、いまの先端と違えば（記録のあとにコミットが足された）、何も消さない", async () => {
+    const s = setup();
+    const p = await provision(s, "c1");
+    const tip = squashMerged(s, p);
+    writeFileSync(join(p, "more.txt"), "more\n");
+    git(p, "add", ".");
+    git(p, "commit", "-q", "-m", "after evidence");
+    const r = await s.ports.removeWorktree("c1", { expectedPath: p, mergeEvidenceTip: tip });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.error.code).toBe("branchNotMerged");
+    expect(existsSync(p)).toBe(true);
+    expect(git(s.repoRoot, "branch", "--list", "touryou/*")).not.toBe("");
+    expect(git(s.repoRoot, "for-each-ref", "refs/touryou/discarded/")).toBe("");
+  });
+
+  it("証拠があっても、未保存の変更があれば、何も消さない（未保存の変更は、証拠では守られない）", async () => {
+    const s = setup();
+    const p = await provision(s, "c1");
+    const tip = squashMerged(s, p);
+    writeFileSync(join(p, "wip.txt"), "未保存\n");
+    const r = await s.ports.removeWorktree("c1", { expectedPath: p, mergeEvidenceTip: tip });
+    expect(r.ok).toBe(false);
+    expect(existsSync(join(p, "wip.txt"))).toBe(true);
+    expect(git(s.repoRoot, "branch", "--list", "touryou/*")).not.toBe("");
   });
 });
 

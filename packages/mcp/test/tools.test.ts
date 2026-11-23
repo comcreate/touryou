@@ -100,6 +100,17 @@ describe("ロール別のツール公開（NFR_004）", () => {
     }
   });
 
+  it("統合済みの証拠の記録（node.mergeEvidence。#239）は、どの MCP のロールにも公開されない（AI は証拠を作れない）", () => {
+    for (const role of MCP_ROLES) {
+      expect(toolsFor(role).some((t) => t.operation === "node.mergeEvidence")).toBe(false);
+      expect(names(role)).not.toContain("node_mergeEvidence");
+      expect(operationForTool(role, "node_mergeEvidence").ok).toBe(false);
+      expect((ROLE_OPERATIONS[role] as readonly string[]).includes("node.mergeEvidence")).toBe(
+        false,
+      );
+    }
+  });
+
   it("情報源は core の ROLE_OPERATIONS（操作の並びが一致する）", () => {
     for (const role of MCP_ROLES) {
       expect(toolsFor(role).map((t) => t.operation)).toEqual([...ROLE_OPERATIONS[role]]);

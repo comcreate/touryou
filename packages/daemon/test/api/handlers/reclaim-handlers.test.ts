@@ -86,8 +86,22 @@ const rig = (
       over.processes === undefined ? ([] as readonly ProcessInfo[] | null) : over.processes,
     removeFailsFor: new Set<string>(),
   };
+  /** `removeWorktree` に渡された `mergeEvidenceTip`（渡されなければ undefined）。 */
+  const evidenceTips: [string, string | undefined][] = [];
   const ports: ReclaimPorts = {
-    factsFor: async (id) => state.facts[id],
+    // 本物のポートと同じ規則: 祖先判定が偽でも、証拠の先端が、いまの先端（headCommit）と一致すれば merged: true（mergedBy: evidence）。
+    factsFor: async (id, opts) => {
+      const f = state.facts[id];
+      if (
+        f !== undefined &&
+        !f.merged &&
+        opts?.mergeEvidenceTip !== undefined &&
+        opts.mergeEvidenceTip === f.headCommit
+      ) {
+        return { ...f, merged: true, mergedBy: "evidence" };
+      }
+      return f === undefined ? f : { ...f, ...(f.merged ? { mergedBy: "ancestor" as const } : {}) };
+    },
     probe: async (path) => {
       probed.push(path);
       return state.processes;
@@ -95,6 +109,7 @@ const rig = (
     removeWorktree: async (id, opts): Promise<Result<undefined, Failure>> => {
       expectedPaths.push([id, opts.expectedPath]);
       forces.push([id, opts.force]);
+      evidenceTips.push([id, opts.mergeEvidenceTip]);
       const tip = over.tips?.[id];
       if (opts.force === true && tip !== undefined) opts.onTip?.(tip);
       if (state.removeFailsFor.has(id))
@@ -162,6 +177,7 @@ const rig = (
     removed,
     expectedPaths,
     forces,
+    evidenceTips,
     failures,
     probed,
     state,
@@ -1151,6 +1167,132 @@ describe("統合済みの子の一括の回収（#234）", () => {
     expect(res.ok).toBe(false);
     expect(res.error?.code).toBe("digestMismatch");
     expect(r.removed).toEqual([]);
+  });
+
+  describe("統合済みの証拠（スカッシュした子。#239）", () => {
+    const TIP = "a".repeat(40);
+    const OTHER = "b".repeat(40);
+    const squashed = () =>
+      rig({
+        facts: {
+          // スカッシュ済み: 祖先判定は false（merged: false）。先端は TIP
+          c: { merged: false, clean: true, worktreePath: `${WT}/c`, headCommit: TIP },
+        },
+      });
+    const record = (
+      r: ReturnType<typeof rig>,
+      p: Record<string, unknown>,
+      role: "integrator" | "human" | "child" = "human",
+    ) =>
+      r.call(
+        "node.mergeEvidence",
+        { nodeId: "c", evidenceKind: "prHead", tip: TIP, prNumber: 7, ...p },
+        "",
+        `q-${++n}`,
+        role,
+      );
+
+    it("証拠がなければ、スカッシュした子は notMerged で対象外のまま", async () => {
+      const r = squashed();
+      const res = await human(r, "node.reclaimBatchPreview");
+      expect(rowOf(res, "c")).toMatchObject({ eligible: false, unmet: ["notMerged"] });
+    });
+
+    it("人間が、いまの先端と一致する証拠を記録できる。記録は先端に紐付く", async () => {
+      const r = squashed();
+      const res = await record(r, {});
+      expect(res).toMatchObject({ ok: true, value: { recorded: true, duplicate: false } });
+      expect(r.s().nodes.find((x) => x.id === "c")?.mergeEvidence).toMatchObject({
+        evidenceKind: "prHead",
+        tip: TIP,
+        prNumber: 7,
+        by: { human: true },
+      });
+    });
+
+    it("同じ証拠をもう一度記録しても成功する（duplicate: true）", async () => {
+      const r = squashed();
+      await record(r, {});
+      const again = await record(r, {});
+      expect(again).toMatchObject({ ok: true, value: { recorded: true, duplicate: true } });
+    });
+
+    it("証拠の先端が、いまの先端と違えば、記録しない（tipMismatch）", async () => {
+      const r = squashed();
+      const res = await record(r, { tip: OTHER });
+      expect(res.ok).toBe(false);
+      expect(res.error?.code).toBe("tipMismatch");
+      expect(r.s().nodes.find((x) => x.id === "c")?.mergeEvidence).toBeUndefined();
+    });
+
+    it("統合ノード・子のロールからは記録できない（AI は証拠を作れない）", async () => {
+      const r = squashed();
+      for (const role of ["integrator", "child"] as const) {
+        const res = await record(r, {}, role);
+        expect(res.ok).toBe(false);
+        expect(res.error?.code).toBe("forbidden");
+      }
+      expect(r.s().nodes.find((x) => x.id === "c")?.mergeEvidence).toBeUndefined();
+    });
+
+    it("存在しないノードは notFound", async () => {
+      const r = squashed();
+      const res = await record(r, { nodeId: "zzz" });
+      expect(res.ok).toBe(false);
+      expect(res.error?.code).toBe("notFound");
+    });
+
+    it("証拠があれば、プレビューは対象に入れ、mergedBy: evidence と branch を返す。照合の値は、証拠の有無で変わる", async () => {
+      const r = squashed();
+      const before = await human(r, "node.reclaimBatchPreview");
+      await record(r, {});
+      const after = await human(r, "node.reclaimBatchPreview");
+      expect(rowOf(after, "c")).toMatchObject({ eligible: true, mergedBy: "evidence" });
+      expect(rowOf(after, "a")).toMatchObject({ eligible: true, mergedBy: "ancestor" });
+      expect(after.value.digest).not.toBe(before.value.digest);
+    });
+
+    it("一括の回収は、証拠のある子を、force なしで、証拠の先端を渡して消す", async () => {
+      const r = squashed();
+      await record(r, {});
+      const pre = await human(r, "node.reclaimBatchPreview");
+      const res = await human(r, "node.reclaimBatch", { expectDigest: pre.value.digest });
+      expect(res.ok).toBe(true);
+      expect(res.value.reclaimed).toContain("c");
+      expect(r.forces.find(([id]) => id === "c")).toEqual(["c", undefined]); // 既存の force を流用しない
+      expect(r.evidenceTips.find(([id]) => id === "c")).toEqual(["c", TIP]);
+      // 祖先判定で統合済みの子には、証拠の先端を渡さない
+      expect(r.evidenceTips.find(([id]) => id === "a")).toEqual(["a", undefined]);
+    });
+
+    it("記録のあとに先端が動けば、証拠は無効になり、対象外に戻る（何も消さない）", async () => {
+      const r = squashed();
+      await record(r, {});
+      r.state.facts.c = { merged: false, clean: true, worktreePath: `${WT}/c`, headCommit: OTHER };
+      const res = await human(r, "node.reclaimBatchPreview");
+      expect(rowOf(res, "c")).toMatchObject({ eligible: false, unmet: ["notMerged"] });
+      expect(r.removed).toEqual([]);
+    });
+
+    it("表示のあとで先端が動いたら、照合の値が変わり、何も消さない", async () => {
+      const r = squashed();
+      await record(r, {});
+      const pre = await human(r, "node.reclaimBatchPreview");
+      r.state.facts.c = { merged: false, clean: true, worktreePath: `${WT}/c`, headCommit: OTHER };
+      const res = await human(r, "node.reclaimBatch", { expectDigest: pre.value.digest });
+      expect(res.ok).toBe(false);
+      expect(res.error?.code).toBe("digestMismatch");
+      expect(r.removed).toEqual([]);
+    });
+
+    it("単独の回収（node.reclaim）も、証拠による統合済みを根拠にできる", async () => {
+      const r = squashed();
+      await record(r, {});
+      const res = await r.call("node.reclaim", { nodeId: "c" }, "m2");
+      expect(res.ok).toBe(true);
+      expect(r.evidenceTips.find(([id]) => id === "c")).toEqual(["c", TIP]);
+      expect(stateOf(r.s(), "c")).toBe("archived");
+    });
   });
 
   it("統合ノード・子のロールからは、プレビューも実行も呼べない（何も消さない）", async () => {
