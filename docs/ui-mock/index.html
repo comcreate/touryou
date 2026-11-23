@@ -17,8 +17,8 @@
 :root{
   --bg:#f1f2f3;--bg-glow:#fcfdfd;
   /* 面: 外の窓（上のバー・3 列の窓・見本帳の台・下のタブ）は見本（ref/sample.html の --glass-*）の値。
-     中の面（カード・札・設定の窓・図の盤など）は塗りを重ねず（6%）、縁と上辺の光の線だけで区切る。帯（窓の見出し・タブ）は塗りなし */
-  --win:rgba(244,241,234,.25);--panel:rgba(255,255,255,.06);--strip:transparent;--panel-solid:#fbfaf6;
+     中の面（カード・札・設定の窓・図の盤・窓の見出し・タブなど）は塗りなし。縁と上辺の光の線だけで区切る */
+  --win:rgba(244,241,234,.15);--panel:transparent;--strip:transparent;--panel-solid:#fbfaf6;
   --glass-edge:rgba(255,255,255,.45);--edge:rgba(90,100,115,.26);
   --hl:inset 0 1px 0 rgba(255,255,255,.7);--hl-line:rgba(255,255,255,.9);--node:rgba(255,255,255,.08);
   --shadow:0 4px 16px rgba(0,0,0,.05);--shadow-in:0 1px 4px rgba(20,30,50,.04);--blur:blur(16px) saturate(160%);
@@ -33,7 +33,7 @@
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#060910;--bg-glow:#0d1a30;
-  --win:rgba(22,20,18,.45);--panel:rgba(255,255,255,.03);--strip:transparent;--panel-solid:#0c1424;
+  --win:rgba(22,20,18,.25);--panel:transparent;--strip:transparent;--panel-solid:#0c1424;
   --glass-edge:rgba(255,245,235,.12);--edge:rgba(150,185,230,.18);
   --hl:inset 0 1px 0 rgba(255,245,235,.12);--hl-line:rgba(255,245,235,.3);--node:rgba(255,255,255,.05);
   --shadow:0 8px 32px rgba(0,0,0,.35);--shadow-in:0 1px 6px rgba(0,0,0,.18);
@@ -47,7 +47,7 @@
 }}
 :root[data-theme="dark"]{
   --bg:#060910;--bg-glow:#0d1a30;
-  --win:rgba(22,20,18,.45);--panel:rgba(255,255,255,.03);--strip:transparent;--panel-solid:#0c1424;
+  --win:rgba(22,20,18,.25);--panel:transparent;--strip:transparent;--panel-solid:#0c1424;
   --glass-edge:rgba(255,245,235,.12);--edge:rgba(150,185,230,.18);
   --hl:inset 0 1px 0 rgba(255,245,235,.12);--hl-line:rgba(255,245,235,.3);--node:rgba(255,255,255,.05);
   --shadow:0 8px 32px rgba(0,0,0,.35);--shadow-in:0 1px 6px rgba(0,0,0,.18);
