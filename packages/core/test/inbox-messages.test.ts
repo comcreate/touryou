@@ -63,7 +63,13 @@ describe("知らせの文の表（#140）", () => {
     });
     expect([...m.summary].length).toBeLessThanOrEqual(INBOX_SUMMARY_MAX);
     // 自動で直らないときの、人の次の操作（claude attach）も残る
-    for (const word of ["いまの状態", "次にすること", "AskUserQuestion", "node_bindCode", "claude attach"]) {
+    for (const word of [
+      "いまの状態",
+      "次にすること",
+      "AskUserQuestion",
+      "node_bindCode",
+      "claude attach",
+    ]) {
       expect(m.summary).toContain(word);
     }
     // 利用者への質問の文に、node_bindCode を入れない（呼ぶ指示は、質問とは別）
