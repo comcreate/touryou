@@ -187,7 +187,10 @@ describe("scope.extend の早期の拒否（#249）", () => {
       "c",
     );
     expect(res.ok).toBe(true);
-    const failed = await r.decideAsHuman({ extensionId: res.value.extensionId, decision: "approve" });
+    const failed = await r.decideAsHuman({
+      extensionId: res.value.extensionId,
+      decision: "approve",
+    });
     expect(failed.error?.code).toBe("scopeNotSubset");
     expect(failed.error?.cause).toContain("近い許可コマンド: bash scripts/fetch-actionlint");
   });
