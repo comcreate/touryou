@@ -67,6 +67,10 @@ export const APP_TEXT = {
     ja: "次の操作: 統合の Claude に、子のつなぎ直しを頼む（統合が紐付けを出し直し、子がつなぎ直す）",
     en: "Next: ask the integrator Claude to reconnect the child (it issues a new binding, and the child reconnects)",
   },
+  "card.bindNextAdopted": {
+    ja: "次の操作: 統合の Claude の「つなぎ直してよいか」に答える。承認すると子が自動でつなぎ直す。10 分たっても直らなければ、このカードの「開き方」にある作業ツリーで動くセッションを開き直す",
+    en: 'Next: answer the integrator Claude when it asks whether to reconnect the child. Once you approve, the child reconnects automatically. If it is still not fixed after 10 minutes, reopen the session running in the worktree shown under "How to open" on this card',
+  },
   "card.bindLost": {
     ja: "紐付けの接続が途切れているかも（知らせを受け取れていない）",
     en: "Connection to the binding may be down (not receiving notices)",

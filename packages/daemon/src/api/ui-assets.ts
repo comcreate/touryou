@@ -613,6 +613,8 @@ export const UI_JS = `'use strict';
     var cmd = attachCommandByRef(n) || attachCommand(n);
     return cmd === '' ? [] : [cmd];
   }
+  // 採用した子で、セッション番号が分からないもの。開き方に claude attach が出ないので、カードの文も作業ツリーで案内する
+  function adoptedNoRef(n) { return n.runtime === 'cli' && typeof n.adoptedWorktree === 'string' && !attachCommandByRef(n); }
   // ノードの呼び名（題がなければ ID）。
   function nodeLabel(n, max) { return n && typeof n.title === 'string' && n.title !== '' ? cleanText(n.title, max) : n ? n.id : ''; }
   function el(tag, cls, text) {
@@ -1195,9 +1197,9 @@ export const UI_JS = `'use strict';
     card.appendChild(head);
     card.appendChild(el('h3', '', nodeLabel(n, 200)));
     if (bindExpired) {
-      card.appendChild(el('p', 'desc', t(n.runtime === 'cli' ? 'card.bindExpiredNextCli' : n.runtime === 'desktop' ? 'card.bindExpiredNextDesktop' : 'card.bindExpiredNextUnknown')));
+      card.appendChild(el('p', 'desc', t(n.runtime === 'cli' ? (adoptedNoRef(n) ? 'card.bindNextAdopted' : 'card.bindExpiredNextCli') : n.runtime === 'desktop' ? 'card.bindExpiredNextDesktop' : 'card.bindExpiredNextUnknown')));
     }
-    if (bindLost) card.appendChild(el('p', 'desc', t(n.runtime === 'desktop' ? 'card.bindExpiredNextDesktop' : n.runtime === 'cli' ? 'card.bindLostNext' : 'card.bindExpiredNextUnknown')));
+    if (bindLost) card.appendChild(el('p', 'desc', t(n.runtime === 'desktop' ? 'card.bindExpiredNextDesktop' : n.runtime === 'cli' ? (adoptedNoRef(n) ? 'card.bindNextAdopted' : 'card.bindLostNext') : 'card.bindExpiredNextUnknown')));
     var meta = el('div', 'meta');
     var parent = n.parentId === null ? null : byId.get(n.parentId);
     meta.appendChild(el('span', '', n.parentId === null ? t('card.roleTop', { role: name(ROLE_NAMES, n.role) }) : t('card.roleParent', { role: name(ROLE_NAMES, n.role), parent: parent ? nodeLabel(parent, 13) : n.parentId })));

@@ -81,6 +81,12 @@ describe("画面の文字の表（#140）", () => {
         uiString(lang, "card.bindExpiredNextCli"),
       );
     }
+    // 採用した子でセッション番号がないときは、開き方に claude attach がないので、作業ツリーで案内する
+    for (const lang of ["ja", "en"] as const) {
+      expect(uiString(lang, "card.bindNextAdopted"), lang).not.toContain("claude attach");
+    }
+    expect(uiString("ja", "card.bindNextAdopted")).toContain("作業ツリー");
+    expect(uiString("en", "card.bindNextAdopted")).toContain("worktree");
     expect(uiString("ja", "card.bindExpiredNextCli")).toContain("10 分たっても");
     expect(uiString("ja", "card.bindExpiredNextCli")).toContain("「開き方」");
     expect(uiString("en", "card.bindExpiredNextCli")).toContain("after 10 minutes");
