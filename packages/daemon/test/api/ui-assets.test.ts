@@ -458,6 +458,9 @@ describe("画面の資産（走査）", () => {
       "querySelector",
       // 確認の出所の印（管理の窓から出した確認だけ true。pending の中の真偽値）
       "fromAdmin",
+      // 狭い画面の下のタブ（#254 の段階 2）: いま出している窓（dataset.view）と、選んでいるタブの印（aria-current）
+      "view",
+      "ariaCurrent",
     ]);
     // 埋め込んだ文字の表（#140。JSON の値で、コードでない）は、走査から除く
     const code = UI_JS.replace(TABLE_LINE, "")
@@ -865,6 +868,28 @@ ${fn("failMsgText")}\n${fn("failureText")}\nfailureText`,
       expect(a).toBeLessThan(UI_HTML.indexOf('id="view"'));
       expect(UI_CSS).toMatch(/\.approvals\{position:sticky;top:0/);
       expect(api.failureHint("confirmationRequired")).toContain("確認待ち");
+    });
+
+    it("幅の区切り（#254 の段階 2）: 899px と 900px の境、900px〜の欄の高さの上限と窓の最小の高さ、下のタブの下の余白", () => {
+      const narrow = UI_CSS.slice(UI_CSS.indexOf("@media (max-width:899px){"));
+      expect(narrow).toMatch(
+        /^@media \(max-width:899px\)\{\s*main\{padding-bottom:calc\(var\(--bar\) \+ 16px\)\}/,
+      );
+      const wideAt = UI_CSS.indexOf("@media (min-width:900px){");
+      expect(wideAt).toBeGreaterThan(-1);
+      const wide = UI_CSS.slice(wideAt, UI_CSS.indexOf("\n}", wideAt));
+      expect(wide).toMatch(
+        /\.approvals\{position:static;max-height:32vh;overflow:auto;flex:none\}/,
+      );
+      expect(wide).toMatch(/#confirm\{max-height:32vh;overflow:auto;flex:none\}/);
+      expect(wide).toMatch(/#notice\{max-height:12vh;overflow:auto;flex:none\}/);
+      expect(wide).toMatch(/\.stage\{flex:1;min-height:360px\}/);
+      expect(wide).toMatch(/main\{[^}]*overflow:auto/);
+      // 件数の札は読み上げず、隠した文で読む
+      expect(UI_HTML).toMatch(/id="nav-count" class="bdg" aria-hidden="true"/);
+      expect(UI_HTML).toContain('id="nav-count-sr" class="sr"');
+      // 窓の見出し h2 の下の「いまの番」は h3
+      expect(UI_HTML).toContain('<h3 id="now-title"');
     });
 
     it("フックの結び付けを外す確認の行と、結果の 3 通りの文", () => {

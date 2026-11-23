@@ -81,12 +81,15 @@ export const UI_HTML = `<!doctype html>
 <section id="approvals" class="approvals" hidden></section>
 <section id="confirm" class="confirm" hidden></section>
 <p id="notice" class="notice" hidden></p>
-<section id="view" hidden>
-<section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h2 id="now-title" data-t="now.title">いまあなたがすること</h2><p id="now-lead" class="lead"></p></section>
+<section id="view" class="stage" data-view="yours" hidden>
+<section class="win" data-p="left" aria-labelledby="yours-title"><header class="wh"><h2 id="yours-title" data-t="pane.yours">あなたの番</h2></header><div class="wb">
+<section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h3 id="now-title" data-t="now.title">いまあなたがすること</h3><p id="now-lead" class="lead"></p></section>
 <div id="todo" class="todo"></div>
-<section class="sec"><h2 data-t="flows.title">やり取り</h2><p class="lead" data-t="flows.lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button></div><div id="graph-filter" class="seg" hidden><button id="hide-finished" class="quiet sm" type="button" aria-pressed="false" data-t="view.hideFinished">止めた・済んだ子を隠す</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span><span data-t="legend.up">← 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">→ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></section>
-<section class="sec"><h2 data-t="cards.title">作業ごとのようす</h2><p class="lead" data-t="cards.lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
-<details id="finished" class="finished"><summary id="finished-summary" data-t="cards.finishedTitle">終わった作業</summary><div id="finished-cards" class="cards"></div></details></section>
+</div></section>
+<section class="win" data-p="graph" aria-labelledby="flows-title"><header class="wh"><h2 id="flows-title" data-t="flows.title">やり取り</h2></header><div class="wb"><p class="lead" data-t="flows.lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button></div><div id="graph-filter" class="seg" hidden><button id="hide-finished" class="quiet sm" type="button" aria-pressed="false" data-t="view.hideFinished">止めた・済んだ子を隠す</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span><span data-t="legend.up">← 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">→ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></div></section>
+<section class="win" data-p="right" aria-labelledby="cards-title"><header class="wh"><h2 id="cards-title" data-t="cards.title">作業ごとのようす</h2></header><div class="wb"><p class="lead" data-t="cards.lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
+<details id="finished" class="finished"><summary id="finished-summary" data-t="cards.finishedTitle">終わった作業</summary><div id="finished-cards" class="cards"></div></details></div></section>
+<nav class="nav" data-t-aria="pane.switch" aria-label="表示の切り替え"><button id="nav-yours" class="nb" type="button" data-view="yours" aria-current="page"><span data-t="pane.yours">あなたの番</span><span id="nav-count" class="bdg" aria-hidden="true" hidden></span><span id="nav-count-sr" class="sr"></span></button><button id="nav-explore" class="nb" type="button" data-view="explore" aria-current="false"><span data-t="pane.navExplore">やり取りと作業</span></button></nav>
 </section>
 </main>
 <script src="/ui/app.js"></script>
@@ -95,9 +98,9 @@ export const UI_HTML = `<!doctype html>
 </html>
 `;
 
-export const UI_CSS = `:root{color-scheme:light dark;--bg:#f1f2f3;--sheet:#fbfbfa;--fg:#1d1f22;--muted:#474c53;--line:#c4c8cd;--card:#fbfbfa;--blocking:#d0210f;--failed:#d0210f;--ok:#0f7d44;--ai:#0066d9;--ai-2:#3f5f96;--ai-3:#6b7891;--kaki:#b54c00;--kaki-soft:#fdeee0;--kiiro:#806100;--kiiro-soft:#f3ebc6;--shu:#d0210f;--shu-soft:#fde8e4;--matsu:#0f7d44;--matsu-soft:#e4f4e9;--kaki-line:#e06400;--matsu-line:#10994f;--blue-line:#2b7fea;--shu-line:#e8341f;--kiiro-line:#a87e00;--wire-over:#78828f;--grid:#e4e6e9;--on-strong:#fff;--dlg:rgba(244,244,242,.6);--blur-dlg:blur(16px) saturate(160%);--glass-edge:rgba(255,255,255,.45);--shadow:0 4px 16px rgba(0,0,0,.05);--hl:inset 0 1px 0 rgba(255,255,255,.7)}
-@media (prefers-color-scheme: dark){:root:not(.theme-light){--bg:#060910;--sheet:#0c1424;--fg:#e9edf3;--muted:#a7b2c2;--line:#2a3850;--card:#0c1424;--blocking:#ff8f84;--failed:#ff8f84;--ok:#7fd29b;--ai:#8fbcf5;--ai-2:#8aa2cc;--ai-3:#8d97aa;--kaki:#ffa04a;--kaki-soft:#432812;--kiiro:#e2c250;--kiiro-soft:#3a3014;--shu:#ff8f84;--shu-soft:#471e1b;--matsu:#7fd29b;--matsu-soft:#173626;--kaki-line:var(--kaki);--matsu-line:var(--matsu);--blue-line:var(--ai);--shu-line:var(--shu);--kiiro-line:var(--kiiro);--wire-over:#6b7c96;--grid:#16223a;--on-strong:#0a0f18;--dlg:rgba(22,20,18,.6);--glass-edge:rgba(255,245,235,.12);--shadow:0 8px 32px rgba(0,0,0,.35);--hl:inset 0 1px 0 rgba(255,245,235,.12)}}
-:root.theme-dark{color-scheme:dark;--bg:#060910;--sheet:#0c1424;--fg:#e9edf3;--muted:#a7b2c2;--line:#2a3850;--card:#0c1424;--blocking:#ff8f84;--failed:#ff8f84;--ok:#7fd29b;--ai:#8fbcf5;--ai-2:#8aa2cc;--ai-3:#8d97aa;--kaki:#ffa04a;--kaki-soft:#432812;--kiiro:#e2c250;--kiiro-soft:#3a3014;--shu:#ff8f84;--shu-soft:#471e1b;--matsu:#7fd29b;--matsu-soft:#173626;--kaki-line:var(--kaki);--matsu-line:var(--matsu);--blue-line:var(--ai);--shu-line:var(--shu);--kiiro-line:var(--kiiro);--wire-over:#6b7c96;--grid:#16223a;--on-strong:#0a0f18;--dlg:rgba(22,20,18,.6);--glass-edge:rgba(255,245,235,.12);--shadow:0 8px 32px rgba(0,0,0,.35);--hl:inset 0 1px 0 rgba(255,245,235,.12)}
+export const UI_CSS = `:root{color-scheme:light dark;--bg:#f1f2f3;--sheet:#fbfbfa;--fg:#1d1f22;--muted:#474c53;--line:#c4c8cd;--card:#fbfbfa;--blocking:#d0210f;--failed:#d0210f;--ok:#0f7d44;--ai:#0066d9;--ai-2:#3f5f96;--ai-3:#6b7891;--kaki:#b54c00;--kaki-soft:#fdeee0;--kiiro:#806100;--kiiro-soft:#f3ebc6;--shu:#d0210f;--shu-soft:#fde8e4;--matsu:#0f7d44;--matsu-soft:#e4f4e9;--kaki-line:#e06400;--matsu-line:#10994f;--blue-line:#2b7fea;--shu-line:#e8341f;--kiiro-line:#a87e00;--wire-over:#78828f;--grid:#e4e6e9;--on-strong:#fff;--dlg:rgba(244,244,242,.6);--blur-dlg:blur(16px) saturate(160%);--glass-edge:rgba(255,255,255,.45);--shadow:0 4px 16px rgba(0,0,0,.05);--hl:inset 0 1px 0 rgba(255,255,255,.7);--win:rgba(244,244,242,.10);--panel:rgba(255,255,255,.20);--edge:rgba(90,100,115,.26);--shadow-in:0 1px 4px rgba(20,30,50,.04);--blur-outer:blur(3px) saturate(160%);--blur-inner:blur(6px) saturate(160%);--rad:10px;--bar:60px}
+@media (prefers-color-scheme: dark){:root:not(.theme-light){--bg:#060910;--sheet:#0c1424;--fg:#e9edf3;--muted:#a7b2c2;--line:#2a3850;--card:#0c1424;--blocking:#ff8f84;--failed:#ff8f84;--ok:#7fd29b;--ai:#8fbcf5;--ai-2:#8aa2cc;--ai-3:#8d97aa;--kaki:#ffa04a;--kaki-soft:#432812;--kiiro:#e2c250;--kiiro-soft:#3a3014;--shu:#ff8f84;--shu-soft:#471e1b;--matsu:#7fd29b;--matsu-soft:#173626;--kaki-line:var(--kaki);--matsu-line:var(--matsu);--blue-line:var(--ai);--shu-line:var(--shu);--kiiro-line:var(--kiiro);--wire-over:#6b7c96;--grid:#16223a;--on-strong:#0a0f18;--dlg:rgba(22,20,18,.6);--glass-edge:rgba(255,245,235,.12);--shadow:0 8px 32px rgba(0,0,0,.35);--hl:inset 0 1px 0 rgba(255,245,235,.12);--win:rgba(22,20,18,.20);--panel:rgba(22,36,60,.30);--edge:rgba(150,185,230,.18);--shadow-in:0 1px 6px rgba(0,0,0,.18);--blur-outer:blur(5px) saturate(160%);--blur-inner:blur(10px) saturate(160%)}}
+:root.theme-dark{color-scheme:dark;--bg:#060910;--sheet:#0c1424;--fg:#e9edf3;--muted:#a7b2c2;--line:#2a3850;--card:#0c1424;--blocking:#ff8f84;--failed:#ff8f84;--ok:#7fd29b;--ai:#8fbcf5;--ai-2:#8aa2cc;--ai-3:#8d97aa;--kaki:#ffa04a;--kaki-soft:#432812;--kiiro:#e2c250;--kiiro-soft:#3a3014;--shu:#ff8f84;--shu-soft:#471e1b;--matsu:#7fd29b;--matsu-soft:#173626;--kaki-line:var(--kaki);--matsu-line:var(--matsu);--blue-line:var(--ai);--shu-line:var(--shu);--kiiro-line:var(--kiiro);--wire-over:#6b7c96;--grid:#16223a;--on-strong:#0a0f18;--dlg:rgba(22,20,18,.6);--glass-edge:rgba(255,245,235,.12);--shadow:0 8px 32px rgba(0,0,0,.35);--hl:inset 0 1px 0 rgba(255,245,235,.12);--win:rgba(22,20,18,.20);--panel:rgba(22,36,60,.30);--edge:rgba(150,185,230,.18);--shadow-in:0 1px 6px rgba(0,0,0,.18);--blur-outer:blur(5px) saturate(160%);--blur-inner:blur(10px) saturate(160%)}
 :root.theme-light{color-scheme:light}
 *{box-sizing:border-box}
 html{background:var(--bg)}
@@ -108,7 +111,49 @@ body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 "Hiragino Kaku 
 .top .tools{margin-left:auto;flex:none;max-width:100%}.tools button{white-space:nowrap}.top h1{flex:none}.top .status{flex:1 1 12em;min-width:0;overflow-wrap:anywhere}
 .status{color:var(--muted);font-size:13px}
 .status.live::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--matsu);margin-right:6px;vertical-align:middle;animation:breathe 2.4s ease-in-out infinite}
-main{padding:0 16px 48px;max-width:1040px;margin:0 auto}
+main{padding:0 16px 48px}
+/* 外の窓（上のバー・3 つの窓・下のタブ）と中の面（カード・札・一覧・図の盤）の、二重のぼかし（#254 の段階 2）。
+   外の窓は、窓そのものでなく背面の ::before にぼかしを持たせる（窓が背景の根にならず、中の面のぼかしが窓の後ろまで届く） */
+.win,.top,.nav{position:relative;isolation:isolate;background:transparent;border:1px solid var(--glass-edge);box-shadow:var(--hl),var(--shadow)}
+.win::before,.top::before,.nav::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;background:var(--win);backdrop-filter:var(--blur-outer);-webkit-backdrop-filter:var(--blur-outer)}
+.top{position:sticky;top:0;z-index:10;border-width:0 0 1px}
+/* 3 つの窓（あなたの番・やり取り・作業ごとのようす）。899px 以下は 1 列で、下のタブ（.nav）で「出番」と「図と作業」を切り替える */
+.stage{display:grid;gap:16px;grid-template-columns:minmax(0,1fr);margin-top:16px;min-width:0}
+.win{display:flex;flex-direction:column;min-height:0;min-width:0;border-radius:var(--rad);overflow:hidden}
+.wh{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 14px;border-bottom:1px solid var(--line)}
+.wh h2{margin:0;font:500 12px/1.6 "SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.14em;color:var(--ai)}
+.wb{padding:12px 14px;overflow:auto;min-height:0;flex:1;min-width:0}
+.wb>.now{margin-top:4px}
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:none;grid-template-columns:repeat(2,1fr);padding-bottom:env(safe-area-inset-bottom);border-width:1px 0 0;border-radius:0}
+.nb{position:relative;font-size:13px;min-height:var(--bar);border:0;border-radius:0;background:transparent;color:var(--muted);display:grid;place-items:center;align-content:center;padding:4px}
+.nb[aria-current="page"]{color:var(--fg);font-weight:800;box-shadow:inset 0 3px 0 var(--ai)}
+.bdg{min-width:20px;height:20px;border-radius:10px;background:var(--kaki);color:var(--on-strong);font-size:12px;font-weight:800;display:inline-grid;place-items:center;padding:0 5px}
+.nb .bdg{position:absolute;top:6px;left:calc(50% + 8px)}
+@media (max-width:899px){
+  main{padding-bottom:calc(var(--bar) + 16px)}
+  .nav{display:grid}
+  .stage[data-view="yours"] .win:not([data-p="left"]),.stage[data-view="explore"] .win[data-p="left"]{display:none}
+  .wb{overflow:visible;flex:none}
+}
+/* 広い画面（900px〜）: 画面全体はスクロールせず、窓の中だけスクロールする */
+@media (min-width:900px){
+  body{display:flex;flex-direction:column;height:100dvh}
+  main{flex:1;min-height:0;display:flex;flex-direction:column;padding:0 20px 16px;overflow:auto}
+  /* 承認・確認・知らせは、同時に出ても窓をつぶさないよう、高さに上限を置き、中だけスクロールする */
+  .approvals{position:static;max-height:32vh;overflow:auto;flex:none}
+  #confirm{max-height:32vh;overflow:auto;flex:none}
+  #notice{max-height:12vh;overflow:auto;flex:none}
+  /* 高さの低い横長の画面でも窓が使えるよう、最小の高さを置く（足りないときは main がスクロールする） */
+  .stage{flex:1;min-height:360px}
+}
+@media (min-width:900px) and (max-width:1279px){
+  .stage{grid-template-columns:clamp(320px,36vw,420px) minmax(0,1fr);grid-template-rows:minmax(0,1.3fr) minmax(0,1fr);grid-template-areas:"left graph" "left right"}
+  .win[data-p="left"]{grid-area:left}.win[data-p="graph"]{grid-area:graph}.win[data-p="right"]{grid-area:right}
+}
+@media (min-width:1280px){
+  .stage{grid-template-columns:clamp(320px,24vw,380px) minmax(0,1fr) clamp(320px,25vw,400px);grid-template-rows:minmax(0,1fr);grid-template-areas:"left graph right"}
+  .win[data-p="left"]{grid-area:left}.win[data-p="graph"]{grid-area:graph}.win[data-p="right"]{grid-area:right}
+}
 h2{font-size:17px;margin:28px 0 6px}
 .lead{margin:0 0 12px;color:var(--muted);font-size:14px}
 button{font:inherit;font-size:14px;line-height:1.4;padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:var(--sheet);color:var(--fg);cursor:pointer;transition:transform .12s,border-color .2s}
@@ -168,7 +213,7 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .now .count{grid-row:span 2;font-size:56px;line-height:1;font-weight:800;color:var(--kaki);min-width:1.2ch;text-align:center;font-variant-numeric:tabular-nums}
 .now .count.zero{color:var(--matsu)}
 .now .count.bump-a{animation:bump-a .6s cubic-bezier(.3,1.6,.5,1)}.now .count.bump-b{animation:bump-b .6s cubic-bezier(.3,1.6,.5,1)}
-.now h2{margin:0;font-size:21px}.now .lead{margin:0}
+.now h3{margin:0;font-size:21px}.now .lead{margin:0}
 .todo{display:grid;gap:10px;margin:12px 0 0}
 .task{background:var(--sheet);border:1px solid var(--line);border-left:5px solid var(--kaki-line);border-radius:4px 12px 12px 4px;padding:12px 16px;overflow-wrap:anywhere}
 .task.stall{border-left-color:var(--kiiro-line)}.task.request{border-left-color:var(--muted)}.task.closed{border-left-color:var(--line);opacity:.75}
@@ -279,7 +324,12 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .still *,.still *::before{animation:none!important;transition:none!important}
 .still .comet{display:none}
 @media (prefers-reduced-motion: reduce){*,*::before{animation:none!important;transition:none!important}.comet{display:none}}
-@media (max-width:640px){dialog.settings{width:calc(100vw - 32px);max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px)}.now .count{font-size:44px}.now h2{font-size:18px}.top .tools{margin-left:0}button.sm,button.copy,button.gear,.settings .policy-add select,.settings .policy-add input{min-height:44px}.zoom{top:4px}.zoom button{min-width:44px;min-height:44px}.seg button{min-width:44px}}
+/* 中の面（#254 の段階 2）: 薄い塗りとぼかし。前に書いた .card などの塗りを上書きするので、ここ（後ろ）に置く。
+   入れ子の中の面と、設定・管理の窓の中のカードは、ぼかさない（外の面・窓が背景の根になり、届かないため） */
+.card,.task,.empty,.tlist,.board{background:var(--panel);border-top-color:var(--edge);border-right-color:var(--edge);border-bottom-color:var(--edge);box-shadow:var(--hl),var(--shadow-in);backdrop-filter:var(--blur-inner);-webkit-backdrop-filter:var(--blur-inner)}
+:is(.card,.task,.empty,.tlist,.board) :is(.card,.task,.empty,.tlist,.board),dialog.settings :is(.card,.empty){backdrop-filter:none;-webkit-backdrop-filter:none}
+dialog.settings :is(.card,.empty){background:var(--sheet)}
+@media (max-width:640px){dialog.settings{width:calc(100vw - 32px);max-width:calc(100vw - 32px);max-height:calc(100dvh - 32px)}.now .count{font-size:44px}.now h3{font-size:18px}.top .tools{margin-left:0}button.sm,button.copy,button.gear,.settings .policy-add select,.settings .policy-add input{min-height:44px}.zoom{top:4px}.zoom button{min-width:44px;min-height:44px}.seg button{min-width:44px}}
 `;
 
 // 根に出る、Desktop の子を人が確かめる依頼（daemon の再起動のあとの整合。external-check.ts）の文面の先頭。画面は、これを「停止の代行依頼」と同じ扱いにする
@@ -454,6 +504,17 @@ export const UI_JS = `'use strict';
   var statusEl = document.getElementById('status');
   var authEl = document.getElementById('auth');
   var viewEl = document.getElementById('view');
+  // 狭い画面（899px 以下）の下のタブ（#254 の段階 2）。「出番」（あなたの番の窓）と「図と作業」（やり取り・作業ごとのようすの窓）を切り替える。
+  // 広い画面では、CSS が 3 つの窓をすべて出すので、この切り替えは見た目に効かない。
+  // 開いたときは「あなたの番」から始める。切り替えるのは、利用者がタブか「詳しく」を押したときだけ（データの更新では戻さない）。選びはブラウザに残さない
+  var paneButtons = [document.getElementById('nav-yours'), document.getElementById('nav-explore')];
+  function showPane(v) {
+    viewEl.dataset.view = v;
+    paneButtons.forEach(function (b) { b.ariaCurrent = b.dataset.view === v ? 'page' : 'false'; });
+  }
+  paneButtons.forEach(function (b) {
+    b.addEventListener('click', function () { showPane(b.dataset.view); });
+  });
   var timer = null;
   var lastView = null;
   var lastRaw = null;
@@ -1008,6 +1069,11 @@ export const UI_JS = `'use strict';
     if (lastCount !== -1 && n !== lastCount) { countFlip = !countFlip; cls += countFlip ? ' bump-a' : ' bump-b'; }
     countEl.className = cls;
     lastCount = n;
+    // 下のタブの「あなたの番」にも、件数の札を出す（0 件のときは出さない）。札は読み上げず、隠した文で件数を読ませる
+    var navCount = document.getElementById('nav-count');
+    navCount.textContent = String(n);
+    navCount.hidden = n === 0;
+    document.getElementById('nav-count-sr').textContent = n ? t('pane.navCount', { n: n }) : '';
     document.getElementById('now-title').textContent = n ? t('now.titleN', { n: n }) : t('now.none');
     document.getElementById('now-lead').textContent = n ? t('now.lead') : '';
   }
@@ -1470,6 +1536,8 @@ export const UI_JS = `'use strict';
     var c = document.getElementById('card-' + id);
     if (!c) return;
     if (c.parentNode && c.parentNode.id === 'finished-cards') document.getElementById('finished').open = true;
+    // 狭い画面で「出番」を出しているときは、カードのある「図と作業」へ切り替えてから動かす
+    showPane('explore');
     c.scrollIntoView({ block: 'center' });
     pickId = id;
     pickUntil = Date.now() + PICK_MS;
