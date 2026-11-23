@@ -64,24 +64,41 @@ describe("画面の文字の表（#140）", () => {
       expect(uiString("ja", key), key).not.toMatch(/idle/i);
       expect(uiString("en", key), key).not.toMatch(/idle/i);
     }
-    // 画面を見ている人のすること（統合の Claude に頼む）を先に言い、ツール名は括弧の中に置く。
-    // CLI の子は、統合の Claude が利用者に確かめ、子の MCP が自分で結び直すので、利用者に打たせない（#255）
+    // 画面を見ている人のすること（統合の Claude に頼む）を先に言う。内部の道具の名前は出さない（#264）
     for (const key of ["card.bindExpiredNextDesktop", "card.bindExpiredNextUnknown"] as const) {
-      expect(uiString("ja", key), key).toMatch(
-        /^次の操作: 統合の Claude に、紐付けの出し直しを頼む（.*node_bindCode.*）$/,
-      );
+      expect(uiString("ja", key), key).toMatch(/^次の操作: 統合の Claude に、子のつなぎ直しを頼む（.*）$/);
       expect(uiString("en", key), key).toMatch(
-        /^Next: ask the integrator Claude to issue the binding again \(.*node_bindCode.*\)$/,
+        /^Next: ask the integrator Claude to reconnect the child \(.*\)$/,
       );
     }
-    // 人の操作の言葉で書く（内部の道具の名前を出さない）。自動で直らないときの次の操作（claude attach）を言う
+    // 人の操作の言葉で書く（内部の道具の名前を出さない）。自動で直らないときの次の操作（claude attach）を、
+    // 待つ目安（10 分。自動の結び直しの間隔の上限）と、カードの「開き方」への誘導で言う（#264）
     for (const lang of ["ja", "en"] as const) {
-      expect(uiString(lang, "card.bindExpiredNextCli"), lang).not.toContain("node_bindCode");
-      expect(uiString(lang, "card.bindExpiredNextCli"), lang).not.toContain("child_bind");
       expect(uiString(lang, "card.bindExpiredNextCli"), lang).toContain("claude attach");
+      expect(uiString(lang, "card.bindLostNext"), lang).toBe(
+        uiString(lang, "card.bindExpiredNextCli"),
+      );
     }
-    expect(uiString("en", "card.bindExpiredNextDesktop")).toContain("node_bindCode");
-    expect(uiString("en", "card.bindExpiredNextUnknown")).toContain("node_bindCode");
+    expect(uiString("ja", "card.bindExpiredNextCli")).toContain("10 分たっても");
+    expect(uiString("ja", "card.bindExpiredNextCli")).toContain("「開き方」");
+    expect(uiString("en", "card.bindExpiredNextCli")).toContain("after 10 minutes");
+    expect(uiString("en", "card.bindExpiredNextCli")).toContain('"How to open"');
+    // 紐付けが切れた系統のカードの文は、言葉をそろえる（つなぎ直す。しばらく・結び直す・道具名を使わない）
+    for (const key of [
+      "card.bindExpiredNextCli",
+      "card.bindExpiredNextDesktop",
+      "card.bindExpiredNextUnknown",
+      "card.bindLostNext",
+      "stall.rebind",
+    ] as const) {
+      for (const lang of ["ja", "en"] as const) {
+        for (const word of ["node_bindCode", "child_bind", "node_send"]) {
+          expect(uiString(lang, key), `${key} ${lang}`).not.toContain(word);
+        }
+      }
+      expect(uiString("ja", key), key).not.toMatch(/しばらく|結び直/);
+      expect(uiString("en", key), key).not.toContain("after a while");
+    }
   });
 
   it("紐付けが外れているかもしれない子のカードの文: 日英とも、切れた札と別の文で、親が利用者に確かめて node_bindCode で出し直す手順を言う", () => {

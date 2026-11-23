@@ -4,6 +4,7 @@
 
 ### 利用者に見える変更
 
+- **紐付けが切れた子の案内の文をそろえた**（#264）。状態画面のカード（CLI・Desktop・runtime 不明・知らせの接続が途切れた子・止まっているかもの子）から内部の道具名（`node_bindCode`）を外し、「しばらくたっても」を「10 分たっても」（子の mcp の自動の結び直しの間隔の上限 10 分）にした。CLI の子のカードは、自動で直らないとき、カードの「開き方」にある `claude attach` を実行するよう案内する。言葉は「紐付け（が切れる）」「つなぎ直す」にそろえた（受信箱の知らせ・integrator の skill・docs も同じ）。統合の Claude が読む受信箱の知らせには、呼ぶ道具の名前を今までどおり残す。動作は変えていない。
 - **根の範囲に収まらない範囲拡張の依頼を、承認の画面に出す前に断るようにした**（#249）。`scope_extend` は、承認しても必ず `scopeNotSubset` などで失敗する依頼（親の範囲・根の範囲に収まらず「上限にも足して承認」でも通せない、deny に当たる）を、記録せずに理由つきで返す。コマンドは、許可に近い形があれば「近い許可コマンド: bash scripts/fetch-actionlint」のように頼み直す形を添える（`scope_decide` の失敗にも同じ文）。人間が「上限にも足して承認」で通せる依頼は、今までどおり画面に出る。前方一致の規則は変えていない。
 - **再生成できる ignored のファイル（Renga の actionlint のバイナリなど）を、新しい作業ツリーに置く手順を整えた**（#250）。既存の `.claude/touryou-worktree-files.json` で足りると確かめ（新しい設定・コマンドは足していない）、コピーを APFS のクローンにして（できなければ通常のコピー）、丸ごと gitignore のディレクトリの中の一覧のファイルも、回収の「きれいか」の判定から外れるようにした（`dir/` にまとまって出る形だと、一覧にあっても「きれいでない」になる場合があった）。手順は `docs/plugin.md`。
 - **別の daemon につなぐ MCP を、設定ごとの名前（`touryou-<名前>`）・`--config` 固定で登録できるようにした**（#224）。`touryou launchd init --config <設定> [--name <名前>]` が、`claude mcp add touryou-<名前> -- …/touryou-mcp --stdio --config <設定>` の命令を「【MCP を登録する】」に出す（実行はしない）。既定の設定の daemon と、plugin の `node` の経路は変わらない。統合セッションの `whoami` の `daemon.repoRoot`・`daemonId` で、つながった daemon を確かめられる（子には出さない）。理由は `.sdd/adr/touryou-224-mcp-per-daemon.md`、使い方は `docs/launchd.md`。
