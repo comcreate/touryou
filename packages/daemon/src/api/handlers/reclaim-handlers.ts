@@ -621,7 +621,9 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
     },
 
     // 一括の回収の実行（人間だけ。#234）。照合の値が違えば何も消さない。強制は使わない（通常の回収だけ）。
-    "node.reclaimBatch": async (req: HandlerRequest<"node.reclaimBatch">): Promise<R<"node.reclaimBatch">> => {
+    "node.reclaimBatch": async (
+      req: HandlerRequest<"node.reclaimBatch">,
+    ): Promise<R<"node.reclaimBatch">> => {
       if (req.role !== "human") return batchHumanOnly();
       if (reclaiming) {
         return fail("busy", "別の回収を実行中", "少し待って、もう一度回収する");
@@ -694,7 +696,12 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
       if (n.state !== "verified") continue;
       const { result: r } = await assessNode([...virtual.values()], open, n.id, discarded);
       if (!r.ok) {
-        candidates.push({ nodeId: n.id, eligible: false, unmet: ["stateNotEligible"], blockers: [] });
+        candidates.push({
+          nodeId: n.id,
+          eligible: false,
+          unmet: ["stateNotEligible"],
+          blockers: [],
+        });
         continue;
       }
       let { unmet } = r.value;
@@ -709,7 +716,10 @@ export function createReclaimHandlers(deps: ReclaimHandlerDeps) {
       if (eligible) virtual.set(n.id, { ...n, state: "reclaimable" });
       candidates.push({ nodeId: n.id, eligible, unmet, blockers: r.value.blockers });
     }
-    const digest = createHash("sha256").update(lines.sort().join("\n"), "utf8").digest("hex").slice(0, 12);
+    const digest = createHash("sha256")
+      .update(lines.sort().join("\n"), "utf8")
+      .digest("hex")
+      .slice(0, 12);
     return { candidates, digest };
   }
 

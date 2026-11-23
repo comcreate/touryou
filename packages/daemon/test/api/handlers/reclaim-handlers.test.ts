@@ -1096,10 +1096,14 @@ describe("回収の断り（openDecision）の nextActions", () => {
 });
 
 describe("統合済みの子の一括の回収（#234）", () => {
-  const human = (r: ReturnType<typeof rig>, op: "node.reclaimBatchPreview" | "node.reclaimBatch", p = {}) =>
-    r.call(op, p, "", `q-${++n}`, "human");
-  const rowOf = (res: { value?: any }, id: string) =>
-    res.value.candidates.find((c: { nodeId: string }) => c.nodeId === id);
+  const human = (
+    r: ReturnType<typeof rig>,
+    op: "node.reclaimBatchPreview" | "node.reclaimBatch",
+    p = {},
+  ) => r.call(op, p, "", `q-${++n}`, "human");
+  type Row = { nodeId: string; eligible: boolean; unmet: string[] };
+  const rowOf = (res: { value?: unknown }, id: string) =>
+    (res.value as { candidates: Row[] }).candidates.find((c) => c.nodeId === id) as Row;
 
   it("プレビューは、回収できる子と、対象外の子を理由つきで返す（何も消さない）", async () => {
     const r = rig({

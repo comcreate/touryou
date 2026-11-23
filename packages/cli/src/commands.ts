@@ -344,7 +344,11 @@ const isBatchPreview = (v: unknown): v is BatchPreview =>
   );
 interface BatchResult {
   readonly reclaimed: readonly string[];
-  readonly failed: readonly { readonly nodeId: string; readonly code: string; readonly cause: string }[];
+  readonly failed: readonly {
+    readonly nodeId: string;
+    readonly code: string;
+    readonly cause: string;
+  }[];
 }
 const isBatchResult = (v: unknown): v is BatchResult =>
   isRecord(v) &&

@@ -95,14 +95,20 @@ describe("reclaim-merged（#234: 統合済みの子の一括の回収）", () =>
 
   it("--expect が表示した値と違えば、何も実行しない（終了コード 1）", async () => {
     const { client, sent } = batch();
-    const r = await runCommand(["reclaim-merged", "--yes", "--expect", "ffffffffffff"], deps(client));
+    const r = await runCommand(
+      ["reclaim-merged", "--yes", "--expect", "ffffffffffff"],
+      deps(client),
+    );
     expect(r.exitCode).toBe(1);
     expect(ops(sent)).toEqual(["node.reclaimBatchPreview"]);
   });
 
   it("--yes --expect が表示した値と同じなら、node.reclaimBatch を送る", async () => {
     const { client, sent } = batch();
-    const r = await runCommand(["reclaim-merged", "--yes", "--expect", "0123456789ab"], deps(client));
+    const r = await runCommand(
+      ["reclaim-merged", "--yes", "--expect", "0123456789ab"],
+      deps(client),
+    );
     expect(r.exitCode).toBe(0);
     expect(ops(sent)).toEqual(["node.reclaimBatchPreview", "node.reclaimBatch"]);
     expect(sent[1]?.params).toEqual({ expectDigest: "0123456789ab" });
@@ -113,7 +119,10 @@ describe("reclaim-merged（#234: 統合済みの子の一括の回収）", () =>
     const { client, sent } = fakeClient({
       "node.reclaimBatchPreview": ok({ candidates: [], digest: "0123456789ab" }),
     });
-    const r = await runCommand(["reclaim-merged", "--yes", "--expect", "0123456789ab"], deps(client));
+    const r = await runCommand(
+      ["reclaim-merged", "--yes", "--expect", "0123456789ab"],
+      deps(client),
+    );
     expect(ops(sent)).toContain("node.reclaimBatchPreview");
     expect(r.exitCode).toBe(0);
   });
