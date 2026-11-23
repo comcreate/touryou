@@ -11,18 +11,18 @@
    組み方: ref/sample.html（上のバー＋3 列。列の中だけスクロール。スマホは 1 列＋下のタブ）
    全面の背景: ref/architect_backgrounds.tsx のシェーダーを、素の JS と WebGL の <canvas> に移した
    （WebGL が使えないときは、下の静的な SVG を出す）
-   面: グラスモーフィズム（外の窓はぼかさずにごく薄い塗りだけ。中の面が半透明の色＋backdrop-filter＋光の縁）
+   面: グラスモーフィズム（外の窓だけがごく薄い塗り＋backdrop-filter を持ち、中の面はごく薄い塗り＋光の縁）
    外部の通信なし・外部のフォントなし。値はすべてダミー
    ============================================================ */
 :root{
   --bg:#f1f2f3;--bg-glow:#fcfdfd;
-  /* 面: 外の窓（上のバー・3 列の窓・見本帳の台・下のタブ）は、ぼかさずにごく薄い塗り（3%）だけ。
-     中の面（カード・札・設定の窓・図の盤など）は、薄い塗り（10%）と --blur のぼかしで面にする。
+  /* 面: 外の窓（上のバー・3 列の窓・見本帳の台・下のタブ・設定の窓）は、ごく薄い塗り（5%）と --blur のぼかし。
+     中の面（カード・札・図の盤など）は、ぼかさずにごく薄い塗り（5%）と、縁・上辺の光の線で区切る。
      帯（窓の見出し・タブ・窓の下の帯）は塗りなし */
-  --win:rgba(244,241,234,.03);--panel:rgba(255,255,255,.10);--strip:transparent;--panel-solid:#fbfaf6;
+  --win:rgba(244,241,234,.05);--panel:rgba(255,255,255,.05);--strip:transparent;--panel-solid:#fbfaf6;
   --glass-edge:rgba(255,255,255,.45);--edge:rgba(90,100,115,.26);
   --hl:inset 0 1px 0 rgba(255,255,255,.7);--hl-line:rgba(255,255,255,.9);--node:rgba(255,255,255,.08);
-  --shadow:0 4px 16px rgba(0,0,0,.05);--shadow-in:0 1px 4px rgba(20,30,50,.04);--blur:blur(14px) saturate(160%);
+  --shadow:0 4px 16px rgba(0,0,0,.05);--shadow-in:0 1px 4px rgba(20,30,50,.04);--blur:blur(7px) saturate(160%);
   /* 文字の色は、面が薄くても背景の上で 4.5:1 を保つよう、明では濃いめにしている */
   --ink:#1d1f22;--ink2:#474c53;--rule:#c4c8cd;--grid:#e4e6e9;
   --accent:#24548f;--kaki:#903d00;--kaki-soft:#fbe6d2;--matsu:#275f3c;--matsu-soft:#dcebdf;
@@ -34,7 +34,7 @@
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#060910;--bg-glow:#0d1a30;
-  --win:rgba(22,20,18,.05);--panel:rgba(22,36,60,.20);--strip:transparent;--panel-solid:#0c1424;
+  --win:rgba(22,20,18,.10);--panel:rgba(22,36,60,.05);--strip:transparent;--panel-solid:#0c1424;
   --glass-edge:rgba(255,245,235,.12);--edge:rgba(150,185,230,.18);
   --hl:inset 0 1px 0 rgba(255,245,235,.12);--hl-line:rgba(255,245,235,.3);--node:rgba(255,255,255,.05);
   --shadow:0 8px 32px rgba(0,0,0,.35);--shadow-in:0 1px 6px rgba(0,0,0,.18);
@@ -48,7 +48,7 @@
 }}
 :root[data-theme="dark"]{
   --bg:#060910;--bg-glow:#0d1a30;
-  --win:rgba(22,20,18,.05);--panel:rgba(22,36,60,.20);--strip:transparent;--panel-solid:#0c1424;
+  --win:rgba(22,20,18,.10);--panel:rgba(22,36,60,.05);--strip:transparent;--panel-solid:#0c1424;
   --glass-edge:rgba(255,245,235,.12);--edge:rgba(150,185,230,.18);
   --hl:inset 0 1px 0 rgba(255,245,235,.12);--hl-line:rgba(255,245,235,.3);--node:rgba(255,255,255,.05);
   --shadow:0 8px 32px rgba(0,0,0,.35);--shadow-in:0 1px 6px rgba(0,0,0,.18);
@@ -90,11 +90,11 @@ html.gl .bg{display:none}
 @keyframes twinkle{from{opacity:.55}to{opacity:1}}
 
 /* ---------- 面（グラスモーフィズム） ----------
-   外の窓（上のバー・3 列の窓・見本帳の台・下のタブ）は backdrop-filter を持たない。
-   backdrop-filter を持つ面は、その中の面にとっての「背景の根」になり、中のぼかしが WebGL の背景まで届かなくなるため。
-   ぼかすのは中の面（カード・札・設定の窓・図の盤など）で、半透明の色・ぼかし・上辺の光の線・淡い影で面にする */
-.win,.top,.nav,.sheet{background:var(--win);border:1px solid var(--glass-edge);box-shadow:var(--hl),var(--shadow)}
-.card,.task,.cmd,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,dialog.settings,.inbox li,.pipe{background:var(--panel);border:1px solid var(--edge);box-shadow:var(--hl),var(--shadow-in);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
+   ぼかすのは外の窓（上のバー・3 列の窓・見本帳の台・下のタブ）だけ。設定の窓のように、外の窓の外に出る面も同じ扱いにする。
+   backdrop-filter を持つ面は、その中の面にとっての「背景の根」になり、中でぼかしても WebGL の背景まで届かないため、
+   中の面（カード・札・図の盤など）は backdrop-filter を持たず、ごく薄い塗り・縁・上辺の光の線・淡い影で区切る */
+.win,.top,.nav,.sheet,dialog.settings{background:var(--win);border:1px solid var(--glass-edge);box-shadow:var(--hl),var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
+.card,.task,.cmd,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,.inbox li,.pipe{background:var(--panel);border:1px solid var(--edge);box-shadow:var(--hl),var(--shadow-in)}
 .top{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:8px 14px;height:var(--hd);padding:0 16px;border-width:0 0 1px;border-radius:0;box-shadow:var(--hl)}
 .top h1{margin:0;display:flex;align-items:baseline;gap:10px;min-width:0;white-space:nowrap}
 .top .repo{font:700 15px/1.2 "SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -170,7 +170,7 @@ input[type=text],input[type=password],select,textarea{font:inherit;font-size:14p
 .inbox .ar{font-weight:800}.ar.up{color:var(--blue)}.ar.dn{color:var(--matsu)}
 
 /* 中央：関係図 */
-.board{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;border:1px solid var(--edge);border-radius:var(--rad);background:var(--panel);box-shadow:var(--hl);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);overflow:hidden}
+.board{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;border:1px solid var(--edge);border-radius:var(--rad);background:var(--panel);box-shadow:var(--hl);overflow:hidden}
 .tree{display:block;width:100%;flex:1 1 0;min-height:220px;height:100%}
 .zoom{position:absolute;left:8px;top:8px;display:flex;gap:4px}
 .zoom button{min-width:44px;min-height:44px;width:44px;padding:0;font-size:18px;border-radius:10px}
@@ -183,7 +183,7 @@ input[type=text],input[type=password],select,textarea{font:inherit;font-size:14p
 .trunk{fill:none;stroke:var(--ink2);stroke-width:1.6;stroke-linecap:round}
 .pd{fill:var(--c);stroke:var(--panel-solid);stroke-width:1.2}
 .nd{cursor:pointer}
-/* 図の箱は SVG の rect で backdrop-filter が効かないため、半透明の塗り（盤の後ろは盤そのものがぼかしている）と、上辺の光の線（.hl）で面にする */
+/* 図の箱は SVG の rect で backdrop-filter が効かないため、半透明の塗り（盤の後ろは外の窓がぼかしている）と、上辺の光の線（.hl）で面にする */
 .nd .box{fill:var(--node);stroke:var(--rule);stroke-width:1.2}
 .nd .hl{fill:none;stroke:var(--hl-line);stroke-width:1.2;stroke-linecap:round}
 .nd .stripe{fill:var(--matsu)}
