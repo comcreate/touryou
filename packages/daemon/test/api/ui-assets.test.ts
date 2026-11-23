@@ -458,6 +458,9 @@ describe("画面の資産（走査）", () => {
       "querySelector",
       // 確認の出所の印（管理の窓から出した確認だけ true。pending の中の真偽値）
       "fromAdmin",
+      // 狭い画面の下のタブ（#254 の段階 2）: いま出している窓（dataset.view）と、選んでいるタブの印（aria-current）
+      "view",
+      "ariaCurrent",
     ]);
     // 埋め込んだ文字の表（#140。JSON の値で、コードでない）は、走査から除く
     const code = UI_JS.replace(TABLE_LINE, "")

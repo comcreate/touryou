@@ -255,6 +255,61 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     await page.waitForSelector("#graph .gnode");
   });
 
+  it("幅の区切り（#254 の段階 2）: 1280px 以上は 3 つの窓が横に並び、900〜1279px は左＋右の上下、899px 以下は下のタブで切り替える", async () => {
+    const boxes = () =>
+      page.evaluate(() =>
+        ["left", "graph", "right"].map((p) => {
+          const r = document.querySelector(`#view .win[data-p="${p}"]`)?.getBoundingClientRect();
+          return r ? { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width) } : null;
+        }),
+      );
+    const navShown = () =>
+      page.evaluate(
+        () => getComputedStyle(document.querySelector("#view .nav") as Element).display !== "none",
+      );
+    // 3 列: 窓は同じ高さから始まり、左 → 中 → 右の順に並ぶ
+    const [l, g, r] = await boxes();
+    expect(l && g && r).toBeTruthy();
+    expect(g?.y).toBe(l?.y);
+    expect(r?.y).toBe(l?.y);
+    expect((l?.x ?? 0) < (g?.x ?? 0) && (g?.x ?? 0) < (r?.x ?? 0)).toBe(true);
+    expect(await navShown()).toBe(false);
+    // 画面全体はスクロールしない（窓の中だけ）
+    expect(
+      await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1),
+    ).toBe(true);
+    // 2 列: 図と作業は同じ列で、図が上
+    await page.setViewportSize({ width: 1000, height: 900 });
+    const [l2, g2, r2] = await boxes();
+    expect(g2?.x).toBe(r2?.x);
+    expect((g2?.y ?? 0) < (r2?.y ?? 0)).toBe(true);
+    expect((l2?.x ?? 0) < (g2?.x ?? 0)).toBe(true);
+    // 1 列: 下のタブで「出番」と「図と作業」を切り替える。選んだタブに aria-current="page"
+    await page.setViewportSize({ width: 420, height: 900 });
+    expect(await navShown()).toBe(true);
+    const shown = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll("#view .win")]
+          .filter((w) => getComputedStyle(w).display !== "none")
+          .map((w) => (w as HTMLElement).dataset.p),
+      );
+    expect(await shown()).toEqual(["left"]);
+    expect(await page.getAttribute("#nav-yours", "aria-current")).toBe("page");
+    await page.click("#nav-explore");
+    expect(await shown()).toEqual(["graph", "right"]);
+    expect(await page.getAttribute("#nav-explore", "aria-current")).toBe("page");
+    expect(await page.getAttribute("#nav-yours", "aria-current")).toBe("false");
+    // キーボードでも切り替えられる（ボタンなので Enter で押せる）
+    await page.focus("#nav-yours");
+    await page.keyboard.press("Enter");
+    expect(await shown()).toEqual(["left"]);
+    // 下のタブの名前と、出番の件数の札
+    expect(await page.getAttribute("#view .nav", "aria-label")).toBe("窓の切り替え");
+    expect(await page.textContent("#nav-count")).toBe(await page.textContent("#now-count"));
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.waitForSelector("#graph .gnode");
+  });
+
   it("作業ごとのようすのカードは見本の形：札は状態 1 つと答えの数、題は h3、棒は 12 区切り、やり取りは 3 件まで、知らせ・ID はたたむ", async () => {
     const shape = await page.evaluate(() =>
       [...document.querySelectorAll("#cards .card, #finished-cards .card")].map((c) => ({

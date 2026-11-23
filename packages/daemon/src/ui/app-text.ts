@@ -18,6 +18,11 @@ export const APP_TEXT = {
     en: "Admin (includes actions that cannot be undone)…",
   },
   "admin.close": { ja: "閉じる", en: "Close" },
+  // 3 つの窓と、狭い画面（899px 以下）の下のタブ（#254 の段階 2）
+  "pane.yours": { ja: "あなたの番", en: "Your turn" },
+  "pane.switch": { ja: "窓の切り替え", en: "Switch panes" },
+  "pane.navYours": { ja: "出番", en: "Your turn" },
+  "pane.navExplore": { ja: "図と作業", en: "Graph and work" },
   "admin.warn": {
     ja: "ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。",
     en: "Most actions here cannot be undone later. Pressing one opens a box to check the details. Actions that cannot be undone are sent only after you type the target ID.",
