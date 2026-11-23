@@ -41,8 +41,8 @@ export const APP_TEXT = {
     en: "Binding expired (too long since it was issued)",
   },
   "card.bindExpiredNextCli": {
-    ja: "次の操作: 統合の Claude に、紐付けの出し直しを頼む（統合が node_bindCode でコードを出し直し、子が child_bind を引数なしで呼んで結び直す）",
-    en: "Next: ask the integrator Claude to issue the binding again (it issues a new code with node_bindCode, and the child calls child_bind with no arguments to bind again)",
+    ja: "次の操作: 統合の Claude が、あなたに直してよいか確かめる。承認すると、node_bindCode で紐付けのコードを出し直し、子の MCP が自分でコードを使って結び直す（あなたがコマンドを打つ必要はない）",
+    en: "Next: the integrator Claude asks you whether it may fix this. Once you approve, it issues a new binding code with node_bindCode and the child's MCP uses the code itself to bind again (you do not need to type any command)",
   },
   "card.bindExpiredNextDesktop": {
     ja: "次の操作: 統合の Claude に、紐付けの出し直しを頼む（統合が node_bindCode で紐付けの文面を出し直し、子が新しい文面で、紐付けを最初からやり直す）",
@@ -57,8 +57,8 @@ export const APP_TEXT = {
     en: "Connection to the binding may be down (not receiving notices)",
   },
   "card.bindLostNext": {
-    ja: "次の操作: 統合の Claude に、子へ「touryou の child_bind を引数なしで呼んで」と送ってもらう（node_send）",
-    en: 'Next: ask the integrator Claude to send the child "call touryou\'s child_bind with no arguments" (node_send)',
+    ja: "次の操作: 統合の Claude が、あなたに直してよいか確かめる。承認すると、node_bindCode で紐付けのコードを出し直し、子の MCP が自分でコードを使って結び直す（あなたがコマンドを打つ必要はない）",
+    en: "Next: the integrator Claude asks you whether it may fix this. Once you approve, it issues a new binding code with node_bindCode and the child's MCP uses the code itself to bind again (you do not need to type any command)",
   },
   "approval.code": { ja: "確認コード", en: "Confirmation code" },
   "approval.done": { ja: "確認して実行しました（{label}）", en: "Confirmed and ran ({label})" },

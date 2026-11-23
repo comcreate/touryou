@@ -132,8 +132,8 @@ export function cliRebindInstruction(nodeId: string, expiresAt: string): string 
   return [
     "---- touryou への紐付けの出し直し（CLI の子）----",
     `ノード ${nodeId} の紐付けのコードを出し直し、子の作業ツリーの git のディレクトリのファイルに書いた（${expiresAt} まで。一度きり）。`,
-    `子のセッションに、次の 1 行だけを伝える: 「最初に touryou の ${CHILD_BIND_TOOL} を引数なしで呼んで、受信箱の手順に従って」`,
-    "まだ子を起動していなければ、parent_request の command を実行する（その指示に同じ文が入っている）。",
+    "子の MCP が、このファイルを自分で読んで結び直す（子の AI や利用者が、紐付けのコマンドを打つ必要はない）。子に伝える文もない。",
+    "まだ子を起動していなければ、parent_request の command を実行する。起動した子の MCP が、同じファイルを使う。",
     "注意: コードをコマンド・会話・報告に書き写さない（この文面にもコードは入っていない）。",
   ].join("\n");
 }
