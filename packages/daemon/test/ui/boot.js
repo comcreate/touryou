@@ -1,5 +1,6 @@
 // 試作のページの起動（試験の中だけで使う）。インラインの script は CSP で止まるので、別の資産にする。
 var VIEW = {
+  decisions: [{ nodeId: "c" }],
   nodes: [
     {
       id: "root",
