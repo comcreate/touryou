@@ -253,7 +253,7 @@ html.still :is(.mh,.mhc,.mtl,.msp){display:none!important}
 .mhc{fill:none;stroke:#fff;stroke-width:2.6;stroke-linecap:round;stroke-dasharray:6 56;stroke-dashoffset:79.6;animation:mt-hc 1.2s linear infinite}
 .mtl{fill:none;stroke:var(--c);stroke-width:5;stroke-linecap:round;stroke-dasharray:30 32;stroke-dashoffset:103.6;opacity:.45;animation:mt-t 1.2s linear infinite}
 .msp{fill:none;stroke:var(--c);stroke-width:2.4;stroke-linecap:round;opacity:0;transform-box:fill-box;transform-origin:center;filter:drop-shadow(0 0 3px var(--c));animation:mt-sp 1.2s linear infinite}
-/* 位相: 読み込んだ直後の 1 枚に、流星 2 つと火花の山（周期の 82%）が入るよう、0.98 秒ぶん進めて始める。
+/* 位相: 読み込んだ直後の 1 枚に、流星 2 つと火花（山は周期の 80%。始まりは 82% の位置）が入るよう、0.98 秒ぶん進めて始める。
    2 本目の上りの線（.mt-late）は、さらに半周期（0.6 秒）ずらす */
 .mh,.mhc,.mtl,.msp{animation-delay:-.98s}
 .mt-late{animation-delay:-1.58s}
