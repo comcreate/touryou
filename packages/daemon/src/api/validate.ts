@@ -16,11 +16,11 @@ import {
   isAgentState,
   isBoundedText,
   isCommitSha,
+  isPrNumber,
   isSafeId,
   isSessionId,
   isSessionRef,
   isValidInboxTime,
-  isPrNumber,
   LIMITS,
   MAX_GRACE_MS,
   MAX_PR_NUMBER,
@@ -373,7 +373,8 @@ const VALIDATORS: Validators = {
       if (!isCommitSha(r.tip)) fail("tip が不正（40 桁の 16 進のコミット SHA）");
       return { nodeId: id(r, "nodeId"), tip: r.tip as string };
     });
-    if (new Set(list.map((e) => e.nodeId)).size !== list.length) fail("assumeEvidence に重複がある");
+    if (new Set(list.map((e) => e.nodeId)).size !== list.length)
+      fail("assumeEvidence に重複がある");
     return { assumeEvidence: list };
   },
   "node.reclaimBatch": (p) => {

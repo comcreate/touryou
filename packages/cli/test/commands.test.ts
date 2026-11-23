@@ -154,7 +154,14 @@ describe("統合済みの証拠（#239: スカッシュ・リベースでマー�
   const AFTER = {
     candidates: [
       { nodeId: "ok1", eligible: true, unmet: [], blockers: [], mergedBy: "ancestor" },
-      { nodeId: "sq1", eligible: true, unmet: [], blockers: [], mergedBy: "evidence", branch: BRANCH },
+      {
+        nodeId: "sq1",
+        eligible: true,
+        unmet: [],
+        blockers: [],
+        mergedBy: "evidence",
+        branch: BRANCH,
+      },
     ],
     digest: "bbbbbbbbbbbb",
   };
@@ -192,16 +199,15 @@ describe("統合済みの証拠（#239: スカッシュ・リベースでマー�
       calls.push(args);
       if (args[0] === "repo") return { code: 0, stdout: JSON.stringify({ nameWithOwner: "o/r" }) };
       if (args[1] === "view") {
-        return view === undefined ? { code: 1, stdout: "" } : { code: 0, stdout: JSON.stringify(view) };
+        return view === undefined
+          ? { code: 1, stdout: "" }
+          : { code: 0, stdout: JSON.stringify(view) };
       }
       return { code: 0, stdout: typeof list === "string" ? list : JSON.stringify(list) };
     };
   const ghFound = (calls: (readonly string[])[] = []) =>
     ghWith(
-      [
-        pr({ number: 5, headRefOid: "d".repeat(40), mergedAt: "2026-01-01T00:00:00Z" }),
-        pr({}),
-      ],
+      [pr({ number: 5, headRefOid: "d".repeat(40), mergedAt: "2026-01-01T00:00:00Z" }), pr({})],
       calls,
     );
   const withGh = (client: DaemonClient, gh?: (args: readonly string[]) => Promise<unknown>) => ({
@@ -328,7 +334,10 @@ describe("統合済みの証拠（#239: スカッシュ・リベースでマー�
 
   it("gh が使えない（起動できない）ときは、証拠を記録せず、祖先判定のものだけを対象にして、理由を表示する", async () => {
     const { client, sent } = evidenceClient();
-    const r = await runCommand(["reclaim-merged"], withGh(client, async () => undefined));
+    const r = await runCommand(
+      ["reclaim-merged"],
+      withGh(client, async () => undefined),
+    );
     expect(ops(sent)).toEqual(["node.reclaimBatchPreview"]);
     expect(r.stdout).toContain("gh（GitHub CLI）を実行できない");
     expect(r.stdout).toContain("親のブランチに取り込み済みと分かる子だけ");
@@ -405,13 +414,18 @@ describe("統合済みの証拠（#239: スカッシュ・リベースでマー�
         digest: "0123456789ab",
       }),
     });
-    const r = await runCommand(["reclaim-merged"], withGh(client, async () => undefined));
+    const r = await runCommand(
+      ["reclaim-merged"],
+      withGh(client, async () => undefined),
+    );
     expect(r.stdout + r.stderr).not.toContain("\u001b");
     expect(r.stdout + r.stderr).not.toContain("\u0007");
   });
 
   it("証拠の記録が断られたら（先端が違うなど）、理由を表示して、プレビューは取り直さない", async () => {
-    const { client, sent } = evidenceClient(err(failure("tipMismatch", "先端が違う", "確かめ直す")));
+    const { client, sent } = evidenceClient(
+      err(failure("tipMismatch", "先端が違う", "確かめ直す")),
+    );
     const r = await runCommand(
       ["reclaim-merged", "--yes", "--expect", "bbbbbbbbbbbb"],
       withGh(client, ghFound()),
@@ -429,7 +443,8 @@ describe("統合済みの証拠（#239: スカッシュ・リベースでマー�
         "node.mergeEvidence": ok({ recorded: true, duplicate: false }),
       });
     /** `gh pr view` が返す 1 件（マージ済みの PR）。 */
-    const view = (over: Record<string, unknown> = {}) => pr({ number: 12, state: "MERGED", ...over });
+    const view = (over: Record<string, unknown> = {}) =>
+      pr({ number: 12, state: "MERGED", ...over });
     const noRecord = (sent: DaemonRequest<"human">[]) =>
       expect(ops(sent)).not.toContain("node.mergeEvidence");
 

@@ -124,11 +124,13 @@ describe("node.mergeEvidenceRecorded（統合済みの証拠。#239）", () => {
 
   it("存在しないノードは unknownNode、動いている（running）ノードは invalidTransition で断る", () => {
     expect(
-      code(foldEvents([...stopped(), evidence({ nodeId: "zzz", evidenceKind: "human", tip: TIP })])),
+      code(
+        foldEvents([...stopped(), evidence({ nodeId: "zzz", evidenceKind: "human", tip: TIP })]),
+      ),
     ).toBe("unknownNode");
-    expect(
-      code(foldEvents([...base(), evidence({ evidenceKind: "human", tip: TIP })])),
-    ).toBe("invalidTransition");
+    expect(code(foldEvents([...base(), evidence({ evidenceKind: "human", tip: TIP })]))).toBe(
+      "invalidTransition",
+    );
   });
 
   it("MERGE_EVIDENCE_KINDS・PR 番号の判定", () => {

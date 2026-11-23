@@ -409,7 +409,8 @@ const parseGhJson = (stdout: string): unknown => {
   }
 };
 
-const GH_UNAVAILABLE = "gh（GitHub CLI）を実行できない（入っていない・ログインしていない・時間切れ）";
+const GH_UNAVAILABLE =
+  "gh（GitHub CLI）を実行できない（入っていない・ログインしていない・時間切れ）";
 
 /** gh を使うリポジトリ（`<owner>/<repo>`）。gh のすべての呼び出しに `-R` で付ける。使えなければ `unavailable`。 */
 async function ghRepoOf(gh: GhRunner | undefined): Promise<string | "unavailable" | "invalid"> {
@@ -1297,7 +1298,9 @@ async function runReclaimMerged(
     if (repo === undefined) break;
     const who = terminalSafe(c.nodeId, 128);
     if (c.base === undefined) {
-      evidenceLines.push(`  - ${who}: 統合済みの証拠なし（親のブランチが分からない。証拠を探さない）`);
+      evidenceLines.push(
+        `  - ${who}: 統合済みの証拠なし（親のブランチが分からない。証拠を探さない）`,
+      );
       continue;
     }
     const lookup = await findMergedPrByBranch(deps.gh, repo, c.branch as string, c.base);
@@ -1344,7 +1347,10 @@ async function runReclaimMerged(
   const skipped = candidates.filter((c) => !c.eligible);
   const lines = [`統合済みの子の一括の回収（照合の値: ${digest}）`];
   if (evidenceLines.length > 0) {
-    lines.push("統合済みの証拠（gh でマージ済みの PR を調べた結果。表示だけでは記録しない）:", ...evidenceLines);
+    lines.push(
+      "統合済みの証拠（gh でマージ済みの PR を調べた結果。表示だけでは記録しない）:",
+      ...evidenceLines,
+    );
   }
   lines.push(
     eligible.length === 0
@@ -1935,13 +1941,18 @@ export async function runCommand(
         return {
           exitCode: 1,
           stdout: "",
-          stderr: "子の親のブランチが分からない（受理済みでない・上流がない、など）ので、PR を証拠にできない。何も記録していない。40 桁の SHA で宣言することはできる\n",
+          stderr:
+            "子の親のブランチが分からない（受理済みでない・上流がない、など）ので、PR を証拠にできない。何も記録していない。40 桁の SHA で宣言することはできる\n",
         };
       }
       const repo = await ghRepoOf(deps.gh);
       if (repo === "unavailable") return unavailable;
       if (repo === "invalid") {
-        return { exitCode: 1, stdout: "", stderr: "gh が返したリポジトリ名の形が不正。何も記録していない\n" };
+        return {
+          exitCode: 1,
+          stdout: "",
+          stderr: "gh が返したリポジトリ名の形が不正。何も記録していない\n",
+        };
       }
       const found = await findMergedPrByNumber(deps.gh, repo, as, base);
       if (found === "unavailable") return unavailable;

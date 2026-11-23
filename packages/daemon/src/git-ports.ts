@@ -1115,7 +1115,11 @@ export function createGitPorts(
           mergedBy = "evidence";
         }
         // 親のブランチ（上流）の名前。CLI が、PR の base ブランチと突き合わせる（別のブランチへのマージを証拠にしない）。
-        const full = await git(["rev-parse", "--symbolic-full-name", `${branchOf(nodeId)}@{upstream}`]);
+        const full = await git([
+          "rev-parse",
+          "--symbolic-full-name",
+          `${branchOf(nodeId)}@{upstream}`,
+        ]);
         const base = baseBranchOf(full.code === 0 ? full.stdout.trim() : "");
         return {
           merged,

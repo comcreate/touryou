@@ -875,14 +875,19 @@ describe("統合済みの証拠（スカッシュした子。#239）", () => {
     expect(r.ok).toBe(true);
     expect(existsSync(p)).toBe(false);
     expect(git(s.repoRoot, "branch", "--list", "touryou/*")).toBe(""); // ブランチは消えた
-    const kept = git(s.repoRoot, "for-each-ref", "--format=%(objectname)", "refs/touryou/discarded/");
+    const kept = git(
+      s.repoRoot,
+      "for-each-ref",
+      "--format=%(objectname)",
+      "refs/touryou/discarded/",
+    );
     expect(kept).toBe(tip); // (d) 保管された
     expect(seen).toEqual([tip]);
     const flat = s.calls.flat();
     // (f) ブランチの削除は、古い値の検査つきの update-ref -d。強制の branch -D・--force は使わない
-    expect(s.calls.some((c) => c.includes("update-ref") && c.includes("-d") && c.includes(tip))).toBe(
-      true,
-    );
+    expect(
+      s.calls.some((c) => c.includes("update-ref") && c.includes("-d") && c.includes(tip)),
+    ).toBe(true);
     expect(flat).not.toContain("-D");
     expect(flat).not.toContain("--force");
     expect(flat).not.toContain("-f");
@@ -905,9 +910,9 @@ describe("統合済みの証拠（スカッシュした子。#239）", () => {
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.error.code).toBe("tipMoved");
     expect(git(s.repoRoot, "branch", "--list", "touryou/*")).not.toBe(""); // ブランチは残る
-    expect(git(s.repoRoot, "for-each-ref", "--format=%(objectname)", "refs/touryou/discarded/")).toBe(
-      tip,
-    );
+    expect(
+      git(s.repoRoot, "for-each-ref", "--format=%(objectname)", "refs/touryou/discarded/"),
+    ).toBe(tip);
   });
 
   it("証拠なしなら、スカッシュした子は branchNotMerged で、何も消さない（既存の挙動）", async () => {
