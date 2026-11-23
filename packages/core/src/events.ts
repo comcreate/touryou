@@ -2221,11 +2221,7 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
             "判断の結果を確認する",
           );
         }
-        if (
-          node.state !== "stopped" &&
-          node.state !== "verified" &&
-          node.state !== "reclaimable"
-        ) {
+        if (node.state !== "stopped" && node.state !== "verified" && node.state !== "reclaimable") {
           return reject(
             seq,
             "invalidTransition",
