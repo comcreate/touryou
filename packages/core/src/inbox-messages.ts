@@ -126,12 +126,12 @@ export const INBOX_MESSAGES = {
     en: "Child {node} has not bound itself ({minutes} min since launch). Likely causes: (1) wrong daemon (check --config and TOURYOU_DAEMON_CONFIG) (2) missing plugin (children of a --plugin-dir parent do not get it; run /touryou:setup) (3) expired code (reissue with node_bindCode)",
   },
   rebind: {
-    ja: "子 {node} の紐付けをやり直す必要がある（コードが無効。daemon の再起動・期限切れなど）。次にすること: 利用者に、問題（子 {node} の紐付けが切れた）と、直してよいか（node_bindCode で紐付けのコードを出し直す）を AskUserQuestion で聞く。承認が出たら node_bindCode を呼ぶ。子の MCP が自分でコードを使って結び直す",
-    en: "The binding for child {node} needs to be redone (the code is no longer valid, for example after a daemon restart or expiry). Next: ask the user with AskUserQuestion about the problem (child {node}'s binding was lost) and whether to fix it (issue a new binding code with node_bindCode). Once approved, call node_bindCode. The child's MCP uses the code itself to bind again",
+    ja: "子 {node} の紐付けをやり直す必要がある（コードが無効。daemon の再起動・期限切れなど）。次にすること: 利用者に、問題（子 {node} の紐付けが切れた）と、つなぎ直してよいかを AskUserQuestion で聞く。承認が出たら node_bindCode を呼ぶ。子の MCP が自分でコードを使って結び直す。しばらくたっても直らないときは、人が claude attach で子のセッションを開き直す",
+    en: "The binding for child {node} needs to be redone (the code is no longer valid, for example after a daemon restart or expiry). Next: ask the user with AskUserQuestion about the problem (child {node}'s binding was lost) and whether to reconnect it. Once approved, call node_bindCode. The child's MCP uses the code itself to bind again. If it is still not fixed after a while, a person reopens the child's session with claude attach",
   },
   bindLostSuspect: {
-    ja: "子 {node} の紐付けが外れているかも。いまの状態: トークンは有効だが、{minutes} 分、知らせを受け取る接続がない。次にすること: 利用者に、問題と直してよいか（node_bindCode でコードを出し直す）を AskUserQuestion で聞く。承認後に node_bindCode。子の MCP が自分で結び直す",
-    en: "Child {node} may be unbound. State: token valid, but no notice connection for {minutes} min. Next: ask the user with AskUserQuestion about the problem (child {node}'s binding may be lost) and whether to fix it (issue a new binding code with node_bindCode). Once approved, call node_bindCode. The child's MCP uses the code itself to bind again",
+    ja: "子 {node} の紐付けが外れているかも。いまの状態: トークンは有効だが、{minutes} 分、知らせの接続がない。次にすること: 利用者に、問題とつなぎ直してよいかを AskUserQuestion で聞き、承認後に node_bindCode を呼ぶ。直らなければ、人が claude attach で開き直す",
+    en: "Child {node} may be unbound. State: token valid, but no notice connection for {minutes} min. Next: ask the user with AskUserQuestion about the problem (child {node}'s binding may be lost) and whether to reconnect it. Once approved, call node_bindCode. The child's MCP uses the code itself to bind again. If it is still not fixed after a while, a person reopens the child's session with claude attach",
   },
   hookNotSeen: {
     ja: "子 {node} が始まってから {minutes} 分たっても、見張り（フック）が 1 度も通っていない。Desktop で daemon の作業ツリーを「ローカル」で始めたかを確かめる（チップや「ワークツリー」で始めた子には、見張りが効かず、報告もできない）",
@@ -154,8 +154,8 @@ export const INBOX_MESSAGES = {
     en: "Child {node}'s token expired (too long since it was issued). Issue a new binding code with node_bindCode and have the child bind again. The limit can be changed with the setting tokenExpiryMinutes.bindAbsolute (minutes; default 1440; see docs/config.md)",
   },
   tokenExpiredIdleBind: {
-    ja: "子 {node} のトークンの期限が切れた（使わなかった時間が長い）。次にすること: 利用者に、問題（子 {node} の紐付けが切れた）と、直してよいか（node_bindCode で紐付けのコードを出し直す）を AskUserQuestion で聞く。承認が出たら node_bindCode を呼ぶ。子の MCP が自分でコードを使って結び直す。使わなければ切れる期限は設定 tokenExpiryMinutes.bindIdle（分。既定 60。docs/config.md）で変えられる",
-    en: "Child {node}'s token expired (unused for too long). Next: ask the user with AskUserQuestion about the problem (child {node}'s binding was lost) and whether to fix it (issue a new binding code with node_bindCode). Once approved, call node_bindCode. The child's MCP uses the code itself to bind again. The unused-time limit can be changed with the setting tokenExpiryMinutes.bindIdle (minutes; default 60; see docs/config.md)",
+    ja: "子 {node} のトークンの期限が切れた（使わなかった時間が長い）。次にすること: 利用者に、問題（子 {node} の紐付けが切れた）と、つなぎ直してよいかを AskUserQuestion で聞く。承認が出たら node_bindCode を呼ぶ。子の MCP が自分でコードを使って結び直す。しばらくたっても直らないときは、人が claude attach で子のセッションを開き直す。使わなければ切れる期限は設定 tokenExpiryMinutes.bindIdle（分。既定 60。docs/config.md）で変えられる",
+    en: "Child {node}'s token expired (unused for too long). Next: ask the user with AskUserQuestion about the problem (child {node}'s binding was lost) and whether to reconnect it. Once approved, call node_bindCode. The child's MCP uses the code itself to bind again. If it is still not fixed after a while, a person reopens the child's session with claude attach. The unused-time limit can be changed with the setting tokenExpiryMinutes.bindIdle (minutes; default 60; see docs/config.md)",
   },
   tokenIdleSoonBind: {
     ja: "子 {node} のトークンが、使われないまま、もうすぐ（約 {minutes} 分後）切れる。子が、この知らせを読んだあとに touryou の道具を 1 つ（inbox_fetch など）呼べば延びる（この知らせを読む呼び出しそのものは、数えない）。切れたら node_bindCode で紐付けを出し直す。使わなければ切れる期限は設定 tokenExpiryMinutes.bindIdle（分。既定 60。docs/config.md）で変えられる",

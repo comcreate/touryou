@@ -305,13 +305,14 @@ describe("自動の紐付け（紐付け待ちの mcp が、自分で戻す）",
   });
 
   it("コードのファイルが残ったまま daemon に断られ続けても、同じ内容のコードは 1 回しか送らない（ファイルは消さない）", async () => {
-    const r = await setup({ withCodeFile: true, codeStatus: 401 });
+    const r = await setup({ withCodeFile: true, codeStatus: 401, rebindStatus: 401 });
     await flush();
     const codeSends = () => r.bindBodies.filter((b) => b.bindCode !== undefined).length;
     expect(codeSends()).toBe(1);
     for (let i = 0; i < 30; i++) await r.clock.tick();
     expect(codeSends()).toBe(1);
-    expect(r.bindBodies).toHaveLength(1); // コードなしの結び直しも試さない（ファイルがあるあいだは、最初の起動の道）
+    // 使用済み（断られた内容のまま）のあいだは、コードは再送せず、コードなしの結び直しだけを（間隔を空けて）試す（#260）
+    expect(r.bindBodies.some((b) => b.bindCode === undefined)).toBe(true);
     expect(existsSync(r.codePath)).toBe(true);
     expect(await r.names()).toEqual(["child_bind", "whoami"]);
     // 親がコードを出し直した（内容が変わった）: 間隔を待たずに、次の確かめで使って紐付く

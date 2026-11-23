@@ -74,9 +74,11 @@ describe("画面の文字の表（#140）", () => {
         /^Next: ask the integrator Claude to issue the binding again \(.*node_bindCode.*\)$/,
       );
     }
+    // 人の操作の言葉で書く（内部の道具の名前を出さない）。自動で直らないときの次の操作（claude attach）を言う
     for (const lang of ["ja", "en"] as const) {
-      expect(uiString(lang, "card.bindExpiredNextCli"), lang).toContain("node_bindCode");
+      expect(uiString(lang, "card.bindExpiredNextCli"), lang).not.toContain("node_bindCode");
       expect(uiString(lang, "card.bindExpiredNextCli"), lang).not.toContain("child_bind");
+      expect(uiString(lang, "card.bindExpiredNextCli"), lang).toContain("claude attach");
     }
     expect(uiString("en", "card.bindExpiredNextDesktop")).toContain("node_bindCode");
     expect(uiString("en", "card.bindExpiredNextUnknown")).toContain("node_bindCode");
@@ -88,9 +90,10 @@ describe("画面の文字の表（#140）", () => {
       const head = (key: UiTextKey): string => [...uiString(lang, key)].slice(0, 6).join("");
       expect(head("card.bindLost"), lang).not.toBe(head("card.bindExpiredIdle"));
       expect(head("card.bindLost"), lang).not.toBe(head("card.bindExpiredAbsolute"));
-      // 統合の Claude が利用者に確かめ、承認後に node_bindCode で出し直す。子の MCP が自分で結び直すので、
-      // 利用者にも子の AI にも child_bind を打たせない（#255）
-      expect(uiString(lang, "card.bindLostNext"), lang).toContain("node_bindCode");
+      // 統合の Claude が利用者に確かめ、承認後に子が自動でつなぎ直す。内部の道具の名前は出さず、
+      // 自動で直らないときは claude attach で開き直す（#255）
+      expect(uiString(lang, "card.bindLostNext"), lang).not.toContain("node_bindCode");
+      expect(uiString(lang, "card.bindLostNext"), lang).toContain("claude attach");
       expect(uiString(lang, "card.bindLostNext"), lang).not.toContain("child_bind");
       expect(uiString(lang, "card.bindLostNext"), lang).not.toContain("node_send");
     }

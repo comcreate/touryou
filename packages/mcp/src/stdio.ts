@@ -412,6 +412,7 @@ const SPENT_CODES = new Set([
   "bind_code_expired",
   "bind_code_used",
   "bind_worktree_mismatch",
+  "bind_daemon_mismatch",
 ]);
 /** コードの要約（同じ内容かを比べるだけ。メモリの中だけに置き、ログ・失敗の原因には出さない）。 */
 const fingerprintOf = (code: string): string => createHash("sha256").update(code).digest("hex");

@@ -301,7 +301,7 @@ describe("recordWatchFindings: 受信箱への記録（時計を進める）", (
     expect(item?.summary).toContain("次にすること");
     expect(item?.summary).toContain("AskUserQuestion");
     expect(item?.summary).toContain("node_bindCode");
-    expect(item?.summary).toContain("子の MCP が自分で結び直す");
+    expect(item?.summary).toContain("claude attach");
     expect(item?.summary).not.toMatch(/session_?id|token=|Bearer/i);
   });
 
