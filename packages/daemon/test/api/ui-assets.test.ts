@@ -1871,7 +1871,7 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     for (const k of ["mt-sk1", "mt-sk2", "mt-sk3", "mt-fl", "mt-glow"])
       expect(meteor).toContain(`@keyframes ${k}{`);
     expect(meteor).toContain(
-      ".gnode:is(.t-turn,.s-fail):not(:hover,:focus-visible){animation:mt-glow",
+      ".gnode.glow:not(:hover,:focus-visible){animation:mt-glow",
     );
     // 線の色（--c）は、流星・火花にも付く
     expect(UI_CSS).toContain(

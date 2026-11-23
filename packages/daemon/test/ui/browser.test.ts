@@ -165,7 +165,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(meteor.painted).toBe(true);
     // 答え待ちの箱（子 c）の縁に、光の animation が付く
     const glow = await page.evaluate(
-      () => getComputedStyle(document.querySelector(".gnode.t-turn") as Element).animationName,
+      () => getComputedStyle(document.querySelector(".gnode.glow") as Element).animationName,
     );
     expect(glow).toBe("mt-glow");
   });

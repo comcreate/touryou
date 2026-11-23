@@ -59,6 +59,8 @@ type Schemes = GetSchemes<ReteNode, ReteConn>;
 type Meteor = "strong" | "weak";
 /** 流す本数の上限（新しい順に選ぶ）。 */
 const METEOR_MAX: Readonly<Record<Meteor, number>> = { strong: 3, weak: 2 };
+/** 縁を光らせる箱の数の上限。 */
+const GLOW_MAX = 6;
 
 interface Shape {
   readonly kind: "twig" | "lane";
@@ -278,6 +280,13 @@ export async function draw(
   const model = graphModelOf(view, lang, { hideFinished: options.hideFinished === true });
   const L = layoutOf(model.nodes);
   const byId = new Map(model.nodes.map((n) => [n.id, n]));
+  // 縁の光は、答え待ち・失敗の箱だけ。上限を超える分は光らせない（box-shadow は毎コマ描き直すため）
+  const glowIds = new Set(
+    model.nodes
+      .filter((n) => n.status === "wait" || n.status === "fail")
+      .slice(0, GLOW_MAX)
+      .map((n) => n.id),
+  );
   const shapes: Shape[] = [];
   const conns: ReteConn[] = [];
   const trunks: string[] = [];
@@ -332,7 +341,7 @@ export async function draw(
     };
     if (type === "node") {
       const n = byId.get(payload.id);
-      const box = drawNode(element, n, now, lang, ticks);
+      const box = drawNode(element, n, now, lang, ticks, glowIds.has(payload.id));
       if (box !== null && n !== undefined) listen(box, n.id);
     } else if (type === "connection") {
       const c = payload as ReteConn;
@@ -511,10 +520,11 @@ function drawNode(
   now: number,
   lang: Lang,
   ticks: AgoTick[],
+  glow: boolean,
 ): HTMLElement | null {
   if (n === undefined) return null;
   element.replaceChildren();
-  const box = el("div", `gnode t-${n.tier} s-${n.status}`);
+  const box = el("div", `gnode t-${n.tier} s-${n.status}${glow ? " glow" : ""}`);
   box.dataset.id = n.id;
   box.role = "button";
   box.ariaLabel = graphString(lang, "graph.boxLabel", { title: n.title, status: n.statusText });

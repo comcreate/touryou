@@ -442,12 +442,12 @@ export const APP_TEXT = {
   },
   "legend.wait": { ja: "あなたの答え待ちのやり取り", en: "Exchanges waiting for your answer" },
   "legend.meteorStrong": {
-    ja: "強い流星と火花：あなたの答え待ちの頼み",
-    en: "Bright meteor and sparks: a request waiting for your answer",
+    ja: "強い流星と火花：あなたの答え待ちの頼み（新しい 3 本まで。4 本目からは橙の線で見分けます）",
+    en: "Bright meteor and sparks: a request waiting for your answer (newest 3; from the 4th, tell them apart by the orange line)",
   },
   "legend.meteorWeak": {
-    ja: "弱い流星：まだ届いていない頼み",
-    en: "Dim meteor: a request not delivered yet",
+    ja: "弱い流星：まだ届いていない頼み（新しい 2 本まで）",
+    en: "Dim meteor: a request not delivered yet (newest 2)",
   },
   "legend.glow": {
     ja: "縁の光：答え待ち・失敗の子",
