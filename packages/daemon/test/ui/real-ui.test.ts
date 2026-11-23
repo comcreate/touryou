@@ -603,8 +603,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   it("管理の窓: 設定の窓の「管理」から開く。確認の欄は窓の中に出て、送るボタンが読める。Shift+Tab は窓の外へ抜けず、Esc で閉じて歯車へ focus が戻る", async () => {
     await page.click("#open-settings");
     await page.click("#to-admin");
-    const isOpen = (id: string) =>
-      page.locator(id).evaluate((d) => (d as HTMLDialogElement).open);
+    const isOpen = (id: string) => page.locator(id).evaluate((d) => (d as HTMLDialogElement).open);
     expect(await isOpen("#admin")).toBe(true);
     expect(await isOpen("#settings")).toBe(false); // 窓は重ねない
     expect(await page.evaluate(() => document.activeElement?.id)).toBe("admin-title");
