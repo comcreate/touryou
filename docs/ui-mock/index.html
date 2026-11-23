@@ -28,6 +28,8 @@
   /* ぼかしは二重: 外の窓の背面（::before）で 1 回、中の面で もう 1 回。値は利用者が変えられるよう分け、
      明・暗でも別に持つ（明はここ、暗は下の 2 か所） */
   --blur-outer:blur(3px) saturate(160%);--blur-inner:blur(6px) saturate(160%);
+  /* 窓（設定・管理の dialog）: 幕の上で、後ろの 3 列の文字が透けて読みにくくならないよう、外の窓より濃い塗りと強いぼかし */
+  --dlg:rgba(244,241,234,.60);--blur-dlg:blur(16px) saturate(160%);
   /* 文字の色は、面が薄くても背景の上で 4.5:1 を保つよう、明では濃いめにしている */
   --ink:#1d1f22;--ink2:#474c53;--rule:#c4c8cd;--grid:#e4e6e9;
   --accent:#24548f;--kaki:#903d00;--kaki-soft:#fbe6d2;--matsu:#275f3c;--matsu-soft:#dcebdf;
@@ -44,6 +46,7 @@
   --hl:inset 0 1px 0 rgba(255,245,235,.12);--hl-line:rgba(255,245,235,.3);
   --shadow:0 8px 32px rgba(0,0,0,.35);--shadow-in:0 1px 6px rgba(0,0,0,.18);
   --blur-outer:blur(5px) saturate(160%);--blur-inner:blur(10px) saturate(160%);
+  --dlg:rgba(22,20,18,.60);--blur-dlg:blur(16px) saturate(160%);
   --ink:#e9edf3;--ink2:#a7b2c2;--rule:#2a3850;--grid:#16223a;
   --accent:#8fbcf5;--kaki:#ffa04a;--kaki-soft:#432812;--matsu:#7fd29b;--matsu-soft:#173626;
   --shu:#ff8f84;--shu-soft:#471e1b;--kiiro:#e2c250;--kiiro-soft:#3a3014;--on:#0a0f18;
@@ -59,6 +62,7 @@
   --hl:inset 0 1px 0 rgba(255,245,235,.12);--hl-line:rgba(255,245,235,.3);
   --shadow:0 8px 32px rgba(0,0,0,.35);--shadow-in:0 1px 6px rgba(0,0,0,.18);
   --blur-outer:blur(5px) saturate(160%);--blur-inner:blur(10px) saturate(160%);
+  --dlg:rgba(22,20,18,.60);--blur-dlg:blur(16px) saturate(160%);
   --ink:#e9edf3;--ink2:#a7b2c2;--rule:#2a3850;--grid:#16223a;
   --accent:#8fbcf5;--kaki:#ffa04a;--kaki-soft:#432812;--matsu:#7fd29b;--matsu-soft:#173626;
   --shu:#ff8f84;--shu-soft:#471e1b;--kiiro:#e2c250;--kiiro-soft:#3a3014;--on:#0a0f18;
@@ -99,16 +103,17 @@ html.gl .bg{display:none}
 /* ---------- 面（グラスモーフィズム） ----------
    ぼかしは二重にする。窓の中は 1 回、中の面の部分は 2 回ぼけて、中の面が浮いて見える。
    backdrop-filter を持つ要素は、その中の要素にとっての「背景の根」になり、中のぼかしが WebGL の背景まで届かなくなる。
-   そこで外の窓（上のバー・3 列の窓・見本帳の台・下のタブ・設定の窓）は、窓そのものにはぼかしを付けず、
+   そこで外の窓（上のバー・3 列の窓・見本帳の台・下のタブ）は、窓そのものにはぼかしを付けず、
    窓の背面に敷いた ::before にぼかしと塗りを持たせる。窓は isolation:isolate で ::before を自分の後ろに回すだけで、
    背景の根にはならない（窓と、中の面の祖先には filter・opacity<1・mask・clip-path・will-change を付けない）。
    中の面は、外の窓の ::before がぼかした結果と WebGL の背景を、もう一度ぼかす。
    中の面の中に入れ子になった中の面（承認の欄の中のカードなど）は、外の中の面が背景の根になって届かないので、ぼかさない。
-   透けるのは外の窓と中の面だけ。ほかの部品（ボタン・札・コマンドの欄・入力欄・図の箱など）は --panel-solid で塗りつぶす */
-.win,.top,.nav,.sheet,dialog.settings{position:relative;isolation:isolate;background:transparent;border:1px solid var(--glass-edge);box-shadow:var(--hl),var(--shadow)}
-.win::before,.top::before,.nav::before,.sheet::before,dialog.settings::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;background:var(--win);backdrop-filter:var(--blur-outer);-webkit-backdrop-filter:var(--blur-outer)}
-.card,.task,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,.inbox li,.pipe,.board{background:var(--panel);border:1px solid var(--edge);box-shadow:var(--hl),var(--shadow-in);backdrop-filter:var(--blur-inner);-webkit-backdrop-filter:var(--blur-inner)}
-:is(.card,.task,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,.inbox li,.pipe,.board) :is(.card,.task,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,.inbox li,.pipe,.board){backdrop-filter:none;-webkit-backdrop-filter:none}
+   透けるのは外の窓と中の面だけ。ほかの部品（ボタン・札・コマンドの欄・入力欄・図の箱など）は --panel-solid で塗りつぶす。
+   設定・管理の窓（dialog）は、下の「窓」の節で別に決める */
+.win,.top,.nav,.sheet{position:relative;isolation:isolate;background:transparent;border:1px solid var(--glass-edge);box-shadow:var(--hl),var(--shadow)}
+.win::before,.top::before,.nav::before,.sheet::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;background:var(--win);backdrop-filter:var(--blur-outer);-webkit-backdrop-filter:var(--blur-outer)}
+.card,.task,.approvals,.confirm,.tlist,.lostbar,.empty,.legend,.inner,.inbox li,.pipe,.board{background:var(--panel);border:1px solid var(--edge);box-shadow:var(--hl),var(--shadow-in);backdrop-filter:var(--blur-inner);-webkit-backdrop-filter:var(--blur-inner)}
+:is(.card,.task,.approvals,.confirm,.tlist,.lostbar,.empty,.legend,.inner,.inbox li,.pipe,.board) :is(.card,.task,.approvals,.confirm,.tlist,.lostbar,.empty,.legend,.inner,.inbox li,.pipe,.board){backdrop-filter:none;-webkit-backdrop-filter:none}
 .top{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:8px 14px;height:var(--hd);padding:0 16px;border-width:0 0 1px;border-radius:0;box-shadow:var(--hl)}
 .top h1{margin:0;display:flex;align-items:baseline;gap:10px;min-width:0;white-space:nowrap}
 .top .repo{font:700 15px/1.2 "SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;min-width:0}
@@ -260,8 +265,16 @@ details>summary{cursor:pointer;font-size:13.5px;color:var(--ink2);min-height:44p
 .trow{display:grid;grid-template-columns:minmax(180px,1.6fr) 150px 1fr 1fr;gap:8px;align-items:center;padding:8px 14px;border-top:1px solid var(--rule);font-size:13.5px;min-width:620px}
 .trow.thead{border-top:0;color:var(--ink2);font-weight:700;font-size:12.5px}
 .trow.turn{background:var(--kaki-soft)}.trow.over{color:var(--ink2)}
-dialog.settings{position:relative;display:block;margin:0;color:var(--ink);border-radius:14px;padding:16px 20px;width:min(30rem,100%)}
-dialog.settings h3{margin:0 0 8px;font-size:17px}
+/* ---------- 窓（設定・管理） ----------
+   本番（packages/daemon/src/api/ui-assets.ts の dialog#settings）と同じく、<dialog> を showModal で開く。
+   幕（::backdrop）の色は本番の値。窓そのものはグラスモーフィズム（塗り --dlg と、ぼかし --blur-dlg）。
+   窓の中の部品（カード・空の表示・札・ボタン・入力欄）は不透明にする。窓が backdrop-filter を持つので、中の部品はぼかさない。
+   窓の高さが画面を超えるときは、窓の中がスクロールする（塗りは窓そのものにあるので、スクロールしても欠けない） */
+dialog.settings{color:var(--ink);background:var(--dlg);backdrop-filter:var(--blur-dlg);-webkit-backdrop-filter:var(--blur-dlg);border:1px solid var(--glass-edge);box-shadow:var(--hl),var(--shadow);border-radius:14px;padding:16px 20px;width:min(30rem,calc(100vw - 32px));max-height:calc(100dvh - 32px);overflow:auto}
+dialog.settings::backdrop{background:rgba(0,0,0,.35)}
+dialog.settings :is(.card,.empty){background:var(--panel-solid);backdrop-filter:none;-webkit-backdrop-filter:none}
+dialog.settings h2{margin:0 0 8px;font-size:17px}
+dialog.settings h2:focus{outline:none}dialog.settings h2:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 dialog.settings fieldset{border:1px solid var(--rule);border-radius:8px;margin:10px 0;padding:8px 14px;min-width:0}
 dialog.settings legend{font-weight:700;padding:0 4px}
 .opt{display:flex;align-items:center;gap:10px;min-height:44px}.opt input{width:20px;height:20px;flex:none;accent-color:var(--accent)}
@@ -270,10 +283,11 @@ dialog.settings legend{font-weight:700;padding:0 4px}
 .policy-item{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:2px 0}
 .policy-add{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.policy-add input{flex:1 1 12em}
 .right{text-align:right}
-.admin{border:2px solid var(--shu);border-radius:14px;padding:4px 16px 14px}
-.admin>summary{font-size:16px;font-weight:700;color:var(--shu);padding:10px 0}
-.admin .warn{margin:0 0 12px;font-size:14px;color:var(--shu);background:var(--shu-soft);border-radius:8px;padding:8px 12px}
-.admin h3{font-size:15px;margin:14px 0 4px}
+/* 管理の窓: 取り消せない操作が多いので、縁を朱にする */
+dialog.settings.adm{border:2px solid var(--shu)}
+.adm h2{color:var(--shu)}
+.adm .warn{margin:0 0 12px;font-size:14px;color:var(--shu);background:var(--shu-soft);border-radius:8px;padding:8px 12px}
+.adm h3{font-size:15px;margin:14px 0 4px}
 
 /* ---------- スマホの下の切り替え ---------- */
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:none;grid-template-columns:repeat(2,1fr);padding-bottom:env(safe-area-inset-bottom);border-width:1px 0 0;border-radius:0;box-shadow:var(--hl)}
@@ -396,7 +410,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   <span class="conn" title="つながっています（変わるとすぐ更新）"><i aria-hidden="true"></i><span class="ct">接続中</span></span>
   <span class="grow"></span>
   <button class="quiet" type="button" id="theme-btn" aria-label="明るさを切り替える（いま：自動）">◐ 自動</button>
-  <button class="quiet" type="button" id="gear" aria-label="設定" title="設定"><span aria-hidden="true">⚙</span></button>
+  <button class="quiet" type="button" id="gear" aria-label="設定" title="設定" aria-haspopup="dialog" aria-controls="settings"><span aria-hidden="true">⚙</span></button>
 </header>
 
 <main id="stage" class="stage">
@@ -563,6 +577,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     <details style="margin-top:10px"><summary>終わった作業（1 件）</summary>
       <div class="cards"><article class="card over"><div class="hd"><span class="chip">✓ 済んだ</span></div><div class="bd"><h3>注文の一覧の並び順を、新しい順にする</h3></div></article></div>
     </details>
+    <div class="row" style="margin-top:10px"><button class="sm" type="button" data-open="admin" aria-haspopup="dialog" aria-controls="admin">管理（まれに使う操作）…</button></div>
   </div>
   <footer class="wfoot" aria-label="矢印の見方"><span><b class="up" aria-hidden="true">↑</b>子から親への報告（上り）</span><span><b class="dn" aria-hidden="true">↓</b>親から子への頼み（下り）</span></footer>
 </section>
@@ -612,9 +627,19 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     <div class="trow over" role="row"><span class="strong" role="cell">一覧の並び順</span><span role="cell"><span class="chip">✓ 済んだ</span></span><span role="cell">注文画面</span><span role="cell">55 分前</span></div>
   </div>
 
-  <h2 id="set-sec">05 設定の窓と規則の一覧 <small>歯車を押したときの窓（開いた状態）</small></h2>
-  <dialog class="settings" open aria-labelledby="set-t" role="group">
-    <h3 id="set-t">設定</h3>
+  <h2>05 設定の窓と規則の一覧 <small>上のバーの歯車で開くダイアログ</small></h2>
+  <p class="note" style="margin-top:0">設定は、本番と同じく、歯車から開くダイアログです（幕が背景を覆い、Esc か「閉じる」で閉じ、Tab は窓の中を回ります）。</p>
+  <div class="row"><button type="button" data-open="settings" aria-haspopup="dialog" aria-controls="settings">設定を開く</button></div>
+
+  <h2>06 管理 <small>まれに使う操作</small></h2>
+  <p class="note" style="margin-top:0">右の窓の「作業の一覧」の下にある「管理（まれに使う操作）…」から開くダイアログです。</p>
+  <div class="row"><button type="button" data-open="admin" aria-haspopup="dialog" aria-controls="admin">管理を開く</button></div>
+</div>
+<div style="height:32px"></div>
+
+<!-- ============ 窓（ダイアログ）: showModal で開く。ページを下までスクロールしても、中身は並ばない ============ -->
+<dialog id="settings" class="settings" aria-labelledby="set-t">
+    <h2 id="set-t">設定</h2>
     <fieldset><legend>アクセシビリティ</legend>
       <label class="opt"><input id="still-ck" type="checkbox"> <span>動きを止める</span></label>
       <p class="note">新しい項目の入る動き・線を流れる点線・背景の動き（方眼の流れ・道具の回転と浮遊・塵の瞬き）を止めます。背景は、その時点の絵で止まります。OS の「視差効果を減らす」を入れているときは、ここを切っていても止まります。</p>
@@ -649,20 +674,18 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
       <p style="color:var(--shu);margin:6px 0">（足せないときの表示）この形の規則は足せません。かっこの中を確かめてください。</p>
     </fieldset>
     <p class="note">選んだものは、このブラウザに残ります。</p>
-    <div class="right"><button type="button">閉じる</button></div>
-  </dialog>
+    <div class="right"><button type="button" data-close>閉じる</button></div>
+</dialog>
 
-  <h2>06 管理 <small>まれに使う操作</small></h2>
-  <details class="admin" open>
-    <summary>管理（まれに使う操作）</summary>
+<dialog id="admin" class="settings adm" aria-labelledby="adm-t">
+    <h2 id="adm-t" tabindex="-1">管理（まれに使う操作）</h2>
     <p class="warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
     <h3>アーカイブした作業の最終削除と、自動の削除の保留</h3>
     <div class="card" style="padding:10px 16px;gap:8px"><div class="kv"><div class="kvr"><span class="k">作業</span><span class="v">sample-task-0001</span></div><div class="kvr"><span class="k">アーカイブした日</span><span class="v">3 日前</span></div></div><div class="row"><button class="danger" type="button">最終削除…</button><button type="button">自動の削除を保留する</button></div></div>
     <h3>捨てた作業の保管</h3>
     <p class="empty">いま、保管している作業はありません。</p>
-  </details>
-</div>
-<div style="height:32px"></div>
+    <div class="right"><button type="button" data-close>閉じる</button></div>
+</dialog>
 
 <!-- 微調整の窓（モック専用。本番には持ち込まない）: 面の透明度とぼかしを、その場で変えて見るためのもの。
      #tune-css・この窓・#tune-js の 3 つを消せば、まるごと外せる -->
@@ -1114,11 +1137,36 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   if (hm) setTheme(hm[1], false);
   document.querySelectorAll("input[name=th]").forEach(function (r) { r.addEventListener("change", function () { setTheme(r.value, true); }); });
   document.getElementById("still-ck").addEventListener("change", function (e) { root.classList.toggle("still", e.target.checked); });
-  document.getElementById("gear").addEventListener("click", function () {
-    var t = document.getElementById("set-sec");
-    t.scrollIntoView({ block: "start" });
-    t.setAttribute("tabindex", "-1"); t.focus({ preventScroll: true });
+  // 窓（設定・管理）: 本番（packages/daemon/src/api/ui-assets.ts）と同じく showModal で開く。
+  // Esc は dialog の既定の動きで閉じる。閉じたら、開いたボタンへフォーカスを戻す。Tab は窓の中を回る
+  var FIRST = { settings: "still-ck", admin: "adm-t" }, opener = null;
+  function openDlg(id, from) {
+    var d = document.getElementById(id);
+    if (d.open) return;
+    opener = from || null;
+    d.showModal();
+    document.getElementById(FIRST[id]).focus();
+  }
+  document.querySelectorAll("dialog.settings").forEach(function (d) {
+    d.addEventListener("close", function () { if (opener) opener.focus(); opener = null; });
+    d.querySelectorAll("[data-close]").forEach(function (b) { b.addEventListener("click", function () { d.close(); }); });
+    d.addEventListener("keydown", function (e) {
+      if (e.key !== "Tab") return;
+      var f = [];
+      d.querySelectorAll("input:not([disabled]),select:not([disabled]),button:not([disabled])").forEach(function (x) { if (x.type !== "radio" || x.checked) f.push(x); });
+      if (f.length === 0) return;
+      var first = f[0], last = f[f.length - 1];
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === d.querySelector("h2"))) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
   });
+  document.getElementById("gear").addEventListener("click", function (e) { openDlg("settings", e.currentTarget); });
+  document.querySelectorAll("[data-open]").forEach(function (b) {
+    b.addEventListener("click", function () { openDlg(b.dataset.open, b); });
+  });
+  // 確かめ用: index.html#open=settings（または admin）で開くと、その窓を開いた状態で始まる（スクリーンショットを撮るため）
+  var om = /open=(settings|admin)/.exec(location.hash);
+  if (om) openDlg(om[1], om[1] === "settings" ? document.getElementById("gear") : null);
   // 窓のタブ
   document.querySelectorAll(".wt").forEach(function (list) {
     var tabs = Array.prototype.slice.call(list.querySelectorAll("[role=tab]"));
