@@ -13,7 +13,7 @@ const fail = (code: string): Result<never> => ({
 });
 
 function harness(init: {
-  file?: "present" | "missing" | "unusable";
+  file?: "present" | "missing" | "unusable" | "spent";
   rebind?: () => Result<unknown> | undefined;
   bindFromFile?: () => Result<unknown>;
   canRebind?: boolean;
@@ -133,6 +133,33 @@ describe("コードのファイルの扱い", () => {
     const h = harness({ file: "unusable" });
     await flush();
     await h.advance(5);
+    expect(h.state.fileAt).toEqual([]);
+    expect(h.state.rebindAt).toEqual([]);
+    await h.stop();
+  });
+
+  it("使用済みのコードのファイルがあっても、結び直せるなら、ファイルは使わず、コードなしの結び直しを試す", async () => {
+    const h = harness({ file: "spent", rebind: () => ok(undefined) });
+    await flush();
+    expect(h.state.fileAt).toEqual([]);
+    expect(h.state.rebindAt).toEqual([0]);
+    expect(h.state.onBound).toBe(1);
+    await h.stop();
+  });
+
+  it("使用済みのコードのファイルがあり、結び直しも失敗するときは、間隔を倍にして試し続ける（ファイルは使わない）", async () => {
+    const h = harness({ file: "spent" });
+    await flush();
+    await h.advance(4);
+    expect(h.state.fileAt).toEqual([]);
+    expect(h.state.rebindAt).toEqual([0, 1, 3]);
+    await h.stop();
+  });
+
+  it("使用済みのコードのファイルがあり、結び直せないときは、何もしない", async () => {
+    const h = harness({ file: "spent", canRebind: false });
+    await flush();
+    await h.advance(3);
     expect(h.state.fileAt).toEqual([]);
     expect(h.state.rebindAt).toEqual([]);
     await h.stop();

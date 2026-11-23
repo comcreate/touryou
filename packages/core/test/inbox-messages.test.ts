@@ -62,16 +62,21 @@ describe("知らせの文の表（#140）", () => {
       minutes: 1440,
     });
     expect([...m.summary].length).toBeLessThanOrEqual(INBOX_SUMMARY_MAX);
-    for (const word of ["いまの状態", "次にすること", "AskUserQuestion", "node_bindCode"]) {
+    // 自動で直らないときの、人の次の操作（claude attach）も残る
+    for (const word of ["いまの状態", "次にすること", "AskUserQuestion", "node_bindCode", "claude attach"]) {
       expect(m.summary).toContain(word);
     }
+    // 利用者への質問の文に、node_bindCode を入れない（呼ぶ指示は、質問とは別）
+    expect(m.summary).not.toContain("node_bindCode で");
     // 利用者に child_bind を打たせる・子に child_bind を呼ばせる文を残さない
-    for (const word of ["node_send", "child_bind", "claude attach"]) {
+    for (const word of ["node_send", "child_bind"]) {
       expect(m.summary).not.toContain(word);
     }
     const en = inboxMessageText("en", m.msg) ?? "";
-    for (const word of ["AskUserQuestion", "node_bindCode"]) expect(en).toContain(word);
-    for (const word of ["node_send", "child_bind", "claude attach"]) {
+    for (const word of ["AskUserQuestion", "node_bindCode", "claude attach"]) {
+      expect(en).toContain(word);
+    }
+    for (const word of ["node_send", "child_bind"]) {
       expect(en).not.toContain(word);
     }
   });

@@ -5,6 +5,7 @@
  *   - ファイルがある: 使う（`child_bind` を引数なしで呼んだときと同じ処理）。
  *   - ファイルがない: コードなしの結び直しを試す。最初の起動はコードのファイルがあるので、ここには来ない
  *     （来ると、記録のない結び直しが断られて、偽の「紐付けをやり直して」が親に出る）。
+ *   - ファイルはあるが、daemon が断った内容のまま（使用済み）: コードは使わず、ファイルがないときと同じく、コードなしの結び直しを試す。
  *   - ファイルはあるが安全でない・読めない: 何もしない（子の AI の `child_bind` が理由を返す）。
  * - daemon を叩く試行は、失敗のたびに間隔を倍にする（上限 `maxIntervalMs`。既定 10 分）。429（`rate_limited`）なら上限まで待つ。
  *   本物のコードでの紐付けを、この定期の確かめが 429 にしないため。ファイルの有無を見るだけの確かめは、daemon を叩かない。
@@ -24,7 +25,7 @@ export interface AutoBindOptions {
   readonly isBound: () => boolean;
   /**
    * コードのファイルの状態。`spent` は、いまの内容のコードを daemon が断った（再試行しても通らない）。
-   * 内容が変わる（親が出し直す）まで、何もしない。`unusable` は、安全でない・読めない。
+   * 内容が変わる（親が出し直す）まで、コードは使わない（`canRebind` なら、コードなしの結び直しは試す）。`unusable` は、安全でない・読めない。
    */
   readonly codeFile: () => "present" | "missing" | "unusable" | "spent";
   /** コードなしの結び直しを試せるか（印とセッションの ID があるか）。 */
@@ -138,7 +139,8 @@ export function startAutoBind(o: AutoBindOptions): Promise<void> {
       failed("codeFile", codeOf(r), file.fail(codeOf(r)));
       return;
     }
-    if (state === "missing" && o.canRebind && rebind.due()) {
+    // ファイルがない、または使用済み（daemon が断った内容のまま）: コードは使えないので、コードなしの結び直しを試す
+    if ((state === "missing" || state === "spent") && o.canRebind && rebind.due()) {
       const r = await o.rebind();
       if (r?.ok === true) {
         rebind.reset(0);
