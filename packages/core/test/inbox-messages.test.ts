@@ -56,6 +56,26 @@ describe("知らせの文の表（#140）", () => {
     }
   });
 
+  it("紐付けが切れた系統の知らせ（rebind・bindLostSuspect・期限切れ 2 種）は、同じ手順（利用者に確かめ、node_bindCode、10 分で直らなければ claude attach）を言う（#264）", () => {
+    for (const key of [
+      "rebind",
+      "bindLostSuspect",
+      "tokenExpiredIdleBind",
+      "tokenExpiredAbsoluteBind",
+    ] as const) {
+      const m = inboxMessage(key, { node: "a", minutes: 15 });
+      for (const word of ["AskUserQuestion", "node_bindCode", "10 分", "claude attach"]) {
+        expect(m.summary, key).toContain(word);
+      }
+      expect(m.summary, key).not.toMatch(/しばらく|結び直/);
+      const en = inboxMessageText("en", m.msg) ?? "";
+      for (const word of ["AskUserQuestion", "node_bindCode", "after 10 minutes", "claude attach"]) {
+        expect(en, key).toContain(word);
+      }
+      expect(en, key).not.toMatch(/after a while|bind again/);
+    }
+  });
+
   it("紐付けが外れているかも: 実際の長さのノード ID でも、日本語の要約は上限に収まり、次にすることが残る", () => {
     const m = inboxMessage("bindLostSuspect", {
       node: `node-${"0".repeat(32)}`,

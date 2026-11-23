@@ -56,12 +56,12 @@ export const APP_TEXT = {
     en: "Binding expired (too long since it was issued)",
   },
   "card.bindExpiredNextCli": {
-    ja: "次の操作: 統合の Claude が、子をつなぎ直してよいか、あなたに確かめる。承認すると、子が自動でつなぎ直す（あなたがコマンドを打つ必要はない）。10 分たっても直らないときは、このカードの「開き方」にある claude attach をターミナルで実行して、子のセッションを開き直す",
-    en: 'Next: the integrator Claude asks you whether it may reconnect the child. Once you approve, the child reconnects automatically (you do not need to type any command). If it is still not fixed after 10 minutes, run the claude attach command shown under "How to open" on this card in a terminal to reopen the child\'s session',
+    ja: "次の操作: 統合の Claude の「つなぎ直してよいか」に答える。承認すると子が自動でつなぎ直す。10 分たっても直らなければ、このカードの「開き方」の claude attach をターミナルで実行する",
+    en: 'Next: answer the integrator Claude when it asks whether to reconnect the child. Once you approve, the child reconnects automatically. If it is still not fixed after 10 minutes, run the claude attach command under "How to open" on this card in a terminal',
   },
   "card.bindExpiredNextDesktop": {
-    ja: "次の操作: 統合の Claude に、子のつなぎ直しを頼む（統合が新しい紐付けの文面を出し、子がその文面で紐付けを最初からやり直す）",
-    en: "Next: ask the integrator Claude to reconnect the child (it issues a new binding text, and the child starts the binding over with that text)",
+    ja: "次の操作: 統合の Claude に、子のつなぎ直しを頼む（統合が新しい文面を出し、子がその文面でつなぎ直す）",
+    en: "Next: ask the integrator Claude to reconnect the child (it issues a new text, and the child reconnects with that text)",
   },
   "card.bindExpiredNextUnknown": {
     ja: "次の操作: 統合の Claude に、子のつなぎ直しを頼む（統合が紐付けを出し直し、子がつなぎ直す）",
@@ -72,8 +72,8 @@ export const APP_TEXT = {
     en: "Connection to the binding may be down (not receiving notices)",
   },
   "card.bindLostNext": {
-    ja: "次の操作: 統合の Claude が、子をつなぎ直してよいか、あなたに確かめる。承認すると、子が自動でつなぎ直す（あなたがコマンドを打つ必要はない）。10 分たっても直らないときは、このカードの「開き方」にある claude attach をターミナルで実行して、子のセッションを開き直す",
-    en: 'Next: the integrator Claude asks you whether it may reconnect the child. Once you approve, the child reconnects automatically (you do not need to type any command). If it is still not fixed after 10 minutes, run the claude attach command shown under "How to open" on this card in a terminal to reopen the child\'s session',
+    ja: "次の操作: 統合の Claude の「つなぎ直してよいか」に答える。承認すると子が自動でつなぎ直す。10 分たっても直らなければ、このカードの「開き方」の claude attach をターミナルで実行する",
+    en: 'Next: answer the integrator Claude when it asks whether to reconnect the child. Once you approve, the child reconnects automatically. If it is still not fixed after 10 minutes, run the claude attach command under "How to open" on this card in a terminal',
   },
   "approval.code": { ja: "確認コード", en: "Confirmation code" },
   "approval.done": { ja: "確認して実行しました（{label}）", en: "Confirmed and ran ({label})" },
@@ -824,7 +824,7 @@ export const APP_TEXT = {
   },
   "stall.rebind": {
     ja: "開くと、子の紐付けが切れることがあります。子が「紐付けをやり直して」と言ったら、統合の会話で、この子のつなぎ直しを頼んでください。",
-    en: "Opening it may cut the child's binding. If the child asks to be bound again, ask in the integrator's conversation to reconnect this child.",
+    en: "Opening it may break the child's binding. If the child asks to be reconnected, ask in the integrator's conversation to reconnect this child.",
   },
   "stall.when": { ja: "知らせ: {when}", en: "Reported: {when}" },
   "state.archived": { ja: "アーカイブした", en: "archived" },

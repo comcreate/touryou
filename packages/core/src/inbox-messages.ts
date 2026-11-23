@@ -150,8 +150,8 @@ export const INBOX_MESSAGES = {
     en: "Child {node}'s watch (hook) was removed ({detail}). The settings were restored and the child's token was revoked. Decide whether to stop the child or issue node.bindCode again",
   },
   tokenExpiredAbsoluteBind: {
-    ja: "子 {node} のトークンの期限が切れた（発行から時間がたった）。node_bindCode で紐付けのコードを出し直し、子がつなぎ直す。期限は設定 tokenExpiryMinutes.bindAbsolute（分。既定 1440。docs/config.md）で変えられる",
-    en: "Child {node}'s token expired (too long since it was issued). Issue a new binding code with node_bindCode and have the child reconnect. The limit can be changed with the setting tokenExpiryMinutes.bindAbsolute (minutes; default 1440; see docs/config.md)",
+    ja: "子 {node} のトークンの期限が切れた（発行から時間がたった）。次にすること: 利用者に、問題（子 {node} の紐付けが切れた）と、つなぎ直してよいかを AskUserQuestion で聞く。承認が出たら node_bindCode を呼ぶ。子の MCP が自分でコードを使ってつなぎ直す。10 分たっても直らないときは、人が claude attach で子のセッションを開き直す。期限は設定 tokenExpiryMinutes.bindAbsolute（分。既定 1440。docs/config.md）で変えられる",
+    en: "Child {node}'s token expired (too long since it was issued). Next: ask the user with AskUserQuestion about the problem (child {node}'s binding was lost) and whether to reconnect it. Once approved, call node_bindCode. The child's MCP uses the code itself to reconnect. If it is still not fixed after 10 minutes, a person reopens the child's session with claude attach. The limit can be changed with the setting tokenExpiryMinutes.bindAbsolute (minutes; default 1440; see docs/config.md)",
   },
   tokenExpiredIdleBind: {
     ja: "子 {node} のトークンの期限が切れた（使わなかった時間が長い）。次にすること: 利用者に、問題（子 {node} の紐付けが切れた）と、つなぎ直してよいかを AskUserQuestion で聞く。承認が出たら node_bindCode を呼ぶ。子の MCP が自分でコードを使ってつなぎ直す。10 分たっても直らないときは、人が claude attach で子のセッションを開き直す。使わなければ切れる期限は設定 tokenExpiryMinutes.bindIdle（分。既定 60。docs/config.md）で変えられる",
