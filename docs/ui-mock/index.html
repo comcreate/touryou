@@ -856,7 +856,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     <h2 id="adm-t" tabindex="-1">管理（取り消せない操作を含む）</h2>
     <p class="warn">ここの操作の多くは、あとから戻せません。押すと、内容を確かめる欄が出ます。取り消せない操作は、対象の ID を打ち込まないと送れません。</p>
     <h3>アーカイブした作業の最終削除と、自動の削除の保留</h3>
-    <p class="note">自動の削除は、daemon の設定で有効にしたときだけ動きます（既定はオフ）。アーカイブから保持期間（既定 90 日）が過ぎ、受信箱の予告から所定の日数がたった、いちばん上の親でない木の記録を消します。保留は、この自動の削除だけを、選んだ期限（30 日・90 日・1〜365 日、または無期限）まで止めます。ここからの最終削除は、保留を無視して消します。</p>
+    <p class="note">自動の削除は、daemon の設定で有効にしたときだけ動きます（既定はオフ）。アーカイブから保持期間（既定 90 日）が過ぎ、受信箱の予告から所定の日数がたった、最上位の木（統合ノード＝いちばん上の親そのものは対象外）の記録を消します。保留は、この自動の削除だけを、選んだ期限（30 日・90 日・1〜365 日、または無期限）まで止めます。ここからの最終削除は、保留を無視して消します。</p>
     <div class="card" style="padding:10px 16px;gap:8px"><div class="kv"><div class="kvr"><span class="k">作業</span><span class="v">sample-task-0001</span></div><div class="kvr"><span class="k">アーカイブした日</span><span class="v">3 日前</span></div></div><div class="row"><button class="danger" type="button">最終削除…</button><button type="button">自動の削除を保留する</button></div></div>
     <h3>捨てた作業の保管</h3>
     <p class="note">破棄した作業の成果を、あとで取り出せるよう保管したものです。アーカイブした作業の記録とは別で、その木を最終削除すると、木の分の保管は一緒に消えます。</p>
