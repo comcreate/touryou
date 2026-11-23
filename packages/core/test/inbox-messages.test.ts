@@ -69,7 +69,12 @@ describe("知らせの文の表（#140）", () => {
       }
       expect(m.summary, key).not.toMatch(/しばらく|結び直/);
       const en = inboxMessageText("en", m.msg) ?? "";
-      for (const word of ["AskUserQuestion", "node_bindCode", "after 10 minutes", "claude attach"]) {
+      for (const word of [
+        "AskUserQuestion",
+        "node_bindCode",
+        "after 10 minutes",
+        "claude attach",
+      ]) {
         expect(en, key).toContain(word);
       }
       expect(en, key).not.toMatch(/after a while|bind again/);

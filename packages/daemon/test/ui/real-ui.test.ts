@@ -1100,14 +1100,21 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       await p2.waitForSelector("#card-ui-lost-dt");
       const descsOf = (id: string) =>
         p2.evaluate(
-          (sel) => [...document.querySelectorAll(`${sel} > p.desc`)].map((e) => e.textContent ?? ""),
+          (sel) =>
+            [...document.querySelectorAll(`${sel} > p.desc`)].map((e) => e.textContent ?? ""),
           `#card-${id}`,
         );
       const cli = await descsOf("ui-lost-cli");
-      expect(cli.some((x) => x.includes("「つなぎ直してよいか」に答える")), cli.join(" / ")).toBe(true);
+      expect(
+        cli.some((x) => x.includes("「つなぎ直してよいか」に答える")),
+        cli.join(" / "),
+      ).toBe(true);
       expect(cli.some((x) => x.includes("「開き方」の claude attach"))).toBe(true);
       const dt = await descsOf("ui-lost-dt");
-      expect(dt.some((x) => x.includes("次の操作: 統合の Claude に、子のつなぎ直しを頼む")), dt.join(" / ")).toBe(true);
+      expect(
+        dt.some((x) => x.includes("次の操作: 統合の Claude に、子のつなぎ直しを頼む")),
+        dt.join(" / "),
+      ).toBe(true);
       expect(dt.some((x) => x.includes("claude attach"))).toBe(false);
       // CLI の子は、案内の先（「開き方」の claude attach）が、たたまれずに見える
       const openFold = await p2.evaluate(() =>
