@@ -122,6 +122,14 @@ html.gl .bg{display:none}
 .conn i{width:10px;height:10px;border-radius:50%;background:var(--matsu);animation:breathe 2.4s ease-in-out infinite}
 .conn.off{color:var(--shu);font-weight:700}.conn.off i{background:var(--shu);animation:none}
 .top button{min-height:36px;font-size:13px;padding:0 12px;white-space:nowrap}
+/* 上のバーの明暗と歯車: 縁は --rule（暗では背景に沈む）でなく --ink2 の 1.5px にして、明・暗の両方で輪郭を見せる */
+.top button.quiet{border:1.5px solid var(--ink2)}.top button.quiet:hover{border-color:var(--accent)}
+/* 歯車: 文字の「⚙」はやめ、20px の SVG。押せる範囲は 44px 四方（上のバーの高さ 48px に収まる） */
+#gear{width:44px;height:44px;min-width:44px;min-height:44px;padding:0;border-radius:50%}
+#gear .ic{width:20px;height:20px;stroke-width:2}
+/* 明暗のボタン: いまの状態のアイコンだけを出す（JS が data-cur を書く） */
+#theme-btn .ic{display:none}
+#theme-btn[data-cur="auto"] .i-auto,#theme-btn[data-cur="light"] .i-light,#theme-btn[data-cur="dark"] .i-dark{display:inline-block}
 
 /* ---------- ボタン ---------- */
 /* ボタンは、枠だけのもの（断る・止める・写す・ズーム・図と一覧の切り替えなど）も含め、不透明の --panel-solid で塗る。
@@ -135,6 +143,11 @@ button.quiet{box-shadow:none}
 /* 押せないボタンは、透けさせず（opacity を使わず）、灰の文字と点線の縁で示す */
 button:disabled{background:var(--panel-solid);border-color:var(--rule);border-style:dashed;color:var(--ink2);cursor:not-allowed}
 button.sm{min-height:36px;font-size:13px;padding:2px 12px}
+/* アイコン: インラインの SVG（外部のフォント・画像なし）。線は currentColor で、文字の高さ（1.15em）にそろえる。
+   形は path（命令 M・L・A・C・Z）だけで書く（本番の svg-el.ts の許可リストの形に寄せる） */
+.ic{width:1.15em;height:1.15em;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ic .f{fill:currentColor;stroke:none}
+button.ib{display:inline-flex;align-items:center;justify-content:center;gap:6px}
 /* 答えのボタン: 見本どおり、横幅いっぱいの大きいボタン（広い画面では横に等分） */
 .big{display:flex;flex-wrap:wrap;gap:8px}
 /* 基準の幅は 6em。左の列（320〜380px）の中にスクロールバーが出て幅が減っても、2 つが横に並ぶ（9em では縦に積まれた） */
@@ -314,6 +327,8 @@ dialog.settings.adm{border:2px solid var(--shu)}
 .adm h2{color:var(--shu)}
 .adm .warn{margin:0 0 12px;font-size:14px;color:var(--shu);background:var(--shu-soft);border-radius:8px;padding:8px 12px}
 .adm h3{font-size:15px;margin:14px 0 4px}
+/* 設定の窓の最下部の、管理の入口: 上に朱の区切りの線を引き、ボタンも朱（取り消せない操作の窓を開くため） */
+.adm-entry{margin-top:14px;padding-top:12px;border-top:2px solid var(--shu)}
 
 /* ---------- スマホの下の切り替え ---------- */
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:none;grid-template-columns:repeat(2,1fr);padding-bottom:env(safe-area-inset-bottom);border-width:1px 0 0;border-radius:0;box-shadow:var(--hl)}
@@ -435,8 +450,8 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   <h1><span class="repo" title="開いているリポジトリ">comcreate/sample-repo</span></h1>
   <span class="conn" title="つながっています（変わるとすぐ更新）"><i aria-hidden="true"></i><span class="ct">接続中</span></span>
   <span class="grow"></span>
-  <button class="quiet" type="button" id="theme-btn" aria-label="明るさを切り替える（いま：自動）">◐ 自動</button>
-  <button class="quiet" type="button" id="gear" aria-label="設定" title="設定" aria-haspopup="dialog" aria-controls="settings"><span aria-hidden="true">⚙</span></button>
+  <button class="quiet ib" type="button" id="theme-btn" data-cur="auto" aria-label="明るさを切り替える（いま：自動）"><svg class="ic i-auto" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 12A9 9 0 1 0 21 12A9 9 0 1 0 3 12Z"/><path class="f" d="M12 3A9 9 0 0 1 12 21Z"/></svg><svg class="ic i-light" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 12A4 4 0 1 0 16 12A4 4 0 1 0 8 12Z"/><path d="M19 12L21.5 12M12 19L12 21.5M5 12L2.5 12M12 5L12 2.5M16.95 16.95L18.72 18.72M7.05 16.95L5.28 18.72M7.05 7.05L5.28 5.28M16.95 7.05L18.72 5.28"/></svg><svg class="ic i-dark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3A6 6 0 0 0 21 12A9 9 0 1 1 12 3Z"/></svg><span id="theme-name">自動</span></button>
+  <button class="quiet" type="button" id="gear" aria-label="設定" title="設定" aria-haspopup="dialog" aria-controls="settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M5.5 12A6.5 6.5 0 1 0 18.5 12A6.5 6.5 0 1 0 5.5 12Z"/><path d="M9.5 12A2.5 2.5 0 1 0 14.5 12A2.5 2.5 0 1 0 9.5 12Z"/><path stroke-width="3" d="M18.5 12L21.5 12M12 18.5L12 21.5M5.5 12L2.5 12M12 5.5L12 2.5M16.6 16.6L18.7 18.7M7.4 16.6L5.3 18.7M7.4 7.4L5.3 5.3M16.6 7.4L18.7 5.3"/></svg></button>
 </header>
 
 <main id="stage" class="stage">
@@ -479,7 +494,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
         <div class="who"><b>メールの雛形</b> ・ 作業 ・ 42 分前</div>
         <div class="ask">42 分、動きがありません。止まっていないか、子の画面を開いて確かめてください。</div>
         <div class="cmd"><span>端末に貼って、子の画面を開きます：</span><code>cd '/path/to/sample-repo' &amp;&amp; claude attach sample-node-0003</code></div>
-        <div class="big"><button type="button" aria-label="コマンドを写す">写す</button><button class="go" type="button">確かめた</button></div>
+        <div class="big"><button class="ib" type="button" aria-label="コマンドを写す"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 9L20 9L20 20L9 20Z"/><path d="M15 9L15 4L4 4L4 15L9 15"/></svg><span>写す</span></button><button class="go" type="button">確かめた</button></div>
       </li>
     </ul>
     <ol class="pipe" aria-label="作業の内訳"><li class="turn"><span>あなたの出番</span><b>3</b></li><li><span>進んでいる</span><b>2</b></li><li><span>終わった</span><b>1</b></li></ol>
@@ -592,7 +607,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
       </article>
       <article class="card stall">
         <div class="hd"><span class="chip stall">‖ 止まっているかも</span><span class="need">あなたの答え 1 件</span></div>
-        <div class="bd"><h3>メールの文の雛形を三つ作り、試験の宛先で送って確かめる</h3><div class="cmd"><code>claude attach sample-node-0003</code><button class="sm" type="button">写す</button></div></div>
+        <div class="bd"><h3>メールの文の雛形を三つ作り、試験の宛先で送って確かめる</h3><div class="cmd"><code>claude attach sample-node-0003</code><button class="sm ib" type="button" aria-label="コマンドを写す"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M9 9L20 9L20 20L9 20Z"/><path d="M15 9L15 4L4 4L4 15L9 15"/></svg><span>写す</span></button></div></div>
       </article>
       <article class="card run">
         <div class="hd"><span class="chip run">▶ 動いています</span></div>
@@ -603,7 +618,6 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     <details style="margin-top:10px"><summary>終わった作業（1 件）</summary>
       <div class="cards"><article class="card over"><div class="hd"><span class="chip">✓ 済んだ</span></div><div class="bd"><h3>注文の一覧の並び順を、新しい順にする</h3></div></article></div>
     </details>
-    <div class="row" style="margin-top:10px"><button class="sm" type="button" data-open="admin" aria-haspopup="dialog" aria-controls="admin">管理（まれに使う操作）…</button></div>
   </div>
   <footer class="wfoot" aria-label="矢印の見方"><span><b class="up" aria-hidden="true">↑</b>子から親への報告（上り）</span><span><b class="dn" aria-hidden="true">↓</b>親から子への頼み（下り）</span></footer>
 </section>
@@ -617,7 +631,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
 <!-- ============ 下：部品の見本帳（3 列に出ない部品） ============ -->
 <div class="sheet" id="parts">
   <h2>部品の見本帳 <small>上の 3 列に出ない部品。値はすべてダミー（実際のトークン・パス・ID は入っていません）</small></h2>
-  <p class="note" style="margin-top:0">上のバーの「◐ 自動」で、自動 → 明 → 暗 と切り替わります。幅 400px は、ブラウザの幅を狭めるか、開発者ツールの端末表示で確かめます。</p>
+  <p class="note" style="margin-top:0">上のバーの明暗のボタン（はじめは「自動」）で、自動 → 明 → 暗 と切り替わります。幅 400px は、ブラウザの幅を狭めるか、開発者ツールの端末表示で確かめます。</p>
 
   <h2>01 状態の札・接続切れ・知らせ</h2>
   <div class="row" style="margin-bottom:10px">
@@ -658,7 +672,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   <div class="row"><button type="button" data-open="settings" aria-haspopup="dialog" aria-controls="settings">設定を開く</button></div>
 
   <h2>06 管理 <small>まれに使う操作</small></h2>
-  <p class="note" style="margin-top:0">右の窓の「作業の一覧」の下にある「管理（まれに使う操作）…」から開くダイアログです。</p>
+  <p class="note" style="margin-top:0">設定の窓の最下部にある「管理（まれに使う操作）…」から開くダイアログです（設定の窓を閉じてから開き、閉じると焦点は上のバーの歯車に戻ります）。</p>
   <div class="row"><button type="button" data-open="admin" aria-haspopup="dialog" aria-controls="admin">管理を開く</button></div>
 </div>
 <div style="height:32px"></div>
@@ -682,7 +696,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     </fieldset>
     <fieldset><legend>子の権限の規則</legend>
       <p class="note">根の方針の規則です。「設定」は設定ファイル（config.json）の値、「実行中」は、いま足した規則です（daemon を起動し直すと、設定の値に戻ります）。deny は allow・ask より強く、ask に当たるツールの承認は、人間だけができます。</p>
-      <div class="row" style="margin:6px 0"><button class="sm" type="button">設定を読み込み直す</button></div>
+      <div class="row" style="margin:6px 0"><button class="sm ib" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 12A9 9 0 1 1 12 3C14.52 3 16.93 4 18.74 5.74L21 8"/><path d="M21 3L21 8L16 8"/></svg><span>設定を読み込み直す</span></button></div>
       <div class="policy-group"><h4>allow（許す）</h4>
         <div class="policy-item"><span class="chip">設定</span><code>Bash(git status:*)</code></div>
         <div class="policy-item"><span class="chip run">実行中</span><code>Read(docs/**)</code><button class="sm danger" type="button">外す</button></div></div>
@@ -701,6 +715,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     </fieldset>
     <p class="note">選んだものは、このブラウザに残ります。</p>
     <div class="right"><button type="button" data-close>閉じる</button></div>
+    <div class="adm-entry"><button class="danger ib" type="button" id="to-admin" aria-haspopup="dialog" aria-controls="admin"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3L22 20L2 20Z"/><path d="M12 9L12 13.5M12 16.9L12 17"/></svg><span>管理（まれに使う操作）…</span></button></div>
 </dialog>
 
 <dialog id="admin" class="settings adm" aria-labelledby="adm-t">
@@ -1154,13 +1169,15 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
 /* モック用の最小の操作（明暗・動きを止める・窓のタブ・スマホの切り替え）。本番の画面の挙動ではない */
 (function () {
   var root = document.documentElement, body = document.body;
-  var NAMES = { auto: "自動", light: "明", dark: "暗" }, ICONS = { auto: "◐", light: "○", dark: "●" };
+  var NAMES = { auto: "自動", light: "明", dark: "暗" };
   var order = ["auto", "light", "dark"], cur = "auto";
   var btn = document.getElementById("theme-btn"), live = document.getElementById("live");
   function setTheme(v, say) {
     cur = v;
     if (v === "auto") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", v);
-    btn.textContent = ICONS[v] + " " + NAMES[v];
+    // アイコン（SVG）は 3 つともボタンの中にあり、CSS が data-cur に合うものだけを出す。文字は名前だけを書き換える
+    btn.dataset.cur = v;
+    document.getElementById("theme-name").textContent = NAMES[v];
     btn.setAttribute("aria-label", "明るさを切り替える（いま：" + NAMES[v] + "）");
     document.querySelectorAll("input[name=th]").forEach(function (r) { r.checked = r.value === v; });
     if (say) live.textContent = "明るさ：" + NAMES[v];
@@ -1173,16 +1190,18 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   document.getElementById("still-ck").addEventListener("change", function (e) { root.classList.toggle("still", e.target.checked); });
   // 窓（設定・管理）: 本番（packages/daemon/src/api/ui-assets.ts）と同じく showModal で開く。
   // Esc は dialog の既定の動きで閉じる。閉じたら、開いたボタンへフォーカスを戻す。Tab は窓の中を回る
-  var FIRST = { settings: "still-ck", admin: "adm-t" }, opener = null;
+  // 焦点を戻す先は、窓ごとに持つ（close の知らせは後から届くので、設定から管理へ移るときに混ざらないように）
+  var FIRST = { settings: "still-ck", admin: "adm-t" }, openers = {};
+  var gear = document.getElementById("gear");
   function openDlg(id, from) {
     var d = document.getElementById(id);
     if (d.open) return;
-    opener = from || null;
+    openers[id] = from || null;
     d.showModal();
     document.getElementById(FIRST[id]).focus();
   }
   document.querySelectorAll("dialog.settings").forEach(function (d) {
-    d.addEventListener("close", function () { if (opener) opener.focus(); opener = null; });
+    d.addEventListener("close", function () { var o = openers[d.id]; openers[d.id] = null; if (o) o.focus(); });
     d.querySelectorAll("[data-close]").forEach(function (b) { b.addEventListener("click", function () { d.close(); }); });
     d.addEventListener("keydown", function (e) {
       if (e.key !== "Tab") return;
@@ -1194,7 +1213,13 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
   });
-  document.getElementById("gear").addEventListener("click", function (e) { openDlg("settings", e.currentTarget); });
+  gear.addEventListener("click", function () { openDlg("settings", gear); });
+  // 設定の窓の最下部の「管理」: 設定を閉じてから管理を開く。設定の close では焦点を動かさず、管理を閉じたら歯車へ戻す
+  document.getElementById("to-admin").addEventListener("click", function () {
+    openers.settings = null;
+    document.getElementById("settings").close();
+    openDlg("admin", gear);
+  });
   document.querySelectorAll("[data-open]").forEach(function (b) {
     b.addEventListener("click", function () { openDlg(b.dataset.open, b); });
   });
@@ -1208,7 +1233,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   var mm = /meteor=([abc])/.exec(location.hash);
   if (mm) setMt(mm[1]);
   var om = /open=(settings|admin)/.exec(location.hash);
-  if (om) openDlg(om[1], om[1] === "settings" ? document.getElementById("gear") : null);
+  if (om) openDlg(om[1], gear);
   // 窓のタブ
   document.querySelectorAll(".wt").forEach(function (list) {
     var tabs = Array.prototype.slice.call(list.querySelectorAll("[role=tab]"));
