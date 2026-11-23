@@ -16,23 +16,27 @@
    ============================================================ */
 :root{
   --bg:#f1f2f3;--bg-glow:#fcfdfd;
-  /* 面の不透明度: 外の面（上のバー・3 列の窓・見本帳の台・下のタブ）48%、中の面（カード・札など）32%、帯（窓の見出し・タブ・図の盤）26% */
-  --win:rgba(250,249,245,.48);--panel:rgba(255,255,255,.32);--strip:rgba(255,255,255,.26);--panel-solid:#fbfaf6;--edge:rgba(110,120,135,.30);
-  --hl:inset 0 1px 0 rgba(255,255,255,.9);--hl-line:rgba(255,255,255,.95);--node:rgba(255,255,255,.5);
-  --shadow:0 8px 28px rgba(20,30,50,.10);--shadow-in:0 2px 10px rgba(20,30,50,.06);--blur:blur(10px) saturate(160%);
-  --ink:#1d1f22;--ink2:#51565d;--rule:#cfd2d6;--grid:#e4e6e9;
-  --accent:#2a5fa8;--kaki:#a04300;--kaki-soft:#fbe6d2;--matsu:#2c6b44;--matsu-soft:#dcebdf;
-  --shu:#a3261c;--shu-soft:#f7dfdb;--kiiro:#7a5c00;--kiiro-soft:#f3ebc6;--on:#fff;
-  --wire-over:#8a9099;--blue:#2a5fa8;
+  /* 面: 外の窓（上のバー・3 列の窓・見本帳の台・下のタブ）は見本（ref/sample.html の --glass-*）の値。
+     中の面（カード・札・設定の窓・図の盤など）は塗りを重ねず（6%）、縁と上辺の光の線だけで区切る。帯（窓の見出し・タブ）は塗りなし */
+  --win:rgba(244,241,234,.25);--panel:rgba(255,255,255,.06);--strip:transparent;--panel-solid:#fbfaf6;
+  --glass-edge:rgba(255,255,255,.45);--edge:rgba(90,100,115,.26);
+  --hl:inset 0 1px 0 rgba(255,255,255,.7);--hl-line:rgba(255,255,255,.9);--node:rgba(255,255,255,.08);
+  --shadow:0 4px 16px rgba(0,0,0,.05);--shadow-in:0 1px 4px rgba(20,30,50,.04);--blur:blur(16px) saturate(160%);
+  /* 文字の色は、面が薄くても背景の上で 4.5:1 を保つよう、明では濃いめにしている */
+  --ink:#1d1f22;--ink2:#474c53;--rule:#c4c8cd;--grid:#e4e6e9;
+  --accent:#24548f;--kaki:#974000;--kaki-soft:#fbe6d2;--matsu:#275f3c;--matsu-soft:#dcebdf;
+  --shu:#a3261c;--shu-soft:#f7dfdb;--kiiro:#6b5000;--kiiro-soft:#f3ebc6;--on:#fff;
+  --wire-over:#8a9099;--blue:#24548f;
   --bp-sub:#cfd3d8;--bp-main:#a9afb7;--bp-mark:#6b7280;--bp-dust:#5a6a80;
   --tool-brass:#c27505;--tool-cyan:#0a6cc2;--tool-terra:#d1470f;--tool-green:#0f8552;--tool-violet:#6133b8;--tool-coral:#c7243d;
   --tool-op:.5;--rad:10px;--hd:48px;--bar:60px;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#060910;--bg-glow:#0d1a30;
-  --win:rgba(8,15,28,.52);--panel:rgba(22,36,60,.34);--strip:rgba(22,36,60,.28);--panel-solid:#0c1424;--edge:rgba(150,185,230,.20);
-  --hl:inset 0 1px 0 rgba(190,220,255,.18);--hl-line:rgba(190,220,255,.4);--node:rgba(18,30,50,.6);
-  --shadow:0 10px 36px rgba(0,0,0,.45);--shadow-in:0 2px 12px rgba(0,0,0,.25);
+  --win:rgba(22,20,18,.45);--panel:rgba(255,255,255,.03);--strip:transparent;--panel-solid:#0c1424;
+  --glass-edge:rgba(255,245,235,.12);--edge:rgba(150,185,230,.18);
+  --hl:inset 0 1px 0 rgba(255,245,235,.12);--hl-line:rgba(255,245,235,.3);--node:rgba(255,255,255,.05);
+  --shadow:0 8px 32px rgba(0,0,0,.35);--shadow-in:0 1px 6px rgba(0,0,0,.18);
   --ink:#e9edf3;--ink2:#a7b2c2;--rule:#2a3850;--grid:#16223a;
   --accent:#8fbcf5;--kaki:#ffa04a;--kaki-soft:#432812;--matsu:#7fd29b;--matsu-soft:#173626;
   --shu:#ff8f84;--shu-soft:#471e1b;--kiiro:#e2c250;--kiiro-soft:#3a3014;--on:#0a0f18;
@@ -43,9 +47,10 @@
 }}
 :root[data-theme="dark"]{
   --bg:#060910;--bg-glow:#0d1a30;
-  --win:rgba(8,15,28,.52);--panel:rgba(22,36,60,.34);--strip:rgba(22,36,60,.28);--panel-solid:#0c1424;--edge:rgba(150,185,230,.20);
-  --hl:inset 0 1px 0 rgba(190,220,255,.18);--hl-line:rgba(190,220,255,.4);--node:rgba(18,30,50,.6);
-  --shadow:0 10px 36px rgba(0,0,0,.45);--shadow-in:0 2px 12px rgba(0,0,0,.25);
+  --win:rgba(22,20,18,.45);--panel:rgba(255,255,255,.03);--strip:transparent;--panel-solid:#0c1424;
+  --glass-edge:rgba(255,245,235,.12);--edge:rgba(150,185,230,.18);
+  --hl:inset 0 1px 0 rgba(255,245,235,.12);--hl-line:rgba(255,245,235,.3);--node:rgba(255,255,255,.05);
+  --shadow:0 8px 32px rgba(0,0,0,.35);--shadow-in:0 1px 6px rgba(0,0,0,.18);
   --ink:#e9edf3;--ink2:#a7b2c2;--rule:#2a3850;--grid:#16223a;
   --accent:#8fbcf5;--kaki:#ffa04a;--kaki-soft:#432812;--matsu:#7fd29b;--matsu-soft:#173626;
   --shu:#ff8f84;--shu-soft:#471e1b;--kiiro:#e2c250;--kiiro-soft:#3a3014;--on:#0a0f18;
@@ -87,7 +92,7 @@ html.gl .bg{display:none}
    背景に直接載る外の面だけが backdrop-filter を持つ。backdrop-filter を持つ面は、その中の面にとっての
    「背景の根」になり、中で backdrop-filter をかけても WebGL の背景までは届かないため。
    中の面（カード・札・設定の窓など）は、半透明の色・上辺の光の線・淡い影で重ねる（外の面がぼかした背景が透ける） */
-.win,.top,.nav,.sheet{background:var(--win);border:1px solid var(--edge);box-shadow:var(--hl),var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
+.win,.top,.nav,.sheet{background:var(--win);border:1px solid var(--glass-edge);box-shadow:var(--hl),var(--shadow);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
 .card,.task,.cmd,.approvals,.confirm,.tlist,.admin,.lostbar,.empty,.legend,.inner,dialog.settings,.inbox li,.pipe{background:var(--panel);border:1px solid var(--edge);box-shadow:var(--hl),var(--shadow-in)}
 .top{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:8px 14px;height:var(--hd);padding:0 16px;border-width:0 0 1px;border-radius:0;box-shadow:var(--hl)}
 .top h1{margin:0;display:flex;align-items:baseline;gap:10px;min-width:0;white-space:nowrap}
@@ -1031,6 +1036,9 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
     if (say) live.textContent = "明るさ：" + NAMES[v];
   }
   btn.addEventListener("click", function () { setTheme(order[(order.indexOf(cur) + 1) % 3], true); });
+  // 確かめ用: index.html#theme=dark（または light）で開くと、その明暗で始まる（スクリーンショットを撮るため）
+  var hm = /theme=(light|dark)/.exec(location.hash);
+  if (hm) setTheme(hm[1], false);
   document.querySelectorAll("input[name=th]").forEach(function (r) { r.addEventListener("change", function () { setTheme(r.value, true); }); });
   document.getElementById("still-ck").addEventListener("change", function (e) { root.classList.toggle("still", e.target.checked); });
   document.getElementById("gear").addEventListener("click", function () {
