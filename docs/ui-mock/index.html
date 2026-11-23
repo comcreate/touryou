@@ -38,8 +38,8 @@
   --bp-sub:#cfd3d8;--bp-main:#a9afb7;--bp-mark:#6b7280;--bp-dust:#5a6a80;
   --tool-brass:#c27505;--tool-cyan:#0a6cc2;--tool-terra:#d1470f;--tool-green:#0f8552;--tool-violet:#6133b8;--tool-coral:#c7243d;
   --tool-op:.5;--rad:10px;--hd:48px;--bar:60px;
-  /* 火花の粒の芯: 線の色の割合（残りは白）。明は線の色が濃いので多め、暗は白を多めにして明るくする */
-  --pt-mix:55%;
+  /* 火花の粒の塗り: 線の色の割合（残りは白）。明は線の色そのまま（明るい背景の上では暗さで見えるため）、暗は白を多めにして芯を明るくする */
+  --pt-mix:100%;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#060910;--bg-glow:#0d1a30;
@@ -261,13 +261,13 @@ html.still :is(.mh,.mhc,.mtl,.msp){display:none!important}
 .mh{fill:none;stroke:var(--c);stroke-width:6;stroke-linecap:round;stroke-dasharray:10 52;stroke-dashoffset:83.6;filter:drop-shadow(0 0 3px var(--c)) drop-shadow(0 0 8px var(--c));animation:mt-h 1.2s linear infinite}
 .mhc{fill:none;stroke:#fff;stroke-width:2.6;stroke-linecap:round;stroke-dasharray:6 56;stroke-dashoffset:79.6;animation:mt-hc 1.2s linear infinite}
 .mtl{fill:none;stroke:var(--c);stroke-width:5;stroke-linecap:round;stroke-dasharray:30 32;stroke-dashoffset:103.6;opacity:.45;animation:mt-t 1.2s linear infinite}
-/* 火花の粒（.msp の g の中の circle.pt を 12 個）: 終点から、ばらばらの向き・距離（.q1〜.q12 の --dx・--dy）・大きさ（r 1.1〜2.4）で飛び散り、
-   飛んだ先で少し落ちて（下へ 6）、薄れて消える。芯は線の色に白を混ぜて明るくし（明は 55%・暗は 35% の線の色。--pt-mix）、
-   blur と、線の色の drop-shadow 2 重でぼかす。明では線の色が濃いので、明るい背景の上でも光の輪で見える。
+/* 火花の粒（.msp の g の中の circle.pt を 12 個）: 終点から、ばらばらの向き・距離（.q1〜.q12 の --dx・--dy）・大きさ（r 1.5〜2.9）で飛び散り、
+   飛んだ先で少し落ちて（下へ 6）、薄れて消える。blur と、線の色の drop-shadow 2 重でぼかす。
+   塗り: 明るい背景の上では、粒は暗さで見えるので、明は線の色そのまま（--pt-mix:100%。白を混ぜると背景との比が約 2.4:1 まで下がる）。
+   暗は、線の色 35%・白 65% にして芯を明るくする。
    本番の CSP の中で作れるよう、SVG の circle（cx・cy・r）と class と、CSS の @keyframes だけで作る（style 属性・グラデーションは使わない）。
-   右向きに着く線（.mir）は、横の向きを反転する（--sx:-1） */
-.msp .pt{fill:color-mix(in srgb,var(--c) var(--pt-mix),#fff);opacity:0;--sx:1;transform-box:fill-box;transform-origin:center;filter:blur(.5px) drop-shadow(0 0 1.5px var(--c)) drop-shadow(0 0 4px var(--c));animation:mt-pt 1.2s linear infinite}
-.msp.mir .pt{--sx:-1}
+   どの終点でも、多くの粒は左へ飛ぶ（上りの終点では進む向き、下りの終点では箱から跳ね返る向き。右へ飛ぶと、あとから描く箱の下に隠れる） */
+.msp .pt{fill:color-mix(in srgb,var(--c) var(--pt-mix),#fff);opacity:0;transform-box:fill-box;transform-origin:center;filter:blur(.5px) drop-shadow(0 0 1.5px var(--c)) drop-shadow(0 0 4px var(--c));animation:mt-pt 1.2s linear infinite}
 .q1{--dx:-14px;--dy:-6px}.q2{--dx:-9px;--dy:8px}.q3{--dx:-18px;--dy:2px}.q4{--dx:-5px;--dy:-12px}
 .q5{--dx:6px;--dy:-10px}.q6{--dx:-11px;--dy:-12px}.q7{--dx:3px;--dy:11px}.q8{--dx:-16px;--dy:9px}
 .q9{--dx:10px;--dy:4px}.q10{--dx:-7px;--dy:15px}.q11{--dx:-2px;--dy:-17px}.q12{--dx:12px;--dy:-4px}
@@ -290,17 +290,20 @@ html.mt-all :is(.mh,.mhc,.mtl).ma{animation-duration:1.8s}
 @keyframes mt-pt{
   0%,76%{opacity:0;transform:translate(0,0) scale(1.2)}
   79%{opacity:1;transform:translate(0,0) scale(1.2)}
-  88%{opacity:1;transform:translate(calc(var(--dx) * var(--sx) * .75),calc(var(--dy) * .75)) scale(1)}
-  96%{opacity:.6;transform:translate(calc(var(--dx) * var(--sx) * .95),calc(var(--dy) + 3px)) scale(.75)}
-  100%{opacity:0;transform:translate(calc(var(--dx) * var(--sx)),calc(var(--dy) + 6px)) scale(.5)}}
+  88%{opacity:1;transform:translate(calc(var(--dx) * .75),calc(var(--dy) * .75)) scale(1)}
+  96%{opacity:.6;transform:translate(calc(var(--dx) * .95),calc(var(--dy) + 3px)) scale(.8)}
+  100%{opacity:0;transform:translate(var(--dx),calc(var(--dy) + 6px)) scale(.6)}}
 /* 案 C: 答え待ち・失敗の箱の縁を、太さ（2 → 5）と光（2px → 14px）をはっきり変えて脈打たせる（線は流さない）。
    読み込んだ直後は強い側から始める（-1s）。まとめのときは、太さ 2 → 3・光 1px → 5px・1.6 秒とひかえめにする（上りの流星を目立たせるため）。
    止めているときは、光を出さない（縁は、ふだんの太さ 2・光なし） */
 .nd.wait{--g:var(--kaki)}.nd.fail{--g:var(--shu)}
 html.mt-c .nd.wait .box,html.mt-c .nd.fail .box{stroke-width:3;filter:drop-shadow(0 0 3px var(--g));animation:mt-glow 1s ease-in-out -1s infinite alternate}
 html.mt-all .nd.wait .box,html.mt-all .nd.fail .box{animation:mt-glow-soft 1.6s ease-in-out -1.6s infinite alternate}
-html.still :is(.nd.wait,.nd.fail) .box{stroke-width:2!important;filter:none!important}
-@media (prefers-reduced-motion:reduce){:is(.nd.wait,.nd.fail) .box{stroke-width:2!important;filter:none!important;animation:none!important}}
+html.still :is(.nd.wait,.nd.fail) .box{filter:none!important}
+html.still :is(.nd.wait,.nd.fail):not(:hover,:focus-visible) .box{stroke-width:2!important}
+@media (prefers-reduced-motion:reduce){
+  :is(.nd.wait,.nd.fail) .box{filter:none!important;animation:none!important}
+  :is(.nd.wait,.nd.fail):not(:hover,:focus-visible) .box{stroke-width:2!important}}
 @keyframes mt-glow{from{stroke-width:2;filter:drop-shadow(0 0 2px var(--g))}to{stroke-width:5;filter:drop-shadow(0 0 6px var(--g)) drop-shadow(0 0 14px var(--g))}}
 @keyframes mt-glow-soft{from{stroke-width:2;filter:drop-shadow(0 0 1px var(--g))}to{stroke-width:3;filter:drop-shadow(0 0 5px var(--g))}}
 /* 案の名前と、どこを見ればよいかを、関係図の窓の上の端に 1 行で出す（案を選んだときだけ。JS が中身を書く） */
@@ -375,14 +378,15 @@ dialog#settings>*{flex:none}
 dialog#settings>p.note{margin-bottom:14px}
 dialog#settings .adm-entry{margin-top:auto}
 dialog#settings p{max-width:40em}
-/* 設定の中の節の組み方（画面の幅で決める。窓の幅は画面の幅 − 96px）:
-   - 〜759px: 1 列（アクセシビリティ・言語・子の権限の規則を縦に並べる。640px 以下の狭い画面もこれ）
-   - 760〜1279px: アクセシビリティと言語を 2 列、子の権限の規則は全幅
-   - 1280px〜: アクセシビリティ・言語・子の権限の規則の 3 列（規則は中身が多いので 2 倍の幅）
+/* 設定の中の節の組み方（画面の幅で決める。窓の中身の幅は、画面の幅 − 138px）:
+   列を増やすと 1 列の幅が細くなるので、いちばん狭い列の説明の文（13px）が、1 行 31 字（前の 30rem の窓と同じ）を下回らない幅から増やす。
+   - 〜1019px: 1 列（アクセシビリティ・言語・子の権限の規則を縦に並べる。640px 以下の狭い画面もこれ。文は max-width:40em で 40 字まで）
+   - 1020〜1499px: アクセシビリティと言語を 2 列、子の権限の規則は全幅（1020px で 1 列の文が約 31 字）
+   - 1500px〜: アクセシビリティ・言語・子の権限の規則を 3 等分（1500px で 1 列の文が約 31 字）
    allow・deny・ask の 3 つの組は、幅が足りるときだけ横に並べる（1 つの最小 14rem） */
 .set-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:0 16px;align-items:start}
-@media (min-width:760px){.set-cols{grid-template-columns:repeat(2,minmax(0,1fr))}.set-cols .pol{grid-column:1/-1}}
-@media (min-width:1280px){.set-cols{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,2fr)}.set-cols .pol{grid-column:auto}}
+@media (min-width:1020px){.set-cols{grid-template-columns:repeat(2,minmax(0,1fr))}.set-cols .pol{grid-column:1/-1}}
+@media (min-width:1500px){.set-cols{grid-template-columns:repeat(3,minmax(0,1fr))}.set-cols .pol{grid-column:auto}}
 .policy-groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:0 16px}
 dialog.settings::backdrop{background:rgba(0,0,0,.35)}
 /* 狭い画面（〜640px）: 余白を 16px にする。窓を左上から 16px の位置に置き、幅を画面の幅（100vw）から決める。
@@ -610,13 +614,13 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
         </g>
         <path class="trunk" d="M128 187H147"/>
         <rect class="bar" x="147" y="108" width="6" height="158" rx="1"/>
-        <g class="k-ask"><path class="ln human" d="M159 124H185V37H410"/><path class="mtl mb" pathLength="100" d="M410 37H185V124H159"/><path class="mh mb" pathLength="100" d="M410 37H185V124H159"/><path class="mhc mb" pathLength="100" d="M410 37H185V124H159"/><path class="tip" d="M169 119L161 124L169 129"/><g class="msp mb"><circle class="pt q1" cx="159" cy="124" r="1.8"/><circle class="pt q2" cx="159" cy="124" r="1.3"/><circle class="pt q3" cx="159" cy="124" r="2.2"/><circle class="pt q4" cx="159" cy="124" r="1.1"/><circle class="pt q5" cx="159" cy="124" r="1.5"/><circle class="pt q6" cx="159" cy="124" r="2"/><circle class="pt q7" cx="159" cy="124" r="1.2"/><circle class="pt q8" cx="159" cy="124" r="1.7"/><circle class="pt q9" cx="159" cy="124" r="1.1"/><circle class="pt q10" cx="159" cy="124" r="1.4"/><circle class="pt q11" cx="159" cy="124" r="2.4"/><circle class="pt q12" cx="159" cy="124" r="1.3"/></g><rect class="pill" x="262" y="28" width="116" height="18" rx="3"/><text class="lab" x="268" y="41.5">↑ 判断 3 分前</text></g>
+        <g class="k-ask"><path class="ln human" d="M159 124H185V37H410"/><path class="mtl mb" pathLength="100" d="M410 37H185V124H159"/><path class="mh mb" pathLength="100" d="M410 37H185V124H159"/><path class="mhc mb" pathLength="100" d="M410 37H185V124H159"/><path class="tip" d="M169 119L161 124L169 129"/><g class="msp mb"><circle class="pt q1" cx="159" cy="124" r="2.2"/><circle class="pt q2" cx="159" cy="124" r="1.7"/><circle class="pt q3" cx="159" cy="124" r="2.6"/><circle class="pt q4" cx="159" cy="124" r="1.5"/><circle class="pt q5" cx="159" cy="124" r="1.9"/><circle class="pt q6" cx="159" cy="124" r="2.4"/><circle class="pt q7" cx="159" cy="124" r="1.6"/><circle class="pt q8" cx="159" cy="124" r="2.1"/><circle class="pt q9" cx="159" cy="124" r="1.5"/><circle class="pt q10" cx="159" cy="124" r="1.8"/><circle class="pt q11" cx="159" cy="124" r="2.9"/><circle class="pt q12" cx="159" cy="124" r="1.7"/></g><rect class="pill" x="262" y="28" width="116" height="18" rx="3"/><text class="lab" x="268" y="41.5">↑ 判断 3 分前</text></g>
         <g class="k-req"><path class="ln" d="M159 142H195V57H406"/><path class="tip" d="M402 52L410 57L402 62"/><rect class="pill" x="262" y="48" width="116" height="18" rx="3"/><text class="lab" x="268" y="61.5">↓ 頼み 20 分前</text></g>
         <g class="k-prog"><path class="ln" d="M159 160H205V127H410"/><path class="tip" d="M169 155L161 160L169 165"/><rect class="pill" x="262" y="118" width="116" height="18" rx="3"/><text class="lab" x="268" y="131.5">↑ 進み 6 分前</text></g>
-        <g class="k-req"><path class="ln dash" d="M159 178H215V147H406"/><path class="mtl ma" pathLength="100" d="M159 178H215V147H406"/><path class="mh ma" pathLength="100" d="M159 178H215V147H406"/><path class="mhc ma" pathLength="100" d="M159 178H215V147H406"/><path class="tip" d="M402 142L410 147L402 152"/><g class="msp ma mir"><circle class="pt q1" cx="406" cy="147" r="1.8"/><circle class="pt q2" cx="406" cy="147" r="1.3"/><circle class="pt q3" cx="406" cy="147" r="2.2"/><circle class="pt q4" cx="406" cy="147" r="1.1"/><circle class="pt q5" cx="406" cy="147" r="1.5"/><circle class="pt q6" cx="406" cy="147" r="2"/><circle class="pt q7" cx="406" cy="147" r="1.2"/><circle class="pt q8" cx="406" cy="147" r="1.7"/><circle class="pt q9" cx="406" cy="147" r="1.1"/><circle class="pt q10" cx="406" cy="147" r="1.4"/><circle class="pt q11" cx="406" cy="147" r="2.4"/><circle class="pt q12" cx="406" cy="147" r="1.3"/></g><rect class="pill" x="262" y="138" width="116" height="18" rx="3"/><text class="lab" x="268" y="151.5">↓ 頼み 30 分前</text></g>
+        <g class="k-req"><path class="ln dash" d="M159 178H215V147H406"/><path class="mtl ma" pathLength="100" d="M159 178H215V147H406"/><path class="mh ma" pathLength="100" d="M159 178H215V147H406"/><path class="mhc ma" pathLength="100" d="M159 178H215V147H406"/><path class="tip" d="M402 142L410 147L402 152"/><g class="msp ma"><circle class="pt q1" cx="406" cy="147" r="2.2"/><circle class="pt q2" cx="406" cy="147" r="1.7"/><circle class="pt q3" cx="406" cy="147" r="2.6"/><circle class="pt q4" cx="406" cy="147" r="1.5"/><circle class="pt q5" cx="406" cy="147" r="1.9"/><circle class="pt q6" cx="406" cy="147" r="2.4"/><circle class="pt q7" cx="406" cy="147" r="1.6"/><circle class="pt q8" cx="406" cy="147" r="2.1"/><circle class="pt q9" cx="406" cy="147" r="1.5"/><circle class="pt q10" cx="406" cy="147" r="1.8"/><circle class="pt q11" cx="406" cy="147" r="2.9"/><circle class="pt q12" cx="406" cy="147" r="1.7"/></g><rect class="pill" x="262" y="138" width="116" height="18" rx="3"/><text class="lab" x="268" y="151.5">↓ 頼み 30 分前</text></g>
         <g class="k-done"><path class="ln over" d="M159 196H215V217H410"/><path class="tip" d="M169 191L161 196L169 201"/><rect class="pill" x="262" y="208" width="116" height="18" rx="3"/><text class="lab" x="268" y="221.5">↑ 済み 55 分前</text></g>
         <g class="k-done"><path class="ln over" d="M159 214H205V237H406"/><path class="tip" d="M402 232L410 237L402 242"/><rect class="pill" x="262" y="228" width="116" height="18" rx="3"/><text class="lab" x="268" y="241.5">↓ 頼み 70 分前</text></g>
-        <g class="k-fail"><path class="ln" d="M159 232H195V307H410"/><path class="mtl mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="mh mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="mhc mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="tip" d="M169 227L161 232L169 237"/><g class="msp mb mt-late"><circle class="pt q1" cx="159" cy="232" r="1.8"/><circle class="pt q2" cx="159" cy="232" r="1.3"/><circle class="pt q3" cx="159" cy="232" r="2.2"/><circle class="pt q4" cx="159" cy="232" r="1.1"/><circle class="pt q5" cx="159" cy="232" r="1.5"/><circle class="pt q6" cx="159" cy="232" r="2"/><circle class="pt q7" cx="159" cy="232" r="1.2"/><circle class="pt q8" cx="159" cy="232" r="1.7"/><circle class="pt q9" cx="159" cy="232" r="1.1"/><circle class="pt q10" cx="159" cy="232" r="1.4"/><circle class="pt q11" cx="159" cy="232" r="2.4"/><circle class="pt q12" cx="159" cy="232" r="1.3"/></g><rect class="pill" x="262" y="298" width="116" height="18" rx="3"/><text class="lab" x="268" y="311.5">↑ 失敗 14 分前</text></g>
+        <g class="k-fail"><path class="ln" d="M159 232H195V307H410"/><path class="mtl mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="mh mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="mhc mb mt-late" pathLength="100" d="M410 307H195V232H159"/><path class="tip" d="M169 227L161 232L169 237"/><g class="msp mb mt-late"><circle class="pt q1" cx="159" cy="232" r="2.2"/><circle class="pt q2" cx="159" cy="232" r="1.7"/><circle class="pt q3" cx="159" cy="232" r="2.6"/><circle class="pt q4" cx="159" cy="232" r="1.5"/><circle class="pt q5" cx="159" cy="232" r="1.9"/><circle class="pt q6" cx="159" cy="232" r="2.4"/><circle class="pt q7" cx="159" cy="232" r="1.6"/><circle class="pt q8" cx="159" cy="232" r="2.1"/><circle class="pt q9" cx="159" cy="232" r="1.5"/><circle class="pt q10" cx="159" cy="232" r="1.8"/><circle class="pt q11" cx="159" cy="232" r="2.9"/><circle class="pt q12" cx="159" cy="232" r="1.7"/></g><rect class="pill" x="262" y="298" width="116" height="18" rx="3"/><text class="lab" x="268" y="311.5">↑ 失敗 14 分前</text></g>
         <g class="k-req"><path class="ln" d="M159 250H185V327H406"/><path class="tip" d="M402 322L410 327L402 332"/><rect class="pill" x="262" y="318" width="116" height="18" rx="3"/><text class="lab" x="268" y="331.5">↓ 頼み 40 分前</text></g>
         <g><rect class="pd k-ask" x="146.5" y="120.5" width="7" height="7" rx="1"/><rect class="pd k-req" x="146.5" y="138.5" width="7" height="7" rx="1"/><rect class="pd k-prog" x="146.5" y="156.5" width="7" height="7" rx="1"/><rect class="pd k-req" x="146.5" y="174.5" width="7" height="7" rx="1"/><rect class="pd k-done" x="146.5" y="192.5" width="7" height="7" rx="1"/><rect class="pd k-done" x="146.5" y="210.5" width="7" height="7" rx="1"/><rect class="pd k-fail" x="146.5" y="228.5" width="7" height="7" rx="1"/><rect class="pd k-req" x="146.5" y="246.5" width="7" height="7" rx="1"/></g>
         <g class="nd wait" tabindex="0" role="button" aria-label="支払い方法の画面。あなたの答え待ち">
@@ -1337,7 +1341,7 @@ html.still *,html.still *::before,html.still *::after{animation:none!important;t
   // 切のほかは、関係図の窓の上の端に、いまの選びの短い説明を 1 行で出す（まとめのときは、それぞれの意味の短い凡例）
   var MT_NAMES = { all: "まとめ", a: "案 A だけ", b: "案 B だけ", c: "案 C だけ" };
   var MT_WHERE = {
-    all: "強い流星と火花＝あなたの番になる知らせ（判断・失敗）／弱い流星＝まだ届いていない頼み／縁の光＝答え待ち・失敗の子",
+    all: "強い流星と火花＝あなたの番／弱い流星＝まだ届かない頼み／縁の光＝答え待ち・失敗",
     a: "緑の破線（↓ 頼み 30 分前）に流星。右の箱の手前に火花",
     b: "橙・朱の上りの線に流星。左の出入口に火花",
     c: "橙・朱の箱の縁が太く光って脈打つ"
