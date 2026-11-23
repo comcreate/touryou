@@ -1710,7 +1710,9 @@ describe("画面の使い勝手（#13）", () => {
   it("管理の窓は、焦点が見出しのときの Shift+Tab も末尾へ回し、閉じたら送る前の確認を取り消す", () => {
     expect(UI_JS).toContain("document.activeElement === box.querySelector('h2')");
     expect(UI_JS).not.toContain("toAdminSwitching");
-    expect(UI_JS).toContain("if (pending && pending.fromAdmin && !pending.sending) pending = null;");
+    expect(UI_JS).toContain(
+      "if (pending && pending.fromAdmin && !pending.sending) pending = null;",
+    );
   });
 
   it("確認の出所: 管理の窓が開いている間に出した確認だけに fromAdmin を付け、窓の中に出す。本文の確認は取り消さない", () => {
