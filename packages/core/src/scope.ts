@@ -402,6 +402,33 @@ const commandCovers = (entry: string, command: string): boolean =>
   wordsCover(entryWords(entry), entryWords(command));
 
 /**
+ * 許可コマンドに収まらない依頼 `command` に、近い許可コマンドを 1 つ返す（読み取りだけ。前方一致の規則は変えない）。
+ * 近い = 許可の語の並びの末尾が依頼と同じ、または依頼の語の並びの末尾が許可と同じ（例: 許可 `bash scripts/x` と依頼 `scripts/x`）。
+ * すでに収まる依頼、近い許可がない依頼は `undefined`。複数あれば、語数の差が小さい（依頼に近い）ものを先に取る。
+ */
+export function nearestAllowedCommand(
+  allowedCommands: readonly string[],
+  command: string,
+): string | undefined {
+  const want = entryWords(command);
+  if (want.length === 0 || want[0] === "") return undefined;
+  if (allowedCommands.some((e) => wordsCover(entryWords(e), want))) return undefined;
+  const endsWith = (long: readonly string[], short: readonly string[]): boolean =>
+    short.length > 0 &&
+    short.length <= long.length &&
+    short.every((w, i) => long[long.length - short.length + i] === w);
+  let best: { entry: string; gap: number } | undefined;
+  for (const entry of allowedCommands) {
+    const have = entryWords(entry);
+    if (have.length === 0 || have[0] === "") continue;
+    if (!endsWith(have, want) && !endsWith(want, have)) continue;
+    const gap = Math.abs(have.length - want.length);
+    if (best === undefined || gap < best.gap) best = { entry, gap };
+  }
+  return best?.entry;
+}
+
+/**
  * 子の範囲が親の範囲に収まるか（spawn・split の検査。FR_005）。
  * - `allowedCommands`: 子の各コマンドを、親の許可の語の並びの前方一致が含む（親より広い許可は不可）
  * - `writableLocations`: 子の各場所が、親の書き込み可能な場所の下にある

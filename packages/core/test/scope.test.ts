@@ -1,6 +1,34 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { evaluateScope, isScopeSubset, type Scope, validateScope } from "../src/index.js";
+import {
+  evaluateScope,
+  isScopeSubset,
+  nearestAllowedCommand,
+  type Scope,
+  validateScope,
+} from "../src/index.js";
+
+describe("nearestAllowedCommand（収まらない依頼に近い許可コマンド。#249）", () => {
+  const allowed = ["bash scripts/fetch-actionlint", "pnpm test", "git status"];
+  it("許可の末尾が依頼と同じなら、その許可を返す", () => {
+    expect(nearestAllowedCommand(allowed, "scripts/fetch-actionlint")).toBe(
+      "bash scripts/fetch-actionlint",
+    );
+  });
+  it("依頼の末尾が許可と同じなら、その許可を返す", () => {
+    expect(nearestAllowedCommand(["scripts/x"], "bash scripts/x")).toBe("scripts/x");
+  });
+  it("すでに収まる依頼・近い許可がない依頼は undefined", () => {
+    expect(nearestAllowedCommand(allowed, "pnpm test -- foo")).toBeUndefined();
+    expect(nearestAllowedCommand(allowed, "rm -rf x")).toBeUndefined();
+    expect(nearestAllowedCommand([], "ls")).toBeUndefined();
+  });
+  it("前方一致の規則は変えない（近い提案は、収まる判定を変えない）", () => {
+    const s: Scope = { writableLocations: [], forbiddenLocations: [], allowedCommands: allowed };
+    const want: Scope = { ...s, allowedCommands: ["scripts/fetch-actionlint"] };
+    expect(isScopeSubset(want, s)).toBe(false);
+  });
+});
 
 const CWD = "/work/node-a";
 const scope: Scope = {

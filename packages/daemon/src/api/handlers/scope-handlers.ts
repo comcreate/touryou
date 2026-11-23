@@ -24,6 +24,7 @@ import {
   isScopeSubset,
   isStrictDescendant,
   LIMITS,
+  nearestAllowedCommand,
   type NodeState,
   type OperationMap,
   type Result,
@@ -32,7 +33,7 @@ import {
   stateOf,
   validateScope,
 } from "@touryou/core";
-import { growScope, ruleOfExtension } from "../../root-policy.js";
+import { addableLimitRule, growScope, ruleOfExtension } from "../../root-policy.js";
 import type { RuntimeAdapter } from "../../sdk/runtime.js";
 import type { HandlerRequest } from "../server.js";
 import { unquote } from "./child-inbox-handlers.js";
@@ -120,7 +121,7 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
 
   /** 承認の前の検査。問題があれば失敗を返す。 */
   async function checkApprove(
-    ext: ExtensionRecord,
+    ext: Pick<ExtensionRecord, "nodeId" | "target">,
     human: boolean,
     /** 「上限にも足して承認」で、上限に足す規則。足したあとの上限で判定する（deny は、これでも承認しない）。 */
     limitRule?: string,
@@ -222,13 +223,19 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
       );
     }
     if (!isScopeSubset(grown, parentScope, { child: parentCwd, parent: parentCwd })) {
+      // コマンドは、親の許可に近い形があれば、頼み直す形を示す（前方一致の規則は変えない。#249）
+      const near =
+        ext.target.kind === "command"
+          ? nearestAllowedCommand(parentScope.allowedCommands, ext.target.value)
+          : undefined;
+      const nearText = near === undefined ? "" : `。近い許可コマンド: ${near}（この形で頼み直す）`;
       // 上限が根の範囲（設定ファイル）のときは、直す場所と、起動し直しが要ることを出す（node.spawn と同じ判定。Issue #5）
       if (brief === undefined)
         return fail(
           "scopeNotSubset",
           ext.target.kind === "mcp"
             ? "MCP ツールが、根の上限（設定ファイル config.json の permissions.allow）にない"
-            : "拡張後の範囲が、根の範囲（設定ファイル config.json の rootScope）に収まらない",
+            : `拡張後の範囲が、根の範囲（設定ファイル config.json の rootScope）に収まらない${nearText}`,
           "却下する",
           ext.target.kind === "mcp"
             ? "上限を広げるなら、人に確かめてから、人間の判定で「上限にも足して承認」（scope_decide の alsoLimit。touryou scope decide --also-limit）にするか、config.json の permissions.allow に MCP ツール（mcp__<サーバー>__<道具>）を足して touryou config reload で読み込み直し（daemon を起動し直すのでもよい）、もう一度判定する"
@@ -236,7 +243,7 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
         );
       return fail(
         "scopeNotSubset",
-        "拡張後の範囲が、親の範囲に収まらない",
+        `拡張後の範囲が、親の範囲に収まらない${nearText}`,
         "却下する",
         "親の範囲を広げてから、もう一度判定する",
       );
@@ -244,8 +251,35 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
     return undefined;
   }
 
+  /**
+   * 要求の時点で、どう判定しても通らない依頼なら、その失敗を返す（通る見込みがあれば `undefined`）。
+   * 通らない = deny に当たる・作業ツリーの規則を満たさない・親の範囲に収まらない。ただし、親が根で、人間が
+   * 「上限にも足して承認」で通せる依頼（規則に直せる）は、人間の判定に回す（#194 PR4 の道を残す）。
+   * 範囲を確認できないなどの一時的な失敗は、ここでは弾かない（判定のときに検査する）。
+   */
+  async function earlyRejection(
+    nodeId: string,
+    target: { kind: "write" | "command" | "mcp"; value: string },
+  ): Promise<{ ok: false; error: Failure } | undefined> {
+    const problem = await checkApprove({ nodeId, target }, true);
+    if (problem === undefined) return undefined;
+    const code = problem.error.code;
+    if (code !== "scopeNotSubset" && code !== "scopeDenied" && code !== "scopeInvalid") {
+      return undefined;
+    }
+    if (code === "scopeNotSubset") {
+      const state = log.state();
+      const parentId = state.nodes.find((n) => n.id === nodeId)?.parentId;
+      const parentIsRoot = parentId != null && effectiveScope(state, parentId) === undefined;
+      if (parentIsRoot && addableLimitRule(target, deps.limitRuleProblem ?? (() => undefined))) {
+        return undefined;
+      }
+    }
+    return problem;
+  }
+
   return {
-    "scope.extend": (req: HandlerRequest<"scope.extend">): R<"scope.extend"> => {
+    "scope.extend": async (req: HandlerRequest<"scope.extend">): Promise<R<"scope.extend">> => {
       const caller = req.caller?.nodeId ?? "";
       const { reason } = req.params;
       // ブリーフ（引用の形）を見たまま書き写した「> …」は、頭の印（と後ろの空白）を外す。印のない値は、そのまま確かめる
@@ -266,6 +300,9 @@ export function createScopeHandlers(deps: ScopeHandlerDeps) {
           "親に、MCP ツールが要る作業を CLI の子で進めるよう頼む",
         );
       }
+      // 承認しても必ず失敗する依頼は、記録も受信箱への項目もなしに、子へ理由を返す（#249）
+      const early = await earlyRejection(caller, target);
+      if (early !== undefined) return early;
       const extensionId = deriveId("ext", caller, req.requestId, "extension");
       const bodies: EventBody[] = [
         {
