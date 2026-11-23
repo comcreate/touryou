@@ -2,9 +2,19 @@
  * 子の受信箱（`child.inbox`）: ブリーフといまだ受け取っていない指示を、自分のノードの分だけ返す。受け取った印
  * （`deliveredSeq`）は、mcp が応答を受け取ったあとの `ackThrough` で付き、Stop のフックの未読（`pendingForChild`）と同じ印で数える。
  */
-import type { EventBody, NodeEvent } from "@touryou/core";
+import {
+  type EventBody,
+  lastActivityMs,
+  type NodeEvent,
+  unquoteInstructionText,
+} from "@touryou/core";
+import { instructionEcho } from "@touryou/core/echo";
 import { describe, expect, it } from "vitest";
-import { createChildInboxHandlers } from "../../src/api/handlers/child-inbox-handlers.js";
+import {
+  createChildInboxHandlers,
+  instructionsFor,
+  readsOnlyPrefaces,
+} from "../../src/api/handlers/child-inbox-handlers.js";
 import { pendingForChild, stopOutcome } from "../../src/api/handlers/hook-handlers.js";
 import type { HandlerRequest } from "../../src/api/server.js";
 import { validateParams } from "../../src/api/validate.js";
@@ -163,6 +173,94 @@ describe("child.inbox", () => {
     expect(validateParams("child.inbox", { ackThrough: 3 }).ok).toBe(true);
     expect(validateParams("child.inbox", { ackThrough: -1 }).ok).toBe(false);
     expect(validateParams("child.inbox", { nodeId: "b" }).ok).toBe(false);
+  });
+
+  describe("指示の復唱（#261）", () => {
+    const echoOf = (text: string) => instructionEcho(text);
+
+    it("一致する復唱は、配送の記録に載る（受領）。受信箱には何も出さない。復唱は新しい動きの時刻を持たない", () => {
+      const r = rig();
+      const s1 = r.instruct("a", "x を直す\n  字下げ");
+      const got = r.call("a");
+      // mcp は、応答の引用（> ）を外した本文から復唱を求める。元の本文と同じ値になる
+      const quoted = got.ok ? (got.value.instructions[0]?.quotedText ?? "") : "";
+      const echo = echoOf(unquoteInstructionText(quoted));
+      expect(echo).toBe(echoOf("x を直す\n  字下げ"));
+      r.call("a", { ackThrough: s1, echoes: { [String(s1)]: echo } });
+      const rec = r.log.state().instructions.find((i) => i.seq === s1);
+      expect(rec?.echo).toBe(echo);
+      expect(rec?.deliveredAt).toBeDefined();
+      expect(r.log.state().inbox).toEqual([]);
+      // 最後の動き（#195）は、配送の時刻だけを数える。復唱があっても、ないときと同じ時刻
+      const t = Date.parse("2026-11-12T00:00:00Z");
+      expect(lastActivityMs(r.log.state(), "a")).toBe(t);
+    });
+
+    it("食い違う復唱は、受信箱に「食い違い」を出す（failure。自動の再送はしない。指示の記録は増えない）", () => {
+      const r = rig();
+      const s1 = r.instruct("a", "x を直す");
+      const before = r.log.state().instructions.length;
+      r.call("a", { ackThrough: s1, echoes: { [String(s1)]: echoOf("y を直す") } });
+      const items = r.log.state().inbox;
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({ kind: "failure", nodeId: "a", msg: { key: "echoMismatch" } });
+      expect(items[0]?.msg?.args).toEqual({ node: "a", seq: s1 });
+      // 受信箱の文に、ハッシュ値も本文も出ない
+      expect(items[0]?.summary).not.toContain(echoOf("y を直す"));
+      expect(items[0]?.summary).not.toContain("x を直す");
+      expect(r.log.state().instructions).toHaveLength(before);
+      // 付け直しても、同じ知らせを重ねない
+      r.call("a", { ackThrough: s1, echoes: { [String(s1)]: echoOf("y を直す") } });
+      expect(r.log.state().inbox).toHaveLength(1);
+    });
+
+    it("復唱がない呼び出し（古い mcp）は、これまでどおり受け取りだけを記録する。知らせは出さない", () => {
+      const r = rig();
+      const s1 = r.instruct("a", "x");
+      r.call("a", { ackThrough: s1 });
+      const rec = r.log.state().instructions.find((i) => i.seq === s1);
+      expect(rec?.deliveredSeq).toEqual(expect.any(Number));
+      expect(rec?.echo).toBeUndefined();
+      expect(r.log.state().inbox).toEqual([]);
+    });
+
+    it("復唱は、ackThrough の対象の指示ごとに照合する（ほかのノードの指示の番号は使えない）", () => {
+      const r = rig();
+      const sa = r.instruct("a", "a へ");
+      const sb = r.instruct("b", "b へ");
+      // a が、b の指示の番号に復唱を付けても、b の指示の記録は変わらない
+      r.call("a", { ackThrough: sb, echoes: { [String(sb)]: echoOf("b へ") } });
+      expect(r.log.state().instructions.find((i) => i.seq === sb)?.echo).toBeUndefined();
+      expect(r.log.state().instructions.find((i) => i.seq === sa)?.deliveredSeq).toEqual(
+        expect.any(Number),
+      );
+    });
+
+    it("復唱の送信は、前置きだけの呼び出しの扱い（#189。時計を延ばさない）を変えない", () => {
+      const r = rig();
+      const s1 = r.instruct("a", "ふつうの指示");
+      const mine = instructionsFor(r.log.state(), "a");
+      // 前置きでないふつうの指示の受け取りは、復唱の有無にかかわらず「前置きだけ」ではない（時計を延ばす）
+      expect(readsOnlyPrefaces(mine, { ackThrough: s1 })).toBe(false);
+      expect(
+        readsOnlyPrefaces(mine, { ackThrough: s1, echoes: { [String(s1)]: echoOf("ふつうの指示") } }),
+      ).toBe(false);
+    });
+
+    it("窓口の検査: echoes は ackThrough と一緒のときだけ。キーは番号、値は小文字の 16 進数 16 桁、64 件まで", () => {
+      const ok = echoOf("x");
+      expect(validateParams("child.inbox", { ackThrough: 3, echoes: { "3": ok } }).ok).toBe(true);
+      expect(validateParams("child.inbox", { echoes: { "3": ok } }).ok).toBe(false);
+      expect(validateParams("child.inbox", { ackThrough: 3, echoes: { x: ok } }).ok).toBe(false);
+      expect(validateParams("child.inbox", { ackThrough: 3, echoes: { "03": ok } }).ok).toBe(false);
+      expect(validateParams("child.inbox", { ackThrough: 3, echoes: { "3": "短い" } }).ok).toBe(false);
+      expect(validateParams("child.inbox", { ackThrough: 3, echoes: { "3": ok.toUpperCase() } }).ok).toBe(
+        false,
+      );
+      expect(validateParams("child.inbox", { ackThrough: 3, echoes: [ok] }).ok).toBe(false);
+      const many = Object.fromEntries(Array.from({ length: 65 }, (_, i) => [String(i), ok]));
+      expect(validateParams("child.inbox", { ackThrough: 99, echoes: many }).ok).toBe(false);
+    });
   });
 
   it("inbox.fetch の ackItemIds（#102）は、項目の ID の配列（100 件まで）だけ受ける", () => {

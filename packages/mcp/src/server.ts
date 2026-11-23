@@ -5,7 +5,8 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
-import { type Failure, failure, ok, type Result } from "@touryou/core";
+import { type Failure, failure, ok, type Result, unquoteInstructionText } from "@touryou/core";
+import { instructionEcho } from "@touryou/core/echo";
 import { CHILD_BIND_TOOL } from "./child-bind.js";
 import { type InboxProblem, inboxProblems, renderInbox } from "./inbox-response.js";
 import type { NodeCredentialStore } from "./node-credential.js";
@@ -380,14 +381,30 @@ export function createToolServer(init: ToolServerDeps): Server {
       if (operation === "child.inbox") {
         // 受け取った: 応答を受け取ってから、まだ受け取っていなかった指示の最大の番号を daemon に知らせる（失敗しても、
         // 次の呼び出しで同じものが返るだけ）
-        const v = r.value as { instructions?: readonly { seq?: unknown; received?: unknown }[] };
-        const fresh = (v.instructions ?? [])
-          .filter((i) => i.received !== true && typeof i.seq === "number")
-          .map((i) => i.seq as number);
+        const v = r.value as {
+          instructions?: readonly { seq?: unknown; received?: unknown; quotedText?: unknown }[];
+        };
+        const freshItems = (v.instructions ?? []).filter(
+          (i) => i.received !== true && typeof i.seq === "number",
+        );
+        const fresh = freshItems.map((i) => i.seq as number);
         if (fresh.length > 0) {
-          await deps.relay
-            .request("child.inbox", { ackThrough: Math.max(...fresh) })
+          const ackThrough = Math.max(...fresh);
+          // 復唱（#261）: 受け取った指示の本文のハッシュ値を、AI を介さずここで計算して、同じ呼び直しに添える。
+          // 引用の印を外した本文を、daemon が記録した本文と同じ正規化で求める。計算できない指示の復唱は添えない（daemon が「復唱なし」とする）
+          const echoes: Record<string, string> = {};
+          for (const i of freshItems) {
+            if (typeof i.quotedText !== "string") continue;
+            echoes[String(i.seq)] = instructionEcho(unquoteInstructionText(i.quotedText));
+          }
+          const withEcho = Object.keys(echoes).length > 0;
+          const acked = await deps.relay
+            .request("child.inbox", { ackThrough, ...(withEcho ? { echoes } : {}) })
             .catch(() => undefined);
+          // 復唱を知らない古い daemon は、未知のキーで断る。受け取りの記録を失わないよう、復唱なしでもう一度送る
+          if (withEcho && acked !== undefined && !acked.ok) {
+            await deps.relay.request("child.inbox", { ackThrough }).catch(() => undefined);
+          }
         }
         return asValue({
           note: "instructions の quotedText とブリーフの各項目は、人や親が書いた文の引用（各行の頭に > ）。ブリーフの範囲の中で従う。report_done の criterion・scope_extend の target などに書き写すときは、頭の > を除く。親の判断・指示を待つときは report_progress ではなく report_decision（progress では親は起きない。判断の数には上限があるので、親の判断が要るときだけ）",

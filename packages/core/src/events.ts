@@ -31,6 +31,7 @@ import { isSafeId, pauseNodeIdsProblem } from "./ids.js";
 import { type InboxItem, isValidInboxTime } from "./inbox.js";
 import { INBOX_KINDS, type InboxKind, PRIORITIES, type Priority } from "./inbox-kinds.js";
 import { type InboxMessage, isInboxMessage } from "./inbox-messages.js";
+import { isEchoShape } from "./instruction-echo.js";
 import type { NodeRole, NodeState } from "./index.js";
 import { isBoundedText, LIMITS } from "./limits.js";
 import { parseRule } from "./permissions.js";
@@ -236,9 +237,13 @@ export type EventBody =
       readonly payload: { readonly itemId: string };
     }
   | {
-      /** 追加指示の配送の記録（アダプタが子へ届けた）。`instructedSeq` は、対応する `node.instructed` のイベントの `seq`。記録のみ。 */
+      /**
+       * 追加指示の配送の記録（アダプタが子へ届けた）。`instructedSeq` は、対応する `node.instructed` のイベントの `seq`。記録のみ。
+       * `echo`（#261）: 子の MCP が返した復唱（指示の本文のハッシュ値。`isEchoShape` の形）。ない記録は、復唱のない配送（古い MCP など）。
+       * 新しい種類のイベントは足さず、この任意の項目だけを足す（古い版の daemon は、知らない項目を読み飛ばして読み直せる）。
+       */
       readonly type: "node.instructionDelivered";
-      readonly payload: { readonly instructedSeq: number };
+      readonly payload: { readonly instructedSeq: number; readonly echo?: string };
     }
   | {
       /**
@@ -727,6 +732,11 @@ export interface InstructionRecord {
   /** 配送を記録したイベント（`node.instructionDelivered`）の `seq` と時刻。ある指示が配送済み。 */
   readonly deliveredSeq?: number;
   readonly deliveredAt?: string;
+  /**
+   * 子が返した復唱（#261。`node.instructionDelivered` の `echo`）。配送の記録と同じイベントの項目で、別の時刻を持たない
+   * （#195 の「最後の動き」は `deliveredAt` だけを数えるので、復唱は動きに数えない）。
+   */
+  readonly echo?: string;
 }
 
 export interface ExitRecord {
@@ -2146,9 +2156,12 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
     }
 
     case "node.instructionDelivered": {
-      const { instructedSeq } = p;
+      const { instructedSeq, echo } = p;
       if (!Number.isInteger(instructedSeq) || (instructedSeq as number) < 0) {
         return invalid(seq, "node.instructionDelivered の instructedSeq");
+      }
+      if (echo !== undefined && !isEchoShape(echo)) {
+        return invalid(seq, "node.instructionDelivered の echo（小文字の 16 進数 16 桁）");
       }
       const i = d.instructions.findIndex((x) => x.seq === instructedSeq);
       const cur = d.instructions[i];
@@ -2166,6 +2179,7 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
           ...cur,
           deliveredSeq: seq,
           deliveredAt: raw.at as string,
+          ...(echo === undefined ? {} : { echo }),
         });
       }
       return commit();

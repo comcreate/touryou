@@ -238,8 +238,16 @@ export interface OperationMap {
    * ものとして記録する。指示の本文は人や親が書いた文で、子への引用として扱う。
    */
   "child.inbox": {
-    /** `ackThrough`: mcp が前の応答を受け取ったあと、その最大の番号を付けて呼ぶ（受け取ったものとして記録する。指示は返さない）。 */
-    params: { all?: boolean; ackThrough?: number };
+    /**
+     * `ackThrough`: mcp が前の応答を受け取ったあと、その最大の番号を付けて呼ぶ（受け取ったものとして記録する。指示は返さない）。
+     * `echoes`（#261）: `ackThrough` と一緒に送る、指示の番号 → 復唱（指示の本文のハッシュ値。子の mcp が計算する）。
+     * daemon が、記録した本文から求めた値と照合する。`ackThrough` のない呼び出しでは受け付けない。
+     */
+    params: {
+      all?: boolean;
+      ackThrough?: number;
+      echoes?: Readonly<Record<string, string>>;
+    };
     result: { brief: ChildBriefView; instructions: readonly ChildInstructionView[] };
   };
   /**

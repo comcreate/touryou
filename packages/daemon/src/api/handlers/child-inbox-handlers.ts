@@ -8,6 +8,9 @@
  *   （`node.instructionDelivered`。`deliveredSeq`）。応答が途中で切れたら記録されないので、次の呼び出しで同じものを返す。
  *   Stop のフックの未読（`pendingForChild`）は、同じ `deliveredSeq` で数える。記録は指示ごとに同じ requestId で、付け直しても害がない。
  *   `ackThrough` の呼び出しは、指示を返さない（ブリーフだけ）。
+ * - 復唱（#261）: `ackThrough` と一緒に、mcp が計算した復唱（指示の本文のハッシュ値）を `echoes` で受ける。配送の記録に `echo` として載せ、
+ *   記録した本文から求めた値と照合する。食い違いは受信箱に出す（自動の再送はしない）。復唱は新しい呼び出しではなく、同じ呼び出しに載るので、
+ *   #189 の時計（前置きだけなら延ばさない）・#195 の最後の動き（配送の時刻だけを数える）は、復唱の前と変わらない。
  * - 指示の本文は、人や親が書いた文。各行の頭に `> ` を付けた引用の形で返す。
  */
 
@@ -17,11 +20,13 @@ import {
   type Failure,
   type InstructionRecord,
   isPrefaceInstruction,
+  judgeEcho,
   type OperationMap,
   type Result,
 } from "@touryou/core";
+import { instructionEcho } from "@touryou/core/echo";
 import type { HandlerRequest } from "../server.js";
-import { appendAtomically, fail, type LogPort } from "./context.js";
+import { appendAtomically, deriveId, fail, type LogPort, notice } from "./context.js";
 
 type R<Op extends keyof OperationMap> = Result<OperationMap[Op]["result"], Failure>;
 
@@ -130,12 +135,19 @@ export function createChildInboxHandlers(deps: ChildInboxHandlerDeps) {
         received: i.deliveredSeq !== undefined,
       }));
       for (const i of toMark) {
+        // 復唱（#261）: 子の mcp が返した、指示の本文のハッシュ値。配送の記録と同じイベントに載せる（別の時刻を持たない）
+        const echo = req.params.echoes?.[String(i.seq)];
         const r = appendAtomically(
           deps.log,
           deps.clock,
           `instruction-delivered-${i.seq}`,
           { system: true },
-          [{ type: "node.instructionDelivered", payload: { instructedSeq: i.seq } }],
+          [
+            {
+              type: "node.instructionDelivered",
+              payload: { instructedSeq: i.seq, ...(echo === undefined ? {} : { echo }) },
+            },
+          ],
         );
         if (!r.ok) {
           try {
@@ -143,6 +155,23 @@ export function createChildInboxHandlers(deps: ChildInboxHandlerDeps) {
           } catch {
             // 記録先の失敗は、処理を止めない
           }
+          continue;
+        }
+        // 照合: 記録した本文から求めた値と比べる（core の純粋な `judgeEcho`）。食い違いだけ受信箱に出す。
+        // 自動の再送はしない（親が内容を確かめて、送り直すかを決める）。一致は、配送の記録に echo が付くことが「受領」の記録
+        // （復唱がないとき `missing` は、cli-watch の「復唱が返らない」が早めに知らせる）
+        if (judgeEcho(instructionEcho(i.text), echo) === "mismatch") {
+          appendAtomically(deps.log, deps.clock, `echo-mismatch-${i.seq}`, { system: true }, [
+            {
+              type: "inbox.added",
+              payload: {
+                id: deriveId("inbox", "system", `echo-mismatch/${i.seq}`, "child-inbox"),
+                kind: "failure",
+                nodeId,
+                ...notice("echoMismatch", { node: nodeId, seq: i.seq }),
+              },
+            },
+          ]);
         }
       }
       return {

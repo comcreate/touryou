@@ -112,6 +112,15 @@ export const INBOX_MESSAGES = {
     ja: "子 {node} が、指示（番号 {seq}）を {minutes} 分たっても受け取っていない。子が動いているか確かめる",
     en: "Child {node} has not picked up instruction #{seq} after {minutes} min. Check that the child is running",
   },
+  // ── 指示の復唱（#261）。文に内部の道具名・復唱の値（ハッシュ）は出さない
+  echoMismatch: {
+    ja: "子 {node} が返した指示（番号 {seq}）の復唱が、送った指示と食い違っている。別の文を受け取ったか、途中で変わった可能性がある。内容を確かめ、必要なら指示を送り直す",
+    en: "The echo that child {node} returned for instruction #{seq} does not match what was sent. It may have received different text, or the text changed on the way. Check the content and resend the instruction if needed",
+  },
+  echoMissing: {
+    ja: "子 {node} が、指示（番号 {seq}）の復唱を {minutes} 分たっても返していない。受け取っていないか、古い版の子かもしれない。子が動いているか確かめる",
+    en: "Child {node} has not returned an echo for instruction #{seq} after {minutes} min. It may not have received it, or it may be an older version. Check that the child is running",
+  },
   unbound: {
     ja: "子 {node} が紐付けていない（起動から {minutes} 分）。原因の候補: (1) 接続先違い（--config・TOURYOU_DAEMON_CONFIG を確かめる）(2) plugin 欠落（--plugin-dir の親の子には付かない。/touryou:setup）(3) コード期限切れ（node_bindCode で出し直す）",
     en: "Child {node} has not bound itself ({minutes} min since launch). Likely causes: (1) wrong daemon (check --config and TOURYOU_DAEMON_CONFIG) (2) missing plugin (children of a --plugin-dir parent do not get it; run /touryou:setup) (3) expired code (reissue with node_bindCode)",

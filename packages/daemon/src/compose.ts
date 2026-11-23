@@ -2362,6 +2362,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     // 紐付けが外れているかも: 購読がない状態がこれだけ続いたら知らせる。既定 15 分（トークンが切れる前の知らせ〔既定 10 分前〕と、
     // 止まっているかも〔30 分〕の間）
     unsubscribedMs: (config.cliWatch?.unsubscribedMinutes ?? 15) * 60_000,
+    // 指示の復唱が返らない（#261）。既定 5 分: 子の mcp は、指示を受け取った直後の呼び直しで復唱を返すので、ふつうは数秒で済む
+    echoMs: (config.cliWatch?.echoMinutes ?? 5) * 60_000,
     // 起動の時刻を「最後の動き」の下限にする（フックの時刻はメモリだけなので）
     sinceMs: Date.parse(clock()),
   };
