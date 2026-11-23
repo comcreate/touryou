@@ -1840,8 +1840,14 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     expect(own).not.toMatch(/\.gnode\.t-over\{[^}]*opacity/);
     // 凡例は丸薬、破線の見本の説明がある
     expect(own).toMatch(/\.lg\{[^}]*border-radius:999px/);
+    for (const k of ["delivered", "sent", "unknown"])
+      expect(UI_HTML).toContain(`data-t="legend.${k}"`);
     expect(UI_HTML).toContain('<span class="sw down sent"></span>');
-    expect(UI_HTML).toContain('data-t="legend.sent"');
+    expect(UI_HTML).toContain('<span class="sw down unknown"></span>');
+    expect(own).toContain(".sw.unknown{border-top-style:dotted}");
+    // 済んだ子の札は、opacity でなく色（--muted。4.5:1）で薄くする
+    expect(own).toContain(".mlabel.over{--ct:var(--muted)}");
+    expect(own).not.toMatch(/\.(mlabel|mstage)\.over\{[^}]*opacity/);
   });
   it("止めた・済んだ子を隠すトグル（#206）: 図のときだけ出る切り替えボタン。押すと設定に残し、図を描き直す。件数の札は図の中に出る", () => {
     expect(UI_HTML).toContain(
