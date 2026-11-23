@@ -224,6 +224,11 @@ export interface DaemonConfig {
      * を知らせるまで。1〜1440 の整数。既定 15（期限の前の知らせの 10 分と、「止まっているかも」の 30 分の間）。
      */
     readonly unsubscribedMinutes?: number;
+    /**
+     * 指示の復唱（#261）が返らないまま、この時間（分）を超えた指示を受信箱に出す。1〜1440 の整数。既定 5。
+     * `unreadMinutes` 以下のとき、同じ指示に「受け取っていない」の知らせ（`unreadMinutes`）は重ねず、こちらに統合する。
+     */
+    readonly echoMinutes?: number;
     readonly intervalSec?: number;
   };
   /** Desktop の子の見張りの設定を見回る間隔（秒）。1〜60 の整数。既定 2。 */
@@ -708,11 +713,12 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
       "unreadMinutes",
       "unboundMinutes",
       "unsubscribedMinutes",
+      "echoMinutes",
       "intervalSec",
     ] as const;
     if (Object.keys(v).some((k) => !(keys as readonly string[]).includes(k)))
       return bad(
-        "cliWatch のキーは stallMinutes・unreadMinutes・unboundMinutes・unsubscribedMinutes・intervalSec だけ",
+        "cliWatch のキーは stallMinutes・unreadMinutes・unboundMinutes・unsubscribedMinutes・echoMinutes・intervalSec だけ",
       );
     const int = (k: string, lo: number, hi: number) =>
       v[k] === undefined ||
@@ -722,10 +728,11 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
       !int("unreadMinutes", 1, 1440) ||
       !int("unboundMinutes", 1, 1440) ||
       !int("unsubscribedMinutes", 1, 1440) ||
+      !int("echoMinutes", 1, 1440) ||
       !int("intervalSec", 10, 3600)
     )
       return bad(
-        "cliWatch の値が範囲の外（stallMinutes・unreadMinutes・unboundMinutes・unsubscribedMinutes は 1〜1440、intervalSec は 10〜3600 の整数）",
+        "cliWatch の値が範囲の外（stallMinutes・unreadMinutes・unboundMinutes・unsubscribedMinutes・echoMinutes は 1〜1440、intervalSec は 10〜3600 の整数）",
       );
     cliWatch = {
       ...(v.stallMinutes === undefined ? {} : { stallMinutes: v.stallMinutes as number }),
@@ -734,6 +741,7 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
       ...(v.unsubscribedMinutes === undefined
         ? {}
         : { unsubscribedMinutes: v.unsubscribedMinutes as number }),
+      ...(v.echoMinutes === undefined ? {} : { echoMinutes: v.echoMinutes as number }),
       ...(v.intervalSec === undefined ? {} : { intervalSec: v.intervalSec as number }),
     };
   }
