@@ -15,6 +15,8 @@
  * - 位置の引数（grep・git grep の最初の引数〔パターン〕と、旗の値を除く）は、作業ツリーの外を指さない（絶対パス・`..`。
  *   実パスにできるものは、リンクを解いても中にあること）。禁じる場所は、これより先に `checkProtected` が拒否する。
  *   禁じる場所が作業ツリーの中にあるときは、使わない（パスを書かない再帰で中まで読めるため）。
+ * - `tail`・`head`・`wc`・`cat` は、ファイルを読むときだけ（位置の引数が 1 つ以上。`FILE_READERS` の旗の表にある旗だけ。`tail -f` などは断る）。
+ *   標準入力を読む形（ファイルなし・`-`）と、`|` の直後は使わない。ファイルは `find`・`grep` と同じパスの検査を通す。
  * - 先頭の 1 つだけの `cd <作業ツリーの中> &&`（以後の相対パスの基準になる。`;`・`||`・`|` でつないだ cd、2 つ目の cd、
  *   行き先に `..` を含む cd は使わない）と、`|` の直後の `head`・`tail`・`wc`・`sort`・`uniq`（旗だけ。位置の引数は許さない）は
  *   混ぜてよい。エラー出力を捨てるだけの `2>/dev/null`・`2>&1` は除いて見る。
@@ -147,6 +149,58 @@ const FILTER_ARG: Readonly<Record<string, RegExp>> = {
   sort: /^-[rnuf]+$/,
   uniq: /^-c$/,
 };
+
+/**
+ * 作業ツリーの中のファイルを読むだけのコマンド（`tail`・`head`・`wc`・`cat`。設計 3.4）。位置の引数（ファイル）は 1 つ以上要る
+ * （なければ標準入力を読む）。許す旗はこの表だけ。長く居座る・値がパスになる旗（`tail -f`・`-F`・`--follow`・`--pid`、`head -n -5`、
+ * `tail -n +5` など）は、表にないので断る。長いオプションは 1 つも許さない。`cat` は旗なし。
+ * - `flags`: 値を取らない旗の全体（束ねられるのは `wc` だけ）。
+ * - `valueFlags`: 数を値に取る旗の文字（`-n 5`・`-n5`。値は数字だけ）。
+ * - `count`: `-5` の形（数字だけ）を許すか。
+ */
+interface FileReaderSpec {
+  readonly flags: RegExp;
+  readonly valueFlags: string;
+  readonly count: boolean;
+}
+
+const FILE_READERS: Readonly<Record<string, FileReaderSpec>> = {
+  cat: { flags: /^$/, valueFlags: "", count: false },
+  head: { flags: /^-q$/, valueFlags: "nc", count: true },
+  tail: { flags: /^-q$/, valueFlags: "nc", count: true },
+  wc: { flags: /^-[lwcm]+$/, valueFlags: "", count: false },
+};
+
+/** ファイルを読むコマンドの、位置の引数（ファイル）を返す。許さない旗・ファイルなし（標準入力）なら undefined。 */
+function fileReaderPaths(name: string, args: readonly string[]): string[] | undefined {
+  const spec = FILE_READERS[name];
+  if (spec === undefined) return undefined;
+  const out: string[] = [];
+  let endOfOptions = false;
+  for (let i = 0; i < args.length; i++) {
+    const w = args[i] as string;
+    if (endOfOptions || !w.startsWith("-") || w === "-") {
+      if (w === "-") return undefined; // 標準入力
+      out.push(w);
+      continue;
+    }
+    if (w === "--") {
+      endOfOptions = true;
+      continue;
+    }
+    if (spec.flags.test(w)) continue;
+    if (spec.count && /^-\d+$/.test(w)) continue;
+    const m = /^-([a-z])(\d*)$/.exec(w);
+    if (m !== null && spec.valueFlags.includes(m[1] as string)) {
+      if (m[2] !== "") continue;
+      if (!/^\d+$/.test(args[i + 1] ?? "")) return undefined;
+      i++;
+      continue;
+    }
+    return undefined;
+  }
+  return out.length === 0 ? undefined : out;
+}
 
 function filterOk(words: readonly string[]): boolean {
   const name = words[0] as string;
@@ -481,13 +535,20 @@ export async function diagnoseReadOnlySearch(
       here = next;
       continue;
     }
-    if (words[0] !== undefined && words[0] in FILTER_ARG) {
-      if (!(sep === "|" && prevPiped) || !filterOk(words)) return "filterRejected";
+    // `|` の直後の head・tail・wc は絞るだけ（位置の引数なし）。それ以外の位置の head・tail・wc・cat は、ファイルを読む（`|` の直後は不可）
+    if (words[0] !== undefined && words[0] in FILTER_ARG && sep === "|") {
+      if (!prevPiped || !filterOk(words)) return "filterRejected";
       prevPiped = true;
       continue;
     }
     let paths: string[] | undefined;
-    if (words[0] === "find") paths = findStarts(words.slice(1));
+    if (words[0] !== undefined && Object.hasOwn(FILE_READERS, words[0])) {
+      if (sep === "|") return "optionNotAllowed";
+      paths = fileReaderPaths(words[0], words.slice(1));
+      // head・tail・wc は、もとは絞るコマンドだけ。ファイルのない形（標準入力）は、これまでどおり絞るコマンドの拒否として記録する
+      if (paths === undefined && words[0] !== "cat") return "filterRejected";
+    } else if (words[0] !== undefined && words[0] in FILTER_ARG) return "filterRejected";
+    else if (words[0] === "find") paths = findStarts(words.slice(1));
     else {
       const hit = SPECS.find(([h]) => h.every((w, k) => words[k] === w));
       if (hit === undefined) return "notSearchCommand";

@@ -136,6 +136,135 @@ describe("外・書き込み・コマンドの実行を伴うものは許さな�
   });
 });
 
+describe("tail・head・wc・cat は、作業ツリーの中のファイルを読む形だけ許す（#194 PR5）", () => {
+  it.each([
+    "cat README.md",
+    "cat docs/a.md docs/b.md",
+    "cat -- README.md",
+    "head README.md",
+    "head -n 20 README.md",
+    "head -n20 README.md",
+    "head -20 README.md",
+    "head -c 100 README.md",
+    "head -q a.md b.md",
+    "tail README.md",
+    "tail -n 50 docs/a.md",
+    "tail -n50 docs/a.md",
+    "tail -5 docs/a.md",
+    "tail -c 100 docs/a.md",
+    "wc README.md",
+    "wc -l README.md",
+    "wc -c README.md",
+    "wc -lw docs/a.md docs/b.md",
+    "ls docs && cat docs/a.md",
+    "cat docs/a.md | head -n 5",
+    "tail -n 50 docs/a.md | wc -l",
+    "grep -rn x docs | head -20",
+  ])("許す: %s", async (c) => {
+    expect(await allowed(c)).toBe(true);
+  });
+
+  it.each([
+    // 長く居座る・未知の旗・長いオプション
+    "tail -f docs/a.md",
+    "tail -F docs/a.md",
+    "tail --follow docs/a.md",
+    "tail --follow=name docs/a.md",
+    "tail -n 5 -f docs/a.md",
+    "tail -nf docs/a.md",
+    "tail -n +5 docs/a.md",
+    "tail --pid=1 docs/a.md",
+    "tail -s 1 docs/a.md",
+    "head -n -5 docs/a.md",
+    "head -n x docs/a.md",
+    "head -n",
+    "head --lines=5 docs/a.md",
+    "head -z docs/a.md",
+    "wc -L docs/a.md",
+    "wc --files0-from=list docs/a.md",
+    "wc --total=only docs/a.md",
+    "cat -n docs/a.md",
+    "cat -A docs/a.md",
+    "cat --number docs/a.md",
+    // 作業ツリーの外・リンクの脱出・禁じる場所
+    "cat /etc/passwd",
+    "cat ../b/secret",
+    "cat ~/.ssh/id_rsa",
+    "tail -n 5 /home/u/state/token",
+    "head -n 5 out/passwd",
+    "wc -l out/passwd",
+    "cat st/token",
+    "cat docs/a.md /etc/passwd",
+    "cat -- /etc/passwd",
+    "cat docs/../../b/x",
+    "cat *",
+    "cat docs/*.md",
+    "cat ~",
+    "cat {a,b}",
+    // 標準入力（ファイルなし・-）
+    "cat",
+    "head",
+    "tail",
+    "wc",
+    "head -n 5",
+    "wc -l",
+    "cat -",
+    "tail -n 5 -",
+    "cat --",
+    // パイプの直後でファイルを読む・パイプの先頭が絞るだけの形でない・複合・リダイレクト
+    "ls | cat docs/a.md",
+    "ls | head docs/a.md",
+    "ls | tail -n 5 docs/a.md",
+    "ls | wc -l docs/a.md",
+    "head -n 5",
+    "cat docs/a.md > out.txt",
+    "cat docs/a.md >> docs/b.md",
+    "cat < docs/a.md",
+    "cat docs/a.md; rm x",
+    "cat docs/a.md && rm x",
+    "cat docs/a.md &",
+    "cat $(echo /etc/passwd)",
+    "cat `echo /etc/passwd`",
+    "cat docs/a.md | sh",
+    "cat docs/a.md | tee x",
+    "ls | sort docs/a.md",
+    "sort docs/a.md",
+    "uniq docs/a.md",
+    "cd .. && cat a.md",
+  ])("許さない: %s", async (c) => {
+    expect(await allowed(c)).toBe(false);
+  });
+
+  it("禁じる場所（state）が作業ツリーの下にあれば、ファイルを読む形も拒否", async () => {
+    const p2 = { ...prot, roots: [{ path: `${WT}/secret`, kind: "stateDir" as const }] };
+    for (const command of ["cat secret/token", "tail -n 5 secret/token", "cat README.md"]) {
+      const r = await decideToolUse(scope, WT, "Bash", { command }, resolve, p2);
+      expect(r.allow).toBe(false);
+    }
+  });
+
+  // 禁じる場所の守りは、find・grep と同じく、フックの protectedPaths（checkProtected。stateDir・.git の置き場など）と、
+  // read-only-search の protectedRoots（作業ツリーと重なれば全体を断る）が担う。ここでは、その経路がファイルを読む形にも効くことを確かめる
+  it(".git の置き場が作業ツリーの下にあれば、ファイルを読む形も拒否", async () => {
+    const p2 = { ...prot, roots: [{ path: `${WT}/.git`, kind: "stateDir" as const }] };
+    for (const command of ["cat .git/config", "head -n 5 .git/HEAD", "wc -l .git/index"]) {
+      const r = await decideToolUse(scope, WT, "Bash", { command }, resolve, p2, WT);
+      expect(r.allow, command).toBe(false);
+    }
+  });
+
+  it("cd した先からの相対パスも読める（cd は先頭の && の前だけ）", async () => {
+    const direct = (c: string) => isReadOnlySearch(c, WT, WT, resolve, [S]);
+    expect(await direct("cd docs && tail -n 5 a.md")).toBe(true);
+    expect(await direct("cd docs && cat ../../b/x")).toBe(false);
+    expect(await direct("cd docs; cat a.md")).toBe(false);
+  });
+
+  it("作業ツリーの外からは使えない", async () => {
+    expect(await isReadOnlySearch("cat README.md", "/home/u", WT, resolve)).toBe(false);
+  });
+});
+
 describe("子が持つ道具の許し（permissions.allow）", () => {
   it("Read・Grep・Glob は作業ツリーの中だけ。探すコマンドの Bash の規則は足さない（フックのない子で find -exec を通さない）", () => {
     const r = childAllowList({ ...scope, writableLocations: [] }, []);

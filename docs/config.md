@@ -122,7 +122,7 @@ SDK による子の起動・子の認証・子の HOME の隔離・子用の HTT
 - **`allow` と `autoApprove` の `Bash(...)`**: 子の許可と同じ検査を通ります。空・`cd` で始まる・**1 語だけ**（`grep`・`tail` など。前方一致で任意の引数が通る）・任意のコードが動く形（`node -e`・`npm exec`・`find -exec` など）は書けません。`deny`・`ask` は、1 語（`Bash(curl:*)` など）でも書けます。
 - **`autoApprove`**: 読み取りだけで副作用のないものに限ります。
   - 書き込み（`Edit(...)`）・MCP のサーバー全体（`mcp__<サーバー>`）は書けません（MCP は、道具の名前を 1 つずつ書きます。MCP の注釈は、サーバーの自己申告なので信用しません）。
-  - `Bash(...)` は、先頭の語が、フックが範囲によらず許す読み取り専用のコマンド（`find`・`ls`・`grep`・`git grep`・`git ls-files`）のものだけです。`git add`・`git commit`・`git push`・`curl` や、`pnpm test` のようなものは書けません（`head`・`tail`・`wc`・`cat` は、読み取り専用の表が広がるまで書けません）。
+  - `Bash(...)` は、先頭の語が、フックが範囲によらず許す読み取り専用のコマンド（`find`・`ls`・`grep`・`git grep`・`git ls-files`）のものだけです。`git add`・`git commit`・`git push`・`curl` や、`pnpm test` のようなものは書けません（`head`・`tail`・`wc`・`cat` は、フックが範囲によらず許す形（作業ツリーの中のファイルを読むだけ。`tail -n <数> <ファイル>`・`head -n <数> <ファイル>`・`wc -l <ファイル>`・`cat <ファイル>`。`tail -f` などの旗・標準入力・パイプの直後は不可）になりましたが、自動承認の対象にはまだ入れていません。`autoApprove` には書けません）。
   - 各規則は、`permissions.allow`（または `rootScope.allowedCommands`・`writableLocations` から変換したもの）の**内側**にあること（上限より広い前方一致は不可）。`permissions.deny`・`permissions.ask` に当たるものは書けません（自動承認より狭い `deny` は書けます。判定では `deny` が勝ちます）。
 
 ### `rootScope` との関係（正規化）

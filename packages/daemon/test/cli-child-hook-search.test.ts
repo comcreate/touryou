@@ -233,6 +233,12 @@ describe("CLI の子のフック: 作業ツリーの中を探すコマンド（#
       [`cd ${s.tree}/src && grep -rn foo .`, s.tree],
       ["cd src && ls ..", s.tree],
       ["cd src && ls | head", s.tree],
+      ["head src/a.ts", s.tree],
+      ["head -n 5 src/a.ts", s.tree],
+      ["tail -n 5 src/a.ts", s.tree],
+      ["wc -l src/a.ts", s.tree],
+      ["cat src/a.ts", s.tree],
+      ["cd src && cat a.ts", s.tree],
     ];
     for (const [command, cwd] of cases) {
       expect(await s.hook(command, cwd), `${command}（cwd: ${cwd}）`).toEqual({
@@ -290,7 +296,14 @@ describe("CLI の子のフック: 作業ツリーの中を探すコマンド（#
       "cd src && ls ../x/..",
       "ls src && wc",
       `ls ${join(s.repoRoot, ".git", "worktrees", basename(s.tree))}`,
-      "head src/a.ts",
+      // tail・head・wc・cat は、作業ツリーの中のファイルを読む形だけ許す（旗・外・禁じる場所・標準入力は断る）
+      "tail -f src/a.ts",
+      "cat /etc/passwd",
+      "cat ../outside.txt",
+      "cat .git/config",
+      `cat ${s.stateDir}/token`,
+      "head",
+      "cat src/a.ts | sh",
       "find src | tail -f",
       "find src | sort -o out",
       "find src | xargs cat",
