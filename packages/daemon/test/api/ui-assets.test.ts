@@ -454,6 +454,8 @@ describe("画面の資産（走査）", () => {
       "right",
       "top",
       "bottom",
+      // 窓の見出し（h2）に焦点があるときの Shift+Tab を末尾へ回す判定（querySelectorAll と同じ読み取りの検索）
+      "querySelector",
     ]);
     // 埋め込んだ文字の表（#140。JSON の値で、コードでない）は、走査から除く
     const code = UI_JS.replace(TABLE_LINE, "")
@@ -1693,6 +1695,20 @@ describe("画面の使い勝手（#13）", () => {
     expect(UI_HTML.indexOf('id="purge"')).toBeLessThan(adminEnd);
     expect(UI_HTML.indexOf('id="kept"')).toBeLessThan(adminEnd);
     expect(UI_HTML.indexOf('id="todo"')).toBeGreaterThan(adminEnd);
+  });
+
+  it("窓の中のボタンの地（--sheet）は、primary・go・done・danger・quiet の地を上書きしない", () => {
+    expect(UI_CSS).toContain(
+      "dialog.settings button:not(.primary):not(.go):not(.done):not(.danger):not(.quiet)",
+    );
+    expect(UI_CSS).not.toMatch(/dialog\.settings button,/);
+    expect(UI_CSS).toContain("button.primary,button.go{background:var(--kaki)");
+  });
+
+  it("管理の窓は、焦点が見出しのときの Shift+Tab も末尾へ回し、閉じたら送る前の確認を取り消す", () => {
+    expect(UI_JS).toContain("document.activeElement === box.querySelector('h2')");
+    expect(UI_JS).not.toContain("toAdminSwitching");
+    expect(UI_JS).toContain("if (pending && !pending.sending) pending = null;");
   });
 
   it("(3) 接続できない・取得に失敗したときは、理由と確かめることを言う", () => {

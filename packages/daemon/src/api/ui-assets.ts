@@ -127,7 +127,7 @@ dialog.settings::backdrop{background:rgba(0,0,0,.35)}
 dialog.settings p{max-width:40em}
 dialog.settings h2{margin:0 0 8px;font-size:17px}
 dialog.settings h2:focus{outline:none}
-dialog.settings button,dialog.settings .card,dialog.settings .empty{background:var(--sheet)}
+dialog.settings button:not(.primary):not(.go):not(.done):not(.danger):not(.quiet),dialog.settings .card,dialog.settings .empty{background:var(--sheet)}
 .set-cols{display:grid;grid-template-columns:minmax(0,1fr);gap:0 20px}
 @media (min-width:1020px){.set-cols{grid-template-columns:repeat(2,minmax(0,1fr))}.set-cols>#set-policy,.set-cols>#set-desktop{grid-column:1/-1}}
 @media (min-width:1500px){.set-cols{grid-template-columns:repeat(3,minmax(0,1fr))}.set-cols>#set-policy{grid-column:auto}.set-cols>#set-desktop{grid-column:1/-1}}
@@ -2387,9 +2387,7 @@ export const UI_JS = `'use strict';
   // 管理の窓（取り消せない操作を含む）。設定の窓の下のボタンから開く（窓を重ねない: 設定を閉じてから管理を開く）。閉じたら、焦点は歯車へ戻す
   var adminBox = document.getElementById('admin');
   var toAdmin = document.getElementById('to-admin');
-  var toAdminSwitching = false;
   toAdmin.addEventListener('click', function () {
-    toAdminSwitching = true;
     settingsBox.close();
     adminBox.showModal();
     renderConfirm();
@@ -2397,12 +2395,17 @@ export const UI_JS = `'use strict';
   });
   document.getElementById('close-settings').addEventListener('click', function () { settingsBox.close(); });
   document.getElementById('close-admin').addEventListener('click', function () { adminBox.close(); });
-  // Esc でも閉じる（dialog の既定）。閉じたら、開く前のボタンへ focus を戻す（管理へ移るときは動かさない。close の知らせは、あとから届く）
+  // Esc でも閉じる（dialog の既定）。閉じたら、開く前のボタンへ focus を戻す（管理へ移るときは動かさない。close の知らせはあとから届くので、そのときに管理の窓が開いているかで見分ける）
   settingsBox.addEventListener('close', function () {
-    if (toAdminSwitching) { toAdminSwitching = false; return; }
+    if (adminBox.open) return;
     openSettings.focus();
   });
-  adminBox.addEventListener('close', function () { renderConfirm(); openSettings.focus(); });
+  // 管理の窓を閉じたら、送る前の確認（ID の打ち込み前）は取り消す。送信中のものは残し、本文の欄に出す
+  adminBox.addEventListener('close', function () {
+    if (pending && !pending.sending) pending = null;
+    renderConfirm();
+    openSettings.focus();
+  });
   // 窓の中は Tab で回る（最後から最初へ、最初から最後へ）。幕のクリックでも閉じる（押し始めと離した所の両方が幕の上のときだけ）
   function wireDialog(box) {
     box.addEventListener('keydown', function (e) {
@@ -2414,7 +2417,8 @@ export const UI_JS = `'use strict';
       if (f.length === 0) return;
       var first = f[0];
       var last = f[f.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      // 開いた直後は見出し（h2）に焦点があるので、その Shift+Tab も末尾へ回す
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === box.querySelector('h2'))) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
     var downOnBackdrop = false;

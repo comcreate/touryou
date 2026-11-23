@@ -600,6 +600,40 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(await page.locator('input[name="set-lang"][value="en"]').isDisabled()).toBe(false);
   });
 
+  it("管理の窓: 設定の窓の「管理」から開く。確認の欄は窓の中に出て、送るボタンが読める。Shift+Tab は窓の外へ抜けず、Esc で閉じて歯車へ focus が戻る", async () => {
+    await page.click("#open-settings");
+    await page.click("#to-admin");
+    const isOpen = (id: string) =>
+      page.locator(id).evaluate((d) => (d as HTMLDialogElement).open);
+    expect(await isOpen("#admin")).toBe(true);
+    expect(await isOpen("#settings")).toBe(false); // 窓は重ねない
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("admin-title");
+    // 開いた直後（見出しに focus）の Shift+Tab は、窓の末尾へ回る
+    await page.keyboard.press("Shift+Tab");
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("close-admin");
+    // 確認の欄は管理の窓の中（#confirm-admin）。送るボタン（primary）は、文字と地が同じ色にならない（窓の中の button の地が勝たない）
+    const colors = await page.evaluate(() => {
+      const box = document.getElementById("confirm-admin") as HTMLElement;
+      box.hidden = false;
+      const b = document.createElement("button");
+      b.className = "primary";
+      b.textContent = "x";
+      box.appendChild(b);
+      const s = getComputedStyle(b);
+      const r = { fg: s.color, bg: s.backgroundColor, inside: box.closest("dialog")?.id };
+      b.remove();
+      box.hidden = true;
+      return r;
+    });
+    expect(colors.inside).toBe("admin");
+    expect(colors.fg).not.toBe(colors.bg);
+    await page.keyboard.press("Escape");
+    expect(await isOpen("#admin")).toBe(false);
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("open-settings");
+    expect(await csp()).toEqual([]);
+    expect(problems).toEqual([]);
+  });
+
   it("設定の窓の「動きを止める」で、図の線も彗星も止まる。戻すと動く。再読み込みのあとも残る", async () => {
     expect((await animations()).some((a) => a !== "none")).toBe(true);
     await page.click("#open-settings");
