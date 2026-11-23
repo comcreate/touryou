@@ -36,7 +36,10 @@ const setup = (seedList?: unknown) => {
   mkdirSync(repoRoot);
   mkdirSync(worktreeRoot);
   git(repoRoot, "init", "-q", "-b", "main");
-  writeFileSync(join(repoRoot, ".gitignore"), ".envrc\n.claude/settings.local.json\nbin/\nsecret\n");
+  writeFileSync(
+    join(repoRoot, ".gitignore"),
+    ".envrc\n.claude/settings.local.json\nbin/\nsecret\n",
+  );
   git(repoRoot, "add", ".");
   git(repoRoot, "commit", "-q", "-m", "init");
   writeFileSync(join(repoRoot, ".envrc"), "export A=1\n", { mode: 0o600 });
