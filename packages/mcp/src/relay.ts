@@ -29,6 +29,8 @@ export interface DaemonInfo {
 }
 
 export interface Relay {
+  /** 紐付けで受け取ったノードの ID（子の relay だけ。紐付け前・根・daemon に直接つなぐ relay には、ない）。 */
+  readonly nodeId?: string;
   /** トークンのロール（接続ごとに 1 回引く）。 */
   /**
    * 呼び出し元のロールと、ノードのトークンなら自分の nodeId（古い daemon・人間のトークンでは、なし）。

@@ -19,7 +19,7 @@
  *   接続を閉じて終わる。
  *
  */
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { lstatSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -406,6 +406,33 @@ export async function openStdioSession(
   return session;
 }
 
+/** daemon が断った、同じコードでは再試行しても通らない失敗（`child-bind.ts` の失敗の記号）。 */
+const SPENT_CODES = new Set([
+  "bind_failed",
+  "bind_code_expired",
+  "bind_code_used",
+  "bind_worktree_mismatch",
+]);
+/** コードの要約（同じ内容かを比べるだけ。メモリの中だけに置き、ログ・失敗の原因には出さない）。 */
+const fingerprintOf = (code: string): string => createHash("sha256").update(code).digest("hex");
+
+/**
+ * 自動の紐付けが通ったあと、自分の受信箱のソケットへ固定の 1 行（番号 0）を書く関数。書けたか・書けなかった理由を記録する
+ * （コード・トークンは書かない）。`write` は試験で差し替える。
+ */
+export function createAutoBindWake(
+  socket: ReturnType<typeof socketFromEnv>,
+  io: StdioIo,
+  write: typeof writeNotification = writeNotification,
+): () => Promise<void> {
+  return async () => {
+    const r = await write(socket, notificationText(0));
+    io.stderr(
+      `${JSON.stringify({ event: "autoBindWake", written: r.written, ...(r.written ? {} : { reason: r.reason }), at: new Date().toISOString() })}\n`,
+    );
+  };
+}
+
 /** 401 のあとの結び直しを、続けて試さない間隔（ミリ秒）。 */
 const REBIND_RETRY_MS = 60_000;
 
@@ -468,6 +495,8 @@ export function openPendingStdioSession(
     const cred = await bindChild(childBindOptions(), nodeId, code);
     return cred.ok ? install(cred.value) : cred;
   };
+  /** daemon に断られたコードの要約（メモリの中だけ。コードそのものは持たない）。 */
+  let spentCode: string | undefined;
   /** 引数なし: ノードの ID は印から、コードは作業ツリーの git のディレクトリのファイルから読む。 */
   const bindWithoutArgs = async (): Promise<Result<Relay>> => {
     const read = readCodeFile(cwdOf(), deps.codeFile ?? {});
@@ -500,6 +529,9 @@ export function openPendingStdioSession(
     );
     // 通ったら消す。通らなくても、形の正しくないコードは消す（読み直しても使えない）
     if (cred.ok || !isCodeShape(read.code)) removeCodeFile(read.path);
+    // daemon が断ったコード（期限切れ・使用済みなど。再試行しても通らない）は、同じ内容では、自動の紐付けが 2 度送らない。
+    // ファイルは消さない（親が出し直したファイルを、読んだ直後に消す競合を避ける。daemon は、期限・起動の掃除で消す）。
+    if (!cred.ok && SPENT_CODES.has(cred.error.code)) spentCode = fingerprintOf(read.code);
     if (!cred.ok) {
       if (cred.error.code === "bind_failed") {
         return fail(
@@ -518,7 +550,7 @@ export function openPendingStdioSession(
    * 子の relay（`inner` を使う）。daemon の 401 は、先に、コードなしの結び直しを試す（`store.reject`）。通れば、新しい資格情報で
    * 1 回だけ呼び直す（401 は処理の前に断られるので、呼び直しても二重にならない）。通らなければ、入れ物が空になる（購読を止める）。
    */
-  const boundRelay = (nodeId: string) => {
+  const boundRelay = (nodeId: string): Relay => {
     const watch = async <T>(call: (r: Relay) => Promise<Result<T>>): Promise<Result<T>> => {
       const used = store.get()?.token;
       const r = await call(inner);
@@ -530,7 +562,7 @@ export function openPendingStdioSession(
       whoami: () => watch((r) => r.whoami()),
       request: (op: string, params: unknown, o?: { readonly requestId?: string }) =>
         watch((r) => r.request(op, params, o)),
-    } satisfies Relay & { readonly nodeId: string };
+    };
   };
   /** 受け取った資格情報を入れ物に入れ、子の relay にする（購読は、入れ物の変更で張り直される）。 */
   const install = (cred: { readonly nodeId: string; readonly token: string }): Result<Relay> => {
@@ -609,7 +641,8 @@ export function openPendingStdioSession(
       isBound: () => store.get() !== undefined,
       codeFile: () => {
         const r = readCodeFile(cwdOf(), deps.codeFile ?? {});
-        return r.ok ? "present" : r.reason === "missing" ? "missing" : "unusable";
+        if (!r.ok) return r.reason === "missing" ? "missing" : "unusable";
+        return spentCode !== undefined && fingerprintOf(r.code) === spentCode ? "spent" : "present";
       },
       canRebind: isSessionId(deps.sessionId),
       bindFromFile: () => bind(undefined, undefined),
@@ -617,14 +650,15 @@ export function openPendingStdioSession(
       onBound: async () => {
         const c = store.get();
         if (c === undefined) return;
-        const applied = await applyBound?.(boundRelay(c.nodeId) as Relay);
+        const applied = await applyBound?.(boundRelay(c.nodeId));
         if (applied?.ok !== true) {
           log({
             event: "autoBindApplyFailed",
             ...(applied?.ok === false ? { code: applied.error.code } : {}),
             at: new Date().toISOString(),
           });
-          return;
+          // 失敗は呼び出し側に知らせ、次の確かめでやり直させる（入れ物には値があるので、黙っていると何もしなくなる）
+          throw new Error("autoBindApplyFailed");
         }
         // 子の AI が先に済ませていたなら、起こさない（すでに動いている）。
         if (applied.value === "applied") await auto.wake?.();
@@ -688,12 +722,7 @@ export async function runStdio(
     // 自動の紐付け（#255）: 結び直しが通ったら、自分の受信箱のソケットへ固定の 1 行を書いて、手の空いた子を起こす。
     // 新しいプロセスの購読は「今より後」から始まるので、結び直しの前に積まれた指示は、通知されない。この 1 行が、読ませる。
     const socket = socketFromEnv(env);
-    const wake = async (): Promise<void> => {
-      const r = await writeNotification(socket, notificationText(0));
-      io.stderr(
-        `${JSON.stringify({ event: "autoBindWake", written: r.written, ...(r.written ? {} : { reason: r.reason }), at: new Date().toISOString() })}\n`,
-      );
-    };
+    const wake = createAutoBindWake(socket, io);
     server = openPendingStdioSession(endpoint.value, io, {
       ...deps,
       autoBind: { wake, ...deps.autoBind, signal: autoBindAbort.signal },

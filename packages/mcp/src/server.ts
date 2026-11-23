@@ -247,7 +247,7 @@ export function createToolServer(init: ToolServerDeps): Server {
     deps.bound = true;
     deps.auto = true;
     deps.lost = false;
-    deps.boundId = (relay as { readonly nodeId?: unknown }).nodeId;
+    deps.boundId = relay.nodeId;
     await server.sendToolListChanged().catch(() => undefined);
     return ok("applied" as const);
   });
@@ -302,7 +302,7 @@ export function createToolServer(init: ToolServerDeps): Server {
     deps.lost = false;
     await server.sendToolListChanged().catch(() => undefined);
     // 引数なしの紐付けでは、ノードの ID は mcp が印から読んだもの（relay に添えて返る）
-    const boundId = (r.value as { readonly nodeId?: unknown }).nodeId ?? a.nodeId;
+    const boundId = r.value.nodeId ?? a.nodeId;
     deps.boundId = boundId;
     return asValue(boundValue(boundId, boundRole));
   };

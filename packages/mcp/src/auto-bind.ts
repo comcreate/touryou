@@ -22,15 +22,21 @@ export const AUTO_BIND_MAX_INTERVAL_MS = 600_000;
 export interface AutoBindOptions {
   /** 入れ物に値が入っているか（入っている間は何もしない）。 */
   readonly isBound: () => boolean;
-  /** コードのファイルの状態。 */
-  readonly codeFile: () => "present" | "missing" | "unusable";
+  /**
+   * コードのファイルの状態。`spent` は、いまの内容のコードを daemon が断った（再試行しても通らない）。
+   * 内容が変わる（親が出し直す）まで、何もしない。`unusable` は、安全でない・読めない。
+   */
+  readonly codeFile: () => "present" | "missing" | "unusable" | "spent";
   /** コードなしの結び直しを試せるか（印とセッションの ID があるか）。 */
   readonly canRebind: boolean;
   /** コードのファイルを使って紐付ける（`child_bind` の本体）。 */
   readonly bindFromFile: () => Promise<Result<unknown>>;
   /** コードなしの結び直し。試せなかったときは `undefined`。 */
   readonly rebind: () => Promise<Result<unknown> | undefined>;
-  /** 紐付いたあとの処理（道具の切り替え・受信箱への 1 行）。失敗は、ここで握りつぶす。 */
+  /**
+   * 紐付いたあとの処理（道具の切り替え・受信箱への 1 行）。失敗は例外で知らせる。失敗したら、紐付いている間も、
+   * 次の確かめ（間隔は倍々）でこの処理だけをやり直す（紐付けそのものは、やり直さない）。
+   */
   readonly onBound: () => Promise<void>;
   readonly log: (e: Record<string, unknown>) => void;
   readonly intervalMs?: number;
@@ -80,17 +86,33 @@ export function startAutoBind(o: AutoBindOptions): Promise<void> {
       }));
   const file = createBackoff(base, max);
   const rebind = createBackoff(base, max);
+  /** `onBound` のやり直しの間隔（紐付いている間の、daemon への尋ね直し）。 */
+  const apply = createBackoff(base, max);
+  let applyPending = false;
+  let lastFile: string | undefined;
   const aborted = new Promise<void>((resolve) => {
     if (o.signal?.aborted) resolve();
     o.signal?.addEventListener("abort", () => resolve(), { once: true });
   });
-  const finish = async (via: "codeFile" | "rebind"): Promise<void> => {
-    o.log({ event: "autoBound", via, at: new Date().toISOString() });
+  /** `onBound` を呼ぶ。失敗したら、次の確かめでやり直す（間隔は倍々）。 */
+  const applyBound = async (): Promise<void> => {
     try {
       await o.onBound();
+      applyPending = false;
+      apply.reset(0);
     } catch {
-      o.log({ event: "autoBindFinishFailed", at: new Date().toISOString() });
+      applyPending = true;
+      o.log({
+        event: "autoBindFinishFailed",
+        nextWaitMs: apply.fail(undefined),
+        at: new Date().toISOString(),
+      });
     }
+  };
+  const finish = async (via: "codeFile" | "rebind"): Promise<void> => {
+    o.log({ event: "autoBound", via, at: new Date().toISOString() });
+    apply.reset(0);
+    await applyBound();
   };
   const failed = (via: "codeFile" | "rebind", code: string | undefined, nextWaitMs: number) =>
     o.log({
@@ -102,6 +124,9 @@ export function startAutoBind(o: AutoBindOptions): Promise<void> {
     });
   const step = async (): Promise<void> => {
     const state = o.codeFile();
+    // ファイルが現れた・内容が変わった（出し直された）: 失敗の間隔を待たずに、すぐ使う
+    if (state === "present" && lastFile !== "present") file.reset(0);
+    lastFile = state;
     if (state === "present") {
       if (!file.due()) return;
       const r = await o.bindFromFile();
@@ -128,10 +153,14 @@ export function startAutoBind(o: AutoBindOptions): Promise<void> {
     while (o.signal?.aborted !== true) {
       if (o.isBound()) {
         wasBound = true;
+        // 紐付いたあとの処理が失敗していた: その処理だけをやり直す（紐付いている間、daemon を叩くのは、ここだけ）
+        if (applyPending && apply.due()) await applyBound();
       } else {
         // 紐付いていたのが外れた直後: 道具の 401 の復旧が、いま試したばかり。すぐには試さず、1 間隔あとにする
         if (wasBound) {
           wasBound = false;
+          applyPending = false;
+          apply.reset(0);
           file.reset(0);
           rebind.reset(base);
         }
@@ -144,6 +173,7 @@ export function startAutoBind(o: AutoBindOptions): Promise<void> {
       await Promise.race([sleep(base), aborted]);
       file.elapse(base);
       rebind.elapse(base);
+      apply.elapse(base);
     }
   };
   return run();

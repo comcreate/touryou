@@ -6,12 +6,15 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { proofOf } from "../src/identity.js";
 import { createNodeCredentialStore } from "../src/node-credential.js";
-import { openPendingStdioSession } from "../src/stdio.js";
+import { notificationText } from "../src/notify-socket.js";
+import { createAutoBindWake, openPendingStdioSession } from "../src/stdio.js";
 import { flush, manualClock } from "./manual-clock.js";
 
 // #255: 紐付け待ちの mcp が、子の AI にも人にも打たせず、自分で紐付けを戻し、受信箱に 1 行書いて子を起こす。
 // 待ち・fetch・コードのファイル・受信箱への書き込みを差し替えて、daemon もソケットもなしで確かめる。
 const CODE = "0123456789ABCDEFGHJKMNPQRS";
+// 親が出し直した、別のコード（形は同じ）
+const CODE2 = "ZYXWVTSRQPNMKJHGFEDCBA9876";
 const TOKEN = `tok-${"x".repeat(40)}`;
 const made: string[] = [];
 afterEach(() => {
@@ -20,7 +23,14 @@ afterEach(() => {
 
 type BindStatus = 200 | 401 | 429;
 
-const setup = async (opts: { withCodeFile?: boolean; rebindStatus?: BindStatus }) => {
+const setup = async (opts: {
+  withCodeFile?: boolean;
+  rebindStatus?: BindStatus;
+  /** コードつきの紐付けに daemon が返す状態（既定は通す）。 */
+  codeStatus?: BindStatus;
+  /** 最初の何回かの whoami を失敗させる（紐付いたあとの処理の失敗の試験）。 */
+  whoamiFailures?: number;
+}) => {
   const dir = mkdtempSync(join(tmpdir(), "touryou-autobind-"));
   made.push(dir);
   const identity = { daemonId: "a".repeat(32), secret: "b".repeat(64) };
@@ -34,8 +44,8 @@ const setup = async (opts: { withCodeFile?: boolean; rebindStatus?: BindStatus }
   mkdirSync(gitdir);
   writeFileSync(join(tree, ".git"), `gitdir: ${gitdir}\n`);
   const codePath = join(gitdir, "touryou-bind-code");
-  const writeCode = () => {
-    writeFileSync(codePath, `${CODE}\ndaemon=${identity.daemonId}\n`, { mode: 0o600 });
+  const writeCode = (code = CODE) => {
+    writeFileSync(codePath, `${code}\ndaemon=${identity.daemonId}\n`, { mode: 0o600 });
     chmodSync(codePath, 0o600);
   };
   if (opts.withCodeFile === true) writeCode();
@@ -46,6 +56,8 @@ const setup = async (opts: { withCodeFile?: boolean; rebindStatus?: BindStatus }
     });
   const bindBodies: Record<string, unknown>[] = [];
   let rebindStatus: BindStatus = opts.rebindStatus ?? 200;
+  let codeStatus: BindStatus = opts.codeStatus ?? 200;
+  const whoami = { calls: 0, failures: opts.whoamiFailures ?? 0 };
   const fakeFetch = (async (input: string, init?: RequestInit) => {
     const url = new URL(input);
     if (url.pathname === "/v1/identity") {
@@ -61,7 +73,7 @@ const setup = async (opts: { withCodeFile?: boolean; rebindStatus?: BindStatus }
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       bindBodies.push(body);
       // コードつきは通す。コードなし（結び直し）は、試験が決めた状態
-      const status = body.bindCode === undefined ? rebindStatus : 200;
+      const status = body.bindCode === undefined ? rebindStatus : codeStatus;
       if (status === 429) return json(429, { ok: false, error: { code: "rateLimited" } });
       if (status !== 200) {
         return json(401, {
@@ -71,15 +83,38 @@ const setup = async (opts: { withCodeFile?: boolean; rebindStatus?: BindStatus }
       }
       return json(200, { ok: true, value: { nodeId: "a", token: TOKEN } });
     }
-    if (url.pathname === "/v1/whoami")
+    if (url.pathname === "/v1/whoami") {
+      whoami.calls += 1;
+      if (whoami.failures > 0) {
+        whoami.failures -= 1;
+        return json(503, {
+          ok: false,
+          error: { code: "unavailable", cause: "x", nextActions: ["x"] },
+        });
+      }
       return json(200, { ok: true, value: { role: "child", nodeId: "a" } });
+    }
     return json(200, { ok: true, value: { accepted: true } });
   }) as unknown as typeof fetch;
   const clock = manualClock();
   const abort = new AbortController();
   const credentials = createNodeCredentialStore();
   const logs: string[] = [];
-  const woke = { count: 0 };
+  // 起こす関数は本物（固定の 1 行を作って書く）。書き込みだけを、書かれた中身の記録に差し替える
+  const written: string[] = [];
+  const woke = {
+    get count() {
+      return written.length;
+    },
+  };
+  const wake = createAutoBindWake(
+    { path: "/inbox.sock" },
+    { stderr: (t) => logs.push(t) },
+    async (_target, text) => {
+      written.push(text);
+      return { written: true };
+    },
+  );
   const server = openPendingStdioSession(
     { daemonUrl: "http://127.0.0.1:45678", identityPath, stateDir: dir },
     { stderr: (t) => logs.push(t) },
@@ -93,9 +128,7 @@ const setup = async (opts: { withCodeFile?: boolean; rebindStatus?: BindStatus }
       autoBind: {
         sleep: clock.sleep,
         signal: abort.signal,
-        wake: async () => {
-          woke.count += 1;
-        },
+        wake,
       },
     },
   );
@@ -113,6 +146,8 @@ const setup = async (opts: { withCodeFile?: boolean; rebindStatus?: BindStatus }
     credentials,
     logs,
     woke,
+    written,
+    whoami,
     clock,
     names,
     call,
@@ -120,6 +155,9 @@ const setup = async (opts: { withCodeFile?: boolean; rebindStatus?: BindStatus }
     writeCode,
     setRebindStatus: (s: BindStatus) => {
       rebindStatus = s;
+    },
+    setCodeStatus: (s: BindStatus) => {
+      codeStatus = s;
     },
     stop: async () => {
       abort.abort();
@@ -218,6 +256,87 @@ describe("自動の紐付け（紐付け待ちの mcp が、自分で戻す）",
     expect(r.logs.join("")).toContain('"event":"pendingBindEntered"');
     expect(r.logs.join("")).toContain('"reason":"startup"');
     await r.stop();
+  });
+
+  it("起こす 1 行は、固定の文で、1 回だけ書かれる（書かれた中身を見る。続く確かめでも増えない）", async () => {
+    const r = await setup({});
+    await flush();
+    expect(r.written).toEqual([notificationText(0)]);
+    for (let i = 0; i < 5; i++) await r.clock.tick();
+    expect(r.written).toEqual([notificationText(0)]);
+    expect(r.logs.join("")).toContain('"event":"autoBindWake","written":true');
+    await r.stop();
+  });
+
+  it("紐付いた直後の処理（whoami）が失敗しても、次の確かめでその処理だけをやり直し、道具が切り替わって、1 行が 1 回書かれる", async () => {
+    const r = await setup({ whoamiFailures: 1 });
+    await flush();
+    // 紐付けは通った（入れ物に値がある）が、道具は切り替わらず、まだ起こしていない
+    expect(r.credentials.get()?.nodeId).toBe("a");
+    expect(r.bindBodies).toHaveLength(1);
+    expect(await r.names()).toEqual(["child_bind", "whoami"]);
+    expect(r.written).toEqual([]);
+    expect(r.logs.join("")).toContain('"event":"autoBindFinishFailed"');
+    await r.clock.tick(); // 次の確かめ: 処理だけをやり直す
+    expect(await r.names()).toContain("report_progress");
+    expect(r.written).toEqual([notificationText(0)]);
+    // 紐付けそのものは、やり直さない（daemon の紐付けは 1 回のまま）。処理が済んだあとは、daemon を叩かない
+    expect(r.bindBodies).toHaveLength(1);
+    const calls = r.whoami.calls;
+    for (let i = 0; i < 4; i++) await r.clock.tick();
+    expect(r.whoami.calls).toBe(calls);
+    expect(r.written).toHaveLength(1);
+    await r.stop();
+  });
+
+  it("紐付いた直後の処理が続けて失敗しても、やり直しの間隔は倍になる（紐付いている間に daemon を叩き続けない）", async () => {
+    const r = await setup({ whoamiFailures: 99 });
+    await flush();
+    const at = () => r.whoami.calls;
+    expect(at()).toBe(1);
+    await r.clock.tick(); // 1 間隔後: 2 回目
+    expect(at()).toBe(2);
+    await r.clock.tick();
+    expect(at()).toBe(2); // 2 間隔空く
+    await r.clock.tick();
+    expect(at()).toBe(3);
+    expect(r.bindBodies).toHaveLength(1);
+    await r.stop();
+  });
+
+  it("コードのファイルが残ったまま daemon に断られ続けても、同じ内容のコードは 1 回しか送らない（ファイルは消さない）", async () => {
+    const r = await setup({ withCodeFile: true, codeStatus: 401 });
+    await flush();
+    const codeSends = () => r.bindBodies.filter((b) => b.bindCode !== undefined).length;
+    expect(codeSends()).toBe(1);
+    for (let i = 0; i < 30; i++) await r.clock.tick();
+    expect(codeSends()).toBe(1);
+    expect(r.bindBodies).toHaveLength(1); // コードなしの結び直しも試さない（ファイルがあるあいだは、最初の起動の道）
+    expect(existsSync(r.codePath)).toBe(true);
+    expect(await r.names()).toEqual(["child_bind", "whoami"]);
+    // 親がコードを出し直した（内容が変わった）: 間隔を待たずに、次の確かめで使って紐付く
+    r.setCodeStatus(200);
+    r.writeCode(CODE2);
+    await r.clock.tick();
+    expect(codeSends()).toBe(2);
+    expect(r.bindBodies.at(-1)).toMatchObject({ bindCode: CODE2 });
+    expect(await r.names()).toContain("report_progress");
+    expect(r.written).toEqual([notificationText(0)]);
+    const all = r.logs.join("");
+    expect(all).not.toContain(CODE);
+    expect(all).not.toContain(CODE2);
+    await r.stop();
+  });
+
+  it("接続が閉じた（中止の合図）あとは、確かめのタイマーが止まり、daemon を叩かない", async () => {
+    const r = await setup({ rebindStatus: 401 });
+    await flush();
+    expect(r.bindBodies).toHaveLength(1);
+    const waits = r.clock.waits.length;
+    await r.stop();
+    for (let i = 0; i < 20; i++) await r.clock.tick();
+    expect(r.clock.waits.length).toBe(waits); // 新しい待ちを張らない
+    expect(r.bindBodies).toHaveLength(1);
   });
 
   it("入れ物が 401 で空になると、理由（rejected）が記録に出て、道具は紐付け待ちに戻る", async () => {
