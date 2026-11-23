@@ -523,7 +523,10 @@ export function openPendingStdioSession(
       );
     }
     const cred = await bindChild(
-      { ...childBindOptions(), ...(read.daemonId === undefined ? {} : { codeDaemonId: read.daemonId }) },
+      {
+        ...childBindOptions(),
+        ...(read.daemonId === undefined ? {} : { codeDaemonId: read.daemonId }),
+      },
       deps.markerNodeId,
       read.code,
     );

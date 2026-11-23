@@ -66,10 +66,7 @@ describe("画面の文字の表（#140）", () => {
     }
     // 画面を見ている人のすること（統合の Claude に頼む）を先に言い、ツール名は括弧の中に置く。
     // CLI の子は、統合の Claude が利用者に確かめ、子の MCP が自分で結び直すので、利用者に打たせない（#255）
-    for (const key of [
-      "card.bindExpiredNextDesktop",
-      "card.bindExpiredNextUnknown",
-    ] as const) {
+    for (const key of ["card.bindExpiredNextDesktop", "card.bindExpiredNextUnknown"] as const) {
       expect(uiString("ja", key), key).toMatch(
         /^次の操作: 統合の Claude に、紐付けの出し直しを頼む（.*node_bindCode.*）$/,
       );
