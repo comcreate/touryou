@@ -193,7 +193,10 @@ button.gear{min-width:44px;min-height:44px;padding:0;border:1.5px solid var(--mu
 dialog.settings{background:var(--dlg);-webkit-backdrop-filter:var(--blur-dlg);backdrop-filter:var(--blur-dlg);color:var(--fg);border:1px solid var(--glass-edge);border-radius:12px;box-shadow:var(--shadow),var(--hl);padding:16px 20px;width:calc(100vw - 96px);max-width:calc(100vw - 96px);max-height:calc(100dvh - 96px);overflow:auto}
 dialog.settings::backdrop{background:rgba(0,0,0,.35)}
 #auth{margin:16px 0 0;padding:16px 20px;background:var(--dlg);border:1px solid var(--glass-edge);border-radius:12px;box-shadow:var(--shadow),var(--hl);-webkit-backdrop-filter:var(--blur-dlg);backdrop-filter:var(--blur-dlg)}#auth h2{margin:0 0 8px;font-size:17px}
-dialog.settings.inline{position:static;width:auto;max-width:none;max-height:none;margin:16px 0 0;box-shadow:none}dialog.settings.inline :is(.set-admin,.settings-actions){display:none}
+dialog.settings.inline{position:static;width:auto;max-width:none;max-height:none;margin:16px 0 0;box-shadow:none}
+/* 接続前の 2 つの窓は、外の窓と同じ塗り・ぼかし（調整スライダーが効く） */
+#auth,dialog.settings.inline{position:relative;isolation:isolate;background:transparent;-webkit-backdrop-filter:none;backdrop-filter:none}
+#auth::before,dialog.settings.inline::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;background:var(--win);backdrop-filter:var(--blur-outer);-webkit-backdrop-filter:var(--blur-outer)}dialog.settings.inline :is(.set-admin,.settings-actions){display:none}
 dialog.settings p{max-width:40em}
 dialog.settings h2{margin:0 0 8px;font-size:17px}
 dialog.settings h2:focus{outline:none}
