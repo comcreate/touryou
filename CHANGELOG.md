@@ -2,6 +2,8 @@
 
 ## 未公開
 
+## 0.1.7（2026-11-25）
+
 ### 利用者に見える変更
 
 - **状態画面の「やり取り」の窓の上下の場所を詰めた**（#281）。「図／一覧」と、止めた・済んだ子の表示のスイッチは、同じ高さの丸薬にそろえた。スイッチは文言をやめ、目のアイコン（隠している＝斜線つき、表示している＝斜線なし）だけにした。ホバーとフォーカスでツールチップ（「止めた・済んだ子を表示する」「…を隠す」）を出し、名前は `aria-label`、状態は `role="switch"`・`aria-checked` で伝える（日本語・英語）。窓の上にあった説明文は、図の下の小さな文にした。凡例は、折りたたみにして丸薬をやめ、詰めて並べた。
@@ -67,6 +69,17 @@
 ### 注意
 
 - 取り下げ（`decision.withdrawn`）を記録した daemon の記録は、古い版では再生に失敗する。
+
+### 上げ方
+
+v0.1.6 を入れている Mac で、次のとおり（細部は `docs/setup-verification.md` の C と、`/touryou:setup` の手順〔`plugin/commands/setup.md`〕。v0.1.6 の節の「上げ方」と同じ流れ）。
+
+1. plugin を上げる（`claude plugin marketplace update touryou` → `claude plugin update touryou@touryou --scope user`）。公開の直後は、marketplace の反映（自動の PR のマージと `marketplace-v0.1.7` の tag 付け）が済むまで、`already at the latest version` と出て更新が見えないことがある。
+2. 新しいセッションで `/touryou:setup` を実行する（本体が v0.1.7 に入れ替わる）。
+3. 常駐（launchd）させているときは、`/touryou:setup` が daemon の起動し直しの同意を聞くので、「はい」と答える。
+4. 上げる前から開いている統合セッションは、`/mcp` で `plugin:touryou:node` を Reconnect し、`/touryou:start` で接続を確かめる。
+5. 状態画面は、`/touryou:ui` で開き直す。
+6. サブ統括（#168）を使うときは、daemon が v0.1.7 に入れ替わったあとに、統合ノードの子を作る。v0.1.6 の daemon は、統合ノードの子の紐付けを断る。
 
 ## 0.1.6（2026-11-22）
 
