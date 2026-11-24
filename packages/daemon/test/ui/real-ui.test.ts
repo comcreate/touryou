@@ -966,7 +966,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     const label = async () =>
       (await page.evaluate(() => document.getElementById("finished-toggle")?.textContent)) +
       ":" +
-      (await page.getAttribute("#finished-toggle", "aria-checked"));
+      (await page.locator("#finished-toggle").getAttribute("aria-checked"));
     const ids = () =>
       page.evaluate(() =>
         [...document.querySelectorAll("#graph .gnode")].map((e) => e.getAttribute("data-id")),
@@ -977,7 +977,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     };
     // 初めは「表示する」で始めてある（上の beforeAll の初期値）ので、いまは出ている。押すと隠れる
     expect(await label()).toBe("止めた・済んだ子を表示する:true");
-    expect(await page.getAttribute("#finished-toggle", "role")).toBe("switch");
+    expect(await page.locator("#finished-toggle").getAttribute("role")).toBe("switch");
     expect(
       await page.evaluate(() =>
         document.getElementById("finished-toggle")?.hasAttribute("aria-pressed"),
@@ -1023,7 +1023,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     const label = async () =>
       (await p2.evaluate(() => document.getElementById("finished-toggle")?.textContent)) +
       ":" +
-      (await p2.getAttribute("#finished-toggle", "aria-checked"));
+      (await p2.locator("#finished-toggle").getAttribute("aria-checked"));
     const graphIds = () =>
       p2.evaluate(() =>
         [...document.querySelectorAll("#graph .gnode")].map((e) => e.getAttribute("data-id")),
