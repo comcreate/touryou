@@ -271,11 +271,11 @@ describe("束ねた graph.js（禁止の API の不在）", async () => {
     expect(js).not.toMatch(/\/home\/|\/Users\/|node_modules/); // 手元のパスを含まない（どこで作っても同じ）
   });
 
-  it("外に出すのは window.touryouGraph（draw・destroy）の 1 つだけ。rete-connection-plugin は入らない。大きさ（gzip）は 21 KB 以下", () => {
+  it("外に出すのは window.touryouGraph（draw・destroy・statusIcon）の 1 つだけ。rete-connection-plugin は入らない。大きさ（gzip）は 21 KB 以下", () => {
     expect(js).toMatch(/\*\/\n(?:"use strict";)?var touryouGraph=/);
     expect(js).not.toMatch(/\b(window|globalThis|self)\.[A-Za-z_$][\w$]*\s*=[^=]/); // ほかの名前を大域に置かない
     const g = runInNewContext(`${js};touryouGraph`, {}) as Record<string, unknown>;
-    expect(Object.keys(g).sort()).toEqual(["destroy", "draw"]);
+    expect(Object.keys(g).sort()).toEqual(["destroy", "draw", "statusIcon"]);
     expect(js).not.toContain("rete-connection-plugin");
     expect(gzipSync(js).length).toBeLessThanOrEqual(21 * 1024);
   });

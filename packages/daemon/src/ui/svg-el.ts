@@ -45,6 +45,10 @@ export const SVG_CLASSES: ReadonlySet<string> = new Set([
   "sk",
   "sk2",
   "sk3",
+  "sico",
+  "ln",
+  "dots",
+  "dot",
 ]);
 /** `d` に許す形：命令 M・L・C・Q・A・Z と、数・空白だけ。 */
 export const PATH_PATTERN = /^(?:[MLCQAZ]|-?\d+(?:\.\d+)?|[ ,])*$/;

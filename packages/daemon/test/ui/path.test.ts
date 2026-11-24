@@ -309,10 +309,10 @@ describe("箱の状態（見本の STATE・TIER。画面の言葉とそろえる
   const by = new Map(m.nodes.map((n) => [n.id, n]));
   it.each([
     ["run", "run", "go", "▶ 動いている", true],
-    ["ask", "wait", "turn", "💬 あなたの答え待ち", false],
+    ["ask", "wait", "turn", "あなたの答え待ち", false],
     ["stall", "stall", "turn", "‖ 止まっているかも", false],
     ["fail", "fail", "turn", "✕ 失敗", false],
-    ["askf", "wait", "turn", "💬 あなたの答え待ち", false],
+    ["askf", "wait", "turn", "あなたの答え待ち", false],
     ["viol", "run", "go", "▶ 動いている", true],
     ["arch", "done", "over", "✓ 済んだ", false],
     ["stop", "stopped", "over", "■ 止めた", false],

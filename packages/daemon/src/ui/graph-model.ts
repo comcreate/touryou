@@ -77,6 +77,8 @@ export interface GraphNode {
   readonly statusText: string;
   /** 動いている子（右上の点）。 */
   readonly alive: boolean;
+  /** 子が済んだと報告して、確かめ待ち（箱の状態の言葉に、箱と点線のチェックの印を付ける）。 */
+  readonly check: boolean;
   /** 人の操作が要る数（右上の丸い数）。 */
   readonly needsHuman: number;
   /** 最後の動きの時刻（ミリ秒。なければ null）。「何分前」は描くときに出す。 */
@@ -286,6 +288,7 @@ export function graphModelOf(
         status === "run" ? (RUN_TEXT[state] ?? STATUS_TEXT.run) : STATUS_TEXT[status],
       ),
       alive: status === "run" && state === "running",
+      check: status === "run" && state === "done",
       needsHuman: count(n.needsHuman),
       lastAt: timeOf(n.lastActivityAt),
     });

@@ -115,6 +115,30 @@ let kept: {
   readonly y: number;
 } | null = null;
 
+/**
+ * 状態の言葉の頭に付ける線の絵（画面のカードの札にも使う。`window.touryouGraph.statusIcon`）。
+ * `ask`＝答え待ち（吹き出しと点 3 つ）、`check`＝確かめ待ち（実線の箱と、点線の四角・チェック）。知らない名前は null。
+ */
+export function statusIcon(kind: string): SVGElement | null {
+  if (kind !== "ask" && kind !== "check") return null;
+  const svg = svgEl("svg", { class: "sico", width: 14, height: 14, viewBox: "0 0 16 16" });
+  if (kind === "ask") {
+    svg.append(
+      svgEl("path", {
+        class: "ln",
+        d: "M8 2 C4.2 2 1.5 4.4 1.5 7.4 C1.5 9.2 2.5 10.7 4 11.7 L3.4 14.2 L6.4 12.7 C6.9 12.8 7.4 12.8 8 12.8 C11.8 12.8 14.5 10.4 14.5 7.4 C14.5 4.4 11.8 2 8 2 Z",
+      }),
+    );
+    for (const x of [5, 8, 11])
+      svg.append(svgEl("path", { class: "dot", d: `M${x} 7.4 L${x} 7.4` }));
+  } else {
+    svg.append(svgEl("rect", { class: "ln", x: 1, y: 1, width: 14, height: 14, rx: 4 }));
+    svg.append(svgEl("rect", { class: "dots", x: 4, y: 4, width: 8, height: 8, rx: 2 }));
+    svg.append(svgEl("path", { class: "dots", d: "M5.2 8.2 L7.2 10.2 L10.8 5.8" }));
+  }
+  return svg;
+}
+
 /** いまの図を消す（描いていなければ何もしない）。描いている途中の `draw` も、そこで止まる。 */
 export function destroy(): void {
   teardown();
@@ -632,7 +656,11 @@ function drawNode(
     });
   }
   row.append(icon, gs);
-  box.append(el("span", "gt", n.title), row, el("span", `gst st-${n.status}`, n.statusText));
+  const gst = el("span", `gst st-${n.status}`);
+  const mark = n.status === "wait" ? statusIcon("ask") : n.check ? statusIcon("check") : null;
+  if (mark !== null) gst.append(mark);
+  gst.append(n.statusText);
+  box.append(el("span", "gt", n.title), row, gst);
   if (n.alive) box.append(el("span", "galive"));
   if (n.needsHuman > 0) {
     const b = el("span", "gbadge", String(n.needsHuman));

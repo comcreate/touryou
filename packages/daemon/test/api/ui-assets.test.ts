@@ -204,6 +204,8 @@ describe("画面の資産（走査）", () => {
       "style",
       "paddingLeft",
       "firstChild",
+      // 札の頭の線の絵（図の束の statusIcon）
+      "statusIcon",
       "removeChild",
       "appendChild",
       "forEach",
