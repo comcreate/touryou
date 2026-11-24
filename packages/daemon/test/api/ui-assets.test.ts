@@ -1883,8 +1883,12 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     expect(own).toMatch(/\.gnode\{[^}]*background:var\(--sheet\)/);
     expect(own).toContain(".gnode.t-over>*{opacity:.62}");
     expect(own).not.toMatch(/\.gnode\.t-over\{[^}]*opacity/);
-    // 凡例は丸薬、破線の見本の説明がある
-    expect(own).toMatch(/\.lg\{[^}]*border-radius:999px/);
+    // 凡例は折りたたみ（details）で、中は丸薬にせず詰めて並べる（#281）。破線の見本の説明がある
+    expect(UI_HTML).toContain(
+      '<details id="graph-legend" class="legend" hidden><summary data-t="legend.title">',
+    );
+    expect(own).toMatch(/\.legend \.lgb\{display:flex;flex-wrap:wrap;gap:2px 12px/);
+    expect(own).not.toMatch(/\.lg\{[^}]*border-radius:999px/);
     for (const k of ["delivered", "sent", "unknown"])
       expect(UI_HTML).toContain(`data-t="legend.${k}"`);
     expect(UI_HTML).toContain('<span class="sw down sent"></span>');
@@ -1936,19 +1940,32 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     }
   });
   it("止めた・済んだ子を隠す／表示するトグル（#206・#274）: 図でも一覧でも出る 1 つのボタン。既定は隠す。押すと設定に残し、図と一覧を描き直す", () => {
-    // 既定は隠す（aria-checked="false"）。文言は固定で、状態は role="switch" と aria-checked で伝える（#277）
+    // 既定は隠す（aria-checked="false"）。表示する文言はなく、アイコン（目・目に斜線）だけ。名前は固定の aria-label、状態は role="switch" と aria-checked で伝える（#277・#281）
     expect(UI_HTML).toContain(
-      '<button id="finished-toggle" class="quiet sm tgl" type="button" role="switch" aria-checked="false"><span class="trk" aria-hidden="true"></span><span data-t="view.showFinished">止めた・済んだ子を表示する</span></button>',
+      '<button id="finished-toggle" class="quiet sm tgl" type="button" role="switch" aria-checked="false" data-t-aria="view.showFinished" aria-label="止めた・済んだ子を表示する" data-tip="止めた・済んだ子を表示する">',
     );
+    expect(UI_HTML).toMatch(
+      /<button id="finished-toggle"[^>]*><svg class="ic eye-on"[^]*?<svg class="ic eye-off"[^]*?<\/svg><\/button>/,
+    );
+    expect(UI_HTML).not.toContain('data-t="view.showFinished"');
+    // ツールチップは、ホバーとフォーカスで出す（押すとどうなるかを data-tip に入れる）
+    expect(UI_CSS).toContain(".tgl:hover::after,.tgl:focus-visible::after{display:block}");
+    expect(UI_JS).toContain(
+      "ft.dataset.tip = t(settings.showFinished ? 'view.hideFinished' : 'view.showFinished');",
+    );
+    // 図・一覧の切り替えと同じ高さ（どちらも .seg の丸薬の中の height:26px のボタン）
+    expect(UI_CSS).toContain(".seg button{height:26px;");
+    expect(UI_CSS).not.toContain(".trk");
+    // 窓の上の説明文は、窓の上でなく図の下の小さな文（図のときだけ出す）
+    expect(UI_HTML).toContain('<p id="graph-note" class="lead foot" data-t="flows.lead" hidden>');
+    expect(UI_HTML.indexOf('id="graph-note"')).toBeGreaterThan(UI_HTML.indexOf('id="graph-legend"'));
+    expect(UI_JS).toContain("document.getElementById('graph-note').hidden = !on;");
     expect(UI_HTML).not.toContain("hide-finished");
     // ボタンの欄は、図のときだけに絞らない（hidden を付けない）
     expect(UI_HTML).toMatch(/<div id="finished-filter" class="seg"><button id="finished-toggle"/);
     expect(UI_JS).not.toContain("document.getElementById('graph-filter')");
-    expect(UI_JS).toContain(
-      "document.getElementById('finished-toggle').ariaChecked = settings.showFinished ? 'true' : 'false';",
-    );
-    expect(UI_JS).not.toContain("view.hideFinished");
-    expect(UI_CSS).toContain('.tgl[aria-checked="true"] .trk{');
+    expect(UI_JS).toContain("ft.ariaChecked = settings.showFinished ? 'true' : 'false';");
+    expect(UI_CSS).toContain('.tgl[aria-checked="true"] .eye-on{display:block}');
     const at = UI_JS.indexOf("document.getElementById('finished-toggle').addEventListener('click'");
     expect(at).toBeGreaterThan(-1);
     const body = UI_JS.slice(at, UI_JS.indexOf("\n  });\n", at));
@@ -1962,7 +1979,13 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     expect(UI_JS).toContain("el('p', 'note hpill', t('list.hidden'");
   });
   it("切り替えボタンと隠した件数の文は、日本語と英語の両方にある（#206・#274）", () => {
-    for (const key of ["view.showFinished", "graph.hidden", "list.hidden"] as const) {
+    for (const key of [
+      "view.showFinished",
+      "view.hideFinished",
+      "legend.title",
+      "graph.hidden",
+      "list.hidden",
+    ] as const) {
       const text = UI_TEXT_TABLE[key];
       expect(text.ja, key).not.toBe("");
       expect(text.en, key).not.toBe("");

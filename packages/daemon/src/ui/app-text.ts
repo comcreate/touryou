@@ -424,6 +424,7 @@ export const APP_TEXT = {
   "lang.screen": { ja: "画面の言語", en: "Screen language" },
   "legend.down": { ja: "↓ 下り（親・人 → 子）", en: "↓ Down (parent or person → child)" },
   "legend.go": { ja: "進んでいる", en: "In progress" },
+  "legend.title": { ja: "凡例（線・流星・縁の光の見方）", en: "Legend (lines, meteors, edge glow)" },
   "legend.newer": { ja: "新しいほど濃い", en: "Darker is newer" },
   "legend.over": { ja: "終わった", en: "Finished" },
   "legend.pick": {
@@ -931,6 +932,7 @@ export const APP_TEXT = {
   "view.graph": { ja: "図", en: "Diagram" },
   "view.how": { ja: "見せ方", en: "View" },
   "view.list": { ja: "一覧", en: "List" },
+  "view.hideFinished": { ja: "止めた・済んだ子を隠す", en: "Hide stopped and finished" },
   "view.showFinished": { ja: "止めた・済んだ子を表示する", en: "Show stopped and finished" },
   "who.role": { ja: "（{role}）", en: " ({role})" },
   "who.roleLast": { ja: "（{role}）・最後の動き {when}", en: " ({role}) · last activity {when}" },

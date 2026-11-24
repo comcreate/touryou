@@ -872,6 +872,13 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(await p2.evaluate(() => document.getElementById("open-settings")?.ariaLabel)).toBe(
       "Settings",
     );
+    // 止めた・済んだ子のスイッチ（アイコンだけ）の名前とツールチップも英語（#281）
+    expect(await p2.locator("#finished-toggle").getAttribute("aria-label")).toBe(
+      "Show stopped and finished",
+    );
+    expect(cjk.test((await p2.locator("#finished-toggle").getAttribute("data-tip")) ?? "")).toBe(
+      false,
+    );
     // daemon が書いた知らせ（msg つき）は英語。msg のない知らせ・子が書いた文は、書かれたまま（利用者の決め）
     const entries = await all(".entry");
     expect(entries.some((t) => t.includes("has not picked up instruction #3 after 10 min"))).toBe(
@@ -962,9 +969,9 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   });
 
   it("「止めた・済んだ子を隠す／表示する」を押すと、図から止めた・済んだ子の箱が消え、押すと戻る。文言は押したあとの動きに替わり、再読み込みのあとも残る（#206・#274）", async () => {
-    // 文言は固定。いまの状態は role="switch" の aria-checked（入＝表示している）で見る（#277）
+    // 表示する文言はなく（アイコンだけ）、名前は固定の aria-label。いまの状態は role="switch" の aria-checked（入＝表示している）で見る（#277・#281）
     const label = async () =>
-      (await page.evaluate(() => document.getElementById("finished-toggle")?.textContent)) +
+      (await page.locator("#finished-toggle").getAttribute("aria-label")) +
       ":" +
       (await page.locator("#finished-toggle").getAttribute("aria-checked"));
     const ids = () =>
@@ -978,6 +985,35 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     // 初めは「表示する」で始めてある（上の beforeAll の初期値）ので、いまは出ている。押すと隠れる
     expect(await label()).toBe("止めた・済んだ子を表示する:true");
     expect(await page.locator("#finished-toggle").getAttribute("role")).toBe("switch");
+    // 表示する文言はない。「図／一覧」の丸薬と、スイッチの丸薬の高さがそろっている（#281）
+    expect(
+      await page.evaluate(() => document.getElementById("finished-toggle")?.textContent?.trim()),
+    ).toBe("");
+    const heights = await page.evaluate(() =>
+      ["view-switch", "finished-filter"].map(
+        (id) => document.getElementById(id)?.getBoundingClientRect().height,
+      ),
+    );
+    expect(heights[0]).toBeGreaterThan(0);
+    expect(heights[1]).toBe(heights[0]);
+    // ツールチップは、フォーカスで出る。入のときは「隠す」（押したあとの動き）
+    await page.focus("#finished-toggle");
+    expect(
+      await page.evaluate(() =>
+        getComputedStyle(document.getElementById("finished-toggle") as Element, "::after").display,
+      ),
+    ).toBe("block");
+    expect(await page.locator("#finished-toggle").getAttribute("data-tip")).toBe(
+      "止めた・済んだ子を隠す",
+    );
+    // 説明文は、窓の上でなく図の下の小さな文
+    expect(
+      await page.evaluate(() => {
+        const note = document.getElementById("graph-note")?.getBoundingClientRect();
+        const board = document.getElementById("graph")?.getBoundingClientRect();
+        return !!note && !!board && note.top >= board.bottom;
+      }),
+    ).toBe(true);
     expect(
       await page.evaluate(() =>
         document.getElementById("finished-toggle")?.hasAttribute("aria-pressed"),
@@ -1021,7 +1057,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     await p2.goto(`${url}/ui#ticket=${await ticket()}`);
     await p2.waitForSelector("#graph .gnode");
     const label = async () =>
-      (await p2.evaluate(() => document.getElementById("finished-toggle")?.textContent)) +
+      (await p2.locator("#finished-toggle").getAttribute("aria-label")) +
       ":" +
       (await p2.locator("#finished-toggle").getAttribute("aria-checked"));
     const graphIds = () =>
