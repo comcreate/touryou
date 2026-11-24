@@ -701,13 +701,15 @@ export const UI_JS = `'use strict';
   }
   function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
   function setStatus(text) { statusEl.textContent = text; statusEl.className = 'status'; }
+  // トークン入力の下に出した設定の窓か（出したものだけ閉じる。モーダルで開いた窓は、つなぎ直しで閉じない）
+  var inlineSettings = false;
   function showAuth(show) {
     authEl.hidden = !show; viewEl.hidden = show;
     // トークン入力の画面は下に余裕があるので、歯車は出さず、設定の窓をトークン入力の下にそのまま出す
     var box = document.getElementById('settings');
     document.getElementById('open-settings').hidden = show;
     box.classList.toggle('inline', show);
-    if (show) { box.open = true; fillSettings(); } else if (box.open) box.close();
+    if (show) { box.open = true; inlineSettings = true; fillSettings(); } else if (inlineSettings) { inlineSettings = false; box.close(); }
   }
 
   // ---- 操作（判断への回答）----
