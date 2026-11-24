@@ -6,7 +6,7 @@ import { BOX_H, BOX_W, type Layout, type LayoutPos, MARGIN, ROW_H } from "./grap
 import { PATH_PATTERN } from "./svg-el.js";
 
 /** 上りと下りの道を、枝の中心から上下にずらす幅。 */
-export const LANE_GAP = 6;
+export const LANE_GAP = 10;
 export const ARROW = 8;
 
 const num = (v: number): string => {

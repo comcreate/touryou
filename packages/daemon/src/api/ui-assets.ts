@@ -115,7 +115,7 @@ html{background:var(--bg)}
 #bg-gl{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;display:block}#bg-gl[hidden]{display:none}
 body{margin:0;background:transparent;color:var(--fg);font:15px/1.7 "Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif}
 :focus-visible{outline:3px solid var(--ai);outline-offset:2px;border-radius:4px}
-.top{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:4px 16px;padding:6px 16px;border-bottom:1px solid var(--line)}
 .top h1{font-size:17px;margin:0;letter-spacing:.04em}
 .top h1.repo{font:700 15px/1.2 "SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .top .tools{margin-left:auto;flex:none;max-width:100%}.tools button{white-space:nowrap}.top h1{flex:none}.top .status{flex:1 1 12em;min-width:0;overflow-wrap:anywhere}
@@ -188,6 +188,8 @@ button.gear{font-size:16px;line-height:1;padding:3px 8px}
 .nb .nic{width:22px;height:22px;margin-bottom:2px}.nb[aria-current="page"] .nic{color:var(--ai)}
 .gear .ic{width:20px;height:20px}.gear .teeth{stroke-width:4;stroke-linecap:butt}
 button.gear{min-width:44px;min-height:44px;padding:0;border:1.5px solid var(--muted);border-radius:50%;background:var(--sheet)}button.gear:hover{border-color:var(--ai)}
+.top .gear{min-width:32px;min-height:32px;width:32px;height:32px}
+.top .gear .ic{width:16px;height:16px}
 dialog.settings{background:var(--dlg);-webkit-backdrop-filter:var(--blur-dlg);backdrop-filter:var(--blur-dlg);color:var(--fg);border:1px solid var(--glass-edge);border-radius:12px;box-shadow:var(--shadow),var(--hl);padding:16px 20px;width:calc(100vw - 96px);max-width:calc(100vw - 96px);max-height:calc(100dvh - 96px);overflow:auto}
 dialog.settings::backdrop{background:rgba(0,0,0,.35)}
 #auth{margin:16px 0 0;padding:16px 20px;background:var(--dlg);border:1px solid var(--glass-edge);border-radius:12px;box-shadow:var(--shadow),var(--hl);-webkit-backdrop-filter:var(--blur-dlg);backdrop-filter:var(--blur-dlg)}#auth h2{margin:0 0 8px;font-size:17px}
@@ -258,6 +260,11 @@ code{font-family:"SFMono-Regular",Menlo,Consolas,monospace;font-size:13.5px;word
 .spark .slot{display:flex;align-items:end;justify-content:center;gap:2px;height:100%}
 .spark .bar{width:7px;border-radius:2px 2px 0 0;background:var(--ai);transform-origin:bottom;animation:grow .7s cubic-bezier(.2,.9,.3,1.2) both}
 .spark .bar.h{background:var(--kaki)}.spark .bar.l1{height:56%}.spark .bar.l2{height:70%}.spark .bar.l3{height:85%}.spark .bar.l4{height:100%}
+.ibx{display:grid;gap:2px;padding:8px 12px;font-size:13.5px;border:1px solid var(--edge);border-radius:var(--rad);background:var(--panel)}
+.ibx.h{border-color:var(--kaki)}
+.ibx .ar{font-weight:800}.ibx .ar.up{color:var(--ai)}.ibx .ar.dn{color:var(--ai-2)}
+.ibx .note{color:var(--muted);font-size:12.5px}
+#inbox-list{display:grid;gap:8px;margin:12px 0 0}
 .flowlist{display:grid;gap:4px;font-size:13.5px}
 .flowlist .fl{display:grid;grid-template-columns:20px 1fr auto;gap:6px;align-items:start}
 .flowlist .ar{font-weight:800;text-align:center}.flowlist .ar.u{color:var(--ai)}.flowlist .ar.d{color:var(--ai-2)}.flowlist .ar.h{color:var(--kaki)}
@@ -1142,7 +1149,7 @@ export const UI_JS = `'use strict';
     renderDecisions(closed, box, byId);
     // 受信箱の知らせ（上の「いまあなたがすること」に出さない種類）は、同じ窓の「受信箱の知らせ」の欄に出す。窓の見出しの「未解決 N 件」は、両方の合計
     var rest = view.inbox.filter(function (i) { return i.stall !== true && !isStopRequest(i, delegated); });
-    renderInboxTab(rest, byId, delegated);
+    renderInboxTab(view.flows, byId);
     var unresolved = n + rest.length;
     document.getElementById('yours-unresolved').textContent = unresolved ? t('yours.unresolved', { n: unresolved }) : '';
     if (n === 0) box.appendChild(el('p', 'empty', t('todo.empty')));
@@ -1186,19 +1193,38 @@ export const UI_JS = `'use strict';
       });
     });
   }
-  // 受信箱の知らせ（新しい順）。1 件ごとに、どの子の知らせかを添える
-  function renderInboxTab(list, byId, delegated) {
+  // 受信箱の知らせの欄: あなたの答えを待っているものと、最近のやり取り（新しい順）。答え待ちは枠の色を変えて先に出す。
+  // 子の受信箱の知らせそのものは、作業ごとのようすのカードに出る
+  var INBOX_TAB_MAX = 20;
+  function renderInboxTab(flows, byId) {
     wireYoursTabs();
     var box = document.getElementById('inbox-list');
     clear(box);
-    list.slice().sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; }).forEach(function (i) {
-      var node = byId.get(i.nodeId);
-      var card = el('div', 'card');
-      card.appendChild(el('div', 'who', node ? nodeLabel(node, 30) : i.nodeId));
-      card.appendChild(entryRow(i, delegated));
-      box.appendChild(card);
+    var sorted = flows.slice().sort(function (a, b) {
+      var wa = isAwaiting(a) ? 1 : 0;
+      var wb = isAwaiting(b) ? 1 : 0;
+      if (wa !== wb) return wb - wa;
+      return a.sentAt < b.sentAt ? 1 : a.sentAt > b.sentAt ? -1 : 0;
+    }).slice(0, INBOX_TAB_MAX);
+    sorted.forEach(function (f) {
+      var from = byId.get(f.from);
+      var to = byId.get(f.to);
+      var up = !!from && from.parentId === f.to;
+      var row = el('div', isAwaiting(f) ? 'ibx h' : 'ibx');
+      var who = el('span', 'ibw');
+      var ar = el('span', up ? 'ar up' : 'ar dn', up ? '↑' : '↓');
+      ar.ariaLabel = t(up ? 'yours.dirUp' : 'yours.dirDown');
+      who.appendChild(ar);
+      who.appendChild(el('span', '', ' ' + (from ? nodeLabel(from, 24) : f.from) + ' › ' + (to ? nodeLabel(to, 24) : f.to)));
+      row.appendChild(who);
+      var note = el('span', 'note', name(FLOW_KIND_NAMES, f.kind));
+      note.appendChild(whenEl('span', '', f.sentAt, 'list.flowWhen'));
+      var stage = stageText(f);
+      if (stage) note.appendChild(el('span', '', '　' + stage));
+      row.appendChild(note);
+      box.appendChild(row);
     });
-    if (list.length === 0) box.appendChild(el('p', 'empty', t('yours.inboxEmpty')));
+    if (sorted.length === 0) box.appendChild(el('p', 'empty', t('yours.inboxEmpty')));
   }
 
   // 作業ごとのようす: 子 1 つを 1 枚のカードに。あなたの出番を先に、ほかは最後に動いた順。終わった作業は、たたんだ欄へ

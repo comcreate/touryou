@@ -2217,7 +2217,7 @@ describe("状態画面の見た目の戻し（#283）", () => {
     expect(UI_HTML).toContain('id="t-yours-inbox"');
     expect(UI_HTML).toContain('id="p-yours-inbox"');
     expect(UI_HTML).toContain('id="inbox-list"');
-    expect(UI_JS).toContain("renderInboxTab(rest, byId, delegated)");
+    expect(UI_JS).toContain("renderInboxTab(view.flows, byId)");
     expect(UI_JS).toContain("t('yours.unresolved', { n: unresolved })");
     expect(UI_TEXT_TABLE["yours.unresolved"]?.ja).toContain("{n}");
     expect(UI_TEXT_TABLE["yours.tabInbox"]?.ja).toBe("受信箱の知らせ");

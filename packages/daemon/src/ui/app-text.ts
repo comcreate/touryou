@@ -592,9 +592,11 @@ export const APP_TEXT = {
   "yours.tabJudge": { ja: "判断・答え待ち", en: "Decisions & waiting" },
   "yours.unresolved": { ja: "未解決 {n} 件", en: "{n} unresolved" },
   "yours.inboxLead": {
-    ja: "子や daemon からの、まだ片付けていない知らせです。",
-    en: "Notices from children and the daemon that are not cleared yet.",
+    ja: "あなたの答えを待っているものと、最近のやり取りです。",
+    en: "What is waiting for your answer, and recent exchanges.",
   },
+  "yours.dirUp": { ja: "上り：子から親への報告", en: "Up: report from child to parent" },
+  "yours.dirDown": { ja: "下り：親から子への頼み", en: "Down: request from parent to child" },
   "yours.inboxEmpty": { ja: "受信箱の知らせはありません", en: "No inbox notices" },
   "page.title": { ja: "touryou 状態画面", en: "touryou status" },
   "page.where": { ja: "この画面の daemon の作業場所", en: "Working directory of this daemon" },
