@@ -53,7 +53,11 @@ async function setup(maxConnections?: number) {
       if (r.url().endsWith("/v1/events")) tab.events += 1;
       if (r.url().includes("/v1/ui/state")) tab.states += 1;
     });
-    if (o.clock === true) await page.clock.install();
+    if (o.clock === true) {
+      await page.clock.install();
+      // 偽の時計を進めると、背景の描画（rAF）が何千回も走って時間切れになる。この試験は背景を見ないので描かせない
+      await page.emulateMedia({ reducedMotion: "reduce" });
+    }
     await page.goto(`${url}/ui#ticket=${await ticket()}`);
     return tab;
   };

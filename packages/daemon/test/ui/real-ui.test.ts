@@ -910,6 +910,8 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     p2.on("pageerror", (e: Error) => errs.push(e.message));
     // 時計は、画面を開く前に差し替える（setInterval も、Date.now も、差し替えた時計のもの）
     await p2.clock.install();
+    // 偽の時計を進めると、背景の描画（rAF）が何千回も走って時間切れになる。この試験は背景を見ないので描かせない
+    await p2.emulateMedia({ reducedMotion: "reduce" });
     await p2.goto(`${url}/ui#ticket=${await ticket()}`);
     await p2.waitForSelector("#graph .gnode");
     const agoOf = () =>
