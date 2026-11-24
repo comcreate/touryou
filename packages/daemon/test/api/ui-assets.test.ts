@@ -1873,7 +1873,7 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     expect(meteor).toContain(".gnode.glow:not(:hover,:focus-visible){animation:mt-glow");
     // 線の色（--c）は、流星・火花にも付く
     expect(UI_CSS).toContain(
-      ":is(.line,.tip,.port,.mlabel,.mstage,.sw,.mh,.mhc,.mtl,.msp){--c:var(--blue-line)}",
+      ":is(.line,.tip,.port,.mlabel,.mpill,.mstage,.sw,.mh,.mhc,.mtl,.msp){--c:var(--blue-line)}",
     );
     // 白と混ぜる割合は、明・暗で別の値
     expect(UI_CSS).toContain("--glint:#fff;--sk-w1:45%;--sk-w2:22%;--sk-wf:55%");

@@ -175,3 +175,21 @@ export const SPARK_STREAKS: readonly (readonly [string, "sk" | "sk sk2" | "sk sk
   ["M0 0L12.2 14.6", "sk sk2"],
   ["M0 0L7.9 16.2", "sk"],
 ];
+
+/**
+ * 下りの火花（弱い流星が着く子の箱の縁から、来た向き＝左側へ跳ね返る）。上りより弱く、筋 10 本・道を 7 割ほど・閃光を小さく
+ * （docs/ui-mock/index.html の案 A の下りと同じ形。`scale(-1 1)` を使わず、左向きの座標で書く）。
+ */
+export const SPARK_FLASH_WEAK = "M-3 0A3 3 0 1 0 3 0A3 3 0 1 0 -3 0Z";
+export const SPARK_STREAKS_WEAK: readonly (readonly [string, "sk" | "sk sk2" | "sk sk3"])[] = [
+  ["M0 0L-8.8 -12.1", "sk"],
+  ["M0 0L-14.4 -9", "sk"],
+  ["M0 0L-21.3 -5.7", "sk sk3"],
+  ["M0 0L-24.8 -3.5", "sk sk2"],
+  ["M0 0L-28 -1.5", "sk sk3"],
+  ["M0 0L-27 0.9", "sk sk2"],
+  ["M0 0L-23.8 2.9", "sk sk3"],
+  ["M0 0L-20.5 4.7", "sk sk2"],
+  ["M0 0L-14.1 7.5", "sk sk2"],
+  ["M0 0L-9.6 11.5", "sk sk2"],
+];

@@ -25,7 +25,9 @@ import {
   meteorEndOf,
   roleIconOf,
   SPARK_FLASH,
+  SPARK_FLASH_WEAK,
   SPARK_STREAKS,
+  SPARK_STREAKS_WEAK,
   trunkOf,
   twigOf,
 } from "./graph-path.js";
@@ -317,6 +319,45 @@ export async function draw(
   editor.use(readonly.root);
   editor.use(area);
   area.use(readonly.area);
+  // 中ボタン（センターホイール）の押し込みでも動かせる。rete の移動は左ボタンだけなので、ここで足す（#274）。
+  // 拡大・移動は、ホイールやボタンと同じく、動きを止める設定でもすぐ変える
+  let panning: { id: number; x: number; y: number } | null = null;
+  // 中ボタンの押し込みで、OS の自動スクロール（Windows）や貼り付け（Linux）が始まらないようにする
+  host.addEventListener(
+    "mousedown",
+    (e) => {
+      if (e.button === 1) e.preventDefault();
+    },
+    opt,
+  );
+  host.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (e.button !== 1) return;
+      e.preventDefault();
+      panning = { id: e.pointerId, x: e.clientX, y: e.clientY };
+      host.setPointerCapture(e.pointerId);
+      host.classList.add("panning");
+    },
+    opt,
+  );
+  host.addEventListener(
+    "pointermove",
+    (e) => {
+      if (panning === null || e.pointerId !== panning.id) return;
+      const t = area.area.transform;
+      void area.area.translate(t.x + e.clientX - panning.x, t.y + e.clientY - panning.y);
+      panning = { id: panning.id, x: e.clientX, y: e.clientY };
+    },
+    opt,
+  );
+  const endPan = (e: PointerEvent): void => {
+    if (panning === null || e.pointerId !== panning.id) return;
+    panning = null;
+    host.classList.remove("panning");
+  };
+  host.addEventListener("pointerup", endPan, opt);
+  host.addEventListener("pointercancel", endPan, opt);
   // 隠した数（#206）。図の左上の空き（右上のボタンと同じ、上の空き）に、図の外の飾りとして置く。片付けは器ごと（`teardown`）
   if (model.hidden > 0)
     host.append(el("div", "ghidden", graphString(lang, "graph.hidden", { n: model.hidden })));
@@ -476,7 +517,8 @@ function laneShape(
   const stage = finished ? "done" : l.stage === "sent" && l.unknown ? "unknown" : l.stage;
   // 新しいほど濃い（a1〜a4）。答え待ちの柿色（wait）と、終わった子の薄い灰（over）は、CSS でこれを上書きする
   const extra = ` ${ageClassOf(l.at, now)}${l.waiting && !finished ? " wait" : ""}${finished ? " over" : ""}`;
-  const arrow = l.dir === "up" ? "← " : "→ ";
+  // 矢印は、上り（子 → 親）が ↑、下り（親 → 子）が ↓（docs/ui-mock と同じ。線の向きの左右ではなく、親子の向き）
+  const arrow = l.dir === "up" ? "↑ " : "↓ ";
   const label = l.at === null ? `${arrow}${l.label}` : laneAgoText(arrow, l.label, l.at, now, lang);
   const stageWords = stageText(l, lang);
   // 流星：上りで答え待ちの線は強く（火花つき）、下りでまだ届いていない線（g-sent）は弱く。それ以外は流さない
@@ -554,6 +596,15 @@ function drawNode(
   return box;
 }
 
+/** 札の地の、文字の左右の余白。 */
+const PILL_PAD = 6;
+/** 札の地の幅：太字の等幅 12.5px の文字幅（半角 7.6・それ以外 12.5）の合計に、左右の余白を足す。 */
+function pillWidthOf(text: string): number {
+  let w = 0;
+  for (const ch of text) w += (ch.codePointAt(0) ?? 0) < 0x80 ? 7.6 : 12.5;
+  return Math.ceil(w + PILL_PAD * 2);
+}
+
 function drawShape(
   element: HTMLElement,
   s: Shape | undefined,
@@ -575,7 +626,7 @@ function drawShape(
     // 流星は、線と同じ `d` の重ね線（尾・頭・芯）で、破線の位置を CSS で動かす
     if (s.meteor !== undefined) svg.append(...meteorOf(s, look));
     svg.append(svgEl("path", { class: `tip ${look}`, d: lane.tip }));
-    if (s.meteor === "strong") svg.append(sparkOf(s, look));
+    if (s.meteor !== undefined) svg.append(sparkOf(s, look));
     if (lane.portX !== undefined && lane.portY !== undefined)
       svg.append(
         svgEl("rect", {
@@ -587,6 +638,18 @@ function drawShape(
           rx: 1,
         }),
       );
+    // 札の地（docs/ui-mock の `pill`）。文字の幅は測らず、半角と全角の数から見積もる
+    const pillOf = (text: string): SVGElement =>
+      svgEl("rect", {
+        class: `mpill ${look}`,
+        x: lane.labelX - PILL_PAD,
+        y: lane.labelY - 13.5,
+        width: pillWidthOf(text),
+        height: 18,
+        rx: 3,
+      });
+    let pill = pillOf(s.label ?? "");
+    svg.append(pill);
     const mlabel = svgEl(
       "text",
       { class: `mlabel ${look}`, x: lane.labelX, y: lane.labelY },
@@ -608,6 +671,10 @@ function drawShape(
         const text = laneAgoText(arrow, label, at, now, lang);
         if (mlabel.textContent !== text) {
           mlabel.textContent = text;
+          // 文字の幅が変わるので、札の地は作り直して置き換える（属性は svgEl だけが書く）
+          const next = pillOf(text);
+          pill.replaceWith(next);
+          pill = next;
           if (title !== null)
             title.textContent = graphString(lang, "graph.lineTitle", {
               label: text,
@@ -668,13 +735,19 @@ function meteorOf(s: Shape, look: string): SVGElement[] {
  * `g` を `transform` で当たった点へ動かし、中の形は当たった点を `0 0` とした座標で書く。
  */
 function sparkOf(s: Shape, look: string): SVGElement {
-  const { x, y } = meteorEndOf(s.d);
-  const cls = ["msp", colorOf(look), s.late === true ? "late" : ""]
+  const weak = s.meteor === "weak";
+  // 上りは道の終わり（幹）、下りは子の箱の縁（端子の位置）に当てる
+  const { x, y } =
+    weak && s.lane?.portX !== undefined && s.lane.portY !== undefined
+      ? { x: s.lane.portX, y: s.lane.portY }
+      : meteorEndOf(s.d);
+  const cls = ["msp", colorOf(look), weak ? "weak" : "", s.late === true ? "late" : ""]
     .filter((c) => c !== "")
     .join(" ");
   const at = `translate(${Math.round(x * 10) / 10} ${Math.round(y * 10) / 10})`;
   const g = svgEl("g", { class: cls, transform: at });
-  g.append(svgEl("path", { class: "fl", d: SPARK_FLASH }));
-  for (const [d, k] of SPARK_STREAKS) g.append(svgEl("path", { class: k, d, pathLength: 100 }));
+  g.append(svgEl("path", { class: "fl", d: weak ? SPARK_FLASH_WEAK : SPARK_FLASH }));
+  for (const [d, k] of weak ? SPARK_STREAKS_WEAK : SPARK_STREAKS)
+    g.append(svgEl("path", { class: k, d, pathLength: 100 }));
   return g;
 }

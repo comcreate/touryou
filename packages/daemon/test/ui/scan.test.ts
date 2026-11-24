@@ -73,8 +73,8 @@ describe("図の自前のコード（走査）", () => {
     // 重ね線は、線の `d` をそのまま使う（尾・頭・芯の 3 本）
     expect(entry).toContain('svgEl("path", { class: `${k} ${cls}`, d: s.d, pathLength: 100 })');
     expect(entry).toContain("if (s.meteor !== undefined) svg.append(...meteorOf(s, look));");
-    // 火花は、強い流星（上りの答え待ち）だけ
-    expect(entry).toContain('if (s.meteor === "strong") svg.append(sparkOf(s, look));');
+    // 火花は、流星のある線すべて（上りは強く、下りは弱く）
+    expect(entry).toContain("if (s.meteor !== undefined) svg.append(sparkOf(s, look));");
     // 流す本数の上限は、上り 3 本・下り 2 本
     expect(entry).toContain("{ strong: 3, weak: 2 }");
     // 縁の光は答え待ち・失敗の箱だけ（stall には出ない）。上限を超える分は光らせない。選び方は graph-model.ts の glowIdsOf（試験は graph-glow.test.ts）
@@ -140,6 +140,9 @@ describe("図の自前のコード（走査）", () => {
       "createElement",
       "createElementNS",
       "setAttributeNS",
+      // 中ボタンでの移動（ポインタを捕まえる。文字列は渡さない）と、札の地の置き換え（要素どうし）
+      "setPointerCapture",
+      "replaceWith",
       // 「何分前」を計算し直す interval（#204。関数だけを渡す。文字列は渡さない）
       "setInterval",
       // 図の言葉の差し込み（#140。graph-text.ts の文字列の replace。DOM には触れない）

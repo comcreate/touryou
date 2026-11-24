@@ -422,7 +422,7 @@ export const APP_TEXT = {
     en: "Notices written by the daemon are also shown in the chosen language. Text written by children or integrators, and older notices, are shown as written.",
   },
   "lang.screen": { ja: "画面の言語", en: "Screen language" },
-  "legend.down": { ja: "→ 下り（親・人 → 子）", en: "→ Down (parent or person → child)" },
+  "legend.down": { ja: "↓ 下り（親・人 → 子）", en: "↓ Down (parent or person → child)" },
   "legend.go": { ja: "進んでいる", en: "In progress" },
   "legend.newer": { ja: "新しいほど濃い", en: "Darker is newer" },
   "legend.over": { ja: "終わった", en: "Finished" },
@@ -438,8 +438,8 @@ export const APP_TEXT = {
     en: "Your turn (awaiting answer, may be stuck, failed)",
   },
   "legend.up": {
-    ja: "← 上り（子 → 親。答え待ちの頼みを先に）",
-    en: "← Up (child → parent; requests awaiting an answer first)",
+    ja: "↑ 上り（子 → 親。答え待ちの頼みを先に）",
+    en: "↑ Up (child → parent; requests awaiting an answer first)",
   },
   "legend.wait": { ja: "あなたの答え待ちのやり取り", en: "Exchanges waiting for your answer" },
   "legend.meteorStrong": {
@@ -447,8 +447,8 @@ export const APP_TEXT = {
     en: "Bright meteor and sparks: a request waiting for your answer (newest 3; from the 4th, tell them apart by the orange line)",
   },
   "legend.meteorWeak": {
-    ja: "弱い流星：まだ届いていない頼み（新しい 2 本まで）",
-    en: "Dim meteor: a request not delivered yet (newest 2)",
+    ja: "弱い流星と火花：まだ届いていない頼み（新しい 2 本まで）",
+    en: "Dim meteor and sparks: a request not delivered yet (newest 2)",
   },
   "legend.glow": {
     ja: "縁の光：答え待ち・失敗の子（新しい 6 つまで）",
