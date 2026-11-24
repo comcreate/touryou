@@ -91,7 +91,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(await page.locator("svg.glink path.tip").count()).toBe(7);
     // 人の答えは、親 m1 から子 c への下りの線の札で出す
     const labels = await page.locator("svg.glink text.mlabel.down").allTextContents();
-    expect(labels.some((t) => t.startsWith("↓ 答え"))).toBe(true);
+    expect(labels.some((t) => t.startsWith("答え"))).toBe(true);
     // 札には地（rect.mpill）が付く。線の札 1 つにつき 1 つで、線と同じ向き・色の印を持つ
     expect(await page.locator("svg.glink rect.mpill").count()).toBe(
       await page.locator("svg.glink text.mlabel").count(),
@@ -99,11 +99,12 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(await page.locator("svg.glink rect.mpill.down").count()).toBe(
       await page.locator("svg.glink text.mlabel.down").count(),
     );
-    // 矢印は、上りが ↑、下りが ↓（左右の ← → ではない）
+    // 矢印は字形でなく図形（path.marr）。上りが ↑、下りが ↓（左右の ← → ではない）。札の文字には入れない
     const ups = await page.locator("svg.glink text.mlabel.up").allTextContents();
     expect(ups.length).toBeGreaterThan(0);
-    for (const t of ups) expect(t.startsWith("↑ ")).toBe(true);
-    for (const t of labels) expect(t.startsWith("↓ ")).toBe(true);
+    for (const t of [...ups, ...labels]) expect(/^[↑↓←→]/.test(t)).toBe(false);
+    expect(await page.locator("svg.glink path.marr.up").count()).toBe(ups.length);
+    expect(await page.locator("svg.glink path.marr.down").count()).toBe(labels.length);
     expect(await page.locator("svg.glink path.twig").count()).toBe(1); // やり取りのない子 e
     expect(await page.locator("#g img, #g script, #g style, #g foreignObject").count()).toBe(0);
     expect(await page.locator('.gnode[data-id="a"] .gt').textContent()).toContain("<img src=x");

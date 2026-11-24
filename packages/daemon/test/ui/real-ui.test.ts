@@ -245,7 +245,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     const labels = await page.evaluate(() =>
       [...document.querySelectorAll("#graph text.mlabel.down")].map((e) => e.textContent ?? ""),
     );
-    expect(labels.some((t) => t.startsWith("↓ 却下"))).toBe(true);
+    expect(labels.some((t) => t.startsWith("却下"))).toBe(true);
   });
 
   it("一覧の「詳しく」は、狭い窓でも 1 行（折れない）", async () => {

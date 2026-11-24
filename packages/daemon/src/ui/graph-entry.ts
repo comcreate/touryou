@@ -76,6 +76,8 @@ interface Shape {
   late?: boolean;
   /** 札（種類と「何分前」）と、その外側の段の言葉。 */
   readonly label?: string;
+  /** 札の矢印の向き（上り＝子 → 親が up、下りが down）。矢印は字形でなく、札の左に図形で描く。 */
+  readonly dir?: "up" | "down";
   readonly stage?: string;
   /** 線の title（言葉と段。描く言語で作っておく）。 */
   readonly title?: string;
@@ -327,10 +329,8 @@ export async function draw(
   const model = graphModelOf(view, lang, { hideFinished: options.hideFinished === true });
   // 列の間は、いちばん長い札が、線の曲がり角（親の箱の右から最大 COL_NEED 先）と子の箱の手前の間に収まる広さにする
   const widest = model.lanes.reduce((m, l) => {
-    const arrow = l.dir === "up" ? "↑ " : "↓ ";
-    const text =
-      l.at === null ? `${arrow}${l.label}` : laneAgoText(arrow, l.label, l.at, Date.now(), lang);
-    return Math.max(m, pillWidthOf(text));
+    const text = l.at === null ? l.label : laneAgoText("", l.label, l.at, Date.now(), lang);
+    return Math.max(m, pillWidthOf(text) + ARROW_W);
   }, 0);
   const L = layoutOf(model.nodes, Math.max(COL_GAP, COL_NEED + widest + PILL_SLACK));
   const byId = new Map(model.nodes.map((n) => [n.id, n]));
@@ -587,8 +587,8 @@ function laneShape(
   // 新しいほど濃い（a1〜a4）。答え待ちの柿色（wait）と、終わった子の薄い灰（over）は、CSS でこれを上書きする
   const extra = ` ${ageClassOf(l.at, now)}${l.waiting && !finished ? " wait" : ""}${finished ? " over" : ""}`;
   // 矢印は、上り（子 → 親）が ↑、下り（親 → 子）が ↓（docs/ui-mock と同じ。線の向きの左右ではなく、親子の向き）
-  const arrow = l.dir === "up" ? "↑ " : "↓ ";
-  const label = l.at === null ? `${arrow}${l.label}` : laneAgoText(arrow, l.label, l.at, now, lang);
+  // 矢印は字形でなく図形で描く（字形は、文字の送り幅と見える幅がずれて、左に隙間が出る）。札の文字には入れない
+  const label = l.at === null ? l.label : laneAgoText("", l.label, l.at, now, lang);
   const stageWords = stageText(l, lang);
   // 流星：上りで答え待ちの線は強く（火花つき）、下りでまだ届いていない線（g-sent）は弱く。それ以外は流さない
   const meteor: Meteor | undefined = finished
@@ -605,9 +605,10 @@ function laneShape(
     ...(meteor === undefined ? {} : { meteor }),
     look: `${l.dir}${extra} g-${stage}`,
     label,
+    dir: l.dir,
     stage: stageWords,
     title: graphString(lang, "graph.lineTitle", { label, stage: stageWords }),
-    ...(l.at === null ? {} : { ago: { arrow, label: l.label, at: l.at } }),
+    ...(l.at === null ? {} : { ago: { arrow: "", label: l.label, at: l.at } }),
   };
 }
 
@@ -678,6 +679,8 @@ function drawNode(
 
 /** 札の地の、文字の左右の余白。 */
 const PILL_PAD = 6;
+/** 札の左に描く矢印の図形の幅（文字との間を含む）。 */
+const ARROW_W = 14;
 /** 札の文字（「N 分前」→「N 時間前」など）が伸びても収まる余裕。 */
 const PILL_SLACK = 24;
 /** 親の箱の右から曲がり角まで（最大）と、札の右端から子の箱まで。 */
@@ -730,7 +733,8 @@ function drawShape(
     // 札の地（docs/ui-mock の `pill`）。文字の幅は測らず、半角と全角の数から見積もる
     // 描いたあとは、文字の実際の幅（測れたとき）で作る。測れなければ見積もり
     const pillOf = (text: string, measured?: number): SVGElement => {
-      const width = measured !== undefined ? Math.ceil(measured + PILL_PAD * 2) : pillWidthOf(text);
+      const width =
+        (measured !== undefined ? Math.ceil(measured + PILL_PAD * 2) : pillWidthOf(text)) + ARROW_W;
       return svgEl("rect", {
         class: `mpill ${look}`,
         x: lane.labelX + PILL_PAD - width,
@@ -740,13 +744,27 @@ function drawShape(
         rx: 3,
       });
     };
+    // 札の左の矢印（上り＝↑・下り＝↓）。札の地の左端から、余白の分だけ内側に置く
+    const arrowOf = (padRect: SVGElement): SVGElement => {
+      const x = Number(padRect.getAttribute("x")) + PILL_PAD + 4;
+      const cy = lane.labelY - 4.5;
+      const up = s.dir === "up";
+      const tip = up ? cy - 5 : cy + 5;
+      const tail = up ? cy + 5 : cy - 5;
+      const wing = up ? tip + 3.5 : tip - 3.5;
+      return svgEl("path", {
+        class: `marr ${look}`,
+        d: `M${x} ${tail} L${x} ${tip} M${x - 3.5} ${wing} L${x} ${tip} L${x + 3.5} ${wing}`,
+      });
+    };
     const measure = (): number | undefined => {
       if (!mlabel.isConnected) return undefined;
       const w = (mlabel as unknown as SVGTextContentElement).getComputedTextLength?.();
       return typeof w === "number" && w > 0 ? w : undefined;
     };
     let pill = pillOf(s.label ?? "");
-    svg.append(pill);
+    let marr = arrowOf(pill);
+    svg.append(pill, marr);
     const mlabel = svgEl(
       "text",
       { class: `mlabel ${look}`, x: lane.labelX, y: lane.labelY },
@@ -764,6 +782,9 @@ function drawShape(
       const next = pillOf(s.label ?? "", w);
       pill.replaceWith(next);
       pill = next;
+      const nextArrow = arrowOf(next);
+      marr.replaceWith(nextArrow);
+      marr = nextArrow;
     });
     if (s.ago !== undefined) {
       const { arrow, label, at } = s.ago;
@@ -779,6 +800,9 @@ function drawShape(
           const next = pillOf(text, measure());
           pill.replaceWith(next);
           pill = next;
+          const nextArrow = arrowOf(next);
+          marr.replaceWith(nextArrow);
+          marr = nextArrow;
           if (title !== null)
             title.textContent = graphString(lang, "graph.lineTitle", {
               label: text,

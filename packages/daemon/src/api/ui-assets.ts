@@ -354,7 +354,7 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .line.wait{stroke-width:2.8;opacity:1}
 .line.over,.tip.over,.port.over,.line.g-done{opacity:.45}.line.over,.line.g-done{stroke-width:1.2}
 .board.panning{cursor:grabbing}
-.mpill{fill:var(--sheet);stroke:var(--c);stroke-width:1}
+.mpill{fill:var(--sheet);stroke:var(--c);stroke-width:1}.marr{fill:none;stroke:var(--ct);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
 .mlabel,.mstage{text-anchor:end;paint-order:stroke;stroke:var(--sheet);stroke-width:3px;stroke-linejoin:round}
 .mlabel{font:700 12.5px "SFMono-Regular",Menlo,Consolas,monospace;fill:var(--ct)}.mstage{font-size:11px;fill:var(--muted)}.mstage.over{fill:var(--muted)}
 .gnode{cursor:pointer;transition:box-shadow .15s}.gnode:focus-visible{outline:3px solid var(--ai);outline-offset:2px}.gnode:hover,.gnode:focus-visible{border-color:var(--ai);box-shadow:var(--hl),0 0 0 1.5px var(--ai)}
