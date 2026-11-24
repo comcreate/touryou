@@ -266,6 +266,20 @@ const server = api.createApiServer({
   handlers: previewHandlers,
   // 停止の代行依頼（本物の daemon は、アダプタの能力表で決める。ここでは g5 だけ親に代行してもらう）
   stopDelegated: (id) => id === "g5",
+  // 左上のリポジトリの名前と、`claude attach` を打つ場所（本物の daemon は repoRoot から作る）
+  repoName: "sample-repo",
+  attachDir: "/path/to/sample-repo",
+  // 設定の窓の「子の権限の規則」（本物の daemon は、設定ファイルの規則と、足した規則を出す。ここは見本の規則）。読み取りだけ
+  policyView: () => ({
+    rules: [
+      { list: "allow", rule: "Bash(git status:*)", source: "config" },
+      { list: "allow", rule: "Read(docs/**)", source: "runtime" },
+      { list: "deny", rule: "Bash(rm -rf:*)", source: "config" },
+      { list: "ask", rule: "Bash(git push:*)", source: "config" },
+    ],
+    mcpGate: {},
+    limitRules: {},
+  }),
 });
 let timer;
 let stopping = false;

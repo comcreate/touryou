@@ -47,7 +47,7 @@ export const UI_HTML = `<!doctype html>
 </head>
 <body>
 <canvas id="bg-gl" aria-hidden="true" hidden></canvas>
-<p id="live" class="sr" aria-live="polite"></p><header class="top"><h1 data-t="page.title">touryou 状態画面</h1><span id="status" class="status" data-t="conn.none">未接続</span><span id="daemon-where" class="status" hidden></span><span class="tools"><button id="open-settings" class="quiet sm gear ib" type="button" data-t-aria="settings.title" data-t-title="settings.title" aria-label="設定" title="設定" aria-haspopup="dialog" aria-controls="settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path class="teeth" d="M12 2L12 5M12 19L12 22M2 12L5 12M19 12L22 12M4.9 4.9L7 7M17 17L19.1 19.1M4.9 19.1L7 17M17 7L19.1 4.9"/><path d="M12 5A7 7 0 1 0 12 19A7 7 0 1 0 12 5Z"/><path d="M12 9A3 3 0 1 0 12 15A3 3 0 1 0 12 9Z"/></svg></button></span></header>
+<p id="live" class="sr" aria-live="polite"></p><header class="top"><h1 id="repo-name" class="repo">touryou</h1><span id="status" class="status" data-t="conn.none">未接続</span><span class="tools"><button id="open-settings" class="quiet sm gear ib" type="button" data-t-aria="settings.title" data-t-title="settings.title" aria-label="設定" title="設定" aria-haspopup="dialog" aria-controls="settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path class="teeth" d="M12 2L12 5M12 19L12 22M2 12L5 12M19 12L22 12M4.9 4.9L7 7M17 17L19.1 19.1M4.9 19.1L7 17M17 7L19.1 4.9"/><path d="M12 5A7 7 0 1 0 12 19A7 7 0 1 0 12 5Z"/><path d="M12 9A3 3 0 1 0 12 15A3 3 0 1 0 12 9Z"/></svg></button></span></header>
 <dialog id="settings" class="settings" aria-labelledby="settings-title"><h2 id="settings-title" data-t="settings.title">設定</h2>
 <div class="set-cols">
 <fieldset><legend data-t="settings.a11y">アクセシビリティ</legend>
@@ -88,10 +88,10 @@ export const UI_HTML = `<!doctype html>
 <section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h3 id="now-title" data-t="now.title">いまあなたがすること</h3><p id="now-lead" class="lead"></p></section>
 <div id="todo" class="todo"></div>
 </div></section>
-<section class="win" data-p="graph" aria-labelledby="flows-title"><header class="wh"><h2 id="flows-title" data-t="flows.title">やり取り</h2></header><div class="wb"><p class="lead" data-t="flows.lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button></div><div id="graph-filter" class="seg" hidden><button id="hide-finished" class="quiet sm" type="button" aria-pressed="false" data-t="view.hideFinished">止めた・済んだ子を隠す</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span><span data-t="legend.up">← 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">→ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.delivered">届いた</span></span><span class="lg"><span class="sw down sent"></span><span data-t="legend.sent">送ったが、まだ届いていない</span></span><span class="lg"><span class="sw down unknown"></span><span data-t="legend.unknown">届いたか分からない</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="sw wait mtsw"></span><span data-t="legend.meteorStrong">強い流星と火花：あなたの答え待ちの頼み</span></span><span class="lg"><span class="sw down mtsw soft"></span><span data-t="legend.meteorWeak">弱い流星：まだ届いていない頼み</span></span><span class="lg"><span class="sw mtglow"></span><span data-t="legend.glow">縁の光：答え待ち・失敗の子</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span><p class="lgnote" data-t="legend.meteorStill">流星と光は、「動きを止める」と OS の「視差効果を減らす」では出ません</p></div><div id="list" class="tlist"></div></div></section>
+<section class="win" data-p="graph" aria-labelledby="flows-title"><header class="wh"><h2 id="flows-title" data-t="flows.title">やり取り</h2></header><div class="wb"><p class="lead" data-t="flows.lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button></div><div id="finished-filter" class="seg"><button id="finished-toggle" class="quiet sm" type="button" data-t="view.showFinished">止めた・済んだ子を表示する</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span><span data-t="legend.up">← 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">→ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.delivered">届いた</span></span><span class="lg"><span class="sw down sent"></span><span data-t="legend.sent">送ったが、まだ届いていない</span></span><span class="lg"><span class="sw down unknown"></span><span data-t="legend.unknown">届いたか分からない</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="sw wait mtsw"></span><span data-t="legend.meteorStrong">強い流星と火花：あなたの答え待ちの頼み</span></span><span class="lg"><span class="sw down mtsw soft"></span><span data-t="legend.meteorWeak">弱い流星：まだ届いていない頼み</span></span><span class="lg"><span class="sw mtglow"></span><span data-t="legend.glow">縁の光：答え待ち・失敗の子</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span><p class="lgnote" data-t="legend.meteorStill">流星と光は、「動きを止める」と OS の「視差効果を減らす」では出ません</p></div><div id="list" class="tlist"></div></div></section>
 <section class="win" data-p="right" aria-labelledby="cards-title"><header class="wh"><h2 id="cards-title" data-t="cards.title">作業ごとのようす</h2></header><div class="wb"><p class="lead" data-t="cards.lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
 <details id="finished" class="finished"><summary id="finished-summary" data-t="cards.finishedTitle">終わった作業</summary><div id="finished-cards" class="cards"></div></details></div></section>
-<nav class="nav" data-t-aria="pane.switch" aria-label="表示の切り替え"><button id="nav-yours" class="nb" type="button" data-view="yours" aria-current="page"><span data-t="pane.yours">あなたの番</span><span id="nav-count" class="bdg" aria-hidden="true" hidden></span><span id="nav-count-sr" class="sr"></span></button><button id="nav-explore" class="nb" type="button" data-view="explore" aria-current="false"><span data-t="pane.navExplore">やり取りと作業</span></button></nav>
+<nav class="nav" data-t-aria="pane.switch" aria-label="表示の切り替え"><button id="nav-yours" class="nb" type="button" data-view="yours" aria-current="page"><svg class="ic nic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 16L6 11A6 6 0 0 1 18 11L18 16L20 18L4 18Z"/><path d="M10 21L14 21"/></svg><span data-t="pane.yours">あなたの番</span><span id="nav-count" class="bdg" aria-hidden="true" hidden></span><span id="nav-count-sr" class="sr"></span></button><button id="nav-explore" class="nb" type="button" data-view="explore" aria-current="false"><svg class="ic nic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="2.5"/><circle cx="5.5" cy="19" r="2.5"/><circle cx="18.5" cy="19" r="2.5"/><path d="M11 7.3L6.5 16.7M13 7.3L17.5 16.7"/></svg><span data-t="pane.navExplore">やり取りと作業</span></button></nav>
 </section>
 </main>
 <script src="/ui/app.js"></script>
@@ -111,6 +111,7 @@ body{margin:0;background:transparent;color:var(--fg);font:15px/1.7 "Hiragino Kak
 :focus-visible{outline:3px solid var(--ai);outline-offset:2px;border-radius:4px}
 .top{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 16px;border-bottom:1px solid var(--line)}
 .top h1{font-size:17px;margin:0;letter-spacing:.04em}
+.top h1.repo{font:700 15px/1.2 "SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.02em;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .top .tools{margin-left:auto;flex:none;max-width:100%}.tools button{white-space:nowrap}.top h1{flex:none}.top .status{flex:1 1 12em;min-width:0;overflow-wrap:anywhere}
 .status{color:var(--muted);font-size:13px}
 .status.live::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--matsu);margin-right:6px;vertical-align:middle;animation:breathe 2.4s ease-in-out infinite}
@@ -168,6 +169,7 @@ button.sm{font-size:12.5px;padding:2px 10px}
 button.gear{font-size:16px;line-height:1;padding:3px 8px}
 .ib{display:inline-flex;align-items:center;justify-content:center;gap:6px}
 .ic{width:1.15em;height:1.15em;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nb .nic{width:22px;height:22px;margin-bottom:2px}.nb[aria-current="page"] .nic{color:var(--ai)}
 .gear .ic{width:20px;height:20px}.gear .teeth{stroke-width:4;stroke-linecap:butt}
 button.gear{min-width:44px;min-height:44px;padding:0;border:1.5px solid var(--muted);border-radius:50%;background:var(--sheet)}button.gear:hover{border-color:var(--ai)}
 dialog.settings{background:var(--dlg);-webkit-backdrop-filter:var(--blur-dlg);backdrop-filter:var(--blur-dlg);color:var(--fg);border:1px solid var(--glass-edge);border-radius:12px;box-shadow:var(--shadow),var(--hl);padding:16px 20px;width:calc(100vw - 96px);max-width:calc(100vw - 96px);max-height:calc(100dvh - 96px);overflow:auto}
@@ -379,7 +381,7 @@ const EXTERNAL_CHECK_PREFIXES = JSON.stringify(externalCheckSummaries().map((x) 
 export const UI_JS = `'use strict';
 (function () {
   // 設定の窓（#139）。描く前に当てる（読み込みの一瞬だけ違う明暗で描かないように）。選んだものはブラウザに残す（残せないときも、その場では効く）。
-  // localStorage を使うのは、この 2 つの関数の中だけ（鍵は 1 つ。書くのは still・theme・lang・hideFinished だけ。トークン・チケット・ID は書かない）
+  // localStorage を使うのは、この 2 つの関数の中だけ（鍵は 1 つ。書くのは still・theme・lang・showFinished だけ。トークン・チケット・ID は書かない）
   var SETTINGS_KEY = 'touryou.ui.settings';
   function browserLang() {
     var b = typeof navigator === 'object' && navigator ? navigator.language : undefined;
@@ -392,8 +394,8 @@ export const UI_JS = `'use strict';
       theme: v.theme === 'light' || v.theme === 'dark' ? v.theme : 'auto',
       // 言語は、言語の欄で選んだときだけ残す（選んでいなければ undefined。JSON に書かれず、そのつどブラウザの言語に合わせる）
       lang: v.lang === 'en' || v.lang === 'ja' ? v.lang : undefined,
-      // 関係図で、止めた・済んだ子を隠すか（#206。既定は出す）
-      hideFinished: v.hideFinished === true,
+      // 図と一覧で、止めた・済んだ子を表示するか（#206・#274。既定は隠す。以前の hideFinished は読まない: 既定が変わったので、前に残った false を引き継がない）
+      showFinished: v.showFinished === true,
     };
   }
   function loadSettings() {
@@ -401,7 +403,7 @@ export const UI_JS = `'use strict';
   }
   function saveSettings(x) {
     var v = settingsOf(x);
-    try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ still: v.still, theme: v.theme, lang: v.lang, hideFinished: v.hideFinished })); } catch (e) { /* 残せなくても動く */ }
+    try { window.localStorage.setItem(SETTINGS_KEY, JSON.stringify({ still: v.still, theme: v.theme, lang: v.lang, showFinished: v.showFinished })); } catch (e) { /* 残せなくても動く */ }
   }
   function applySettings(x) {
     var root = document.documentElement;
@@ -504,10 +506,12 @@ export const UI_JS = `'use strict';
     var s = msgText(f.msg);
     return s !== null ? s : typeof f.text === 'string' ? f.text : '';
   }
+  // 左上に出すリポジトリの名前（表示モデルの repoName。届くまでは空）
+  var repoName = '';
   // ページに書いてある文字（data-t の鍵）と、html の lang（属性は使わず、プロパティで入れる）
   function applyLang() {
     document.documentElement.lang = lang;
-    document.title = t('page.title');
+    document.title = repoName ? repoName + ' - ' + t('page.title') : t('page.title');
     document.querySelectorAll('[data-t]').forEach(function (e) { e.textContent = t(e.dataset.t); });
     document.querySelectorAll('[data-t-aria]').forEach(function (e) { e.ariaLabel = t(e.dataset.tAria); });
     document.querySelectorAll('[data-t-title]').forEach(function (e) { e.title = t(e.dataset.tTitle); });
@@ -1489,8 +1493,11 @@ export const UI_JS = `'use strict';
     document.getElementById('graph').hidden = !on;
     document.getElementById('graph-legend').hidden = !on;
     document.getElementById('graph-zoom').hidden = !on;
-    document.getElementById('graph-filter').hidden = !on;
-    document.getElementById('hide-finished').ariaPressed = settings.hideFinished ? 'true' : 'false';
+    // 隠す／表示するのボタンは、図でも一覧でも出す。文言は、押すとどうなるか（隠しているときは「表示する」）。ラベルが変わるので aria-pressed は付けない
+    var finishedKey = settings.showFinished ? 'view.hideFinished' : 'view.showFinished';
+    var finishedBtn = document.getElementById('finished-toggle');
+    finishedBtn.dataset.t = finishedKey;
+    finishedBtn.textContent = t(finishedKey);
     document.getElementById('list').hidden = on;
     document.getElementById('show-graph').ariaPressed = on ? 'true' : 'false';
     document.getElementById('show-list').ariaPressed = on ? 'false' : 'true';
@@ -1516,7 +1523,7 @@ export const UI_JS = `'use strict';
     try {
       // 箱を押したら、その子のカードへ移って光らせる（一覧の「詳しく」と同じ）。graph.js から返るのは ID だけ
       var pick = function (id) { if (typeof id === 'string' && ID_RE.test(id)) openCard(id); };
-      Promise.resolve(g.draw(box, view, { onPick: pick, lang: lang, hideFinished: settings.hideFinished })).then(fit, fallback);
+      Promise.resolve(g.draw(box, view, { onPick: pick, lang: lang, hideFinished: !settings.showFinished })).then(fit, fallback);
     } catch (e) {
       fallback();
     }
@@ -1525,11 +1532,35 @@ export const UI_JS = `'use strict';
     graphMode = mode;
     if (graphView && lastView) { graphSeq = mode === 'graph' ? -1 : graphSeq; renderGraph(graphView, lastView.seq); }
   }
+  // 止めた・済んだ子を隠したときに残す子の ID（図の keptIdsOf と同じ規則。試験で照らす）。
+  // 残すのは、終わった子（band が finished。根を除く）でない子と、その祖先すべて（動いている子の行が途中で切れないように）
+  function keptIdsOf(nodes) {
+    var byId = new Map();
+    nodes.forEach(function (n) { byId.set(n.id, n); });
+    var kept = new Set();
+    nodes.forEach(function (n) {
+      if (n.parentId !== null && n.band === 'finished') return;
+      var cur = n;
+      while (cur !== undefined && !kept.has(cur.id)) {
+        kept.add(cur.id);
+        cur = cur.parentId === null ? undefined : byId.get(cur.parentId);
+      }
+    });
+    return kept;
+  }
+  // 戻り値は、描いた数（隠した分も含む。「一部しか描けていない」の判定に使う）
   function renderList(view) {
     var box = document.getElementById('list');
     clear(box);
     var nodes = view.nodes;
     if (!nodes.length) { box.appendChild(el('p', 'empty', t('work.none'))); return 0; }
+    var hidden = 0;
+    if (!settings.showFinished) {
+      var kept = keptIdsOf(nodes);
+      hidden = nodes.length - kept.size;
+      nodes = nodes.filter(function (n) { return kept.has(n.id); });
+      if (hidden > 0) box.appendChild(el('p', 'note', t('list.hidden', { n: hidden })));
+    }
     var head = el('div', 'trow thead');
     ['list.hWork', 'list.hState', 'list.hUp', 'list.hDown'].forEach(function (k) { head.appendChild(el('span', '', t(k))); });
     box.appendChild(head);
@@ -1564,7 +1595,7 @@ export const UI_JS = `'use strict';
       });
     }
     walk('', 0);
-    return seen.size;
+    return seen.size + hidden;
   }
   // 一覧の「詳しく」: その子のカードまで動かして、光らせる（終わった作業なら、たたんだ欄を開く）
   // 移った先のカードを、1.5 秒、藍の縁で光らせる（どのカードに移ったか分かるように）。同じ子を続けて押したら、はじめから。
@@ -2198,12 +2229,15 @@ export const UI_JS = `'use strict';
 
   function render(view) {
     attachDir = typeof view.attachDir === 'string' ? view.attachDir : '';
-    // どの daemon の画面かを、ヘッダーに示す（作業場所の名前。全体の道筋は title に出す）
-    var where = document.getElementById('daemon-where');
-    var whereName = attachDir.slice(attachDir.lastIndexOf('/') + 1);
-    where.hidden = !whereName;
-    where.textContent = whereName;
-    where.title = t('page.where') + ': ' + attachDir;
+    // 左上は、開いているリポジトリの名前（daemon が repoRoot の末尾から作る）。全体の道筋は title に出す
+    var nameNow = typeof view.repoName === 'string' ? view.repoName : '';
+    if (nameNow !== repoName) {
+      repoName = nameNow;
+      document.title = repoName ? repoName + ' - ' + t('page.title') : t('page.title');
+    }
+    var repoEl = document.getElementById('repo-name');
+    repoEl.textContent = repoName || 'touryou';
+    repoEl.title = attachDir ? t('page.where') + ': ' + attachDir : '';
     document.getElementById('set-desktop').hidden = view.desktopChildrenAllowed !== true;
     renderApprovals(view.confirmations);
     var flows = Array.isArray(view.flows) ? view.flows : [];
@@ -2479,12 +2513,12 @@ export const UI_JS = `'use strict';
   document.getElementById('zoom-out').addEventListener('click', function () { zoomGraph('out'); });
   document.getElementById('zoom-fit').addEventListener('click', function () { zoomGraph('fit'); });
   document.getElementById('show-list').addEventListener('click', function () { showGraphMode('list'); });
-  // 止めた・済んだ子を隠す（#206）。選んだ状態はブラウザに残す。図の並びが変わるので、拡大・移動は初めの形に戻して描き直す
-  document.getElementById('hide-finished').addEventListener('click', function () {
-    settings.hideFinished = !settings.hideFinished;
+  // 止めた・済んだ子の隠す／表示する（#206・#274）。図と一覧で同じ状態。選んだ状態はブラウザに残す。図の並びが変わるので、拡大・移動は初めの形に戻して描き直す
+  document.getElementById('finished-toggle').addEventListener('click', function () {
+    settings.showFinished = !settings.showFinished;
     saveSettings(settings);
     dropGraph();
-    if (graphView && lastView) renderGraph(graphView, lastView.seq);
+    if (graphView && lastView) { renderList(graphView); renderGraph(graphView, lastView.seq); }
   });
   var settingsBox = document.getElementById('settings');
   var openSettings = document.getElementById('open-settings');

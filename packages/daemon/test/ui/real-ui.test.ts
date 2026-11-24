@@ -178,6 +178,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       credentials: createCredentialStore({ humanToken: HUMAN }),
       getState: () => current,
       handlers: {},
+      repoName: "sample-repo",
     });
     url = (await server.listen(0)).url;
     browser = await (pw as Pw).chromium.launch();
@@ -186,6 +187,16 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       if (m.type() === "error") problems.push(`${m.type()}: ${m.text()}`);
     });
     page.on("pageerror", (e) => problems.push(`pageerror: ${e.message}`));
+    // 既定は、止めた・済んだ子を隠す（#274）。ほかの試験は、7 つの箱が出る前提なので、残してあるものがないときだけ「表示する」を入れておく
+    // （既定そのものは、新しい文脈で確かめる試験がある。残してあるものは上書きしないので、再読み込みの試験もそのまま通る）
+    await page.addInitScript(() => {
+      try {
+        if (window.localStorage.getItem("touryou.ui.settings") === null)
+          window.localStorage.setItem("touryou.ui.settings", JSON.stringify({ showFinished: true }));
+      } catch {
+        /* 残せなければ、既定のまま */
+      }
+    });
     await page.addInitScript(() => {
       document.addEventListener("securitypolicyviolation", (e) => {
         (window as Win).__csp = ((window as Win).__csp ?? []).concat(
@@ -722,7 +733,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
 
   it("管理の窓: 本文で出した確認は、管理の窓を開いて閉じても残る（管理の窓から出した確認だけが、閉じると取り消される）", async () => {
     // 本文のボタンを順に押し、確認の欄（#confirm）が出るものを探す（確認の 2 段目は押さないので、何も送らない）
-    // 見せ方の切り替え（#show-list）や「隠す」（#hide-finished）は押さない（押すと、あとの試験の前提の「図」が変わる）
+    // 見せ方の切り替え（#show-list）や「隠す／表示する」（#finished-toggle）は押さない（押すと、あとの試験の前提の「図」が変わる）
     const buttons = page.locator(
       "#approvals button:not([disabled]), #todo button:not([disabled]), #cards button:not([disabled])",
     );
@@ -840,7 +851,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       );
     await open();
     expect(await p2.evaluate(() => document.documentElement.lang)).toBe("en");
-    expect(await p2.evaluate(() => document.title)).toBe("touryou status");
+    expect(await p2.evaluate(() => document.title)).toBe("sample-repo - touryou status");
     for (const sel of [
       "h1",
       "#now-title",
@@ -870,7 +881,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     await p2.click("#open-settings");
     await p2.check('input[name="set-theme"][value="light"]');
     await p2.click("#close-settings");
-    expect(await saved()).toEqual({ still: false, theme: "light", hideFinished: false });
+    expect(await saved()).toEqual({ still: false, theme: "light", showFinished: false });
     // 設定で日本語を選ぶと、その場で切り替わり、言語も残る
     await p2.click("#open-settings");
     await p2.check('input[name="set-lang"][value="ja"]');
@@ -881,7 +892,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       still: false,
       theme: "light",
       lang: "ja",
-      hideFinished: false,
+      showFinished: false,
     });
     expect((await all("#graph .gst")).some((t) => cjk.test(t))).toBe(true);
     expect(
@@ -892,7 +903,8 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     // 再読み込みのあとも残る（ブラウザが英語でも、覚えた日本語）
     await open();
     expect(await p2.evaluate(() => document.documentElement.lang)).toBe("ja");
-    expect(await textOf("h1")).toBe("touryou 状態画面");
+    // 左上は、言語によらず、リポジトリの名前（#274）
+    expect(await textOf("h1")).toBe("sample-repo");
     // 英語に戻すと、覚えた値も英語
     await p2.click("#open-settings");
     await p2.check('input[name="set-lang"][value="en"]');
@@ -946,52 +958,82 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     await ctx.close();
   });
 
-  it("設定の「止めた・済んだ子を隠す」を入れると、図から止めた・済んだ子の箱が消え、切ると戻る。再読み込みのあとも残る（#206）", async () => {
-    const pressed = () =>
-      page.evaluate(() => document.getElementById("hide-finished")?.getAttribute("aria-pressed"));
+  it("「止めた・済んだ子を隠す／表示する」を押すと、図から止めた・済んだ子の箱が消え、押すと戻る。文言は押したあとの動きに替わり、再読み込みのあとも残る（#206・#274）", async () => {
+    const label = () => page.evaluate(() => document.getElementById("finished-toggle")?.textContent);
     const ids = () =>
       page.evaluate(() =>
         [...document.querySelectorAll("#graph .gnode")].map((e) => e.getAttribute("data-id")),
       );
-    // 切り替えが設定の窓の中にあれば、窓を開いて押す（外にあれば、そのまま押す）
     const toggle = async () => {
-      const inDialog = await page.evaluate(
-        () => document.querySelector("#settings #hide-finished") !== null,
-      );
-      if (inDialog) await page.click("#open-settings");
-      await page.click("#hide-finished");
-      if (inDialog) await page.click("#close-settings");
+      await page.click("#finished-toggle");
       await page.waitForSelector("#graph .gnode");
     };
-    expect(await pressed()).toBe("false");
+    // 初めは「表示する」で始めてある（上の beforeAll の初期値）ので、いまは出ている。押すと隠れる
+    expect(await label()).toBe("止めた・済んだ子を隠す");
+    expect(await page.evaluate(() => document.getElementById("finished-toggle")?.hasAttribute("aria-pressed"))).toBe(false);
     const all = await ids();
     expect(all).toContain("ui-old");
     expect(await page.locator("#graph .gnode.t-over").count()).toBeGreaterThan(0);
     await toggle();
-    expect(await pressed()).toBe("true");
+    expect(await label()).toBe("止めた・済んだ子を表示する");
     const hidden = await ids();
     expect(hidden).not.toContain("ui-old");
     expect(await page.locator("#graph .gnode.t-over").count()).toBe(0);
     for (const id of ["root", "ui-a", "ui-b", "ui-c", LONG]) expect(hidden).toContain(id);
     expect(hidden.length).toBeLessThan(all.length);
-    // ブラウザに残る（鍵は 1 つ。値は still・theme・lang・hideFinished のどれか）
+    // ブラウザに残る（鍵は 1 つ。値は still・theme・lang・showFinished のどれか）
     const saved = await page.evaluate(() =>
       JSON.parse(window.localStorage.getItem("touryou.ui.settings") ?? "null"),
     );
-    expect(saved.hideFinished).toBe(true);
+    expect(saved.showFinished).toBe(false);
     // 再読み込みのあとも、隠れたまま
     await reopen();
-    expect(await pressed()).toBe("true");
+    expect(await label()).toBe("止めた・済んだ子を表示する");
     expect(await ids()).not.toContain("ui-old");
-    // 切ると戻る
+    // 押すと戻る
     await toggle();
-    expect(await pressed()).toBe("false");
+    expect(await label()).toBe("止めた・済んだ子を隠す");
     expect(new Set(await ids())).toEqual(new Set(all));
     await reopen();
-    expect(await pressed()).toBe("false");
+    expect(await label()).toBe("止めた・済んだ子を隠す");
     expect(new Set(await ids())).toEqual(new Set(all));
     expect(await csp()).toEqual([]);
     expect(problems).toEqual([]);
+  });
+
+  it("何も選んでいない画面は、止めた・済んだ子を隠す。図でも一覧でも同じボタンで「表示する」と、出る（#274）", async () => {
+    const ctx = await (browser as Browser).newContext({ locale: "ja-JP" });
+    const p2 = await ctx.newPage();
+    const errs: string[] = [];
+    p2.on("pageerror", (e: Error) => errs.push(e.message));
+    await p2.goto(`${url}/ui#ticket=${await ticket()}`);
+    await p2.waitForSelector("#graph .gnode");
+    const label = () => p2.evaluate(() => document.getElementById("finished-toggle")?.textContent);
+    const graphIds = () =>
+      p2.evaluate(() =>
+        [...document.querySelectorAll("#graph .gnode")].map((e) => e.getAttribute("data-id")),
+      );
+    const listText = () => p2.evaluate(() => document.getElementById("list")?.textContent ?? "");
+    // 図: 既定は隠す。ボタンは「表示する」
+    expect(await graphIds()).not.toContain("ui-old");
+    expect(await label()).toBe("止めた・済んだ子を表示する");
+    // 一覧へ切り替えても、同じボタンがあり、同じ状態（隠している）。隠した数を出す
+    await p2.click("#show-list");
+    expect(await p2.evaluate(() => document.getElementById("finished-toggle")?.offsetParent !== null)).toBe(true);
+    expect(await label()).toBe("止めた・済んだ子を表示する");
+    expect(await listText()).not.toContain("前の画面を片付ける");
+    expect(await listText()).toMatch(/\d+ 件隠しています/);
+    // 押すと、一覧に出る（隠した数の文は消える）
+    await p2.click("#finished-toggle");
+    expect(await label()).toBe("止めた・済んだ子を隠す");
+    expect(await listText()).toContain("前の画面を片付ける");
+    expect(await listText()).not.toMatch(/件隠しています/);
+    // 図へ戻すと、図にも出ている（同じ状態）
+    await p2.click("#show-graph");
+    await p2.waitForSelector("#graph .gnode");
+    expect(await graphIds()).toContain("ui-old");
+    expect(errs).toEqual([]);
+    await ctx.close();
   });
 
   it("紐付けが外れているかもしれない子（bindLostSuspect）のカードに、札と次にすること（統合が利用者に確かめ、承認後に自動でつなぎ直す。直らないときだけ claude attach。内部の道具名は出さない）が出る（#209・#255・#260）", async () => {
