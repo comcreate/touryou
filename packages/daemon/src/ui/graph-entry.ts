@@ -8,7 +8,7 @@
 import { type GetSchemes, NodeEditor } from "rete";
 import { AreaPlugin } from "rete-area-plugin";
 import { ReadonlyPlugin } from "rete-readonly-plugin";
-import { type LayoutPos, layoutOf } from "./graph-layout.js";
+import { COL_GAP, type LayoutPos, layoutOf } from "./graph-layout.js";
 import {
   ageClassOf,
   type GraphLane,
@@ -115,6 +115,36 @@ let kept: {
   readonly y: number;
 } | null = null;
 
+/**
+ * 状態の言葉の頭に付ける線の絵（画面のカードの札にも使う。`window.touryouGraph.statusIcon`）。
+ * `ask`＝答え待ち（吹き出しと点 3 つ）、`check`＝確かめ待ち（実線の箱と、点のチェック）。知らない名前は null。
+ */
+export function statusIcon(kind: string): SVGElement | null {
+  if (kind !== "ask" && kind !== "check") return null;
+  const svg = svgEl("svg", { class: "sico", width: 14, height: 14, viewBox: "0 0 16 16" });
+  if (kind === "ask") {
+    svg.append(
+      svgEl("path", {
+        class: "ln",
+        d: "M8 2 C4.2 2 1.5 4.4 1.5 7.4 C1.5 9.2 2.5 10.7 4 11.7 L3.4 14.2 L6.4 12.7 C6.9 12.8 7.4 12.8 8 12.8 C11.8 12.8 14.5 10.4 14.5 7.4 C14.5 4.4 11.8 2 8 2 Z",
+      }),
+    );
+    for (const x of [5, 8, 11])
+      svg.append(svgEl("path", { class: "dot", d: `M${x} 7.4 L${x} 7.4` }));
+  } else {
+    svg.append(svgEl("rect", { class: "ln", x: 1, y: 1, width: 14, height: 14, rx: 4 }));
+    for (const [x, y] of [
+      [4.5, 8.3],
+      [6.4, 10.2],
+      [8.3, 8.3],
+      [10.2, 6.4],
+      [12, 4.6],
+    ])
+      svg.append(svgEl("path", { class: "dot", d: `M${x} ${y} L${x} ${y}` }));
+  }
+  return svg;
+}
+
 /** いまの図を消す（描いていなければ何もしない）。描いている途中の `draw` も、そこで止まる。 */
 export function destroy(): void {
   teardown();
@@ -148,6 +178,8 @@ const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 2;
 /** 「全体を見る」の倍率：字が小さくなっても、図の全部を枠に収める（0.25 倍まで）。 */
 let fitK = 1;
+/** 「全体を見る」で、枠の中の真ん中に置くための、図の大きさ（倍率をかける前）。 */
+let fitSize = { w: 0, h: 0 };
 /** 初めの形の倍率の下限（利用者の決め：初めは読める大きさ。収まらない分は、図をつかんで動かして見る）。 */
 const FIRST_MIN = 0.5;
 /**
@@ -181,12 +213,24 @@ async function zoomBy(f: number): Promise<void> {
   );
 }
 
-/** 「全体を見る」：図の全部を枠に収める倍率と、左上（右上のボタンの分だけ下）に置く。描いていなければ何もしない。 */
+/** 枠の高さ（CSS の max-height があればそれ、なければ枠そのものの高さ）から、上の空きと下の余白を除いて、図の高さに収める倍率。 */
+function byHeightOf(host: HTMLElement, height: number): number {
+  const maxH = Number.parseFloat(getComputedStyle(host).maxHeight);
+  const boxH = Number.isFinite(maxH) ? maxH : host.clientHeight;
+  return boxH > 0 ? (boxH - FIT_TOP - FIT_BOTTOM) / height : 1;
+}
+
+/** 「全体を見る」：図の全部を、いまの枠（窓の大きさを変えたあとも、押した時点の大きさ）に収める倍率と、左上（右上のボタンの分だけ下）に置く。描いていなければ何もしない。 */
 async function fitView(): Promise<void> {
   const a = current;
+  const h = currentHost;
   if (a === null) return;
+  if (h !== null && fitSize.w > 0 && fitSize.h > 0)
+    fitK = clampZoom(Math.min(h.clientWidth / fitSize.w, byHeightOf(h, fitSize.h)));
   await a.area.zoom(fitK, 0, 0);
-  await a.area.translate(0, FIT_TOP);
+  const spareX = h === null ? 0 : (h.clientWidth - fitSize.w * fitK) / 2;
+  const spareY = h === null ? 0 : (h.clientHeight - FIT_TOP - FIT_BOTTOM - fitSize.h * fitK) / 2;
+  await a.area.translate(Math.max(0, spareX), FIT_TOP + Math.max(0, spareY));
 }
 
 /**
@@ -281,13 +325,21 @@ export async function draw(
   const none: Drawn = { width: 0, height: 0, ...ctl };
   const now = Date.now();
   const model = graphModelOf(view, lang, { hideFinished: options.hideFinished === true });
-  const L = layoutOf(model.nodes);
+  // 列の間は、いちばん長い札が、線の曲がり角（親の箱の右から最大 COL_NEED 先）と子の箱の手前の間に収まる広さにする
+  const widest = model.lanes.reduce((m, l) => {
+    const arrow = l.dir === "up" ? "↑ " : "↓ ";
+    const text =
+      l.at === null ? `${arrow}${l.label}` : laneAgoText(arrow, l.label, l.at, Date.now(), lang);
+    return Math.max(m, pillWidthOf(text));
+  }, 0);
+  const L = layoutOf(model.nodes, Math.max(COL_GAP, COL_NEED + widest + PILL_SLACK));
   const byId = new Map(model.nodes.map((n) => [n.id, n]));
   // 縁の光は、答え待ち・失敗の箱だけ。新しい順に GLOW_MAX 個まで（流星と同じ選び方。上限を超える分は光らせない）
   const glowIds = new Set(glowIdsOf(model.nodes, GLOW_MAX));
   const shapes: Shape[] = [];
   const conns: ReteConn[] = [];
   const trunks: string[] = [];
+  const bars: string[] = [];
   const add = (s: Shape, source: string, target: string): void => {
     conns.push({ id: `c${conns.length}`, source, target, shape: shapes.length });
     shapes.push(s);
@@ -295,14 +347,29 @@ export async function draw(
   for (const [pid, kids] of L.children) {
     const P = L.pos.get(pid) as LayoutPos;
     const kidPos = kids.map((k) => L.pos.get(k) as LayoutPos);
-    if (kids.length > 0) trunks.push(...trunkOf(P, kidPos));
-    kids.forEach((kid, i) => {
+    // 親の線の枠：子の並びの順に、上りが下りの前（子の高さの順＝線が交わらない順）。やり取りのない子は、点線の枝で 1 枠
+    const rows = kids.map((kid) => {
+      const mine = model.lanes
+        .filter((l) => l.parent === pid && l.child === kid)
+        .sort((a, b) => (a.dir === b.dir ? 0 : a.dir === "up" ? -1 : 1));
+      return { kid, mine };
+    });
+    const count = rows.reduce((n, r) => n + Math.max(1, r.mine.length), 0);
+    if (count > 0) {
+      const [stub, bar] = trunkOf(P, count);
+      trunks.push(stub as string);
+      bars.push(bar as string);
+    }
+    let index = 0;
+    rows.forEach((row, i) => {
       const C = kidPos[i] as LayoutPos;
-      const mine = model.lanes.filter((l) => l.parent === pid && l.child === kid);
-      if (mine.length === 0) add({ kind: "twig", d: twigOf(P, C) }, pid, kid);
-      for (const l of mine) {
-        const s = laneShape(l, laneOf(P, C, l.dir), byId.get(kid), now, lang);
-        add(s, l.dir === "up" ? kid : pid, l.dir === "up" ? pid : kid);
+      if (row.mine.length === 0) {
+        add({ kind: "twig", d: twigOf(P, C, { index: index++, count }) }, pid, row.kid);
+      }
+      for (const l of row.mine) {
+        const lane = laneOf(P, C, l.dir, { index: index++, count });
+        const s = laneShape(l, lane, byId.get(row.kid), now, lang);
+        add(s, l.dir === "up" ? row.kid : pid, l.dir === "up" ? pid : row.kid);
       }
     });
   }
@@ -362,7 +429,7 @@ export async function draw(
   if (model.hidden > 0)
     host.append(el("div", "ghidden", graphString(lang, "graph.hidden", { n: model.hidden })));
   // 背景：親の幹（どのノード・つながりにも属さないので、area の中身にじかに置く）
-  area.area.content.add(drawBackdrop(trunks, width, height));
+  area.area.content.add(drawBackdrop(trunks, bars, width, height));
 
   area.addPipe((ctx) => {
     // 拡大は、ホイールもボタンも、同じ下限・上限で止める
@@ -455,12 +522,14 @@ export async function draw(
   if (!live()) return none;
   readonly.enable(); // 置いたあとは、つなぐ・動かす・消すを止める（拡大・移動は残る）
   // 枠の幅と高さ（CSS の max-height。上の空き〔ボタン〕と下の余白を含む）に収まる倍率。大きくはしない。
-  const maxH = Number.parseFloat(getComputedStyle(host).maxHeight);
-  const byHeight = Number.isFinite(maxH) ? (maxH - FIT_TOP - FIT_BOTTOM) / height : 1;
+  // 広い画面は、盤が窓の高さいっぱいに広がる（max-height なし）ので、いまの枠の高さに収める
+  const byHeight = byHeightOf(host, height);
   const fits = Math.min(1, host.clientWidth / width, byHeight);
   // 初めの形は、読める大きさ（0.5 倍）より小さくしない。「全体を見る」は、0.25 倍まで縮めて全部を収める
   const k = Math.max(FIRST_MIN, fits);
-  fitK = clampZoom(fits);
+  // 「全体を見る」は、枠いっぱいまで拡大して（上限 ZOOM_MAX）、真ん中に置く
+  fitK = clampZoom(Math.min(host.clientWidth / width, byHeight));
+  fitSize = { w: width, h: height };
   // 同じ器への描き直しなら、人が変えた拡大・移動をそのまま残す（初めて描くときだけ、枠に合わせる）
   const keep = kept !== null && kept.host === host ? kept : null;
   kept = null;
@@ -542,11 +611,18 @@ function laneShape(
   };
 }
 
-function drawBackdrop(trunks: readonly string[], w: number, h: number): HTMLElement {
+function drawBackdrop(
+  trunks: readonly string[],
+  bars: readonly string[],
+  w: number,
+  h: number,
+): HTMLElement {
   const box = el("div", "gback");
   const svg = svgEl("svg", { class: "glink", width: w, height: h, viewBox: `0 0 ${w} ${h}` });
   // 列の見出し（いちばん上の統合・子・孫）は置かない（利用者の決め。親子は線と箱の位置で分かる）
   for (const d of trunks) svg.append(svgEl("path", { class: "trunk", d }));
+  // 親の端子の帯（太い縦の線）。端子（port）は、この上に置く
+  for (const d of bars) svg.append(svgEl("path", { class: "trunk bar", d }));
   box.append(svg);
   return box;
 }
@@ -586,7 +662,11 @@ function drawNode(
     });
   }
   row.append(icon, gs);
-  box.append(el("span", "gt", n.title), row, el("span", `gst st-${n.status}`, n.statusText));
+  const gst = el("span", `gst st-${n.status}`);
+  const mark = n.status === "wait" ? statusIcon("ask") : n.check ? statusIcon("check") : null;
+  if (mark !== null) gst.append(mark);
+  gst.append(n.statusText);
+  box.append(el("span", "gt", n.title), row, gst);
   if (n.alive) box.append(el("span", "galive"));
   if (n.needsHuman > 0) {
     const b = el("span", "gbadge", String(n.needsHuman));
@@ -598,10 +678,18 @@ function drawNode(
 
 /** 札の地の、文字の左右の余白。 */
 const PILL_PAD = 6;
+/** 札の文字（「N 分前」→「N 時間前」など）が伸びても収まる余裕。 */
+const PILL_SLACK = 24;
+/** 親の箱の右から曲がり角まで（最大）と、札の右端から子の箱まで。 */
+const COL_NEED = 135;
 /** 札の地の幅：太字の等幅 12.5px の文字幅（半角 7.6・それ以外 12.5）の合計に、左右の余白を足す。 */
 function pillWidthOf(text: string): number {
   let w = 0;
-  for (const ch of text) w += (ch.codePointAt(0) ?? 0) < 0x80 ? 7.6 : 12.5;
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0;
+    // 矢印（U+2190〜21FF）は、全角より狭く出る
+    w += c < 0x80 ? 7.6 : c >= 0x2190 && c <= 0x21ff ? 8.5 : 12.5;
+  }
   return Math.ceil(w + PILL_PAD * 2);
 }
 
@@ -614,6 +702,7 @@ function drawShape(
   ticks: AgoTick[],
 ): void {
   if (s === undefined) return;
+  const fitters: Array<() => void> = [];
   element.replaceChildren();
   const svg = svgEl("svg", { class: "glink", width: w, height: h, viewBox: `0 0 ${w} ${h}` });
   if (s.kind === "twig") svg.append(svgEl("path", { class: "twig", d: s.d }));
@@ -639,15 +728,23 @@ function drawShape(
         }),
       );
     // 札の地（docs/ui-mock の `pill`）。文字の幅は測らず、半角と全角の数から見積もる
-    const pillOf = (text: string): SVGElement =>
-      svgEl("rect", {
+    // 描いたあとは、文字の実際の幅（測れたとき）で作る。測れなければ見積もり
+    const pillOf = (text: string, measured?: number): SVGElement => {
+      const width = measured !== undefined ? Math.ceil(measured + PILL_PAD * 2) : pillWidthOf(text);
+      return svgEl("rect", {
         class: `mpill ${look}`,
-        x: lane.labelX - PILL_PAD,
+        x: lane.labelX + PILL_PAD - width,
         y: lane.labelY - 13.5,
-        width: pillWidthOf(text),
+        width,
         height: 18,
         rx: 3,
       });
+    };
+    const measure = (): number | undefined => {
+      if (!mlabel.isConnected) return undefined;
+      const w = (mlabel as unknown as SVGTextContentElement).getComputedTextLength?.();
+      return typeof w === "number" && w > 0 ? w : undefined;
+    };
     let pill = pillOf(s.label ?? "");
     svg.append(pill);
     const mlabel = svgEl(
@@ -661,6 +758,13 @@ function drawShape(
       s.stage ?? "",
     );
     svg.append(mlabel, mstage);
+    fitters.push(() => {
+      const w = measure();
+      if (w === undefined) return;
+      const next = pillOf(s.label ?? "", w);
+      pill.replaceWith(next);
+      pill = next;
+    });
     if (s.ago !== undefined) {
       const { arrow, label, at } = s.ago;
       const title = line.querySelector("title");
@@ -672,7 +776,7 @@ function drawShape(
         if (mlabel.textContent !== text) {
           mlabel.textContent = text;
           // 文字の幅が変わるので、札の地は作り直して置き換える（属性は svgEl だけが書く）
-          const next = pillOf(text);
+          const next = pillOf(text, measure());
           pill.replaceWith(next);
           pill = next;
           if (title !== null)
@@ -692,6 +796,7 @@ function drawShape(
     }
   }
   element.append(svg);
+  for (const fit of fitters) fit();
 }
 
 /**
@@ -736,11 +841,8 @@ function meteorOf(s: Shape, look: string): SVGElement[] {
  */
 function sparkOf(s: Shape, look: string): SVGElement {
   const weak = s.meteor === "weak";
-  // 上りは道の終わり（幹）、下りは子の箱の縁（端子の位置）に当てる
-  const { x, y } =
-    weak && s.lane?.portX !== undefined && s.lane.portY !== undefined
-      ? { x: s.lane.portX, y: s.lane.portY }
-      : meteorEndOf(s.d);
+  // 上りも下りも、道の終わり（上りは親の端子の帯の側、下りは子の箱の縁）に当てる
+  const { x, y } = meteorEndOf(s.d);
   const cls = ["msp", colorOf(look), weak ? "weak" : "", s.late === true ? "late" : ""]
     .filter((c) => c !== "")
     .join(" ");

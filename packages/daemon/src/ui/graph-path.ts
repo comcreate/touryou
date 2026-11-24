@@ -6,7 +6,7 @@ import { BOX_H, BOX_W, type Layout, type LayoutPos, MARGIN, ROW_H } from "./grap
 import { PATH_PATTERN } from "./svg-el.js";
 
 /** 上りと下りの道を、枝の中心から上下にずらす幅。 */
-export const LANE_GAP = 6;
+export const LANE_GAP = 10;
 export const ARROW = 8;
 
 const num = (v: number): string => {
@@ -33,72 +33,109 @@ export interface Lane {
   readonly d: string;
   /** 矢印の三角。 */
   readonly tip: string;
-  /** 端子の丸（子の箱の端）の真ん中。 */
+  /** 端子（親の端子の帯の上の、この線の枠）の真ん中。 */
   readonly portX?: number;
   readonly portY?: number;
-  /** 札（種類と「何分前」）の左下。段の言葉は、その外側（上りは上・下りは下）に `stageY` で置く。 */
+  /** 札（種類と「何分前」）の文字の右の端と基線。段の言葉は、その外側（上りは上・下りは下）に `stageY` で置く。 */
   readonly labelX: number;
   readonly labelY: number;
   readonly stageY: number;
 }
 
-/** 親の箱の右の辺から、幹（縦の線）までの長さ。 */
-export const TRUNK = 26;
+/**
+ * 親の右の辺の「端子の帯」（見本の `bar`）と、そこから出る線の寸法（docs/ui-mock/index.html と同じ）。
+ * 線は 1 本ごとに「枠」（slot）を 1 つ持ち、親の中心を真ん中に、SLOT_GAP ずつ縦に並ぶ。
+ * 線は端子の帯の右から出て、枠ごとの高さで折れ（JOG）、子の高さの線になって子の箱へ着く。
+ */
+export const BAR_OFFSET = 19;
+export const BAR_W = 6;
+export const LANE_OFFSET = 31;
+export const SLOT_GAP = 18;
+const JOG_BASE = 26;
+const JOG_STEP = 10;
+const JOG_EXTRA_MAX = 40;
 
-/** 親 P の幹の x。子の枝は、すべてこの幹から分かれる（見本の `tx`）。 */
-export const trunkXOf = (P: LayoutPos): number => P.x + BOX_W + TRUNK;
+/** 親の線の枠（何番目か・全部で何個か）。親の下の子の並びの順（子の高さの順。上りが下りの前）に 0 から振る。 */
+export interface Slot {
+  readonly index: number;
+  readonly count: number;
+}
+
+const barXOf = (P: LayoutPos): number => P.x + BOX_W + BAR_OFFSET;
+/** 線が端子の帯から出る x（帯の右）。 */
+export const laneXOf = (P: LayoutPos): number => P.x + BOX_W + LANE_OFFSET;
+const slotYOf = (P: LayoutPos, s: Slot): number => P.cy + (s.index - (s.count - 1) / 2) * SLOT_GAP;
+/** 縦に折れる x。両端の枠ほど手前、真ん中の枠ほど奥にして、線が交わらないようにする（見本の 185・195・205・215）。 */
+function jogXOf(P: LayoutPos, s: Slot): number {
+  const depth = Math.min(s.index, s.count - 1 - s.index);
+  const step = Math.min(JOG_STEP, JOG_EXTRA_MAX / Math.max(1, Math.floor((s.count - 1) / 2)));
+  return laneXOf(P) + JOG_BASE + depth * step;
+}
 
 /**
- * 親の幹：親の箱の右の辺から短く出て、子の高さまで縦にのびる 2 本（見本の `trunk`）。
- * 子の上りの道は、子ごとの高さで幹に着くので、矢印の先が重ならない。
+ * 親の端子の帯：親の箱の右の辺から短く出る線（stub）と、枠の全部にのびる縦の帯（bar。太い線で描く）。
  */
-export function trunkOf(P: LayoutPos, kids: readonly LayoutPos[]): readonly string[] {
-  const tx = trunkXOf(P);
-  const ys = kids.map((k) => k.cy).concat([P.cy]);
+export function trunkOf(P: LayoutPos, count: number): readonly string[] {
+  const bx = barXOf(P) + BAR_W / 2;
+  const top = slotYOf(P, { index: 0, count }) - 16;
+  const bottom = slotYOf(P, { index: count - 1, count }) + 16;
   return [
     pathD([
       ["M", P.x + BOX_W, P.cy],
-      ["L", tx, P.cy],
+      ["L", barXOf(P), P.cy],
     ]),
     pathD([
-      ["M", tx, Math.min(...ys) - LANE_GAP],
-      ["L", tx, Math.max(...ys) + LANE_GAP],
+      ["M", bx, top],
+      ["L", bx, bottom],
     ]),
   ];
 }
 
 /**
  * 子 C の枝の、上り（子 → 親）か下り（親 → 子）の道（見本の `drawGraph` の `line`）。
- * 上りは子の箱の左から幹へ（矢印の先は幹。左向き）、下りは幹から子の箱の左へ（矢印の先は子の箱。右向き）。
- * 上りは枝の上、下りは枝の下を通る。
+ * 上りは子の箱の左から、折れて、端子の帯の右へ（矢印の先は帯の側。左向き）。下りは帯の右から、折れて、子の箱の左へ（矢印の先は子の箱。右向き）。
+ * 子の高さの線は、上りが枝の上、下りが枝の下を通る。端子（port）は、帯の上の、この線の枠の位置。
  */
-export function laneOf(P: LayoutPos, C: LayoutPos, dir: Dir): Lane {
-  const tx = trunkXOf(P);
+export function laneOf(P: LayoutPos, C: LayoutPos, dir: Dir, slot: Slot): Lane {
+  const sx = laneXOf(P);
+  const jx = jogXOf(P, slot);
+  const py = slotYOf(P, slot);
   const up = dir === "up";
   const y = C.cy + (up ? -LANE_GAP : LANE_GAP);
+  const apex = sx + 2;
   return {
     d: up
       ? pathD([
           ["M", C.x, y],
-          ["L", tx + ARROW, y],
+          ["L", jx, y],
+          ["L", jx, py],
+          ["L", apex + ARROW, py],
         ])
       : pathD([
-          ["M", tx, y],
+          ["M", sx, py],
+          ["L", jx, py],
+          ["L", jx, y],
           ["L", C.x - ARROW, y],
         ]),
-    tip: up ? tipAt(tx, y, "left") : tipAt(C.x, y, "right"),
-    portX: C.x,
-    portY: y,
-    labelX: tx + 18,
-    labelY: up ? y - 6 : y + 15,
-    stageY: up ? y - 20 : y + 29,
+    tip: up ? tipAt(apex, py, "left") : tipAt(C.x, y, "right"),
+    portX: barXOf(P) + BAR_W / 2,
+    portY: py,
+    // 札は線の上下の真ん中（高さ 18）に置き、右の端を子の箱の手前 32 にそろえる（見本のとおり）。
+    // 段の言葉は、札の外側（上りは上・下りは下）に、札の右の端にそろえて置く
+    labelX: C.x - 32 - 6,
+    labelY: y + 4.5,
+    stageY: up ? y - 13 : y + 22,
   };
 }
 
-/** 薄い点線の枝（やり取りのまだない子）。幹から子の箱の左まで。 */
-export function twigOf(P: LayoutPos, C: LayoutPos): string {
+/** 薄い点線の枝（やり取りのまだない子）。端子の帯の右から、折れて、子の箱の左まで。 */
+export function twigOf(P: LayoutPos, C: LayoutPos, slot: Slot): string {
+  const jx = jogXOf(P, slot);
+  const py = slotYOf(P, slot);
   return pathD([
-    ["M", trunkXOf(P), C.cy],
+    ["M", laneXOf(P), py],
+    ["L", jx, py],
+    ["L", jx, C.cy],
     ["L", C.x, C.cy],
   ]);
 }

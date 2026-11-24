@@ -30,7 +30,7 @@ export interface Layout {
   readonly height: number;
 }
 
-export function layoutOf(nodes: readonly LayoutInput[]): Layout {
+export function layoutOf(nodes: readonly LayoutInput[], colGap: number = COL_GAP): Layout {
   const ids = new Set<string>();
   const order: string[] = [];
   for (const n of nodes) {
@@ -78,7 +78,7 @@ export function layoutOf(nodes: readonly LayoutInput[]): Layout {
         cy = (first.cy + last.cy) / 2;
       }
       maxDepth = Math.max(maxDepth, top.depth);
-      const x = MARGIN + top.depth * (BOX_W + COL_GAP);
+      const x = MARGIN + top.depth * (BOX_W + colGap);
       pos.set(top.id, { x, y: cy - BOX_H / 2, cy, depth: top.depth });
     }
   };
@@ -94,7 +94,7 @@ export function layoutOf(nodes: readonly LayoutInput[]): Layout {
   return {
     pos,
     children: shown,
-    width: MARGIN * 2 + maxDepth * (BOX_W + COL_GAP) + BOX_W,
+    width: MARGIN * 2 + maxDepth * (BOX_W + colGap) + BOX_W,
     height: MARGIN * 2 + Math.max(1, leaf) * ROW_H - (ROW_H - BOX_H),
   };
 }

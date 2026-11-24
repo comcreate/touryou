@@ -15,15 +15,18 @@ import {
 } from "../../src/ui/graph-model.js";
 import {
   ARROW,
+  BAR_OFFSET,
+  BAR_W,
   LANE_GAP,
   laneOf,
+  laneXOf,
   meteorEndOf,
   pathD,
   roleIconOf,
+  SLOT_GAP,
   SPARK_FLASH,
   SPARK_STREAKS,
   trunkOf,
-  trunkXOf,
   twigOf,
 } from "../../src/ui/graph-path.js";
 import { LANGS, UI_TEXT } from "../../src/ui/i18n.js";
@@ -44,34 +47,39 @@ describe("graph-path（線の道。幹から子ごとに枝分かれ）", () => 
   ]);
   const P = must(L.pos.get("r"));
   const kids = ["a", "b", "c"].map((k) => must(L.pos.get(k)));
-  const tx = trunkXOf(P);
+  const sx = laneXOf(P);
+  const slot = { index: 2, count: 6 };
 
   it("d は許した命令と数だけ", () => {
     for (const C of kids)
       for (const dir of ["up", "down"] as const) {
-        const l = laneOf(P, C, dir);
+        const l = laneOf(P, C, dir, slot);
         expect(l.d).toMatch(PATH_PATTERN);
         expect(l.tip).toMatch(PATH_PATTERN);
       }
-    for (const d of trunkOf(P, kids)) expect(d).toMatch(PATH_PATTERN);
-    expect(twigOf(P, must(kids[0]))).toMatch(PATH_PATTERN);
+    for (const d of trunkOf(P, 6)) expect(d).toMatch(PATH_PATTERN);
+    expect(twigOf(P, must(kids[0]), slot)).toMatch(PATH_PATTERN);
     expect(roleIconOf(true)).toMatch(PATH_PATTERN);
     expect(roleIconOf(false)).toMatch(PATH_PATTERN);
     expect(() => pathD([["M", Number.NaN, 0]])).toThrow();
     expect(() => pathD([["X" as "M", 0, 0]])).toThrow();
   });
 
-  it("上りは子の箱の左から幹へ（矢印の先は幹・左向き）、下りは幹から子の箱へ（矢印の先は子の箱・右向き）。端子は子の箱の端", () => {
+  it("上りは子の箱の左から、折れて、端子の帯の右へ（矢印の先は帯の側・左向き）。下りは帯の右から、折れて、子の箱へ（矢印の先は子の箱・右向き）。端子は帯の上", () => {
     const C = must(kids[1]);
-    const up = laneOf(P, C, "up");
-    const down = laneOf(P, C, "down");
+    const up = laneOf(P, C, "up", slot);
+    const down = laneOf(P, C, "down", slot);
+    const py = P.cy + (slot.index - (slot.count - 1) / 2) * SLOT_GAP;
     expect(nums(up.d)[0]).toBe(C.x);
-    expect(nums(up.tip).slice(0, 2)).toEqual([tx, C.cy - LANE_GAP]);
-    expect(nums(up.tip)[2]).toBeGreaterThan(tx); // 左向き（三角の底が右）
-    expect(nums(down.d)[0]).toBe(tx);
+    expect(nums(up.d).slice(-2)).toEqual([sx + 2 + ARROW, py]);
+    expect(nums(up.tip).slice(0, 2)).toEqual([sx + 2, py]);
+    expect(nums(up.tip)[2]).toBeGreaterThan(sx); // 左向き（三角の底が右）
+    expect(nums(down.d).slice(0, 2)).toEqual([sx, py]);
     expect(nums(down.tip).slice(0, 2)).toEqual([C.x, C.cy + LANE_GAP]);
-    expect([up.portX, up.portY]).toEqual([C.x, C.cy - LANE_GAP]);
-    // 札は線の上（上り）・下（下り）、段の言葉はその外側
+    expect([up.portX, up.portY]).toEqual([P.x + BOX_W + BAR_OFFSET + BAR_W / 2, py]);
+    // 札は線の真ん中（札の高さ 18 の中心が線）、段の言葉はその外側（上りは上・下りは下）
+    expect(up.labelY - 4.5).toBe(C.cy - LANE_GAP);
+    expect(down.labelY - 4.5).toBe(C.cy + LANE_GAP);
     expect(up.stageY).toBeLessThan(up.labelY);
     expect(down.stageY).toBeGreaterThan(down.labelY);
   });
@@ -79,7 +87,7 @@ describe("graph-path（線の道。幹から子ごとに枝分かれ）", () => 
   it("矢印は塗らない開いた山形（先から 2 本の線。閉じない）で、底は先から ARROW だけ離れる", () => {
     const C = must(kids[1]);
     for (const dir of ["up", "down"] as const) {
-      const tip = laneOf(P, C, dir).tip;
+      const tip = laneOf(P, C, dir, slot).tip;
       expect(tip).not.toContain("Z");
       expect(tip.match(/M/g)?.length).toBe(2);
       const n = nums(tip);
@@ -89,23 +97,28 @@ describe("graph-path（線の道。幹から子ごとに枝分かれ）", () => 
     }
   });
 
-  it("上りの矢印の先は、子ごとに違う高さ（1 点に重ならない）。幹は子の高さの全体にのびる", () => {
+  it("上りの矢印の先は、線ごとに違う高さ（1 点に重ならない）。端子の帯は枠の全体にのびる。折れる x は、両端ほど手前", () => {
     const many = Array.from({ length: 20 }, (_, i) => ({ id: `k${i}`, parentId: "r" }));
     const M = layoutOf([{ id: "r", parentId: null }, ...many]);
     const MP = must(M.pos.get("r"));
     const kp = many.map((k) => must(M.pos.get(k.id)));
-    const tips = kp.map((C) =>
-      nums(laneOf(MP, C, "up").tip)
+    const count = kp.length * 2;
+    const tips = kp.map((C, i) =>
+      nums(laneOf(MP, C, "up", { index: i * 2, count }).tip)
         .slice(0, 2)
         .join(","),
     );
     expect(new Set(tips).size).toBe(kp.length);
-    const [stub, trunk] = trunkOf(MP, kp).map(nums);
+    const [stub, bar] = trunkOf(MP, count).map(nums);
     expect(must(stub)[0]).toBe(MP.x + BOX_W);
-    expect(must(trunk)[1]).toBeLessThanOrEqual(Math.min(...kp.map((k) => k.cy)));
-    expect(must(trunk)[3]).toBeGreaterThanOrEqual(Math.max(...kp.map((k) => k.cy)));
+    const ys = Array.from({ length: count }, (_, i) => MP.cy + (i - (count - 1) / 2) * SLOT_GAP);
+    expect(must(bar)[1]).toBeLessThanOrEqual(Math.min(...ys));
+    expect(must(bar)[3]).toBeGreaterThanOrEqual(Math.max(...ys));
+    const jog = (index: number) => must(nums(laneOf(MP, must(kp[0]), "up", { index, count }).d)[2]);
+    expect(jog(0)).toBeLessThan(jog(Math.floor(count / 2) - 1));
+    expect(jog(0)).toBe(jog(count - 1));
     // 札は列の間に収まる（子の箱にかからない）
-    for (const C of kp) expect(laneOf(MP, C, "up").labelX).toBeLessThan(C.x - 150);
+    for (const C of kp) expect(laneOf(MP, C, "up", { index: 0, count }).labelX).toBe(C.x - 38);
     expect(COL_GAP).toBeGreaterThanOrEqual(200);
   });
 });
@@ -159,9 +172,10 @@ describe("流星・火花（段階 ④）", () => {
     ]);
     const P = must(L.pos.get("r"));
     const C = must(L.pos.get("a"));
-    const up = laneOf(P, C, "up");
-    expect(meteorEndOf(up.d)).toEqual({ x: trunkXOf(P) + ARROW, y: C.cy - LANE_GAP });
-    const down = laneOf(P, C, "down");
+    const slot = { index: 0, count: 2 };
+    const up = laneOf(P, C, "up", slot);
+    expect(meteorEndOf(up.d).x).toBe(laneXOf(P) + 2 + ARROW);
+    const down = laneOf(P, C, "down", slot);
     expect(meteorEndOf(down.d)).toEqual({ x: C.x - ARROW, y: C.cy + LANE_GAP });
     // 曲線・円弧は、端の点が決まらないので受けない
     expect(() => meteorEndOf("M 0 0 C 1 1 2 2 3 3")).toThrow();
@@ -294,13 +308,13 @@ describe("箱の状態（見本の STATE・TIER。画面の言葉とそろえる
   });
   const by = new Map(m.nodes.map((n) => [n.id, n]));
   it.each([
-    ["run", "run", "go", "動いている", true],
-    ["ask", "wait", "turn", "● あなたの答え待ち", false],
+    ["run", "run", "go", "▶ 動いている", true],
+    ["ask", "wait", "turn", "あなたの答え待ち", false],
     ["stall", "stall", "turn", "‖ 止まっているかも", false],
     ["fail", "fail", "turn", "✕ 失敗", false],
-    ["askf", "wait", "turn", "● あなたの答え待ち", false],
-    ["viol", "run", "go", "動いている", true],
-    ["arch", "done", "over", "済んだ", false],
+    ["askf", "wait", "turn", "あなたの答え待ち", false],
+    ["viol", "run", "go", "▶ 動いている", true],
+    ["arch", "done", "over", "✓ 済んだ", false],
     ["stop", "stopped", "over", "■ 止めた", false],
     ["pend", "run", "go", "起動を待っている", false],
   ] as const)("%s → %s・%s・「%s」", (id, status, tier, text, alive) => {
@@ -511,7 +525,7 @@ describe("閉じた判断は、答え待ちに数えない（カードと同じ�
 });
 
 describe("箱の状態の言葉は、画面（app.js）の STATE_NAMES と同じ", () => {
-  it("RUN_TEXT の値は、STATE_NAMES の同じキーの値と同じ（「■ 」の印つきの止まりきっていないは、印を除いて）", () => {
+  it("RUN_TEXT の値は、STATE_NAMES の同じキーの値と同じ（「■ 」「▶ 」の印つきは、印を除いて）", () => {
     const i = UI_JS.indexOf("var STATE_NAMES = {");
     const names = runInNewContext(
       `(${UI_JS.slice(UI_JS.indexOf("{", i), UI_JS.indexOf("};", i) + 1)})`,
@@ -520,8 +534,8 @@ describe("箱の状態の言葉は、画面（app.js）の STATE_NAMES と同じ
     for (const lang of LANGS) {
       const word = (key: string) => UI_TEXT[key as keyof typeof UI_TEXT][lang];
       for (const [k, v] of Object.entries(RUN_TEXT))
-        expect(word(v).replace(/^■ /, ""), `${lang} ${k}`).toBe(word(names[k] as string));
-      expect(word(STATUS_TEXT.run)).toBe(word(names.running as string));
+        expect(word(v).replace(/^[■▶] /, ""), `${lang} ${k}`).toBe(word(names[k] as string));
+      expect(word(STATUS_TEXT.run).replace(/^▶ /, "")).toBe(word(names.running as string));
     }
   });
 });

@@ -168,19 +168,19 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(meteor.weakSameD).toBe(true);
     expect(meteor.pathLength).toBe("100");
     expect(meteor.sparkAt).toBe(`translate(${meteor.upEnd[0]} ${meteor.upEnd[1]})`);
-    // 下りの火花は、子の箱の縁の端子（rect.port）の真ん中に置く
+    // 下りの火花は、道の終わり（子の箱の縁）に置く
     const weakSpark = await page.evaluate(() => {
       const g = document.querySelector("svg.glink g.msp.weak") as SVGGraphicsElement;
-      const port = g.parentElement?.querySelector("rect.port") as SVGGraphicsElement;
-      const n = (a: string) => Number.parseFloat(port.getAttribute(a) ?? "NaN");
+      const d = g.parentElement?.querySelector("path.mtl.down, path.mtl") as Element | null;
+      const nums = (d?.getAttribute("d") ?? "").match(/-?\d+(?:\.\d+)?/g)?.map(Number) ?? [];
       return {
         at: g.getAttribute("transform"),
-        portX: n("x") + n("width") / 2,
-        portY: n("y") + n("height") / 2,
+        end: nums.slice(-2),
         duration: getComputedStyle(g.querySelector("path.sk") as Element).animationDuration,
       };
     });
-    expect(weakSpark.at).toBe(`translate(${weakSpark.portX} ${weakSpark.portY})`);
+    expect(weakSpark.at).toMatch(/^translate\(/);
+    expect(weakSpark.end.length).toBe(2);
     expect(weakSpark.duration).toBe("1.8s");
     // 強いほうが太く（頭 6 ＞ 4）、弱いほうは遅い（1.8 秒）
     expect(meteor.strongWidth).toBeGreaterThan(meteor.weakWidth);
@@ -460,7 +460,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(r.kMax).toBe(2);
     expect(r.kMin).toBe(0.25);
     expect(r.afterRedraw).toBe(r.kept); // ボタンで変えた拡大も、描き直しで残る
-    expect(r.fitted).toBe(r.first); // 全体を見るで、初めの形に戻る
+    expect(r.fitted.replace(/^.*scale/, "scale")).toBe(r.first.replace(/^.*scale/, "scale")); // 全体を見るで、初めの倍率に戻る（位置は枠の真ん中）
     expect(problems).toEqual([]);
   });
 

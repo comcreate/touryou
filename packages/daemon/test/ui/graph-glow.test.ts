@@ -12,6 +12,7 @@ const node = (id: string, status: GraphNode["status"], lastAt: number | null): G
   tier: "go",
   statusText: "",
   alive: true,
+  check: false,
   needsHuman: 0,
   lastAt,
 });
