@@ -12,7 +12,7 @@ depends-on: ["spec-touryou-ui"]
 
 **仕様:** [touryou-ui.md](../../specification/touryou-ui.md)
 **見た目の基準:** `docs/ui-mock/index.html` と `docs/ui-mock/README.md`（#238 で確定）
-**置き場:** チケット番号は #236（#254 に含まれた）。旧の置き場 `.sdd/task/ui-status-screen-look/` は、統括が統合のときに改名・削除する（この子は触らない）。
+**置き場:** チケット番号は #236（#254 に含まれた）。旧の置き場 `ui-status-screen-look` は削除済み。
 
 実装後に削除してよい一時文書。
 

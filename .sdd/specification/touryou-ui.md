@@ -15,7 +15,7 @@ risk: "medium"
 
 # 状態画面の見た目
 
-**関連 Design:** [design-draft.md](../task/ui-status-screen-look/design-draft.md)
+**関連 Design:** [design-draft.md](../task/236/design-draft.md)
 **関連 Spec:** [touryou_spec.md](./touryou_spec.md)（5.6 節「人間の判断と表示」）
 **関連 PRD:** [touryou.md](../requirement/touryou.md)（FR_021・IR_003）
 **見本:** [proposal-final.html](../task/ui-design-proposals/round5/proposal-final.html)、[index.html](../task/ui-design-proposals/round5/index.html)
@@ -30,7 +30,7 @@ risk: "medium"
 
 # 2. 位置づけと既存の仕様との関係
 
-- 種別は「新機能（小）」。既存の機能（状態画面）の中の、描画の層だけの変更で、PRD の新規作成は要らない。理由は [design-draft.md](../task/ui-status-screen-look/design-draft.md) の 1 節にある。
+- 種別は「新機能（小）」。既存の機能（状態画面）の中の、描画の層だけの変更で、PRD の新規作成は要らない。理由は [design-draft.md](../task/236/design-draft.md) の 1 節にある。
 - [touryou_spec.md](./touryou_spec.md) 5.6 節の画面の構成（#89）と、本書の次の点は食い違う。**どちらを正にするかは人間の判断**で、本書は、決まるまで 5.6 節を書き換えない（PRD も同じ）。
 
 | 5.6 節の記述 | 本書（見本）の姿 |
@@ -98,5 +98,5 @@ risk: "medium"
 # 6. 未確認・未決
 
 - 本書は、コードと見本の**読み取り**だけに基づく。ブラウザでの表示・動作は、見本も本番も確かめていない。
-- 差分の整理と、決めてほしい点（選択肢と推奨）は [design-draft.md](../task/ui-status-screen-look/design-draft.md) の 5・6 節にある。
+- 差分の整理と、決めてほしい点（選択肢と推奨）は [design-draft.md](../task/236/design-draft.md) の 5・6 節にある。
 - PRD（FR_021・IR_003）に矛盾がないかは、全文を読み切れていない。矛盾が見つかったら、PRD は書き換えず、人間に報告する。
