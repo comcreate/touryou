@@ -1,0 +1,43 @@
+name: Self-hosted Mac check
+
+# 追加した self-hosted の Mac の runner（mac-a-1795505588）の動作を確かめる。手で実行したときだけ動く。
+# runner の名前はラベルにならないので、既定のラベル（self-hosted・macOS）で選び、割り当てられた runner の名前を確かめる。
+on:
+  workflow_dispatch:
+    inputs:
+      expected_runner:
+        description: 割り当てを期待する runner の名前
+        default: mac-a-1795505588
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: [self-hosted, macOS]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: runner の情報を出す
+        run: |
+          echo "runner.name=${{ runner.name }} os=${{ runner.os }} arch=${{ runner.arch }}"
+          sw_vers
+          uname -a
+          df -h "$RUNNER_WORKSPACE" || true
+      - name: 期待した runner に割り当てられたかを確かめる
+        env:
+          EXPECTED: ${{ inputs.expected_runner }}
+          ACTUAL: ${{ runner.name }}
+        run: |
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::期待した runner（$EXPECTED）ではなく $ACTUAL に割り当てられた"
+            exit 1
+          fi
+      - name: 使う道具の有無を確かめる
+        run: |
+          for c in git node pnpm claude; do
+            if command -v "$c" >/dev/null; then echo "$c: $("$c" --version 2>&1 | head -1)"; else echo "::warning::$c が見つからない"; fi
+          done
