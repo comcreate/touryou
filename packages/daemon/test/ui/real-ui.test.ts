@@ -411,7 +411,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(flowsC.some((t) => t.includes("← あなた　却下"))).toBe(true);
     expect(flowsC.some((t) => t.includes("人　"))).toBe(false);
     const old = shape.find((c) => c.id === "card-ui-old");
-    expect(old?.chips[0]).toBe("済んだ");
+    expect(old?.chips[0]).toBe("✓ 済んだ");
   });
 
   it("同じ表示モデルから、カードの状態の札と、図の箱の状態の言葉が、子ごとに同じ（閉じた判断だけが残る子も）", async () => {
@@ -438,7 +438,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(pairs.find((p) => p.id === "ui-d")?.card).not.toBe("● あなたの答え待ち");
     // 答え待ちは失敗より先。断られた操作の知らせだけでは失敗にしない（#131）
     expect(pairs.find((p) => p.id === "ui-b")?.card).toBe("● あなたの答え待ち");
-    expect(pairs.find((p) => p.id === "ui-a")?.card).toBe("動いている");
+    expect(pairs.find((p) => p.id === "ui-a")?.card).toBe("▶ 動いている");
   });
 
   it("カードの meta は 1 行、親の題は 12 字、やり取りの相手の題は 10 字で切る。短い文は 1 行、長い文はたたむ", async () => {
@@ -513,7 +513,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   it("箱は見本の形：状態の言葉と印・左の縁の段・役割の印・列の見出し。止まっているかもは、くすんだ黄（カードも）", async () => {
     const box = (id: string) => page.locator(`#graph .gnode[data-id="${id}"]`);
     expect(await box("root").getAttribute("class")).toContain("t-go");
-    expect(await box("root").locator(".gst").textContent()).toBe("動いている");
+    expect(await box("root").locator(".gst").textContent()).toBe("▶ 動いている");
     expect(await box("ui-b").getAttribute("class")).toContain("s-wait");
     expect(await box("ui-b").locator(".gst").textContent()).toBe("● あなたの答え待ち");
     expect(await box("ui-b").locator(".gbadge").textContent()).toBe("1");
