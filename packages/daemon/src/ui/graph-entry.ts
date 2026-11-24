@@ -183,12 +183,21 @@ async function zoomBy(f: number): Promise<void> {
   );
 }
 
-/** 「全体を見る」：図の全部を枠に収める倍率と、左上（右上のボタンの分だけ下）に置く。描いていなければ何もしない。 */
+/** 枠の高さ（CSS の max-height があればそれ、なければ枠そのものの高さ）から、上の空きと下の余白を除いて、図の高さに収める倍率。 */
+function byHeightOf(host: HTMLElement, height: number): number {
+  const maxH = Number.parseFloat(getComputedStyle(host).maxHeight);
+  const boxH = Number.isFinite(maxH) ? maxH : host.clientHeight;
+  return boxH > 0 ? (boxH - FIT_TOP - FIT_BOTTOM) / height : 1;
+}
+
+/** 「全体を見る」：図の全部を、いまの枠（窓の大きさを変えたあとも、押した時点の大きさ）に収める倍率と、左上（右上のボタンの分だけ下）に置く。描いていなければ何もしない。 */
 async function fitView(): Promise<void> {
   const a = current;
-  if (a === null) return;
-  await a.area.zoom(fitK, 0, 0);
   const h = currentHost;
+  if (a === null) return;
+  if (h !== null && fitSize.w > 0 && fitSize.h > 0)
+    fitK = clampZoom(Math.min(h.clientWidth / fitSize.w, byHeightOf(h, fitSize.h)));
+  await a.area.zoom(fitK, 0, 0);
   const spareX = h === null ? 0 : (h.clientWidth - fitSize.w * fitK) / 2;
   const spareY = h === null ? 0 : (h.clientHeight - FIT_TOP - FIT_BOTTOM - fitSize.h * fitK) / 2;
   await a.area.translate(Math.max(0, spareX), FIT_TOP + Math.max(0, spareY));
@@ -484,9 +493,7 @@ export async function draw(
   readonly.enable(); // 置いたあとは、つなぐ・動かす・消すを止める（拡大・移動は残る）
   // 枠の幅と高さ（CSS の max-height。上の空き〔ボタン〕と下の余白を含む）に収まる倍率。大きくはしない。
   // 広い画面は、盤が窓の高さいっぱいに広がる（max-height なし）ので、いまの枠の高さに収める
-  const maxH = Number.parseFloat(getComputedStyle(host).maxHeight);
-  const boxH = Number.isFinite(maxH) ? maxH : host.clientHeight;
-  const byHeight = boxH > 0 ? (boxH - FIT_TOP - FIT_BOTTOM) / height : 1;
+  const byHeight = byHeightOf(host, height);
   const fits = Math.min(1, host.clientWidth / width, byHeight);
   // 初めの形は、読める大きさ（0.5 倍）より小さくしない。「全体を見る」は、0.25 倍まで縮めて全部を収める
   const k = Math.max(FIRST_MIN, fits);
