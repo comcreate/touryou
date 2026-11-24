@@ -309,9 +309,9 @@ export const UI_BG_JS = `
   // 描かない条件: 動きを止める設定・OS の視差効果を減らす・ページが見えていない
   function mustStay() { return root.classList.contains('still') || mqStill.matches || document.hidden === true; }
 
-  // 画面の大きさと devicePixelRatio（上限 2）に合わせる
+  // 画面の大きさに合わせる。柔らかい絵なので、内部の解像度は半分（devicePixelRatio の上限 2 → 実質 1）。CSS の拡大で画面いっぱいに出す
   function fit() {
-    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var dpr = Math.min(window.devicePixelRatio || 1, 2) * 0.5;
     var w = Math.max(1, Math.round((canvas.clientWidth || window.innerWidth) * dpr));
     var h = Math.max(1, Math.round((canvas.clientHeight || window.innerHeight) * dpr));
     if (canvas.width !== w || canvas.height !== h) {
@@ -337,6 +337,8 @@ export const UI_BG_JS = `
   function frame(now) {
     raf = 0;
     if (!ready || mustStay()) return;
+    // 約 30 フレーム/秒に間引く（窓の backdrop-filter が毎コマ再計算されるため）
+    if (last && now - last < 32) { raf = requestAnimationFrame(frame); return; }
     if (last) t += Math.min((now - last) / 1000, 0.1);
     last = now;
     draw();

@@ -145,13 +145,13 @@ describe("全面の背景（WebGL）: 描くとき", () => {
     expect(r.draws).toHaveLength(2);
   });
 
-  it("時間は積み上げで、1 回に進めるのは 0.1 秒まで。解像度は devicePixelRatio の上限 2 まで", () => {
+  it("時間は積み上げで、1 回に進めるのは 0.1 秒まで。解像度は devicePixelRatio の上限 2 の半分（内部の解像度を下げる）", () => {
     const r = run();
     r.tick(1000);
     r.tick(60000); // 隠れたタブから戻ったような大きな間
     expect(r.draws[1]?.time).toBeCloseTo(24.1, 5);
-    expect(r.canvas.width).toBe(1600);
-    expect(r.canvas.height).toBe(1200);
+    expect(r.canvas.width).toBe(800);
+    expect(r.canvas.height).toBe(600);
   });
 
   it("明暗は、html の設定（theme-dark・theme-light）が先。なければ OS に合わせる", () => {
@@ -254,8 +254,9 @@ describe("全面の背景（WebGL）: ページへの入れ方", () => {
     expect(UI_HTML).not.toMatch(/<canvas[^>]*tabindex/);
   });
 
-  it("静かな背景は、body の CSS の色（var(--bg)）のまま。CSS に色の直書きを足していない", () => {
-    expect(UI_CSS).toContain("body{margin:0;background:var(--bg);");
+  it("静かな背景は、html の CSS の色（var(--bg)）。body は透明（背面の canvas を覆わない）。CSS に色の直書きを足していない", () => {
+    expect(UI_CSS).toContain("html{background:var(--bg)}");
+    expect(UI_CSS).toContain("body{margin:0;background:transparent;");
     const rule = /#bg-gl\{[^}]*\}/.exec(UI_CSS)?.[0] ?? "";
     expect(rule).not.toMatch(/#[0-9a-fA-F]{3,8}|rgba?\(/);
   });
