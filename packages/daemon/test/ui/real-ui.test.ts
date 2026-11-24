@@ -642,7 +642,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     await page.focus("#zoom-fit");
     await page.keyboard.press(" ");
     await page.waitForTimeout(100);
-    expect(await holder()).toBe(first);
+    expect((await holder()).replace(/^.*scale/, "scale")).toBe(first.replace(/^.*scale/, "scale")); // 倍率が初めに戻る（位置は枠の真ん中）
     // 右上に置く（枠の中の右上の隅）
     const b = await page.locator("#graph").boundingBox();
     const z = await zoomBox.boundingBox();

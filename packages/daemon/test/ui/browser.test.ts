@@ -460,7 +460,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(r.kMax).toBe(2);
     expect(r.kMin).toBe(0.25);
     expect(r.afterRedraw).toBe(r.kept); // ボタンで変えた拡大も、描き直しで残る
-    expect(r.fitted).toBe(r.first); // 全体を見るで、初めの形に戻る
+    expect(r.fitted.replace(/^.*scale/, "scale")).toBe(r.first.replace(/^.*scale/, "scale")); // 全体を見るで、初めの倍率に戻る（位置は枠の真ん中）
     expect(problems).toEqual([]);
   });
 
