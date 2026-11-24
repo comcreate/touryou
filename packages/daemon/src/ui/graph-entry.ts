@@ -13,6 +13,7 @@ import {
   ageClassOf,
   type GraphLane,
   type GraphNode,
+  glowIdsOf,
   graphModelOf,
   laneAgoText,
   roleAgoText,
@@ -280,13 +281,8 @@ export async function draw(
   const model = graphModelOf(view, lang, { hideFinished: options.hideFinished === true });
   const L = layoutOf(model.nodes);
   const byId = new Map(model.nodes.map((n) => [n.id, n]));
-  // 縁の光は、答え待ち・失敗の箱だけ。上限を超える分は光らせない（box-shadow は毎コマ描き直すため）
-  const glowIds = new Set(
-    model.nodes
-      .filter((n) => n.status === "wait" || n.status === "fail")
-      .slice(0, GLOW_MAX)
-      .map((n) => n.id),
-  );
+  // 縁の光は、答え待ち・失敗の箱だけ。新しい順に GLOW_MAX 個まで（流星と同じ選び方。上限を超える分は光らせない）
+  const glowIds = new Set(glowIdsOf(model.nodes, GLOW_MAX));
   const shapes: Shape[] = [];
   const conns: ReteConn[] = [];
   const trunks: string[] = [];

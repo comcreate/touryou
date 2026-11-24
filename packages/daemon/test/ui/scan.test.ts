@@ -77,10 +77,13 @@ describe("図の自前のコード（走査）", () => {
     expect(entry).toContain('if (s.meteor === "strong") svg.append(sparkOf(s, look));');
     // 流す本数の上限は、上り 3 本・下り 2 本
     expect(entry).toContain("{ strong: 3, weak: 2 }");
-    // 縁の光は答え待ち・失敗の箱だけ（stall には出ない）。上限を超える分は光らせない
-    expect(entry).toContain('.filter((n) => n.status === "wait" || n.status === "fail")');
-    expect(entry).toContain(".slice(0, GLOW_MAX)");
+    // 縁の光は答え待ち・失敗の箱だけ（stall には出ない）。上限を超える分は光らせない。選び方は graph-model.ts の glowIdsOf（試験は graph-glow.test.ts）
+    expect(entry).toContain("glowIdsOf(model.nodes, GLOW_MAX)");
+    const model = src("graph-model.ts");
+    expect(model).toContain('.filter((n) => n.status === "wait" || n.status === "fail")');
+    expect(model).toContain(".slice(0, max)");
     expect(entry).not.toContain('n.status === "stall"');
+    expect(model).not.toContain('n.status === "stall"');
     expect(entry).not.toMatch(/comet/i);
     const el = src("svg-el.ts");
     expect(el).not.toMatch(/comet|mask|maskUnits/i);

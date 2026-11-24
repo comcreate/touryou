@@ -213,6 +213,19 @@ function flagsOf(
   return m;
 }
 
+/**
+ * 縁を光らせる箱の ID。答え待ち・失敗の箱だけを、最後の動きが新しい順（流星の線と同じ。時刻のない箱は最後）に `max` 個まで選ぶ。
+ * 同じ時刻のものは、`nodes` の並びのまま（安定）。上限を超える分は光らせない（box-shadow は毎コマ描き直すため）。
+ */
+export function glowIdsOf(nodes: readonly GraphNode[], max: number): string[] {
+  const at = (n: GraphNode): number => n.lastAt ?? Number.NEGATIVE_INFINITY;
+  return nodes
+    .filter((n) => n.status === "wait" || n.status === "fail")
+    .sort((a, b) => at(b) - at(a))
+    .slice(0, max)
+    .map((n) => n.id);
+}
+
 /** 表示モデル（形を信じない）から、描く値だけを作り直す。 */
 export function graphModelOf(
   view: unknown,

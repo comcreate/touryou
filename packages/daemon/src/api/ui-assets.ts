@@ -23,6 +23,7 @@ import {
 } from "@touryou/core";
 import { externalCheckSummaries } from "../external-check.js";
 import { UI_TEXT } from "../ui/i18n.js";
+import { UI_BG_JS } from "./ui-bg-webgl.js";
 
 // 画面の文字の表と、知らせの文の表（#140）。app.js に、そのまま JS の値として埋め込む
 export const UI_TEXT_JSON = JSON.stringify(UI_TEXT);
@@ -45,6 +46,7 @@ export const UI_HTML = `<!doctype html>
 <link rel="stylesheet" href="/ui/app.css">
 </head>
 <body>
+<canvas id="bg-gl" aria-hidden="true" hidden></canvas>
 <p id="live" class="sr" aria-live="polite"></p><header class="top"><h1 data-t="page.title">touryou 状態画面</h1><span id="status" class="status" data-t="conn.none">未接続</span><span id="daemon-where" class="status" hidden></span><span class="tools"><button id="open-settings" class="quiet sm gear ib" type="button" data-t-aria="settings.title" data-t-title="settings.title" aria-label="設定" title="設定" aria-haspopup="dialog" aria-controls="settings"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path class="teeth" d="M12 2L12 5M12 19L12 22M2 12L5 12M19 12L22 12M4.9 4.9L7 7M17 17L19.1 19.1M4.9 19.1L7 17M17 7L19.1 4.9"/><path d="M12 5A7 7 0 1 0 12 19A7 7 0 1 0 12 5Z"/><path d="M12 9A3 3 0 1 0 12 15A3 3 0 1 0 12 9Z"/></svg></button></span></header>
 <dialog id="settings" class="settings" aria-labelledby="settings-title"><h2 id="settings-title" data-t="settings.title">設定</h2>
 <div class="set-cols">
@@ -86,7 +88,7 @@ export const UI_HTML = `<!doctype html>
 <section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h3 id="now-title" data-t="now.title">いまあなたがすること</h3><p id="now-lead" class="lead"></p></section>
 <div id="todo" class="todo"></div>
 </div></section>
-<section class="win" data-p="graph" aria-labelledby="flows-title"><header class="wh"><h2 id="flows-title" data-t="flows.title">やり取り</h2></header><div class="wb"><p class="lead" data-t="flows.lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button></div><div id="graph-filter" class="seg" hidden><button id="hide-finished" class="quiet sm" type="button" aria-pressed="false" data-t="view.hideFinished">止めた・済んだ子を隠す</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span><span data-t="legend.up">← 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">→ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.delivered">届いた</span></span><span class="lg"><span class="sw down sent"></span><span data-t="legend.sent">送ったが、まだ届いていない</span></span><span class="lg"><span class="sw down unknown"></span><span data-t="legend.unknown">届いたか分からない</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="sw wait mtsw"></span><span data-t="legend.meteorStrong">強い流星と火花：あなたの答え待ちの頼み</span></span><span class="lg"><span class="sw down mtsw soft"></span><span data-t="legend.meteorWeak">弱い流星：まだ届いていない頼み</span></span><span class="lg"><span class="sw mtglow"></span><span data-t="legend.glow">縁の光：答え待ち・失敗の子</span></span><span class="lgnote" data-t="legend.meteorStill">流星と光は、「動きを止める」と OS の「視差効果を減らす」では出ません</span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span></div><div id="list" class="tlist"></div></div></section>
+<section class="win" data-p="graph" aria-labelledby="flows-title"><header class="wh"><h2 id="flows-title" data-t="flows.title">やり取り</h2></header><div class="wb"><p class="lead" data-t="flows.lead">親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="view-switch" class="seg" role="group" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button></div><div id="graph-filter" class="seg" hidden><button id="hide-finished" class="quiet sm" type="button" aria-pressed="false" data-t="view.hideFinished">止めた・済んだ子を隠す</button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><div id="graph-legend" class="legend" hidden><span class="lg"><span class="sw up"></span><span data-t="legend.up">← 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">→ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.delivered">届いた</span></span><span class="lg"><span class="sw down sent"></span><span data-t="legend.sent">送ったが、まだ届いていない</span></span><span class="lg"><span class="sw down unknown"></span><span data-t="legend.unknown">届いたか分からない</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="sw wait mtsw"></span><span data-t="legend.meteorStrong">強い流星と火花：あなたの答え待ちの頼み</span></span><span class="lg"><span class="sw down mtsw soft"></span><span data-t="legend.meteorWeak">弱い流星：まだ届いていない頼み</span></span><span class="lg"><span class="sw mtglow"></span><span data-t="legend.glow">縁の光：答え待ち・失敗の子</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span><p class="lgnote" data-t="legend.meteorStill">※ 流星と光は、「動きを止める」と OS の「視差効果を減らす」では出ません</p></div><div id="list" class="tlist"></div></div></section>
 <section class="win" data-p="right" aria-labelledby="cards-title"><header class="wh"><h2 id="cards-title" data-t="cards.title">作業ごとのようす</h2></header><div class="wb"><p class="lead" data-t="cards.lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
 <details id="finished" class="finished"><summary id="finished-summary" data-t="cards.finishedTitle">終わった作業</summary><div id="finished-cards" class="cards"></div></details></div></section>
 <nav class="nav" data-t-aria="pane.switch" aria-label="表示の切り替え"><button id="nav-yours" class="nb" type="button" data-view="yours" aria-current="page"><span data-t="pane.yours">あなたの番</span><span id="nav-count" class="bdg" aria-hidden="true" hidden></span><span id="nav-count-sr" class="sr"></span></button><button id="nav-explore" class="nb" type="button" data-view="explore" aria-current="false"><span data-t="pane.navExplore">やり取りと作業</span></button></nav>
@@ -104,6 +106,7 @@ export const UI_CSS = `:root{color-scheme:light dark;--bg:#f1f2f3;--sheet:#fbfbf
 :root.theme-light{color-scheme:light}
 *{box-sizing:border-box}
 html{background:var(--bg)}
+#bg-gl{position:fixed;inset:0;width:100%;height:100%;z-index:-1;pointer-events:none;display:block}#bg-gl[hidden]{display:none}
 body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.7 "Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif}
 :focus-visible{outline:3px solid var(--ai);outline-offset:2px;border-radius:4px}
 .top{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 16px;border-bottom:1px solid var(--line)}
@@ -117,7 +120,7 @@ main{padding:0 16px 48px}
 .win,.top,.nav{position:relative;isolation:isolate;background:transparent;border:1px solid var(--glass-edge);box-shadow:var(--hl),var(--shadow)}
 .win::before,.top::before,.nav::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;background:var(--win);backdrop-filter:var(--blur-outer);-webkit-backdrop-filter:var(--blur-outer)}
 .top{position:sticky;top:0;z-index:10;border-width:0 0 1px}
-/* 3 つの窓（あなたの番・やり取り・作業ごとのようす）。899px 以下は 1 列で、下のタブ（.nav）で「出番」と「図と作業」を切り替える */
+/* 3 つの窓（あなたの番・やり取り・作業ごとのようす）。899px 以下は 1 列で、下のタブ（.nav）で「あなたの番」と「やり取りと作業」を切り替える */
 .stage{display:grid;gap:16px;grid-template-columns:minmax(0,1fr);margin-top:16px;min-width:0}
 .win{display:flex;flex-direction:column;min-height:0;min-width:0;border-radius:var(--rad);overflow:hidden}
 .wh{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 14px;border-bottom:1px solid var(--line)}
@@ -324,7 +327,7 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .gnode{cursor:pointer;transition:box-shadow .15s}.gnode:focus-visible{outline:3px solid var(--ai);outline-offset:2px}.gnode:hover,.gnode:focus-visible{border-color:var(--ai);box-shadow:var(--hl),0 0 0 1.5px var(--ai)}
 .board .glink,.board .gback{transition:opacity .15s}.board.hot .glink{opacity:.18}.board.hot .lit .glink{opacity:1}.board.g-instant .glink,.board.g-instant .gback,.board.g-instant .gnode{transition:none}
 .board-wrap{position:relative}.zoom{position:absolute;right:10px;top:10px;display:flex;gap:4px;z-index:2}.zoom button{width:34px;height:34px;padding:0;border-radius:50%;font-size:18px;line-height:1;background:var(--sheet);color:var(--fg);border:1px solid var(--line)}.zoom button.fit{width:auto;padding:0 12px;border-radius:999px;font-size:13px}.zoom button:focus-visible{outline:3px solid var(--ai);outline-offset:2px}
-.legend{display:flex;flex-wrap:wrap;gap:4px 18px;margin:8px 0 0;font-size:13px;color:var(--muted)}.lgnote{flex-basis:100%}.lg{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;background:var(--sheet);border:1px solid var(--line);border-radius:999px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 18px;margin:8px 0 0;font-size:13px;color:var(--muted)}.lgnote{flex-basis:100%;margin:2px 0 0;font-size:12px}.lg{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;background:var(--sheet);border:1px solid var(--line);border-radius:999px}
 .sw{display:inline-block;width:22px;height:0;border-top:3px solid var(--c)}.sw.sent{border-top-style:dashed}.sw.unknown{border-top-style:dotted}.sw.a3{opacity:.65}.sw.a4{opacity:.45}
 .edge{display:inline-block;width:4px;height:14px;border-radius:2px;background:var(--blue-line)}.edge.turn{background:var(--kaki-line)}.edge.stall{background:var(--kiiro-line)}.edge.fail{background:var(--shu-line)}.edge.over{background:var(--wire-over)}
 .sw.mtsw{border-top:0;height:5px;border-radius:3px;background:linear-gradient(90deg,var(--glint) 0 18%,var(--c) 30%,transparent);box-shadow:0 0 5px var(--c)}
@@ -541,7 +544,7 @@ export const UI_JS = `'use strict';
   var statusEl = document.getElementById('status');
   var authEl = document.getElementById('auth');
   var viewEl = document.getElementById('view');
-  // 狭い画面（899px 以下）の下のタブ（#254 の段階 2）。「出番」（あなたの番の窓）と「図と作業」（やり取り・作業ごとのようすの窓）を切り替える。
+  // 狭い画面（899px 以下）の下のタブ（#254 の段階 2）。「あなたの番」（あなたの番の窓）と「やり取りと作業」（やり取り・作業ごとのようすの窓）を切り替える。
   // 広い画面では、CSS が 3 つの窓をすべて出すので、この切り替えは見た目に効かない。
   // 開いたときは「あなたの番」から始める。切り替えるのは、利用者がタブか「詳しく」を押したときだけ（データの更新では戻さない）。選びはブラウザに残さない
   var paneButtons = [document.getElementById('nav-yours'), document.getElementById('nav-explore')];
@@ -1579,7 +1582,7 @@ export const UI_JS = `'use strict';
     var c = document.getElementById('card-' + id);
     if (!c) return;
     if (c.parentNode && c.parentNode.id === 'finished-cards') document.getElementById('finished').open = true;
-    // 狭い画面で「出番」を出しているときは、カードのある「図と作業」へ切り替えてから動かす
+    // 狭い画面で「あなたの番」を出しているときは、カードのある「やり取りと作業」へ切り替えてから動かす
     showPane('explore');
     c.scrollIntoView({ block: 'center' });
     pickId = id;
@@ -2594,6 +2597,9 @@ export const UI_JS = `'use strict';
 `;
 
 /** 画面の応答ヘッダー（CSP など）。インラインを許さず、同じ origin の資産と通信だけを許す。 */
+/** /ui/app.js として配る全体。画面の script（UI_JS）に、全面の背景（WebGL）を足したもの。経路は増やさない。 */
+export const UI_APP_JS = UI_JS + UI_BG_JS;
+
 export const UI_HEADERS: Readonly<Record<string, string>> = {
   "content-security-policy":
     "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
