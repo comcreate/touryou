@@ -542,9 +542,9 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   it("箱を押すと、その子のカードへ移って光る（一覧の「詳しく」と同じ）。凡例は図のときだけ出る", async () => {
     expect(await page.evaluate(() => document.getElementById("graph-legend")?.hidden)).toBe(false);
     await page.click('#graph .gnode[data-id="ui-c"]');
-    await page.waitForSelector("#card-ui-c.picked");
+    await page.waitForSelector("#sel-card-ui-c.picked");
     // 移った先のカードに focus も移る
-    expect(await page.evaluate(() => document.activeElement?.id)).toBe("card-ui-c");
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("sel-card-ui-c");
     await page.click("#show-list");
     expect(await page.evaluate(() => document.getElementById("graph-legend")?.hidden)).toBe(true);
     await page.click("#show-graph");
@@ -554,24 +554,28 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   it("移った先のカードは 1.5 秒ほど光り、外れる。続けて押すとはじめから。光っている途中の描き直しのあとも、残りの時間は光る", async () => {
     const has = () =>
       page.evaluate(
-        () => document.getElementById("card-ui-b")?.classList.contains("picked") ?? false,
+        () => document.getElementById("sel-card-ui-b")?.classList.contains("picked") ?? false,
       );
     await page.click('#graph .gnode[data-id="ui-b"]');
-    await page.waitForSelector("#card-ui-b.picked");
-    const first = await page.evaluate(() => document.getElementById("card-ui-b")?.className ?? "");
+    await page.waitForSelector("#sel-card-ui-b.picked");
+    const first = await page.evaluate(
+      () => document.getElementById("sel-card-ui-b")?.className ?? "",
+    );
     // 続けて押すと、動きのクラスが入れ替わる（はじめから動く）
     await page.click('#graph .gnode[data-id="ui-b"]');
-    const second = await page.evaluate(() => document.getElementById("card-ui-b")?.className ?? "");
+    const second = await page.evaluate(
+      () => document.getElementById("sel-card-ui-b")?.className ?? "",
+    );
     expect(first.includes(" pa") !== second.includes(" pa")).toBe(true);
     // 途中で描き直す（記録の番号を進める）→ 作り直したカードにも、残りの時間は付いている
     await page.evaluate(() => {
-      const c = document.getElementById("card-ui-b");
+      const c = document.getElementById("sel-card-ui-b");
       if (c) c.dataset.old = "1";
     });
     current = { ...state, lastSeq: state.lastSeq + 1 };
     await page.waitForFunction(
       () => {
-        const c = document.getElementById("card-ui-b");
+        const c = document.getElementById("sel-card-ui-b");
         return c !== null && c.dataset.old === undefined;
       },
       undefined,
@@ -579,25 +583,27 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     );
     expect(await has()).toBe(true);
     // 描き直しのあとも、focus は作り直した同じ子のカードにある
-    expect(await page.evaluate(() => document.activeElement?.id)).toBe("card-ui-b");
+    expect(await page.evaluate(() => document.activeElement?.id)).toBe("sel-card-ui-b");
     await page.waitForTimeout(1700);
     expect(await has()).toBe(false);
     // focus がほかの所（答えの欄）へ移っていたら、描き直しのあとにカードへ奪わない
     await page.click("#todo textarea");
     await page.evaluate(() => {
-      const c = document.getElementById("card-ui-b");
+      const c = document.getElementById("sel-card-ui-b");
       if (c) c.dataset.old = "1";
     });
     current = { ...state, lastSeq: state.lastSeq + 2 };
     await page.waitForFunction(
       () => {
-        const c = document.getElementById("card-ui-b");
+        const c = document.getElementById("sel-card-ui-b");
         return c !== null && c.dataset.old === undefined;
       },
       undefined,
       { timeout: 5000 },
     );
-    expect(await page.evaluate(() => /^card-/.test(document.activeElement?.id ?? ""))).toBe(false);
+    expect(await page.evaluate(() => /^(sel-)?card-/.test(document.activeElement?.id ?? ""))).toBe(
+      false,
+    );
     current = state;
   });
 
