@@ -91,7 +91,19 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(await page.locator("svg.glink path.tip").count()).toBe(7);
     // 人の答えは、親 m1 から子 c への下りの線の札で出す
     const labels = await page.locator("svg.glink text.mlabel.down").allTextContents();
-    expect(labels.some((t) => t.startsWith("→ 答え"))).toBe(true);
+    expect(labels.some((t) => t.startsWith("↓ 答え"))).toBe(true);
+    // 札には地（rect.mpill）が付く。線の札 1 つにつき 1 つで、線と同じ向き・色の印を持つ
+    expect(await page.locator("svg.glink rect.mpill").count()).toBe(
+      await page.locator("svg.glink text.mlabel").count(),
+    );
+    expect(await page.locator("svg.glink rect.mpill.down").count()).toBe(
+      await page.locator("svg.glink text.mlabel.down").count(),
+    );
+    // 矢印は、上りが ↑、下りが ↓（左右の ← → ではない）
+    const ups = await page.locator("svg.glink text.mlabel.up").allTextContents();
+    expect(ups.length).toBeGreaterThan(0);
+    for (const t of ups) expect(t.startsWith("↑ ")).toBe(true);
+    for (const t of labels) expect(t.startsWith("↓ ")).toBe(true);
     expect(await page.locator("svg.glink path.twig").count()).toBe(1); // やり取りのない子 e
     expect(await page.locator("#g img, #g script, #g style, #g foreignObject").count()).toBe(0);
     expect(await page.locator('.gnode[data-id="a"] .gt').textContent()).toContain("<img src=x");
@@ -119,10 +131,11 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(await page.locator("svg.glink path.mh.up.wait").count()).toBe(1);
     expect(await page.locator("svg.glink path.mh.down.weak").count()).toBe(1);
     expect(await page.locator("svg.glink path.mhc, svg.glink path.mtl").count()).toBe(4);
-    // 火花は、強い流星の着く点だけ（閃光 1 つと筋 16 本）
-    expect(await page.locator("svg.glink g.msp").count()).toBe(1);
-    expect(await page.locator("svg.glink g.msp path.fl").count()).toBe(1);
-    expect(await page.locator("svg.glink g.msp path.sk").count()).toBe(16);
+    // 火花は、流星の着く点ごとに 1 つ。強い流星（上り）は閃光 1 つと筋 16 本、弱い流星（下り）は閃光 1 つと筋 10 本
+    expect(await page.locator("svg.glink g.msp").count()).toBe(2);
+    expect(await page.locator("svg.glink g.msp path.fl").count()).toBe(2);
+    expect(await page.locator("svg.glink g.msp:not(.weak) path.sk").count()).toBe(16);
+    expect(await page.locator("svg.glink g.msp.weak path.sk").count()).toBe(10);
     const meteor = await page.evaluate(() => {
       const pick = (sel: string) => document.querySelector(sel) as SVGGraphicsElement;
       const strong = pick("svg.glink path.mh.up.wait");
@@ -130,7 +143,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
       const upLine = pick("svg.glink path.line.up.wait");
       const downLine = pick("svg.glink path.line.g-sent");
       const end = (d: string) => (d.match(/-?\d+(?:\.\d+)?/g) ?? []).slice(-2).map(Number);
-      const spark = pick("svg.glink g.msp");
+      const spark = pick("svg.glink g.msp:not(.weak)");
       const num = (e: Element, p: string) =>
         Number.parseFloat(getComputedStyle(e).getPropertyValue(p));
       return {
@@ -155,6 +168,20 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
     expect(meteor.weakSameD).toBe(true);
     expect(meteor.pathLength).toBe("100");
     expect(meteor.sparkAt).toBe(`translate(${meteor.upEnd[0]} ${meteor.upEnd[1]})`);
+    // 下りの火花は、子の箱の縁の端子（rect.port）の真ん中に置く
+    const weakSpark = await page.evaluate(() => {
+      const g = document.querySelector("svg.glink g.msp.weak") as SVGGraphicsElement;
+      const port = g.parentElement?.querySelector("rect.port") as SVGGraphicsElement;
+      const n = (a: string) => Number.parseFloat(port.getAttribute(a) ?? "NaN");
+      return {
+        at: g.getAttribute("transform"),
+        portX: n("x") + n("width") / 2,
+        portY: n("y") + n("height") / 2,
+        duration: getComputedStyle(g.querySelector("path.sk") as Element).animationDuration,
+      };
+    });
+    expect(weakSpark.at).toBe(`translate(${weakSpark.portX} ${weakSpark.portY})`);
+    expect(weakSpark.duration).toBe("1.8s");
     // 強いほうが太く（頭 6 ＞ 4）、弱いほうは遅い（1.8 秒）
     expect(meteor.strongWidth).toBeGreaterThan(meteor.weakWidth);
     expect(meteor.strongAnim).toBe("mt-h");
@@ -495,7 +522,7 @@ describe.skipIf(pw === null)("CSP の下で graph.js が動く（Playwright）",
         for (let j = 0; j < 3; j++)
           nodes.push({ id: `g${i}${j}`, parentId: `c${i}`, title: `孫 ${i}${j}` });
       }
-      // いちばん下の子に、下りの線と札（「→ 指示」と段の言葉）を付ける
+      // いちばん下の子に、下りの線と札（「↓ 指示」と段の言葉）を付ける
       flows.push({
         id: "f1",
         kind: "instruction",
