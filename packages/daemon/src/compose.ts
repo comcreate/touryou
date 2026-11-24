@@ -2176,6 +2176,8 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     stopDelegated: (nodeId: string) => stopDelegatedOf(adapterFor(nodeId))(nodeId),
     // 画面の claude attach を打つ場所（#136）
     attachDir: config.repoRoot,
+    // 画面の左上に出すリポジトリの名前（repoRoot の末尾。パスは attachDir にだけ載せる）
+    repoName: basename(config.repoRoot),
     // 設定の窓の注記（opt-in が有効なとき、取り消せない操作は端末つきの daemon でしか通らない）
     desktopChildrenAllowed: desktopAllowed,
     // 設定の窓の規則の一覧と、承認カードの MCP ツールの判定（deny・ask）。読み取りだけ（#194 PR4）

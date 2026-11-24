@@ -134,6 +134,42 @@ describe("GET /v1/ui/state の stopDelegated", () => {
   });
 });
 
+describe("GET /v1/ui/state の repoName と policy（#274）", () => {
+  it("渡したときだけ載せる。policy は、規則の一覧（list・rule・source）と判定だけで、ほかの設定の値は載せない", async () => {
+    const auth = { authorization: `Bearer ${HUMAN}` };
+    server = createApiServer({
+      credentials: createCredentialStore({ humanToken: HUMAN }),
+      getState: state,
+      handlers: {},
+      repoName: "sample-repo",
+      attachDir: "/path/to/sample-repo",
+      policyView: () => ({
+        rules: [
+          { list: "allow", rule: "Bash(git status:*)", source: "config" },
+          { list: "ask", rule: "Bash(git push:*)", source: "runtime" },
+        ],
+        mcpGate: {},
+        limitRules: {},
+      }),
+    });
+    const { url } = await server.listen(0);
+    const body = await (await fetch(`${url}/v1/ui/state`, { headers: auth })).json();
+    expect(body.value.repoName).toBe("sample-repo");
+    expect(body.value.attachDir).toBe("/path/to/sample-repo");
+    expect(Object.keys(body.value.policy).sort()).toEqual(["limitRules", "mcpGate", "rules"]);
+    expect(body.value.policy.rules).toEqual([
+      { list: "allow", rule: "Bash(git status:*)", source: "config" },
+      { list: "ask", rule: "Bash(git push:*)", source: "runtime" },
+    ]);
+    await server.close();
+    // 渡さなければ、載せない（画面は「touryou」と出し、規則の欄を隠す）
+    const r = await start();
+    const bare = await (await fetch(`${r.url}/v1/ui/state`, { headers: auth })).json();
+    expect(bare.value.repoName).toBeUndefined();
+    expect(bare.value.policy).toBeUndefined();
+  });
+});
+
 describe("GET /v1/ui/state（人間のトークンだけ）", () => {
   const get = (url: string, token?: string, headers: Record<string, string> = {}) =>
     fetch(`${url}/v1/ui/state`, {

@@ -229,6 +229,8 @@ export interface ApiDeps {
    * 画面は `cd <ここ> && claude attach <ノード ID>` の形で出す。表示モデルの応答にだけ載せ、記録には残さない。
    */
   readonly attachDir?: string;
+  /** 画面の左上に出す、開いているリポジトリの名前（repoRoot の末尾の名前。パスは含めない）。表示モデルの応答にだけ載せる。 */
+  readonly repoName?: string;
   /** Desktop の子を足してよい設定（allowDesktopChildren か childRuntime: desktop）か。画面の設定の窓の注記に使う（#159）。 */
   readonly desktopChildrenAllowed?: boolean;
   /**
@@ -1594,6 +1596,7 @@ export function createApiServer(deps: ApiDeps): ApiServer {
             ),
             ...(deps.confirmations === undefined ? {} : { confirmations: deps.confirmations() }),
             ...(deps.attachDir === undefined ? {} : { attachDir: deps.attachDir }),
+            ...(deps.repoName === undefined ? {} : { repoName: deps.repoName }),
             // 設定の窓に、opt-in（Desktop の子を足してよい）の注記を出す。読み取りだけ（#159）
             ...(deps.desktopChildrenAllowed === true ? { desktopChildrenAllowed: true } : {}),
             ...(deps.policyView === undefined ? {} : { policy: deps.policyView(current) }),

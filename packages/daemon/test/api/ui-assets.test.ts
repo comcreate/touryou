@@ -84,11 +84,11 @@ describe("画面の資産（走査）", () => {
       expect(UI_JS.match(/var SETTINGS_KEY = '([^']*)'/)?.[1]).toBe("touryou.ui.settings");
       expect(UI_JS.match(/localStorage\.(getItem|setItem|removeItem|clear)\(/g)?.length).toBe(2);
     });
-    it("書く値は still・theme・lang・hideFinished だけ（形を確かめた値）", () => {
+    it("書く値は still・theme・lang・showFinished だけ（形を確かめた値）", () => {
       const save = fnOf("saveSettings");
       expect(save).toContain("var v = settingsOf(x);");
       expect(save).toContain(
-        "JSON.stringify({ still: v.still, theme: v.theme, lang: v.lang, hideFinished: v.hideFinished })",
+        "JSON.stringify({ still: v.still, theme: v.theme, lang: v.lang, showFinished: v.showFinished })",
       );
     });
     it("読み出した値は形を確かめ、知らない鍵・形の違う値は捨てる", () => {
@@ -101,33 +101,36 @@ describe("画面の資産（走査）", () => {
         ) as (o: unknown) => unknown;
       const settingsOf = of("ja-JP");
       // 言語は、選んだときだけ残す（選んでいなければ undefined で、JSON に書かれない。#140）
-      // 止めた・済んだ子を隠すのは、true を覚えているときだけ（既定は出す。#206）
+      // 止めた・済んだ子を表示するのは、showFinished が true のときだけ（既定は隠す。#206・#274）
       expect(settingsOf(null)).toEqual({
         still: false,
         theme: "auto",
         lang: undefined,
-        hideFinished: false,
+        showFinished: false,
       });
       expect(of("en-US")({ lang: "ja" })).toEqual({
         still: false,
         theme: "auto",
         lang: "ja",
-        hideFinished: false,
+        showFinished: false,
       });
       expect(
-        settingsOf({ still: "yes", theme: "neon", lang: "fr", hideFinished: "yes", token: "t" }),
+        settingsOf({ still: "yes", theme: "neon", lang: "fr", showFinished: "yes", token: "t" }),
       ).toEqual({
         still: false,
         theme: "auto",
         lang: undefined,
-        hideFinished: false,
+        showFinished: false,
       });
-      expect(settingsOf({ still: true, theme: "dark", lang: "en", hideFinished: true })).toEqual({
+      expect(settingsOf({ still: true, theme: "dark", lang: "en", showFinished: true })).toEqual({
         still: true,
         theme: "dark",
         lang: "en",
-        hideFinished: true,
+        showFinished: true,
       });
+      // 以前の欄（hideFinished）は読まない。既定が「隠す」に変わったので、前に残った false を引き継がない
+      expect(settingsOf({ hideFinished: false })).toMatchObject({ showFinished: false });
+      expect(settingsOf({ hideFinished: true })).toMatchObject({ showFinished: false });
     });
     it("トークン・チケット・ノード ID を残さない（保存の関数に、その名前が出てこない）", () => {
       for (const f of ["loadSettings", "saveSettings", "settingsOf"]) {
@@ -180,6 +183,7 @@ describe("画面の資産（走査）", () => {
       "lang",
       // 関係図で、止めた・済んだ子を隠す（#206）。保存は同じ 2 つの関数の中
       "hideFinished",
+      "showFinished",
       "localStorage",
       "getItem",
       "setItem",
@@ -420,6 +424,8 @@ describe("画面の資産（走査）", () => {
       "documentElement",
       "cli",
       "attachDir",
+      // 左上に出すリポジトリの名前（#274。表示モデルの文字列。textContent で入れるだけ）
+      "repoName",
       // 紐付けが切れた子（#189。表示モデルの値 'idle' | 'absolute'）
       "bindExpired",
       // 相対時刻（「N 分前」）を、画面を描き直さずに計算し直す（#204）。基準の時刻・文の鍵・ほかの値を dataset に持たせ、interval で回す
@@ -1445,7 +1451,8 @@ describe("画面の使い勝手（#13）", () => {
       fnOf("attachCommands"),
       fnOf("cleanText"),
       lineOf("function nodeLabel("),
-      "({ inboxBand: inboxBand, fetchFailureText: fetchFailureText, UNREACHABLE_TEXT: unreachableText(), timeText: timeText, agoText: agoText, whenText: whenText, refreshTimes: refreshTimes, stageText: stageText, attachCommand: attachCommand, attachCommandByRef: attachCommandByRef, attachCommands: attachCommands, nodeLabel: nodeLabel })",
+      fnOf("keptIdsOf"),
+      "({ inboxBand: inboxBand, fetchFailureText: fetchFailureText, UNREACHABLE_TEXT: unreachableText(), timeText: timeText, agoText: agoText, whenText: whenText, refreshTimes: refreshTimes, stageText: stageText, attachCommand: attachCommand, attachCommandByRef: attachCommandByRef, attachCommands: attachCommands, nodeLabel: nodeLabel, keptIdsOf: keptIdsOf })",
     ].join("\n"),
     uiContext,
   ) as {
@@ -1466,7 +1473,46 @@ describe("画面の使い勝手（#13）", () => {
     attachCommandByRef(n: unknown): string;
     attachCommands(n: unknown): string[];
     nodeLabel(n: unknown, max: number): string;
+    keptIdsOf(nodes: unknown[]): Set<string>;
   };
+
+  it("(#274) 一覧の「隠す」で残す子は、図の「隠す」で残す子と同じ（根・動いている子・その祖先・出番の子）", async () => {
+    const { graphModelOf } = await import("../../src/ui/graph-model.js");
+    const node = (id: string, parentId: string | null, band: string, state: string) => ({
+      id,
+      parentId,
+      role: parentId === null ? "integrator" : "implement",
+      state,
+      band,
+      title: id,
+    });
+    // root ─ mid（済んだ）─ run（動いている）
+    //      │              └ done（済んだ）
+    //      ├ gone（止めた）─ gone2（済んだ）
+    //      ├ stuck（停止未完了。出番）
+    //      └ stop（止めた）
+    const nodes = [
+      node("root", null, "running", "running"),
+      node("mid", "root", "finished", "verified"),
+      node("run", "mid", "running", "running"),
+      node("done", "mid", "finished", "verified"),
+      node("gone", "root", "finished", "stopped"),
+      node("gone2", "gone", "finished", "verified"),
+      node("stuck", "root", "turn", "stopIncomplete"),
+      node("stop", "root", "finished", "stopped"),
+    ];
+    const fromGraph = graphModelOf({ nodes, flows: [] }, "ja", { hideFinished: true }).nodes.map(
+      (n) => n.id,
+    );
+    expect([...api.keptIdsOf(nodes)].sort()).toEqual([...fromGraph].sort());
+    expect([...api.keptIdsOf(nodes)].sort()).toEqual(["mid", "root", "run", "stuck"]);
+    // 全部が終わっても、根は残る（空にならない）
+    const allDone = [
+      node("root", null, "finished", "verified"),
+      node("c", "root", "finished", "verified"),
+    ];
+    expect([...api.keptIdsOf(allDone)]).toEqual(["root"]);
+  });
 
   it("(4) 停止を代行してもらうノードの停止未完了は、赤の「失敗」でなく「停止の代行依頼」。直接止めるノードは、これまでどおり失敗", () => {
     const delegated = new Set(["c1"]);
@@ -1659,10 +1705,11 @@ describe("画面の使い勝手（#13）", () => {
     );
   });
 
-  it("(#197) ヘッダーに、どの daemon の画面か（作業場所の名前。全体は title）を示す。文は i18n の鍵", () => {
-    expect(UI_HTML).toContain('<span id="daemon-where" class="status" hidden></span>');
-    expect(UI_JS).toContain("document.getElementById('daemon-where')");
-    expect(UI_JS).toContain("where.title = t('page.where') + ': ' + attachDir;");
+  it("(#274) 左上は、リポジトリの名前（daemon が repoRoot の末尾から作る repoName。全体の道筋は title）。文は i18n の鍵", () => {
+    expect(UI_HTML).toContain('<h1 id="repo-name" class="repo">touryou</h1>');
+    expect(UI_HTML).not.toContain("daemon-where");
+    expect(UI_JS).toContain("typeof view.repoName === 'string' ? view.repoName : ''");
+    expect(UI_JS).toContain("repoEl.title = attachDir ? t('page.where') + ': ' + attachDir : '';");
     expect(UI_TEXT_TABLE["page.where"]?.ja).toContain("daemon");
   });
 
@@ -1795,7 +1842,7 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     // 描けないとき（reject も同期の例外も）は一覧に戻る。戻すのは、いちばん新しい描きのときだけ
     // 止めた・済んだ子を隠すかどうか（#206）も、設定から draw に渡す
     expect(UI_JS).toContain(
-      "Promise.resolve(g.draw(box, view, { onPick: pick, lang: lang, hideFinished: settings.hideFinished })).then(fit, fallback);",
+      "Promise.resolve(g.draw(box, view, { onPick: pick, lang: lang, hideFinished: !settings.showFinished })).then(fit, fallback);",
     );
     expect(UI_JS).toMatch(/\} catch \(e\) \{\s*fallback\(\);/);
     expect(UI_JS).toMatch(
@@ -1888,26 +1935,35 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
       expect(text.en, k).not.toBe(text.ja);
     }
   });
-  it("止めた・済んだ子を隠すトグル（#206）: 図のときだけ出る切り替えボタン。押すと設定に残し、図を描き直す。件数の札は図の中に出る", () => {
+  it("止めた・済んだ子を隠す／表示するトグル（#206・#274）: 図でも一覧でも出る 1 つのボタン。既定は隠す。押すと設定に残し、図と一覧を描き直す", () => {
+    // 既定は隠すので、初めの文言は「表示する」。ラベルが変わるので aria-pressed は付けない
     expect(UI_HTML).toContain(
-      '<button id="hide-finished" class="quiet sm" type="button" aria-pressed="false" data-t="view.hideFinished">止めた・済んだ子を隠す</button>',
+      '<button id="finished-toggle" class="quiet sm" type="button" data-t="view.showFinished">止めた・済んだ子を表示する</button>',
     );
-    // 切り替えのボタンの欄は、図のときだけ出す（一覧には効かないので、出さない）
-    expect(UI_HTML).toMatch(/<div id="graph-filter" class="seg" hidden>/);
-    expect(UI_JS).toContain("document.getElementById('graph-filter').hidden = !on;");
+    expect(UI_HTML).not.toContain("hide-finished");
+    // ボタンの欄は、図のときだけに絞らない（hidden を付けない）
+    expect(UI_HTML).toMatch(/<div id="finished-filter" class="seg"><button id="finished-toggle"/);
+    expect(UI_JS).not.toContain("document.getElementById('graph-filter')");
     expect(UI_JS).toContain(
-      "document.getElementById('hide-finished').ariaPressed = settings.hideFinished ? 'true' : 'false';",
+      "var finishedKey = settings.showFinished ? 'view.hideFinished' : 'view.showFinished';",
     );
-    const at = UI_JS.indexOf("document.getElementById('hide-finished').addEventListener('click'");
+    expect(UI_JS).not.toMatch(/finished-toggle'\)\.ariaPressed/);
+    const at = UI_JS.indexOf("document.getElementById('finished-toggle').addEventListener('click'");
     expect(at).toBeGreaterThan(-1);
     const body = UI_JS.slice(at, UI_JS.indexOf("\n  });\n", at));
-    expect(body).toContain("settings.hideFinished = !settings.hideFinished;");
+    expect(body).toContain("settings.showFinished = !settings.showFinished;");
     expect(body).toContain("saveSettings(settings);");
     expect(body).toContain("dropGraph();");
+    expect(body).toContain("renderList(graphView);");
     expect(UI_CSS).toContain(".ghidden{");
   });
-  it("切り替えボタンと隠した件数の文は、日本語と英語の両方にある（#206）", () => {
-    for (const key of ["view.hideFinished", "graph.hidden"] as const) {
+  it("切り替えボタンと隠した件数の文は、日本語と英語の両方にある（#206・#274）", () => {
+    for (const key of [
+      "view.hideFinished",
+      "view.showFinished",
+      "graph.hidden",
+      "list.hidden",
+    ] as const) {
       const text = UI_TEXT_TABLE[key];
       expect(text.ja, key).not.toBe("");
       expect(text.en, key).not.toBe("");
@@ -1958,7 +2014,7 @@ describe("状態変化の読み上げ・スマホの幅（UI レビューの対�
     const api = runInNewContext(
       [
         "var lastCount = -1; var lastFail = -1; var lostSaid = true; var lastView = null; var lastRaw = null;",
-        "var attachDir = ''; var titleById = null; var nextSeen = null; var cardStatus = null; var graphView = null; var seenItems = null;",
+        "var attachDir = ''; var repoName = ''; var titleById = null; var nextSeen = null; var cardStatus = null; var graphView = null; var seenItems = null;",
         "var viaSession = false; var token = 't'; var etag = ''; var generation = 0; var sseUp = false; var keptList = null;",
         "var purgeSignature = null; var pending = null; var controller = null;",
         "var codeDrafts = new Map(); var approvalErrors = new Map();",
