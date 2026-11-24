@@ -394,7 +394,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       ).toBe(true);
     }
     const b = shape.find((c) => c.id === "card-ui-b");
-    expect(b?.chips).toEqual(["● あなたの答え待ち", "あなたの答え 1 件"]);
+    expect(b?.chips).toEqual(["💬 あなたの答え待ち", "あなたの答え 1 件"]);
     expect(b?.need).toBe(true);
     const stall = shape.find((c) => c.id === `card-${LONG}`);
     expect(stall?.chips[0]).toBe("‖ 止まっているかも");
@@ -435,9 +435,9 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
         `${p.id}: カード「${p.card}」図「${p.graph}」`,
       ).toBe(true);
     }
-    expect(pairs.find((p) => p.id === "ui-d")?.card).not.toBe("● あなたの答え待ち");
+    expect(pairs.find((p) => p.id === "ui-d")?.card).not.toBe("💬 あなたの答え待ち");
     // 答え待ちは失敗より先。断られた操作の知らせだけでは失敗にしない（#131）
-    expect(pairs.find((p) => p.id === "ui-b")?.card).toBe("● あなたの答え待ち");
+    expect(pairs.find((p) => p.id === "ui-b")?.card).toBe("💬 あなたの答え待ち");
     expect(pairs.find((p) => p.id === "ui-a")?.card).toBe("▶ 動いている");
   });
 
@@ -515,7 +515,7 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(await box("root").getAttribute("class")).toContain("t-go");
     expect(await box("root").locator(".gst").textContent()).toBe("▶ 動いている");
     expect(await box("ui-b").getAttribute("class")).toContain("s-wait");
-    expect(await box("ui-b").locator(".gst").textContent()).toBe("● あなたの答え待ち");
+    expect(await box("ui-b").locator(".gst").textContent()).toBe("💬 あなたの答え待ち");
     expect(await box("ui-b").locator(".gbadge").textContent()).toBe("1");
     expect(await box(LONG).getAttribute("class")).toContain("s-stall");
     expect(await box(LONG).locator(".gst").textContent()).toBe("‖ 止まっているかも");

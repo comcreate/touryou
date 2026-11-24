@@ -877,7 +877,7 @@ export const APP_TEXT = {
   },
   "stall.when": { ja: "知らせ: {when}", en: "Reported: {when}" },
   "state.archived": { ja: "アーカイブした", en: "archived" },
-  "state.done": { ja: "済んだと報告（確かめ待ち）", en: "reported done (to be checked)" },
+  "state.done": { ja: "⬚ 済んだと報告（確かめ待ち）", en: "⬚ reported done (to be checked)" },
   "state.pending": { ja: "起動を待っている", en: "waiting to start" },
   "state.reclaimable": { ja: "片付けられる", en: "can be cleaned up" },
   "state.running": { ja: "動いている", en: "running" },
