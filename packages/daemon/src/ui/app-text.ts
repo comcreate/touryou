@@ -929,7 +929,6 @@ export const APP_TEXT = {
     en: "its state is not eligible for reclaim",
   },
   "view.graph": { ja: "図", en: "Diagram" },
-  "view.hideFinished": { ja: "止めた・済んだ子を隠す", en: "Hide stopped and finished" },
   "view.how": { ja: "見せ方", en: "View" },
   "view.list": { ja: "一覧", en: "List" },
   "view.showFinished": { ja: "止めた・済んだ子を表示する", en: "Show stopped and finished" },

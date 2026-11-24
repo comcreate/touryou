@@ -389,7 +389,7 @@ describe("画面の資産（走査）", () => {
       // draw が返す、図の拡大・縮小の操作（graph.js の中で、いまの図にだけ効く。値は数だけ）
       "zoomBy",
       "fit",
-      "ariaPressed",
+      "ariaChecked",
       // 関係図の枠の高さを、描いた図に合わせる（draw の戻り値の height）
       "height",
       // #89: 画面の作り直し（表示モデルの値・時刻・写すボタン・動きを止める・たたむ欄）
@@ -1851,10 +1851,10 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
   });
   it("見せ方の切り替え（図・一覧）があり、動きを止める（.still）と OS の設定で、図の動きも止まる", () => {
     expect(UI_HTML).toContain(
-      '<button id="show-graph" class="quiet sm" type="button" data-t="view.graph">図</button>',
+      '<button id="show-graph" class="quiet sm" type="button" role="radio" aria-checked="true" data-t="view.graph">図</button>',
     );
     expect(UI_HTML).toContain(
-      '<button id="show-list" class="quiet sm" type="button" data-t="view.list">一覧</button>',
+      '<button id="show-list" class="quiet sm" type="button" role="radio" aria-checked="false" data-t="view.list">一覧</button>',
     );
     expect(UI_CSS).toContain(".still *,.still *::before{animation:none!important");
     expect(UI_CSS).toMatch(
@@ -1936,18 +1936,19 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     }
   });
   it("止めた・済んだ子を隠す／表示するトグル（#206・#274）: 図でも一覧でも出る 1 つのボタン。既定は隠す。押すと設定に残し、図と一覧を描き直す", () => {
-    // 既定は隠すので、初めの文言は「表示する」。ラベルが変わるので aria-pressed は付けない
+    // 既定は隠す（aria-checked="false"）。文言は固定で、状態は role="switch" と aria-checked で伝える（#277）
     expect(UI_HTML).toContain(
-      '<button id="finished-toggle" class="quiet sm" type="button" data-t="view.showFinished">止めた・済んだ子を表示する</button>',
+      '<button id="finished-toggle" class="quiet sm tgl" type="button" role="switch" aria-checked="false"><span class="trk" aria-hidden="true"></span><span data-t="view.showFinished">止めた・済んだ子を表示する</span></button>',
     );
     expect(UI_HTML).not.toContain("hide-finished");
     // ボタンの欄は、図のときだけに絞らない（hidden を付けない）
     expect(UI_HTML).toMatch(/<div id="finished-filter" class="seg"><button id="finished-toggle"/);
     expect(UI_JS).not.toContain("document.getElementById('graph-filter')");
     expect(UI_JS).toContain(
-      "var finishedKey = settings.showFinished ? 'view.hideFinished' : 'view.showFinished';",
+      "document.getElementById('finished-toggle').ariaChecked = settings.showFinished ? 'true' : 'false';",
     );
-    expect(UI_JS).not.toMatch(/finished-toggle'\)\.ariaPressed/);
+    expect(UI_JS).not.toContain("view.hideFinished");
+    expect(UI_CSS).toContain('.tgl[aria-checked="true"] .trk{');
     const at = UI_JS.indexOf("document.getElementById('finished-toggle').addEventListener('click'");
     expect(at).toBeGreaterThan(-1);
     const body = UI_JS.slice(at, UI_JS.indexOf("\n  });\n", at));
@@ -1956,10 +1957,12 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     expect(body).toContain("dropGraph();");
     expect(body).toContain("renderList(graphView);");
     expect(UI_CSS).toContain(".ghidden{");
+    // 一覧の「N 件隠しています」も、図と同じ札（hpill）にする
+    expect(UI_CSS).toContain(".hpill{");
+    expect(UI_JS).toContain("el('p', 'note hpill', t('list.hidden'");
   });
   it("切り替えボタンと隠した件数の文は、日本語と英語の両方にある（#206・#274）", () => {
     for (const key of [
-      "view.hideFinished",
       "view.showFinished",
       "graph.hidden",
       "list.hidden",

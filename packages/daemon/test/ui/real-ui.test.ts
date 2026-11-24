@@ -606,11 +606,11 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(await page.evaluate(() => document.getElementById("graph")?.hidden)).toBe(true);
     expect(await page.evaluate(() => document.getElementById("list")?.hidden)).toBe(false);
     expect(await page.locator("#graph .gnode").count()).toBe(0);
-    expect(await page.locator("#show-list[aria-pressed=true]").count()).toBe(1);
+    expect(await page.locator("#show-list[aria-checked=true]").count()).toBe(1);
     await page.click("#show-graph");
     await page.waitForSelector("#graph .gnode");
     expect(await page.locator("#graph .gnode").count()).toBe(7);
-    expect(await page.locator("#show-graph[aria-pressed=true]").count()).toBe(1);
+    expect(await page.locator("#show-graph[aria-checked=true]").count()).toBe(1);
   });
 
   it("図の右上の「＋」「−」「全体を見る」で、拡大・縮小・初めの形に戻せる。キーボードでも押せる。一覧のときは出ない", async () => {
@@ -962,8 +962,11 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   });
 
   it("「止めた・済んだ子を隠す／表示する」を押すと、図から止めた・済んだ子の箱が消え、押すと戻る。文言は押したあとの動きに替わり、再読み込みのあとも残る（#206・#274）", async () => {
-    const label = () =>
-      page.evaluate(() => document.getElementById("finished-toggle")?.textContent);
+    // 文言は固定。いまの状態は role="switch" の aria-checked（入＝表示している）で見る（#277）
+    const label = async () =>
+      (await page.evaluate(() => document.getElementById("finished-toggle")?.textContent)) +
+      ":" +
+      (await page.getAttribute("#finished-toggle", "aria-checked"));
     const ids = () =>
       page.evaluate(() =>
         [...document.querySelectorAll("#graph .gnode")].map((e) => e.getAttribute("data-id")),
@@ -973,17 +976,14 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
       await page.waitForSelector("#graph .gnode");
     };
     // 初めは「表示する」で始めてある（上の beforeAll の初期値）ので、いまは出ている。押すと隠れる
-    expect(await label()).toBe("止めた・済んだ子を隠す");
-    expect(
-      await page.evaluate(() =>
-        document.getElementById("finished-toggle")?.hasAttribute("aria-pressed"),
-      ),
-    ).toBe(false);
+    expect(await label()).toBe("止めた・済んだ子を表示する:true");
+    expect(await page.getAttribute("#finished-toggle", "role")).toBe("switch");
+    expect(await page.evaluate(() => document.getElementById("finished-toggle")?.hasAttribute("aria-pressed"))).toBe(false);
     const all = await ids();
     expect(all).toContain("ui-old");
     expect(await page.locator("#graph .gnode.t-over").count()).toBeGreaterThan(0);
     await toggle();
-    expect(await label()).toBe("止めた・済んだ子を表示する");
+    expect(await label()).toBe("止めた・済んだ子を表示する:false");
     const hidden = await ids();
     expect(hidden).not.toContain("ui-old");
     expect(await page.locator("#graph .gnode.t-over").count()).toBe(0);
@@ -996,14 +996,14 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(saved.showFinished).toBe(false);
     // 再読み込みのあとも、隠れたまま
     await reopen();
-    expect(await label()).toBe("止めた・済んだ子を表示する");
+    expect(await label()).toBe("止めた・済んだ子を表示する:false");
     expect(await ids()).not.toContain("ui-old");
     // 押すと戻る
     await toggle();
-    expect(await label()).toBe("止めた・済んだ子を隠す");
+    expect(await label()).toBe("止めた・済んだ子を表示する:true");
     expect(new Set(await ids())).toEqual(new Set(all));
     await reopen();
-    expect(await label()).toBe("止めた・済んだ子を隠す");
+    expect(await label()).toBe("止めた・済んだ子を表示する:true");
     expect(new Set(await ids())).toEqual(new Set(all));
     expect(await csp()).toEqual([]);
     expect(problems).toEqual([]);
@@ -1016,7 +1016,10 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     p2.on("pageerror", (e: Error) => errs.push(e.message));
     await p2.goto(`${url}/ui#ticket=${await ticket()}`);
     await p2.waitForSelector("#graph .gnode");
-    const label = () => p2.evaluate(() => document.getElementById("finished-toggle")?.textContent);
+    const label = async () =>
+      (await p2.evaluate(() => document.getElementById("finished-toggle")?.textContent)) +
+      ":" +
+      (await p2.getAttribute("#finished-toggle", "aria-checked"));
     const graphIds = () =>
       p2.evaluate(() =>
         [...document.querySelectorAll("#graph .gnode")].map((e) => e.getAttribute("data-id")),
@@ -1024,18 +1027,28 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     const listText = () => p2.evaluate(() => document.getElementById("list")?.textContent ?? "");
     // 図: 既定は隠す。ボタンは「表示する」
     expect(await graphIds()).not.toContain("ui-old");
-    expect(await label()).toBe("止めた・済んだ子を表示する");
+    expect(await label()).toBe("止めた・済んだ子を表示する:false");
     // 一覧へ切り替えても、同じボタンがあり、同じ状態（隠している）。隠した数を出す
     await p2.click("#show-list");
     expect(
       await p2.evaluate(() => document.getElementById("finished-toggle")?.offsetParent !== null),
     ).toBe(true);
-    expect(await label()).toBe("止めた・済んだ子を表示する");
+    expect(await label()).toBe("止めた・済んだ子を表示する:false");
     expect(await listText()).not.toContain("前の画面を片付ける");
     expect(await listText()).toMatch(/\d+ 件隠しています/);
+    // 一覧の「N 件隠しています」も、図と同じ角丸の札（hpill）で、地・縁・余白がある（#277）
+    const pill = await p2.evaluate(() => {
+      const e = document.querySelector("#list .hpill");
+      if (!e) return null;
+      const s = getComputedStyle(e);
+      return { border: s.borderTopWidth, radius: s.borderTopLeftRadius, margin: s.marginLeft };
+    });
+    expect(pill).not.toBeNull();
+    expect(pill?.border).toBe("1px");
+    expect(pill?.margin).not.toBe("0px");
     // 押すと、一覧に出る（隠した数の文は消える）
     await p2.click("#finished-toggle");
-    expect(await label()).toBe("止めた・済んだ子を隠す");
+    expect(await label()).toBe("止めた・済んだ子を表示する:true");
     expect(await listText()).toContain("前の画面を片付ける");
     expect(await listText()).not.toMatch(/件隠しています/);
     // 図へ戻すと、図にも出ている（同じ状態）
