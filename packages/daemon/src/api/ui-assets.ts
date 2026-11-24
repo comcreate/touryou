@@ -84,11 +84,14 @@ export const UI_HTML = `<!doctype html>
 <section id="confirm" class="confirm" hidden></section>
 <p id="notice" class="notice" hidden></p>
 <section id="view" class="stage" data-view="yours" hidden>
-<section class="win" data-p="left" aria-labelledby="yours-title"><header class="wh"><h2 id="yours-title" data-t="pane.yours">あなたの番</h2></header><div class="wb">
+<section class="win" data-p="left" aria-labelledby="yours-title"><header class="wh"><h2 id="yours-title" data-t="pane.yours">あなたの番</h2><span id="yours-unresolved" class="wm"></span></header>
+<div class="wt" role="tablist" data-t-aria="pane.yours" aria-label="あなたの番"><button id="t-yours-judge" class="wtab" type="button" role="tab" aria-selected="true" aria-controls="p-yours-judge" data-k="judge" data-t="yours.tabJudge">判断・答え待ち</button><button id="t-yours-inbox" class="wtab" type="button" role="tab" aria-selected="false" aria-controls="p-yours-inbox" data-k="inbox" tabindex="-1" data-t="yours.tabInbox">受信箱の知らせ</button></div>
+<div id="p-yours-judge" class="wb" role="tabpanel" aria-labelledby="t-yours-judge" data-k="judge">
 <section class="now" aria-labelledby="now-title"><div id="now-count" class="count" aria-hidden="true">0</div><h3 id="now-title" data-t="now.title">いまあなたがすること</h3><p id="now-lead" class="lead"></p></section>
 <div id="todo" class="todo"></div>
-</div></section>
-<section class="win" data-p="graph" aria-labelledby="flows-title"><header class="wh"><h2 id="flows-title" data-t="flows.title">やり取り</h2></header><div class="wb"><div id="view-switch" class="seg" role="radiogroup" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" role="radio" aria-checked="true" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" role="radio" aria-checked="false" data-t="view.list">一覧</button></div><div id="finished-filter" class="seg"><button id="finished-toggle" class="quiet sm tgl" type="button" role="switch" aria-checked="false" data-t-aria="view.showFinished" aria-label="止めた・済んだ子を表示する" data-tip="止めた・済んだ子を表示する"><svg class="ic eye-on" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2 12C5 6.5 8.5 4.5 12 4.5S19 6.5 22 12C19 17.5 15.5 19.5 12 19.5S5 17.5 2 12Z"/><circle cx="12" cy="12" r="3"/></svg><svg class="ic eye-off" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2 12C5 6.5 8.5 4.5 12 4.5S19 6.5 22 12C19 17.5 15.5 19.5 12 19.5S5 17.5 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="M4 4L20 20"/></svg></button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）" data-t="zoom.fit">全体を見る</button></div></div><details id="graph-legend" class="legend" hidden><summary data-t="legend.title">凡例（線・流星・縁の光の見方）</summary><div class="lgb"><span class="lg"><span class="sw up"></span><span data-t="legend.up">↑ 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">↓ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.delivered">届いた</span></span><span class="lg"><span class="sw down sent"></span><span data-t="legend.sent">送ったが、まだ届いていない</span></span><span class="lg"><span class="sw down unknown"></span><span data-t="legend.unknown">届いたか分からない</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="sw wait mtsw"></span><span data-t="legend.meteorStrong">強い流星と火花：あなたの答え待ちの頼み</span></span><span class="lg"><span class="sw down mtsw soft"></span><span data-t="legend.meteorWeak">弱い流星と火花：まだ届いていない頼み</span></span><span class="lg"><span class="sw mtglow"></span><span data-t="legend.glow">縁の光：答え待ち・失敗の子</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span><p class="lgnote" data-t="legend.meteorStill">流星と光は、「動きを止める」と OS の「視差効果を減らす」では出ません</p></div></details><p id="graph-note" class="lead foot" data-t="flows.lead" hidden>親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="list" class="tlist"></div></div></section>
+</div>
+<div id="p-yours-inbox" class="wb" role="tabpanel" aria-labelledby="t-yours-inbox" data-k="inbox" hidden><p class="lead" data-t="yours.inboxLead">子や daemon からの、まだ片付けていない知らせです。</p><div id="inbox-list" class="todo"></div></div></section>
+<section class="win" data-p="graph" aria-labelledby="flows-title"><header class="wh"><h2 id="flows-title" data-t="flows.title">やり取り</h2></header><div class="wb"><div id="view-switch" class="seg" role="radiogroup" data-t-aria="view.how" aria-label="見せ方" hidden><button id="show-graph" class="quiet sm" type="button" role="radio" aria-checked="true" data-t="view.graph">図</button><button id="show-list" class="quiet sm" type="button" role="radio" aria-checked="false" data-t="view.list">一覧</button></div><div id="finished-filter" class="seg"><button id="finished-toggle" class="quiet sm tgl" type="button" role="switch" aria-checked="false" data-t-aria="view.showFinished" aria-label="止めた・済んだ子を表示する" data-tip="止めた・済んだ子を表示する"><svg class="ic eye-on" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2 12C5 6.5 8.5 4.5 12 4.5S19 6.5 22 12C19 17.5 15.5 19.5 12 19.5S5 17.5 2 12Z"/><circle cx="12" cy="12" r="3"/></svg><svg class="ic eye-off" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2 12C5 6.5 8.5 4.5 12 4.5S19 6.5 22 12C19 17.5 15.5 19.5 12 19.5S5 17.5 2 12Z"/><circle cx="12" cy="12" r="3"/><path d="M4 4L20 20"/></svg></button></div><div class="board-wrap"><div id="graph" class="board" hidden></div><div id="graph-zoom" class="zoom" role="group" data-t-aria="zoom.group" aria-label="図の拡大・縮小" hidden><button id="zoom-in" type="button" data-t-aria="zoom.in" data-t-title="zoom.in" aria-label="拡大する" title="拡大する">＋</button><button id="zoom-out" type="button" data-t-aria="zoom.out" data-t-title="zoom.out" aria-label="縮める" title="縮める">−</button><button id="zoom-fit" class="fit" type="button" data-t-aria="zoom.fit" data-t-title="zoom.fitTitle" aria-label="全体を見る" title="全体を見る（初めの形に戻す）"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 9V4H9M15 4H20V9M20 15V20H15M9 20H4V15"/></svg></button></div></div><details id="graph-legend" class="legend" hidden><summary data-t="legend.title">凡例（線・流星・縁の光の見方）</summary><div class="lgb"><span class="lg"><span class="sw up"></span><span data-t="legend.up">↑ 上り（子 → 親。答え待ちの頼みを先に）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.down">↓ 下り（親・人 → 子）</span></span><span class="lg"><span class="sw down"></span><span data-t="legend.delivered">届いた</span></span><span class="lg"><span class="sw down sent"></span><span data-t="legend.sent">送ったが、まだ届いていない</span></span><span class="lg"><span class="sw down unknown"></span><span data-t="legend.unknown">届いたか分からない</span></span><span class="lg"><span class="sw a1"></span><span class="sw a3"></span><span class="sw a4"></span><span data-t="legend.newer">新しいほど濃い</span></span><span class="lg"><span class="sw wait"></span><span data-t="legend.wait">あなたの答え待ちのやり取り</span></span><span class="lg"><span class="sw wait mtsw"></span><span data-t="legend.meteorStrong">強い流星と火花：あなたの答え待ちの頼み</span></span><span class="lg"><span class="sw down mtsw soft"></span><span data-t="legend.meteorWeak">弱い流星と火花：まだ届いていない頼み</span></span><span class="lg"><span class="sw mtglow"></span><span data-t="legend.glow">縁の光：答え待ち・失敗の子</span></span><span class="lg"><span class="edge go"></span><span data-t="legend.go">進んでいる</span></span><span class="lg"><span class="edge turn"></span><span class="edge stall"></span><span class="edge fail"></span><span data-t="legend.turn">あなたの出番（答え待ち・止まっているかも・失敗）</span></span><span class="lg"><span class="edge over"></span><span data-t="legend.over">終わった</span></span><span class="lg" data-t="legend.pick">箱を押すと、その子のカードへ移ります</span><p class="lgnote" data-t="legend.meteorStill">流星と光は、「動きを止める」と OS の「視差効果を減らす」では出ません</p></div></details><p id="graph-note" class="lead foot" data-t="flows.lead" hidden>親子の並びと、上り（子 → 親）・下り（親・人 → 子）のやり取りです。ふだんはいちばん新しいものを出します。上りは、あなたの答えを待つ頼みを先に出します。</p><div id="list" class="tlist"></div></div></section>
 <section class="win" data-p="right" aria-labelledby="cards-title"><header class="wh"><h2 id="cards-title" data-t="cards.title">作業ごとのようす</h2></header><div class="wb"><p class="lead" data-t="cards.lead">あなたの出番の作業を先に、ほかは最後に動いた順に並べます。棒は、この 1 時間のやり取りの数（藍はやり取り、柿は答え待ち）。</p><div id="cards" class="cards"></div>
 <details id="finished" class="finished"><summary id="finished-summary" data-t="cards.finishedTitle">終わった作業</summary><div id="finished-cards" class="cards"></div></details></div></section>
 <nav class="nav" data-t-aria="pane.switch" aria-label="表示の切り替え"><button id="nav-yours" class="nb" type="button" data-view="yours" aria-current="page"><svg class="ic nic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M6 16L6 11A6 6 0 0 1 18 11L18 16L20 18L4 18Z"/><path d="M10 21L14 21"/></svg><span data-t="pane.yours">あなたの番</span><span id="nav-count" class="bdg" aria-hidden="true" hidden></span><span id="nav-count-sr" class="sr"></span></button><button id="nav-explore" class="nb" type="button" data-view="explore" aria-current="false"><svg class="ic nic" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="5" r="2.5"/><circle cx="5.5" cy="19" r="2.5"/><circle cx="18.5" cy="19" r="2.5"/><path d="M11 7.3L6.5 16.7M13 7.3L17.5 16.7"/></svg><span data-t="pane.navExplore">やり取りと作業</span></button></nav>
@@ -128,6 +131,10 @@ main{padding:0 16px 48px}
 .wh h2{margin:0;font:500 12px/1.6 "SFMono-Regular",Menlo,Consolas,monospace;letter-spacing:.14em;color:var(--ai)}
 .wb{padding:12px 14px;overflow:auto;min-height:0;flex:1;min-width:0}
 .wb>.now{margin-top:4px}
+.wb[hidden]{display:none}
+.wm{font-size:12px;color:var(--muted);white-space:nowrap}.wm:empty{display:none}
+.wt{display:flex;gap:2px;padding:0 10px;border-bottom:1px solid var(--line)}
+.wtab{border:0;border-radius:0;background:transparent;color:var(--muted);font-size:13px;padding:6px 10px}.wtab[aria-selected="true"]{color:var(--fg);font-weight:800;box-shadow:inset 0 -3px 0 var(--ai)}
 .nav{position:fixed;left:0;right:0;bottom:0;z-index:20;display:none;grid-template-columns:repeat(2,1fr);padding-bottom:env(safe-area-inset-bottom);border-width:1px 0 0;border-radius:0}
 .nb{position:relative;font-size:13px;min-height:var(--bar);border:0;border-radius:0;background:transparent;color:var(--muted);display:grid;place-items:center;align-content:center;padding:4px}
 .nb[aria-current="page"]{color:var(--fg);font-weight:800;box-shadow:inset 0 3px 0 var(--ai)}
@@ -149,6 +156,11 @@ main{padding:0 16px 48px}
   #notice{max-height:12vh;overflow:auto;flex:none}
   /* 高さの低い横長の画面でも窓が使えるよう、最小の高さを置く（足りないときは main がスクロールする） */
   .stage{flex:1;min-height:360px}
+  /* やり取りの窓：図の盤は、窓の残りの高さいっぱいに広がり、図は枠の中に収まる（窓の中でスクロールさせない）。凡例を開く・一覧にしたときだけ、窓の中をスクロールする */
+  .win[data-p="graph"] .wb{display:flex;flex-direction:column}
+  .win[data-p="graph"] .board-wrap{flex:1 1 0;min-height:180px;display:flex;flex-direction:column}
+  .win[data-p="graph"] .board{flex:1 1 auto;height:auto;max-height:none}
+  .win[data-p="graph"] .wb>:not(.board-wrap){flex:none}
 }
 @media (min-width:900px) and (max-width:1279px){
   .stage{grid-template-columns:clamp(320px,36vw,420px) minmax(0,1fr);grid-template-rows:minmax(0,1.3fr) minmax(0,1fr);grid-template-areas:"left graph" "left right"}
@@ -330,7 +342,7 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .mlabel{font:700 12.5px "SFMono-Regular",Menlo,Consolas,monospace;fill:var(--ct)}.mstage{font-size:11px;fill:var(--muted)}.mstage.over{fill:var(--muted)}
 .gnode{cursor:pointer;transition:box-shadow .15s}.gnode:focus-visible{outline:3px solid var(--ai);outline-offset:2px}.gnode:hover,.gnode:focus-visible{border-color:var(--ai);box-shadow:var(--hl),0 0 0 1.5px var(--ai)}
 .board .glink,.board .gback{transition:opacity .15s}.board.hot .glink{opacity:.18}.board.hot .lit .glink{opacity:1}.board.g-instant .glink,.board.g-instant .gback,.board.g-instant .gnode{transition:none}
-.board-wrap{position:relative}.zoom{position:absolute;right:10px;top:10px;display:flex;gap:4px;z-index:2}.zoom button{width:34px;height:34px;padding:0;border-radius:50%;font-size:18px;line-height:1;background:var(--sheet);color:var(--fg);border:1px solid var(--line)}.zoom button.fit{width:auto;padding:0 12px;border-radius:999px;font-size:13px}.zoom button:focus-visible{outline:3px solid var(--ai);outline-offset:2px}
+.board-wrap{position:relative}.zoom{position:absolute;right:10px;top:10px;display:flex;gap:4px;z-index:2}.zoom button{width:34px;height:34px;padding:0;border-radius:50%;font-size:18px;line-height:1;background:var(--sheet);color:var(--fg);border:1px solid var(--line)}.zoom button.fit{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;align-self:center;color:var(--ai);border-color:var(--ai)}.zoom button.fit .ic{width:14px;height:14px}.zoom button:focus-visible{outline:3px solid var(--ai);outline-offset:2px}
 .legend{margin:6px 0 0;font-size:12px;color:var(--muted)}.legend summary{cursor:pointer;width:fit-content;padding:2px 4px}.legend .lgb{display:flex;flex-wrap:wrap;gap:2px 12px;padding:4px 4px 0}.lgnote{flex-basis:100%;margin:2px 0 0;font-size:12px}.lg{display:inline-flex;align-items:center;gap:6px}.lead.foot{margin:6px 0 0;font-size:12px}
 .sw{display:inline-block;width:22px;height:0;border-top:3px solid var(--c)}.sw.sent{border-top-style:dashed}.sw.unknown{border-top-style:dotted}.sw.a3{opacity:.65}.sw.a4{opacity:.45}
 .edge{display:inline-block;width:4px;height:14px;border-radius:2px;background:var(--blue-line)}.edge.turn{background:var(--kaki-line)}.edge.stall{background:var(--kiiro-line)}.edge.fail{background:var(--shu-line)}.edge.over{background:var(--wire-over)}
@@ -1113,6 +1125,11 @@ export const UI_JS = `'use strict';
       }
     });
     renderDecisions(closed, box, byId);
+    // 受信箱の知らせ（上の「いまあなたがすること」に出さない種類）は、同じ窓の「受信箱の知らせ」の欄に出す。窓の見出しの「未解決 N 件」は、両方の合計
+    var rest = view.inbox.filter(function (i) { return i.stall !== true && !isStopRequest(i, delegated); });
+    renderInboxTab(rest, byId, delegated);
+    var unresolved = n + rest.length;
+    document.getElementById('yours-unresolved').textContent = unresolved ? t('yours.unresolved', { n: unresolved }) : '';
     if (n === 0) box.appendChild(el('p', 'empty', t('todo.empty')));
     var countEl = document.getElementById('now-count');
     countEl.textContent = String(n);
@@ -1127,6 +1144,46 @@ export const UI_JS = `'use strict';
     document.getElementById('nav-count-sr').textContent = n ? t('pane.navCount', { n: n }) : '';
     document.getElementById('now-title').textContent = n ? t('now.titleN', { n: n }) : t('now.none');
     document.getElementById('now-lead').textContent = n ? t('now.lead') : '';
+  }
+
+  // 「あなたの番」の窓のタブ（判断・答え待ち / 受信箱の知らせ）。選んだタブの欄だけ出す
+  var tabsWired = false;
+  function showYoursTab(k) {
+    ['judge', 'inbox'].forEach(function (key) {
+      var tab = document.getElementById('t-yours-' + key);
+      tab.ariaSelected = key === k ? 'true' : 'false';
+      tab.tabIndex = key === k ? 0 : -1;
+      document.getElementById('p-yours-' + key).hidden = key !== k;
+    });
+  }
+  function wireYoursTabs() {
+    if (tabsWired) return;
+    tabsWired = true;
+    ['judge', 'inbox'].forEach(function (key) {
+      var tab = document.getElementById('t-yours-' + key);
+      tab.addEventListener('click', function () { showYoursTab(key); });
+      tab.addEventListener('keydown', function (e) {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        e.preventDefault();
+        var next = key === 'judge' ? 'inbox' : 'judge';
+        showYoursTab(next);
+        document.getElementById('t-yours-' + next).focus();
+      });
+    });
+  }
+  // 受信箱の知らせ（新しい順）。1 件ごとに、どの子の知らせかを添える
+  function renderInboxTab(list, byId, delegated) {
+    wireYoursTabs();
+    var box = document.getElementById('inbox-list');
+    clear(box);
+    list.slice().sort(function (a, b) { return a.at < b.at ? 1 : a.at > b.at ? -1 : 0; }).forEach(function (i) {
+      var node = byId.get(i.nodeId);
+      var card = el('div', 'card');
+      card.appendChild(el('div', 'who', node ? nodeLabel(node, 30) : i.nodeId));
+      card.appendChild(entryRow(i, delegated));
+      box.appendChild(card);
+    });
+    if (list.length === 0) box.appendChild(el('p', 'empty', t('yours.inboxEmpty')));
   }
 
   // 作業ごとのようす: 子 1 つを 1 枚のカードに。あなたの出番を先に、ほかは最後に動いた順。終わった作業は、たたんだ欄へ
@@ -1522,6 +1579,8 @@ export const UI_JS = `'use strict';
     var fit = function (r) {
       if (mine !== graphDrawId || !r || typeof r.height !== 'number' || !(r.height > 0)) return;
       graphCtl = r;
+      // 広い画面（900px〜）は、盤が窓の残りの高さに広がる（CSS）ので、高さは決めない。狭い画面だけ、図の高さに合わせる
+      if (window.matchMedia('(min-width:900px)').matches) return;
       box.style.height = Math.min(720, Math.max(180, Math.ceil(r.height))) + 'px';
     };
     try {

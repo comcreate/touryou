@@ -154,6 +154,10 @@ describe("画面の資産（走査）", () => {
       // 要素・文字列・集合・配列・Promise の、安全な操作
       // 移った先のカードへ focus を移すため（tabIndex = -1。カードを Tab の並びには入れない）
       "tabIndex",
+      // 「あなたの番」の窓のタブの選択の印（aria-selected）と、広い画面かどうかの確かめ（図の盤の高さ。#283）
+      "ariaSelected",
+      "matchMedia",
+      "matches",
       // 止まった子を、セッション番号で開くコマンドを組むため（表示モデルの nodes[].sessionRef。#150）
       "sessionRef",
       // 採用した子の開き方に、作業ツリーのパスを出すため（表示モデルの nodes[].adoptedWorktree。#159）
@@ -2164,5 +2168,39 @@ describe("受信箱の項目の片付け・戻し（#99）", () => {
     expect(UI_JS).toMatch(/\.resolved\b/);
     expect(UI_JS).toMatch(/b\.ariaLabel = label \+ ': '/);
     expect(UI_JS).toMatch(/undo\.ariaLabel = t\('reopen\.button'\) \+ ': '/);
+  });
+});
+
+describe("状態画面の見た目の戻し（#283）", () => {
+  it("「全体を見る」は、文字でなく青い小さなアイコンのボタン（名前は aria-label・title で残す）", () => {
+    const tag = /<button id="zoom-fit"[^>]*>(.*?)<\/button>/s.exec(UI_HTML);
+    expect(tag, "zoom-fit が取れない").not.toBeNull();
+    const html = tag?.[0] ?? "";
+    expect(html).toContain('data-t-aria="zoom.fit"');
+    expect(html).toContain('data-t-title="zoom.fitTitle"');
+    expect(html).not.toContain('data-t="zoom.fit"'); // data-t は textContent で中のアイコンを消す
+    expect(html).toContain("<svg");
+    expect(UI_CSS).toMatch(/\.zoom button\.fit\{[^}]*color:var\(--ai\)/);
+    expect(UI_CSS).toMatch(/\.zoom button\.fit\{[^}]*width:26px;height:26px/);
+  });
+
+  it("広い画面の図の盤は、窓の残りの高さに広がり、図は枠に収まる（高さを JS で決めない）", () => {
+    expect(UI_CSS).toContain(
+      '.win[data-p="graph"] .board{flex:1 1 auto;height:auto;max-height:none}',
+    );
+    expect(UI_JS).toContain("window.matchMedia('(min-width:900px)').matches) return;");
+    const src = readFileSync(new URL("../../src/ui/graph-entry.ts", import.meta.url), "utf8");
+    expect(src).toContain("host.clientHeight");
+  });
+
+  it("「あなたの番」の窓に、「未解決 N 件」の見出しと、「受信箱の知らせ」のタブがある", () => {
+    expect(UI_HTML).toContain('id="yours-unresolved"');
+    expect(UI_HTML).toContain('id="t-yours-inbox"');
+    expect(UI_HTML).toContain('id="p-yours-inbox"');
+    expect(UI_HTML).toContain('id="inbox-list"');
+    expect(UI_JS).toContain("renderInboxTab(rest, byId, delegated)");
+    expect(UI_JS).toContain("t('yours.unresolved', { n: unresolved })");
+    expect(UI_TEXT_TABLE["yours.unresolved"]?.ja).toContain("{n}");
+    expect(UI_TEXT_TABLE["yours.tabInbox"]?.ja).toBe("受信箱の知らせ");
   });
 });

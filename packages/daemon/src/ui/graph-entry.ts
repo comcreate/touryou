@@ -455,8 +455,10 @@ export async function draw(
   if (!live()) return none;
   readonly.enable(); // 置いたあとは、つなぐ・動かす・消すを止める（拡大・移動は残る）
   // 枠の幅と高さ（CSS の max-height。上の空き〔ボタン〕と下の余白を含む）に収まる倍率。大きくはしない。
+  // 広い画面は、盤が窓の高さいっぱいに広がる（max-height なし）ので、いまの枠の高さに収める
   const maxH = Number.parseFloat(getComputedStyle(host).maxHeight);
-  const byHeight = Number.isFinite(maxH) ? (maxH - FIT_TOP - FIT_BOTTOM) / height : 1;
+  const boxH = Number.isFinite(maxH) ? maxH : host.clientHeight;
+  const byHeight = boxH > 0 ? (boxH - FIT_TOP - FIT_BOTTOM) / height : 1;
   const fits = Math.min(1, host.clientWidth / width, byHeight);
   // 初めの形は、読める大きさ（0.5 倍）より小さくしない。「全体を見る」は、0.25 倍まで縮めて全部を収める
   const k = Math.max(FIRST_MIN, fits);
