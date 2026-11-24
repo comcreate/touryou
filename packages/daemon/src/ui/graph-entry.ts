@@ -8,7 +8,7 @@
 import { type GetSchemes, NodeEditor } from "rete";
 import { AreaPlugin } from "rete-area-plugin";
 import { ReadonlyPlugin } from "rete-readonly-plugin";
-import { type LayoutPos, layoutOf } from "./graph-layout.js";
+import { COL_GAP, type LayoutPos, layoutOf } from "./graph-layout.js";
 import {
   ageClassOf,
   type GraphLane,
@@ -286,7 +286,14 @@ export async function draw(
   const none: Drawn = { width: 0, height: 0, ...ctl };
   const now = Date.now();
   const model = graphModelOf(view, lang, { hideFinished: options.hideFinished === true });
-  const L = layoutOf(model.nodes);
+  // 列の間は、いちばん長い札が、線の曲がり角（親の箱の右から最大 COL_NEED 先）と子の箱の手前の間に収まる広さにする
+  const widest = model.lanes.reduce((m, l) => {
+    const arrow = l.dir === "up" ? "↑ " : "↓ ";
+    const text =
+      l.at === null ? `${arrow}${l.label}` : laneAgoText(arrow, l.label, l.at, Date.now(), lang);
+    return Math.max(m, pillWidthOf(text));
+  }, 0);
+  const L = layoutOf(model.nodes, Math.max(COL_GAP, COL_NEED + widest + PILL_SLACK));
   const byId = new Map(model.nodes.map((n) => [n.id, n]));
   // 縁の光は、答え待ち・失敗の箱だけ。新しい順に GLOW_MAX 個まで（流星と同じ選び方。上限を超える分は光らせない）
   const glowIds = new Set(glowIdsOf(model.nodes, GLOW_MAX));
@@ -630,10 +637,18 @@ function drawNode(
 
 /** 札の地の、文字の左右の余白。 */
 const PILL_PAD = 6;
+/** 札の文字（「N 分前」→「N 時間前」など）が伸びても収まる余裕。 */
+const PILL_SLACK = 24;
+/** 親の箱の右から曲がり角まで（最大）と、札の右端から子の箱まで。 */
+const COL_NEED = 135;
 /** 札の地の幅：太字の等幅 12.5px の文字幅（半角 7.6・それ以外 12.5）の合計に、左右の余白を足す。 */
 function pillWidthOf(text: string): number {
   let w = 0;
-  for (const ch of text) w += (ch.codePointAt(0) ?? 0) < 0x80 ? 7.6 : 12.5;
+  for (const ch of text) {
+    const c = ch.codePointAt(0) ?? 0;
+    // 矢印（U+2190〜21FF）は、全角より狭く出る
+    w += c < 0x80 ? 7.6 : c >= 0x2190 && c <= 0x21ff ? 8.5 : 12.5;
+  }
   return Math.ceil(w + PILL_PAD * 2);
 }
 
