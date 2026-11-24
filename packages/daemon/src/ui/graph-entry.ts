@@ -661,6 +661,7 @@ function drawShape(
   ticks: AgoTick[],
 ): void {
   if (s === undefined) return;
+  const fitters: Array<() => void> = [];
   element.replaceChildren();
   const svg = svgEl("svg", { class: "glink", width: w, height: h, viewBox: `0 0 ${w} ${h}` });
   if (s.kind === "twig") svg.append(svgEl("path", { class: "twig", d: s.d }));
@@ -686,15 +687,23 @@ function drawShape(
         }),
       );
     // 札の地（docs/ui-mock の `pill`）。文字の幅は測らず、半角と全角の数から見積もる
-    const pillOf = (text: string): SVGElement =>
-      svgEl("rect", {
+    // 描いたあとは、文字の実際の幅（測れたとき）で作る。測れなければ見積もり
+    const pillOf = (text: string, measured?: number): SVGElement => {
+      const width = measured !== undefined ? Math.ceil(measured + PILL_PAD * 2) : pillWidthOf(text);
+      return svgEl("rect", {
         class: `mpill ${look}`,
-        x: lane.labelX + PILL_PAD - pillWidthOf(text),
+        x: lane.labelX + PILL_PAD - width,
         y: lane.labelY - 13.5,
-        width: pillWidthOf(text),
+        width,
         height: 18,
         rx: 3,
       });
+    };
+    const measure = (): number | undefined => {
+      if (!mlabel.isConnected) return undefined;
+      const w = (mlabel as unknown as SVGTextContentElement).getComputedTextLength?.();
+      return typeof w === "number" && w > 0 ? w : undefined;
+    };
     let pill = pillOf(s.label ?? "");
     svg.append(pill);
     const mlabel = svgEl(
@@ -708,6 +717,13 @@ function drawShape(
       s.stage ?? "",
     );
     svg.append(mlabel, mstage);
+    fitters.push(() => {
+      const w = measure();
+      if (w === undefined) return;
+      const next = pillOf(s.label ?? "", w);
+      pill.replaceWith(next);
+      pill = next;
+    });
     if (s.ago !== undefined) {
       const { arrow, label, at } = s.ago;
       const title = line.querySelector("title");
@@ -719,7 +735,7 @@ function drawShape(
         if (mlabel.textContent !== text) {
           mlabel.textContent = text;
           // 文字の幅が変わるので、札の地は作り直して置き換える（属性は svgEl だけが書く）
-          const next = pillOf(text);
+          const next = pillOf(text, measure());
           pill.replaceWith(next);
           pill = next;
           if (title !== null)
@@ -739,6 +755,7 @@ function drawShape(
     }
   }
   element.append(svg);
+  for (const fit of fitters) fit();
 }
 
 /**
