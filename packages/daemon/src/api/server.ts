@@ -71,7 +71,7 @@ import {
 } from "./rate-limit.js";
 import { pickResult } from "./results.js";
 import { createSseHub, nodeFeedOf, responseSink } from "./sse-hub.js";
-import { UI_CSS, UI_HEADERS, UI_HTML, UI_HTML_HEADERS, UI_APP_JS } from "./ui-assets.js";
+import { UI_APP_JS, UI_CSS, UI_HEADERS, UI_HTML, UI_HTML_HEADERS } from "./ui-assets.js";
 import { UI_GRAPH_JS } from "./ui-graph-js.js";
 import { createUiSessionStore, type UiSessionStore } from "./ui-session.js";
 import { parseEnvelope, validateParams } from "./validate.js";

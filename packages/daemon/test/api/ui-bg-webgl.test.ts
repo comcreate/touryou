@@ -26,7 +26,7 @@ function run(opts: Options = {}) {
   const draws: Array<{ time: number; dark: number }> = [];
   let time = 0;
   let dark = 0;
-  let compileOk = true;
+  const compileOk = true;
 
   const gl = {
     VERTEX_SHADER: 1,
@@ -130,7 +130,8 @@ function run(opts: Options = {}) {
       doc.hidden = on;
       docListeners.get("visibilitychange")?.();
     },
-    fire: (type: string, e: unknown = { preventDefault: () => {} }) => canvasListeners.get(type)?.(e),
+    fire: (type: string, e: unknown = { preventDefault: () => {} }) =>
+      canvasListeners.get(type)?.(e),
   };
 }
 
