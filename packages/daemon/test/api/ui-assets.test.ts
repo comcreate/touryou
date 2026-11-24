@@ -2180,8 +2180,19 @@ describe("状態画面の見た目の戻し（#283）", () => {
     expect(html).toContain('data-t-title="zoom.fitTitle"');
     expect(html).not.toContain('data-t="zoom.fit"'); // data-t は textContent で中のアイコンを消す
     expect(html).toContain("<svg");
-    expect(UI_CSS).toMatch(/\.zoom button\.fit\{[^}]*color:var\(--ai\)/);
-    expect(UI_CSS).toMatch(/\.zoom button\.fit\{[^}]*width:26px;height:26px/);
+    expect(UI_CSS).toMatch(/\.zoom button\{[^}]*color:var\(--ai\)/);
+    expect(UI_CSS).toMatch(/\.zoom button\{[^}]*width:26px;height:26px/);
+  });
+
+  it("図の ＋ ・ − も同じ青い小さなアイコンのボタンで、タブは左右に均等に並ぶ（#283）", () => {
+    for (const id of ["zoom-in", "zoom-out"]) {
+      const tag = new RegExp(`<button id="${id}"[^>]*>(.*?)</button>`, "s").exec(UI_HTML);
+      expect(tag?.[0] ?? "", `${id} が取れない`).toContain("<svg");
+      expect(tag?.[0] ?? "").toContain("aria-label=");
+    }
+    expect(UI_CSS).toMatch(/\.wtab\{[^}]*flex:1 1 0/);
+    expect(UI_CSS).toContain("#detail.cards{grid-template-columns:1fr}");
+    expect(UI_CSS).toContain('.win[data-p="graph"] .wb>.seg{align-self:flex-start}');
   });
 
   it("作業ごとのようすは、「選んだ作業」と「作業の一覧」の 2 タブで、選んだ子のカードを出す（#283）", () => {
