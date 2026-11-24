@@ -144,6 +144,16 @@ export const APP_TEXT = {
   },
   "cards.noneRunning": { ja: "動いている作業はありません", en: "No work is in progress" },
   "cards.title": { ja: "作業ごとのようす", en: "Each piece of work" },
+  "cards.tabDetail": { ja: "選んだ作業", en: "Selected work" },
+  "cards.tabList": { ja: "作業の一覧", en: "All work" },
+  "cards.detailNone": {
+    ja: "図の箱か、作業の一覧の「詳しく」を押すと、その作業のようすをここに出します。",
+    en: "Pick a box in the diagram, or press “Details” in the list, to see that piece of work here.",
+  },
+  "cards.detailGone": {
+    ja: "選んだ作業は、いまの木にありません。",
+    en: "The selected work is no longer in the tree.",
+  },
   "confirm.back": { ja: "戻る", en: "Back" },
   "confirm.send": { ja: "この内容で送る", en: "Send this" },
   "confirm.sending": { ja: "送信中…", en: "Sending…" },

@@ -2184,6 +2184,14 @@ describe("状態画面の見た目の戻し（#283）", () => {
     expect(UI_CSS).toMatch(/\.zoom button\.fit\{[^}]*width:26px;height:26px/);
   });
 
+  it("作業ごとのようすは、「選んだ作業」と「作業の一覧」の 2 タブで、選んだ子のカードを出す（#283）", () => {
+    expect(UI_HTML).toContain('id="t-right-detail"');
+    expect(UI_HTML).toContain('id="t-right-list"');
+    expect(UI_HTML).toContain('id="p-right-detail"');
+    expect(UI_HTML).toContain('id="detail"');
+    expect(UI_JS).toContain("showRightTab('detail')");
+    expect(UI_JS).toContain("function renderDetail(");
+  });
   it("広い画面の図の盤は、窓の残りの高さに広がり、図は枠に収まる（高さを JS で決めない）", () => {
     expect(UI_CSS).toContain(
       '.win[data-p="graph"] .board{flex:1 1 auto;height:auto;max-height:none}',
