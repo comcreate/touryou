@@ -1,6 +1,7 @@
 name: Self-hosted Mac check
 
-# 追加した self-hosted の Mac の runner（mac-a-1795505588）の動作を確かめる。手で実行したときだけ動く。
+# 追加した self-hosted の Mac の runner（mac-a-1795505588）の動作を確かめる。手で実行したときと、この yml を変える PR で動く。
+# PR では、fork からの PR を self-hosted の runner で動かさない（同じリポジトリのブランチの PR だけ）。
 # runner の名前はラベルにならないので、既定のラベル（self-hosted・macOS）で選び、割り当てられた runner の名前を確かめる。
 on:
   workflow_dispatch:
@@ -9,12 +10,17 @@ on:
         description: 割り当てを期待する runner の名前
         default: mac-a-1795505588
         required: true
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/self-hosted-mac-check.yml"
 
 permissions:
   contents: read
 
 jobs:
   check:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, macOS]
     timeout-minutes: 10
     steps:
@@ -29,7 +35,7 @@ jobs:
           df -h "$RUNNER_WORKSPACE" || true
       - name: 期待した runner に割り当てられたかを確かめる
         env:
-          EXPECTED: ${{ inputs.expected_runner }}
+          EXPECTED: ${{ inputs.expected_runner || 'mac-a-1795505588' }}
           ACTUAL: ${{ runner.name }}
         run: |
           if [ "$ACTUAL" != "$EXPECTED" ]; then
