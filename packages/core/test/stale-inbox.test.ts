@@ -17,11 +17,16 @@ const item = (
   ...(resolved === undefined ? {} : { resolved }),
 });
 
-const stateOf = (nodes: Record<string, NodeState>, inbox: InboxItem[]) =>
+const stateOf = (
+  nodes: Record<string, NodeState>,
+  inbox: InboxItem[],
+  extensions: { extensionId: string; status: string }[] = [],
+) =>
   ({
     nodes: Object.entries(nodes).map(([id, state]) => ({ id, state })),
     inbox,
-  }) as unknown as Pick<OrchState, "nodes" | "inbox">;
+    extensions,
+  }) as unknown as Pick<OrchState, "nodes" | "inbox" | "extensions">;
 
 describe("staleInboxItems", () => {
   const settled: NodeState[] = ["verified", "reclaimable", "archived"];
@@ -35,6 +40,21 @@ describe("staleInboxItems", () => {
   it.each(live)("%s のノードの項目は含めない", (s) => {
     const inbox = [item(1, "a", "stopIncomplete"), item(2, "a", "failure")];
     expect(staleInboxItems(stateOf({ a: s }, inbox))).toEqual([]);
+  });
+
+  it("判定済みの拡張要求を指す、未解決の違反の項目は含める。open の要求を指すものは含めない（#279）", () => {
+    const violation = (seq: number, ref: string): InboxItem => ({
+      ...item(seq, "a", "violation"),
+      ref,
+    });
+    const inbox = [violation(1, "x-closed"), violation(2, "x-open")];
+    const extensions = [
+      { extensionId: "x-closed", status: "rejected" },
+      { extensionId: "x-open", status: "open" },
+    ];
+    expect(staleInboxItems(stateOf({ a: "running" }, inbox, extensions)).map((i) => i.id)).toEqual([
+      "i1",
+    ]);
   });
 
   it("info・done・decision など、ほかの種類は含めない", () => {

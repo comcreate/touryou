@@ -1361,6 +1361,28 @@ describe("範囲の拡張要求（scope.extensionRequested・scope.extensionDeci
     return foldEvents([...b, ...make.map((m) => m())]);
   };
 
+  it("子が回収可能になると、その子の open の要求は却下で閉じる（承認待ちに残らない。#279）", () => {
+    const retired = must(
+      run(
+        () => requested(),
+        () => ev(changed("a", { type: "reportDone" })),
+        () => ev(changed("a", { type: "accept" })),
+        () => ev(changed("a", { type: "markReclaimable", discarded: false })),
+      ),
+    );
+    expect(retired.extensions[0]).toMatchObject({ status: "rejected" });
+    expect(retired.extensions[0]?.decidedSeq).toBeGreaterThan(0);
+    // 受理（verified）だけでは、まだ閉じない（回収・削除で閉じる）
+    const accepted = must(
+      run(
+        () => requested(),
+        () => ev(changed("a", { type: "reportDone" })),
+        () => ev(changed("a", { type: "accept" })),
+      ),
+    );
+    expect(accepted.extensions[0]).toMatchObject({ status: "open" });
+  });
+
   it("要求は open で記録され、判定で状態が変わる。承認には granted が残る", () => {
     const s = must(run(() => requested()));
     expect(s.extensions).toEqual([

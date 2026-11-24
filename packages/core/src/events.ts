@@ -1369,6 +1369,30 @@ function closeOpenDecisions(
   });
 }
 
+/**
+ * そのノードの open の拡張要求を、却下として閉じる。ノードが回収可能（reclaimable）・archive 済みになるときに呼ぶ。
+ * 回収された子の要求は、承認しても子に届かず、人の判定を待たせ続けるだけなので、残さない（#279）。
+ * 判定の者は、回収の操作をした行為者。人の判定と同じ形（status・decidedSeq・decidedBy・decidedAt）で記録に残す。
+ */
+function closeOpenExtensions(
+  d: Draft,
+  nodeId: string,
+  seq: number,
+  actor: Actor,
+  at: string,
+): void {
+  d.extensions.forEach((cur, i) => {
+    if (cur.nodeId !== nodeId || cur.status !== "open") return;
+    d.extensions[i] = freezeRecord({
+      ...cur,
+      status: "rejected" as const,
+      decidedSeq: seq,
+      decidedBy: actor,
+      decidedAt: at,
+    });
+  });
+}
+
 /** 自分より上の親から根までの ID。 */
 function ancestorIds(d: Draft, parentId: string | null): Set<string> {
   const out = new Set<string>();
@@ -1616,6 +1640,10 @@ function step(d: Draft, raw: unknown): Result<boolean, FoldFailure> {
           ? { reviewedSeq: seq, reviewedAt: raw.at as string }
           : {}),
       });
+      // 回収された子の未決の拡張要求は、答えても届かないので閉じる（承認待ちに出続けない。#279）
+      if (next === "reclaimable" || next === "archived") {
+        closeOpenExtensions(d, nodeId, seq, actor, raw.at as string);
+      }
       if (event.type === "stop" && t.value.changed && t.value.effect !== "cancelStart") {
         d.stopRequests.push(
           freezeRecord({
