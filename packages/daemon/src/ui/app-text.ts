@@ -424,7 +424,10 @@ export const APP_TEXT = {
   "lang.screen": { ja: "画面の言語", en: "Screen language" },
   "legend.down": { ja: "↓ 下り（親・人 → 子）", en: "↓ Down (parent or person → child)" },
   "legend.go": { ja: "進んでいる", en: "In progress" },
-  "legend.title": { ja: "凡例（線・流星・縁の光の見方）", en: "Legend (lines, meteors, edge glow)" },
+  "legend.title": {
+    ja: "凡例（線・流星・縁の光の見方）",
+    en: "Legend (lines, meteors, edge glow)",
+  },
   "legend.newer": { ja: "新しいほど濃い", en: "Darker is newer" },
   "legend.over": { ja: "終わった", en: "Finished" },
   "legend.pick": {

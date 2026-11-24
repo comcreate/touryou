@@ -999,8 +999,10 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     // ツールチップは、フォーカスで出る。入のときは「隠す」（押したあとの動き）
     await page.focus("#finished-toggle");
     expect(
-      await page.evaluate(() =>
-        getComputedStyle(document.getElementById("finished-toggle") as Element, "::after").display,
+      await page.evaluate(
+        () =>
+          getComputedStyle(document.getElementById("finished-toggle") as Element, "::after")
+            .display,
       ),
     ).toBe("block");
     expect(await page.locator("#finished-toggle").getAttribute("data-tip")).toBe(

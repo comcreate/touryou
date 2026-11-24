@@ -1945,7 +1945,7 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
       '<button id="finished-toggle" class="quiet sm tgl" type="button" role="switch" aria-checked="false" data-t-aria="view.showFinished" aria-label="止めた・済んだ子を表示する" data-tip="止めた・済んだ子を表示する">',
     );
     expect(UI_HTML).toMatch(
-      /<button id="finished-toggle"[^>]*><svg class="ic eye-on"[^]*?<svg class="ic eye-off"[^]*?<\/svg><\/button>/,
+      /<button id="finished-toggle"[^>]*><svg class="ic eye-on"[\s\S]*?<svg class="ic eye-off"[\s\S]*?<\/svg><\/button>/,
     );
     expect(UI_HTML).not.toContain('data-t="view.showFinished"');
     // ツールチップは、ホバーとフォーカスで出す（押すとどうなるかを data-tip に入れる）
@@ -1958,7 +1958,9 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     expect(UI_CSS).not.toContain(".trk");
     // 窓の上の説明文は、窓の上でなく図の下の小さな文（図のときだけ出す）
     expect(UI_HTML).toContain('<p id="graph-note" class="lead foot" data-t="flows.lead" hidden>');
-    expect(UI_HTML.indexOf('id="graph-note"')).toBeGreaterThan(UI_HTML.indexOf('id="graph-legend"'));
+    expect(UI_HTML.indexOf('id="graph-note"')).toBeGreaterThan(
+      UI_HTML.indexOf('id="graph-legend"'),
+    );
     expect(UI_JS).toContain("document.getElementById('graph-note').hidden = !on;");
     expect(UI_HTML).not.toContain("hide-finished");
     // ボタンの欄は、図のときだけに絞らない（hidden を付けない）
