@@ -1962,11 +1962,7 @@ describe("関係図の呼び出し（#89 の PR-5）", () => {
     expect(UI_JS).toContain("el('p', 'note hpill', t('list.hidden'");
   });
   it("切り替えボタンと隠した件数の文は、日本語と英語の両方にある（#206・#274）", () => {
-    for (const key of [
-      "view.showFinished",
-      "graph.hidden",
-      "list.hidden",
-    ] as const) {
+    for (const key of ["view.showFinished", "graph.hidden", "list.hidden"] as const) {
       const text = UI_TEXT_TABLE[key];
       expect(text.ja, key).not.toBe("");
       expect(text.en, key).not.toBe("");

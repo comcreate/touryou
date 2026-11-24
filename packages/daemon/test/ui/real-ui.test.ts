@@ -978,7 +978,11 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     // 初めは「表示する」で始めてある（上の beforeAll の初期値）ので、いまは出ている。押すと隠れる
     expect(await label()).toBe("止めた・済んだ子を表示する:true");
     expect(await page.getAttribute("#finished-toggle", "role")).toBe("switch");
-    expect(await page.evaluate(() => document.getElementById("finished-toggle")?.hasAttribute("aria-pressed"))).toBe(false);
+    expect(
+      await page.evaluate(() =>
+        document.getElementById("finished-toggle")?.hasAttribute("aria-pressed"),
+      ),
+    ).toBe(false);
     const all = await ids();
     expect(all).toContain("ui-old");
     expect(await page.locator("#graph .gnode.t-over").count()).toBeGreaterThan(0);
