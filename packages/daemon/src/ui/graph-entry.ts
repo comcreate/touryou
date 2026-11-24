@@ -117,7 +117,7 @@ let kept: {
 
 /**
  * 状態の言葉の頭に付ける線の絵（画面のカードの札にも使う。`window.touryouGraph.statusIcon`）。
- * `ask`＝答え待ち（吹き出しと点 3 つ）、`check`＝確かめ待ち（実線の箱と、点線の四角・チェック）。知らない名前は null。
+ * `ask`＝答え待ち（吹き出しと点 3 つ）、`check`＝確かめ待ち（実線の箱と、点のチェック）。知らない名前は null。
  */
 export function statusIcon(kind: string): SVGElement | null {
   if (kind !== "ask" && kind !== "check") return null;
@@ -133,8 +133,14 @@ export function statusIcon(kind: string): SVGElement | null {
       svg.append(svgEl("path", { class: "dot", d: `M${x} 7.4 L${x} 7.4` }));
   } else {
     svg.append(svgEl("rect", { class: "ln", x: 1, y: 1, width: 14, height: 14, rx: 4 }));
-    svg.append(svgEl("rect", { class: "dots", x: 4, y: 4, width: 8, height: 8, rx: 2 }));
-    svg.append(svgEl("path", { class: "dots", d: "M5.2 8.2 L7.2 10.2 L10.8 5.8" }));
+    for (const [x, y] of [
+      [4.5, 8.3],
+      [6.4, 10.2],
+      [8.3, 8.3],
+      [10.2, 6.4],
+      [12, 4.6],
+    ])
+      svg.append(svgEl("path", { class: "dot", d: `M${x} ${y} L${x} ${y}` }));
   }
   return svg;
 }
