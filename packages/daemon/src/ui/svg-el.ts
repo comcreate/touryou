@@ -26,6 +26,7 @@ export const SVG_CLASSES: ReadonlySet<string> = new Set([
   "a3",
   "a4",
   "trunk",
+  "bar",
   "port",
   "mstage",
   "gic",

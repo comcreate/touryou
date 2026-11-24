@@ -293,6 +293,7 @@ export async function draw(
   const shapes: Shape[] = [];
   const conns: ReteConn[] = [];
   const trunks: string[] = [];
+  const bars: string[] = [];
   const add = (s: Shape, source: string, target: string): void => {
     conns.push({ id: `c${conns.length}`, source, target, shape: shapes.length });
     shapes.push(s);
@@ -300,14 +301,29 @@ export async function draw(
   for (const [pid, kids] of L.children) {
     const P = L.pos.get(pid) as LayoutPos;
     const kidPos = kids.map((k) => L.pos.get(k) as LayoutPos);
-    if (kids.length > 0) trunks.push(...trunkOf(P, kidPos));
-    kids.forEach((kid, i) => {
+    // 親の線の枠：子の並びの順に、上りが下りの前（子の高さの順＝線が交わらない順）。やり取りのない子は、点線の枝で 1 枠
+    const rows = kids.map((kid) => {
+      const mine = model.lanes
+        .filter((l) => l.parent === pid && l.child === kid)
+        .sort((a, b) => (a.dir === b.dir ? 0 : a.dir === "up" ? -1 : 1));
+      return { kid, mine };
+    });
+    const count = rows.reduce((n, r) => n + Math.max(1, r.mine.length), 0);
+    if (count > 0) {
+      const [stub, bar] = trunkOf(P, count);
+      trunks.push(stub as string);
+      bars.push(bar as string);
+    }
+    let index = 0;
+    rows.forEach((row, i) => {
       const C = kidPos[i] as LayoutPos;
-      const mine = model.lanes.filter((l) => l.parent === pid && l.child === kid);
-      if (mine.length === 0) add({ kind: "twig", d: twigOf(P, C) }, pid, kid);
-      for (const l of mine) {
-        const s = laneShape(l, laneOf(P, C, l.dir), byId.get(kid), now, lang);
-        add(s, l.dir === "up" ? kid : pid, l.dir === "up" ? pid : kid);
+      if (row.mine.length === 0) {
+        add({ kind: "twig", d: twigOf(P, C, { index: index++, count }) }, pid, row.kid);
+      }
+      for (const l of row.mine) {
+        const lane = laneOf(P, C, l.dir, { index: index++, count });
+        const s = laneShape(l, lane, byId.get(row.kid), now, lang);
+        add(s, l.dir === "up" ? row.kid : pid, l.dir === "up" ? pid : row.kid);
       }
     });
   }
@@ -367,7 +383,7 @@ export async function draw(
   if (model.hidden > 0)
     host.append(el("div", "ghidden", graphString(lang, "graph.hidden", { n: model.hidden })));
   // 背景：親の幹（どのノード・つながりにも属さないので、area の中身にじかに置く）
-  area.area.content.add(drawBackdrop(trunks, width, height));
+  area.area.content.add(drawBackdrop(trunks, bars, width, height));
 
   area.addPipe((ctx) => {
     // 拡大は、ホイールもボタンも、同じ下限・上限で止める
@@ -551,11 +567,18 @@ function laneShape(
   };
 }
 
-function drawBackdrop(trunks: readonly string[], w: number, h: number): HTMLElement {
+function drawBackdrop(
+  trunks: readonly string[],
+  bars: readonly string[],
+  w: number,
+  h: number,
+): HTMLElement {
   const box = el("div", "gback");
   const svg = svgEl("svg", { class: "glink", width: w, height: h, viewBox: `0 0 ${w} ${h}` });
   // 列の見出し（いちばん上の統合・子・孫）は置かない（利用者の決め。親子は線と箱の位置で分かる）
   for (const d of trunks) svg.append(svgEl("path", { class: "trunk", d }));
+  // 親の端子の帯（太い縦の線）。端子（port）は、この上に置く
+  for (const d of bars) svg.append(svgEl("path", { class: "trunk bar", d }));
   box.append(svg);
   return box;
 }
@@ -745,11 +768,8 @@ function meteorOf(s: Shape, look: string): SVGElement[] {
  */
 function sparkOf(s: Shape, look: string): SVGElement {
   const weak = s.meteor === "weak";
-  // 上りは道の終わり（幹）、下りは子の箱の縁（端子の位置）に当てる
-  const { x, y } =
-    weak && s.lane?.portX !== undefined && s.lane.portY !== undefined
-      ? { x: s.lane.portX, y: s.lane.portY }
-      : meteorEndOf(s.d);
+  // 上りも下りも、道の終わり（上りは親の端子の帯の側、下りは子の箱の縁）に当てる
+  const { x, y } = meteorEndOf(s.d);
   const cls = ["msp", colorOf(look), weak ? "weak" : "", s.late === true ? "late" : ""]
     .filter((c) => c !== "")
     .join(" ");

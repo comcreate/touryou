@@ -325,7 +325,7 @@ form{display:flex;gap:8px;flex-wrap:wrap}input{flex:1;min-width:200px}
 .gbadge{position:absolute;right:-10px;top:-10px;min-width:24px;height:24px;padding:0 4px;box-sizing:border-box;border-radius:12px;background:var(--kaki);color:var(--on-strong);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center}
 .glink{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
 
-.trunk{fill:none;stroke:var(--muted);stroke-width:1.6;stroke-linecap:round}
+.trunk{fill:none;stroke:var(--muted);stroke-width:1.6;stroke-linecap:round}.trunk.bar{stroke-width:6;stroke-linecap:butt;opacity:.55}
 .twig{fill:none;stroke:var(--muted);stroke-width:1.5;stroke-dasharray:2 5;opacity:.6}
 /* 線の色（見本の k-*）：上り＝青、下り＝緑、答え待ち＝橙、済んだ＝灰。線・矢印・端子・札が同じ --c を使う */
 :is(.line,.tip,.port,.mlabel,.mpill,.mstage,.sw,.mh,.mhc,.mtl,.msp){--c:var(--blue-line)}
