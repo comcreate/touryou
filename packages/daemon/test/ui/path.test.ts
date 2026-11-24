@@ -308,13 +308,13 @@ describe("箱の状態（見本の STATE・TIER。画面の言葉とそろえる
   });
   const by = new Map(m.nodes.map((n) => [n.id, n]));
   it.each([
-    ["run", "run", "go", "動いている", true],
+    ["run", "run", "go", "▶ 動いている", true],
     ["ask", "wait", "turn", "● あなたの答え待ち", false],
     ["stall", "stall", "turn", "‖ 止まっているかも", false],
     ["fail", "fail", "turn", "✕ 失敗", false],
     ["askf", "wait", "turn", "● あなたの答え待ち", false],
-    ["viol", "run", "go", "動いている", true],
-    ["arch", "done", "over", "済んだ", false],
+    ["viol", "run", "go", "▶ 動いている", true],
+    ["arch", "done", "over", "✓ 済んだ", false],
     ["stop", "stopped", "over", "■ 止めた", false],
     ["pend", "run", "go", "起動を待っている", false],
   ] as const)("%s → %s・%s・「%s」", (id, status, tier, text, alive) => {
@@ -525,7 +525,7 @@ describe("閉じた判断は、答え待ちに数えない（カードと同じ�
 });
 
 describe("箱の状態の言葉は、画面（app.js）の STATE_NAMES と同じ", () => {
-  it("RUN_TEXT の値は、STATE_NAMES の同じキーの値と同じ（「■ 」の印つきの止まりきっていないは、印を除いて）", () => {
+  it("RUN_TEXT の値は、STATE_NAMES の同じキーの値と同じ（「■ 」「▶ 」の印つきは、印を除いて）", () => {
     const i = UI_JS.indexOf("var STATE_NAMES = {");
     const names = runInNewContext(
       `(${UI_JS.slice(UI_JS.indexOf("{", i), UI_JS.indexOf("};", i) + 1)})`,
@@ -534,8 +534,8 @@ describe("箱の状態の言葉は、画面（app.js）の STATE_NAMES と同じ
     for (const lang of LANGS) {
       const word = (key: string) => UI_TEXT[key as keyof typeof UI_TEXT][lang];
       for (const [k, v] of Object.entries(RUN_TEXT))
-        expect(word(v).replace(/^■ /, ""), `${lang} ${k}`).toBe(word(names[k] as string));
-      expect(word(STATUS_TEXT.run)).toBe(word(names.running as string));
+        expect(word(v).replace(/^[■▶] /, ""), `${lang} ${k}`).toBe(word(names[k] as string));
+      expect(word(STATUS_TEXT.run).replace(/^▶ /, "")).toBe(word(names.running as string));
     }
   });
 });
