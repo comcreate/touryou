@@ -996,7 +996,8 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     );
     expect(heights[0]).toBeGreaterThan(0);
     expect(heights[1]).toBe(heights[0]);
-    // ツールチップは、フォーカスで出る。入のときは「隠す」（押したあとの動き）
+    // ツールチップは、キーボードでフォーカスしたときに出る（:focus-visible）。直前にキーを押しておくと、プログラムからのフォーカスでも :focus-visible が付く（マウスの操作のあとだと付かず、ブラウザの版でぶれる）。入のときは「隠す」（押したあとの動き）
+    await page.keyboard.press("Shift");
     await page.focus("#finished-toggle");
     expect(
       await page.evaluate(
