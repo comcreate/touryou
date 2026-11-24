@@ -2192,7 +2192,7 @@ describe("状態画面の見た目の戻し（#283）", () => {
     }
     expect(UI_CSS).toMatch(/\.wtab\{[^}]*flex:1 1 0/);
     expect(UI_CSS).toContain("#detail.cards{grid-template-columns:1fr}");
-    expect(UI_CSS).toContain('.win[data-p="graph"] .wb>.seg{align-self:flex-start}');
+    expect(UI_HTML).toMatch(/<div class="segrow"><div id="view-switch"/);
   });
 
   it("作業ごとのようすは、「選んだ作業」と「作業の一覧」の 2 タブで、選んだ子のカードを出す（#283）", () => {

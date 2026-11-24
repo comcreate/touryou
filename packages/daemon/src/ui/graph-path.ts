@@ -36,7 +36,7 @@ export interface Lane {
   /** 端子の丸（子の箱の端）の真ん中。 */
   readonly portX?: number;
   readonly portY?: number;
-  /** 札（種類と「何分前」）の左下。段の言葉は、その外側（上りは上・下りは下）に `stageY` で置く。 */
+  /** 札（種類と「何分前」）の文字の右の端と基線。段の言葉は、その外側（上りは上・下りは下）に `stageY` で置く。 */
   readonly labelX: number;
   readonly labelY: number;
   readonly stageY: number;
@@ -89,9 +89,11 @@ export function laneOf(P: LayoutPos, C: LayoutPos, dir: Dir): Lane {
     tip: up ? tipAt(tx, y, "left") : tipAt(C.x, y, "right"),
     portX: C.x,
     portY: y,
-    labelX: tx + 18,
-    labelY: up ? y - 6 : y + 15,
-    stageY: up ? y - 20 : y + 29,
+    // 札は線の上下の真ん中（高さ 18）に置き、右の端を子の箱の手前 32 にそろえる（見本のとおり）。
+    // 段の言葉は、札の外側（上りは上・下りは下）に、札の右の端にそろえて置く
+    labelX: C.x - 32 - 6,
+    labelY: y + 4.5,
+    stageY: up ? y - 13 : y + 22,
   };
 }
 

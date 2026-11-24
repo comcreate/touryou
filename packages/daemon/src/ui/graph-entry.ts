@@ -148,6 +148,8 @@ const ZOOM_MIN = 0.25;
 const ZOOM_MAX = 2;
 /** 「全体を見る」の倍率：字が小さくなっても、図の全部を枠に収める（0.25 倍まで）。 */
 let fitK = 1;
+/** 「全体を見る」で、枠の中の真ん中に置くための、図の大きさ（倍率をかける前）。 */
+let fitSize = { w: 0, h: 0 };
 /** 初めの形の倍率の下限（利用者の決め：初めは読める大きさ。収まらない分は、図をつかんで動かして見る）。 */
 const FIRST_MIN = 0.5;
 /**
@@ -186,7 +188,10 @@ async function fitView(): Promise<void> {
   const a = current;
   if (a === null) return;
   await a.area.zoom(fitK, 0, 0);
-  await a.area.translate(0, FIT_TOP);
+  const h = currentHost;
+  const spareX = h === null ? 0 : (h.clientWidth - fitSize.w * fitK) / 2;
+  const spareY = h === null ? 0 : (h.clientHeight - FIT_TOP - FIT_BOTTOM - fitSize.h * fitK) / 2;
+  await a.area.translate(Math.max(0, spareX), FIT_TOP + Math.max(0, spareY));
 }
 
 /**
@@ -462,7 +467,9 @@ export async function draw(
   const fits = Math.min(1, host.clientWidth / width, byHeight);
   // 初めの形は、読める大きさ（0.5 倍）より小さくしない。「全体を見る」は、0.25 倍まで縮めて全部を収める
   const k = Math.max(FIRST_MIN, fits);
-  fitK = clampZoom(fits);
+  // 「全体を見る」は、枠いっぱいまで拡大して（上限 ZOOM_MAX）、真ん中に置く
+  fitK = clampZoom(Math.min(host.clientWidth / width, byHeight));
+  fitSize = { w: width, h: height };
   // 同じ器への描き直しなら、人が変えた拡大・移動をそのまま残す（初めて描くときだけ、枠に合わせる）
   const keep = kept !== null && kept.host === host ? kept : null;
   kept = null;
@@ -644,7 +651,7 @@ function drawShape(
     const pillOf = (text: string): SVGElement =>
       svgEl("rect", {
         class: `mpill ${look}`,
-        x: lane.labelX - PILL_PAD,
+        x: lane.labelX + PILL_PAD - pillWidthOf(text),
         y: lane.labelY - 13.5,
         width: pillWidthOf(text),
         height: 18,

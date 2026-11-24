@@ -105,7 +105,7 @@ describe("graph-path（線の道。幹から子ごとに枝分かれ）", () => 
     expect(must(trunk)[1]).toBeLessThanOrEqual(Math.min(...kp.map((k) => k.cy)));
     expect(must(trunk)[3]).toBeGreaterThanOrEqual(Math.max(...kp.map((k) => k.cy)));
     // 札は列の間に収まる（子の箱にかからない）
-    for (const C of kp) expect(laneOf(MP, C, "up").labelX).toBeLessThan(C.x - 150);
+    for (const C of kp) expect(laneOf(MP, C, "up").labelX).toBe(C.x - 38);
     expect(COL_GAP).toBeGreaterThanOrEqual(200);
   });
 });
