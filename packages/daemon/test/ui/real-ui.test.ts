@@ -192,7 +192,10 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     await page.addInitScript(() => {
       try {
         if (window.localStorage.getItem("touryou.ui.settings") === null)
-          window.localStorage.setItem("touryou.ui.settings", JSON.stringify({ showFinished: true }));
+          window.localStorage.setItem(
+            "touryou.ui.settings",
+            JSON.stringify({ showFinished: true }),
+          );
       } catch {
         /* 残せなければ、既定のまま */
       }
@@ -959,7 +962,8 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
   });
 
   it("「止めた・済んだ子を隠す／表示する」を押すと、図から止めた・済んだ子の箱が消え、押すと戻る。文言は押したあとの動きに替わり、再読み込みのあとも残る（#206・#274）", async () => {
-    const label = () => page.evaluate(() => document.getElementById("finished-toggle")?.textContent);
+    const label = () =>
+      page.evaluate(() => document.getElementById("finished-toggle")?.textContent);
     const ids = () =>
       page.evaluate(() =>
         [...document.querySelectorAll("#graph .gnode")].map((e) => e.getAttribute("data-id")),
@@ -970,7 +974,11 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     };
     // 初めは「表示する」で始めてある（上の beforeAll の初期値）ので、いまは出ている。押すと隠れる
     expect(await label()).toBe("止めた・済んだ子を隠す");
-    expect(await page.evaluate(() => document.getElementById("finished-toggle")?.hasAttribute("aria-pressed"))).toBe(false);
+    expect(
+      await page.evaluate(() =>
+        document.getElementById("finished-toggle")?.hasAttribute("aria-pressed"),
+      ),
+    ).toBe(false);
     const all = await ids();
     expect(all).toContain("ui-old");
     expect(await page.locator("#graph .gnode.t-over").count()).toBeGreaterThan(0);
@@ -1019,7 +1027,9 @@ describe.skipIf(pw === null)("本物の /ui（Playwright。CSP の下で関係�
     expect(await label()).toBe("止めた・済んだ子を表示する");
     // 一覧へ切り替えても、同じボタンがあり、同じ状態（隠している）。隠した数を出す
     await p2.click("#show-list");
-    expect(await p2.evaluate(() => document.getElementById("finished-toggle")?.offsetParent !== null)).toBe(true);
+    expect(
+      await p2.evaluate(() => document.getElementById("finished-toggle")?.offsetParent !== null),
+    ).toBe(true);
     expect(await label()).toBe("止めた・済んだ子を表示する");
     expect(await listText()).not.toContain("前の画面を片付ける");
     expect(await listText()).toMatch(/\d+ 件隠しています/);

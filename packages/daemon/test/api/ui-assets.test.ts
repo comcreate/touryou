@@ -1507,7 +1507,10 @@ describe("画面の使い勝手（#13）", () => {
     expect([...api.keptIdsOf(nodes)].sort()).toEqual([...fromGraph].sort());
     expect([...api.keptIdsOf(nodes)].sort()).toEqual(["mid", "root", "run", "stuck"]);
     // 全部が終わっても、根は残る（空にならない）
-    const allDone = [node("root", null, "finished", "verified"), node("c", "root", "finished", "verified")];
+    const allDone = [
+      node("root", null, "finished", "verified"),
+      node("c", "root", "finished", "verified"),
+    ];
     expect([...api.keptIdsOf(allDone)]).toEqual(["root"]);
   });
 
