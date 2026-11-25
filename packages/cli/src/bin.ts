@@ -308,8 +308,7 @@ export async function runBin(argv: readonly string[], deps: BinDeps): Promise<Co
       uid,
       probe,
       sleep,
-      launchd: (a) =>
-        runLaunchdService(a, { env: deps.env, checkConfig, sleep, run, uid, probe }),
+      launchd: (a) => runLaunchdService(a, { env: deps.env, checkConfig, sleep, run, uid, probe }),
       supervisor: (a) =>
         runSupervisorCommand(a, {
           env: deps.env,

@@ -419,7 +419,10 @@ test("setup.md: 前の置き場からの移行は touryou migrate の 1 コマ�
   assert.match(s, /\*\*元は消さない\*\*/);
   assert.match(s, /手順 3 は要らない/);
   const mig = s.slice(s.indexOf("**移行（"));
-  assert.ok(mig.indexOf("**同意**") < mig.indexOf('touryou" migrate --yes'), "migrate の前に同意を取る");
+  assert.ok(
+    mig.indexOf("**同意**") < mig.indexOf('touryou" migrate --yes'),
+    "migrate の前に同意を取る",
+  );
   assert.match(mig, /\*\*はっきり「はい」のときだけ\*\*進む/);
   assert.match(mig, /`"\$HOME\/\.touryou\/current\/bin\/touryou" migrate --yes`/);
   // 設定の置き場は、リポジトリの .touryou/（前の置き場には、新しく書かない）。worktreeRoot の推奨

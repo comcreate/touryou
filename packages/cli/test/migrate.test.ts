@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { type MigrateDeps, copyStateTree, runMigrate } from "../src/migrate.js";
+import { copyStateTree, type MigrateDeps, runMigrate } from "../src/migrate.js";
 import { readRegistry, registryPath } from "../src/registry.js";
 
 let home: string;
@@ -34,11 +34,9 @@ function seedLegacy(): void {
   writeFileSync(join(OLD_STATE(), "daemon.pid"), "999999");
   mkdirSync(join(OLD_STATE(), "sub"), { mode: 0o700 });
   writeFileSync(join(OLD_STATE(), "sub", "a.txt"), "a", { mode: 0o600 });
-  writeFileSync(
-    OLD_CONFIG(),
-    JSON.stringify({ repoRoot: repo, stateDir: OLD_STATE(), extra: 1 }),
-    { mode: 0o600 },
-  );
+  writeFileSync(OLD_CONFIG(), JSON.stringify({ repoRoot: repo, stateDir: OLD_STATE(), extra: 1 }), {
+    mode: 0o600,
+  });
 }
 
 /** 旧の設定・state の中身（変わっていないことの確認用）。 */
@@ -46,7 +44,9 @@ function snapshotLegacy(): string {
   const walk = (d: string): string[] =>
     readdirSync(d, { withFileTypes: true })
       .flatMap((e) =>
-        e.isDirectory() ? walk(join(d, e.name)) : [`${join(d, e.name)}=${readFileSync(join(d, e.name), "utf8")}`],
+        e.isDirectory()
+          ? walk(join(d, e.name))
+          : [`${join(d, e.name)}=${readFileSync(join(d, e.name), "utf8")}`],
       )
       .sort();
   return `${readFileSync(OLD_CONFIG(), "utf8")}\n${walk(OLD_STATE()).join("\n")}`;
@@ -183,7 +183,9 @@ describe("runMigrate", () => {
       const before = snapshotLegacy();
       const r = await runMigrate(
         ["--yes"],
-        makeDeps({ checkConfig: () => ({ status: 1, stdout: "", stderr: "stateDir is not ignored" }) }),
+        makeDeps({
+          checkConfig: () => ({ status: 1, stdout: "", stderr: "stateDir is not ignored" }),
+        }),
       );
       expect(r.exitCode).toBe(1);
       expect(r.stderr).toContain(".gitignore");
@@ -232,7 +234,10 @@ describe("runMigrate", () => {
 
     it("新しい daemon が応答しない: 戻す（前の常駐を外さない）", async () => {
       const before = snapshotLegacy();
-      const r = await runMigrate(["--yes"], makeDeps({ probe: async () => undefined, isPidAlive: () => false }));
+      const r = await runMigrate(
+        ["--yes"],
+        makeDeps({ probe: async () => undefined, isPidAlive: () => false }),
+      );
       expect(r.exitCode).toBe(1);
       expect(r.stderr).toContain("応答しない");
       expect(existsSync(NEW_CONFIG())).toBe(false);

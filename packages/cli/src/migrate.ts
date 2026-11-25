@@ -205,7 +205,8 @@ export async function runMigrate(
   let legacy: Record<string, unknown>;
   try {
     const json = JSON.parse(legacyText) as unknown;
-    if (typeof json !== "object" || json === null || Array.isArray(json)) throw new Error("形が違う");
+    if (typeof json !== "object" || json === null || Array.isArray(json))
+      throw new Error("形が違う");
     legacy = json as Record<string, unknown>;
   } catch (e) {
     return fail(`${legacyConfig} を JSON として読めない（${messageOf(e)}）。何も変えずに止めた`);
@@ -259,11 +260,9 @@ export async function runMigrate(
     return fail(`${reg.reason}\n${reg.fix}\n何も変えずに止めた`);
   }
   const wasRegistered = reg.configs.includes(newConfig);
-  const legacyPlist = readDaemonPlist(
-    [join(base, "launchd"), agents],
-    `${LEGACY_LABEL}.plist`,
-  );
-  const pathValue = (legacyPlist === undefined ? undefined : pathValueOf(legacyPlist.text)) ?? DEFAULT_PATH;
+  const legacyPlist = readDaemonPlist([join(base, "launchd"), agents], `${LEGACY_LABEL}.plist`);
+  const pathValue =
+    (legacyPlist === undefined ? undefined : pathValueOf(legacyPlist.text)) ?? DEFAULT_PATH;
 
   const undo: Undo[] = [];
   const lines: string[] = [];
@@ -287,8 +286,7 @@ export async function runMigrate(
   };
 
   // ---- 1. 前の daemon を止める ----
-  const loadedBefore =
-    deps.run("launchctl", ["print", `gui/${uid}/${LEGACY_LABEL}`]).status === 0;
+  const loadedBefore = deps.run("launchctl", ["print", `gui/${uid}/${LEGACY_LABEL}`]).status === 0;
   if (loadedBefore) {
     const r = await deps.launchd(["stop"]);
     if (r.exitCode !== 0) {
@@ -470,5 +468,9 @@ export async function runMigrate(
     "新しい daemon に、このセッションの node をつなぎ直す（/mcp で plugin:touryou:node を Reconnect。なければ Claude Code を起動し直す）。そのあと /touryou:start で確かめる",
     ...(tail.length === 0 ? [] : ["", ...tail]),
   );
-  return { exitCode, stdout: `${lines.join("\n")}\n`, stderr: exitCode === 0 ? "" : "移行は済んだが、後始末が残っている\n" };
+  return {
+    exitCode,
+    stdout: `${lines.join("\n")}\n`,
+    stderr: exitCode === 0 ? "" : "移行は済んだが、後始末が残っている\n",
+  };
 }
