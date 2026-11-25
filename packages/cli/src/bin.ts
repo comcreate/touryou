@@ -35,6 +35,7 @@ import {
   SERVICE_SUBCOMMANDS,
 } from "./launchd-service.js";
 import { runSupervisorCommand, superviseForever } from "./launchd-supervisor.js";
+import { type MigrateDeps, runMigrate } from "./migrate.js";
 import { runUi, type UiDeps } from "./ui.js";
 
 export interface BinDeps {
@@ -273,6 +274,52 @@ export async function runBin(argv: readonly string[], deps: BinDeps): Promise<Co
     return runLaunchd(argv.slice(1), {
       env: deps.env,
       checkConfig: deps.launchd?.checkConfig ?? checkConfigBySpawn,
+    });
+  }
+  if (argv[0] === "migrate") {
+    // 前の置き場（HOME の .touryou の設定・state・常駐）を、リポジトリの .touryou/ に移す（コピー → 検査 → 切り替え）
+    const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    const doFetch = deps.fetch ?? fetch;
+    const checkConfig = deps.launchd?.checkConfig ?? checkConfigBySpawn;
+    const run: MigrateDeps["run"] =
+      deps.launchd?.run ??
+      ((cmd, args) => {
+        const r = spawnSync(cmd, args, { encoding: "utf8", timeout: 30_000 });
+        return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+      });
+    const uid = deps.launchd?.uid ?? (() => process.getuid?.() ?? -1);
+    const probe: NonNullable<MigrateDeps["probe"]> =
+      deps.launchd?.probe ??
+      (async (port) => {
+        try {
+          const res = await doFetch(`http://127.0.0.1:${port}/v1/whoami`, {
+            signal: AbortSignal.timeout(2000),
+          });
+          await res.body?.cancel();
+          return res.status;
+        } catch {
+          return undefined;
+        }
+      });
+    return runMigrate(argv.slice(1), {
+      env: deps.env,
+      checkConfig,
+      run,
+      uid,
+      probe,
+      sleep,
+      launchd: (a) =>
+        runLaunchdService(a, { env: deps.env, checkConfig, sleep, run, uid, probe }),
+      supervisor: (a) =>
+        runSupervisorCommand(a, {
+          env: deps.env,
+          cwd: () => undefined,
+          exists: deps.exists ?? configExists,
+          checkConfig,
+          run,
+          uid,
+          probe,
+        }),
     });
   }
   if (argv[0] === "supervisor") {

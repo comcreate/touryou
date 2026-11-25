@@ -62,6 +62,8 @@ finish() {
   if [ "$1" = 0 ]; then
     # 設定は、実行した場所から上へ探した <リポジトリ>/.touryou/config.json（#300。前の置き場 ${HOME}/.touryou/config.json には、戻らない）
     if config_in_ancestors; then echo "CONFIG: present"; else echo "CONFIG: absent"; fi
+    # 前の置き場（${HOME}/.touryou/config.json。通常のファイルで、リンクでない）が残っているか。/setup が、移行（touryou migrate）の枝に使う（#301）
+    if [ -f "${HOME}/.touryou/config.json" ] && [ ! -L "${HOME}/.touryou/config.json" ]; then echo "LEGACY_CONFIG: present"; else echo "LEGACY_CONFIG: absent"; fi
     if [ -f "${HOME}/Library/LaunchAgents/${LABEL_PLIST}" ]; then echo "LAUNCHD: present"; else echo "LAUNCHD: absent"; fi
     # supervisor（Label touryou.supervisor。登録簿の設定ごとに daemon を起こして見張る常駐。#300）
     if [ -f "${HOME}/Library/LaunchAgents/${SUPERVISOR_PLIST}" ]; then echo "SUPERVISOR: present"; else echo "SUPERVISOR: absent"; fi
