@@ -116,7 +116,7 @@ root（`repoRoot`）ごとに daemon を分けるとき、設定ファイルご�
 
 **どの daemon につなぐか（環境変数の渡し方）**:
 
-- 統合セッションの `touryou-mcp --stdio` は、`TOURYOU_DAEMON_CONFIG`（なければ `<H>/.touryou/config.json`）の `stateDir` の `root-token`・`port` を読みます。別の daemon につなぐときは、統合セッション（`claude`）を起動する端末で `export TOURYOU_DAEMON_CONFIG=<設定の絶対パス>` してから起動します。
+- 統合セッションの `touryou-mcp --stdio` は、`--config`・`TOURYOU_DAEMON_CONFIG`（なければ、実行した場所から上へ `<dir>/.touryou/config.json`。見つからなければ、旧パス `<H>/.touryou/config.json` へは戻らず止まる）の `stateDir` の `root-token`・`port` を読みます。なお、`touryou launchd` 自身の `--config` 省略時の既定（`<H>/.touryou/config.json`）は、この版では変えていません（リポジトリ単位の置き場への切り替えは後続の変更）。別の daemon につなぐときは、統合セッション（`claude`）を起動する端末で `export TOURYOU_DAEMON_CONFIG=<設定の絶対パス>` してから起動します。
 - **設定ごとの MCP の登録（#224）**: 別の設定（`--config`）の daemon につなぐ MCP は、plugin の `node` とは別に、`claude mcp add touryou-<名前> -- "<H>/.touryou/current/bin/touryou-mcp" --stdio --config <設定の絶対パス>` で登録できます（`--config` が固定されるので、環境変数 `TOURYOU_DAEMON_CONFIG` は要りません）。`touryou launchd init --config <設定> [--name <名前>]` は、この命令を出力の「【MCP を登録する】」に出します（**実行はしません**。`claude` の設定は init の責務の外。理由は `.sdd/adr/touryou-224-mcp-per-daemon.md`）。`<名前>` は `--name`（小文字の英数字とハイフン。32 文字まで）、なければ設定の `repoRoot` のフォルダ名から作ります。既定の設定の daemon は、今までどおり plugin の `node` です。つながった daemon は、統合セッションの `whoami` の `daemon.repoRoot`・`daemon.daemonId` で確かめられます（子のセッションには出しません）。この登録は、シムを通らないので、daemon が動いていないと `/mcp` に failed と出ます（daemon を起こしてから Reconnect します）。
 - `touryou ui` は、`--config <絶対パス>` ＞ `TOURYOU_DAEMON_CONFIG` ＞ 候補が 2 つ以上あるときはコマンドを実行した場所が `repoRoot` か `worktreeRoot` の中にあるもの（いちばん深い root）＞ 既定の設定、の順で選びます。候補は、既定の設定と、`<H>/Library/LaunchAgents` に置いた別名の plist の設定です（`--others` と同じ集合。`init` しただけの plist は候補にしません）。`touryou ui --list` で、設定のパスと `repoRoot` の一覧を見られます（`docs/ui.md`）。
 

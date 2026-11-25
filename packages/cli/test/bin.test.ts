@@ -11,6 +11,8 @@ const ENV = {
   TOURYOU_CLI_ALLOW_UNVERIFIED: "1",
 };
 const TTY = { stdin: false, stdout: false };
+/** 設定が見つからない場所（実機の cwd の上にある設定を拾わない）。環境変数だけで動く試験に付ける */
+const NO_CONFIG = { cwd: "/work/none", exists: () => false };
 
 /** 偽の窓口: POST /v1/request の要求を記録して、決まった応答を返す。 */
 const fakeFetch = (value: unknown) => {
@@ -33,6 +35,7 @@ describe("touryou（bin）", () => {
   it("環境変数で受けた窓口・トークンで POST /v1/request を呼ぶ。requestId はそのまま。出力にトークンを出さない", async () => {
     const { f, seen } = fakeFetch({ unbound: true, duplicate: false });
     const r = await runBin(["hook-unbind", "a", "--request-id", "again-1"], {
+      ...NO_CONFIG,
       env: ENV,
       isTTY: TTY,
       fetch: f,
@@ -58,7 +61,7 @@ describe("touryou（bin）", () => {
         }),
         { status: 422, headers: { "content-type": "application/json" } },
       )) as typeof fetch;
-    const r = await runBin(["hook-unbind", "a"], { env: ENV, isTTY: TTY, fetch: f });
+    const r = await runBin(["hook-unbind", "a"], { ...NO_CONFIG, env: ENV, isTTY: TTY, fetch: f });
     expect(r.exitCode).toBe(1);
     expect(r.stdout + r.stderr).not.toContain(TOKEN);
     expect(r.stderr).toContain("echo *** back");
@@ -71,11 +74,12 @@ describe("touryou（bin）", () => {
       { ...ENV, TOURYOU_HUMAN_TOKEN: undefined },
       { ...ENV, TOURYOU_HUMAN_TOKEN: "" },
     ]) {
-      const r = await runBin(["hook-unbind", "a"], { env, isTTY: TTY, fetch: f });
+      const r = await runBin(["hook-unbind", "a"], { ...NO_CONFIG, env, isTTY: TTY, fetch: f });
       expect(r.exitCode).toBe(2);
       expect(r.stderr).toContain("TOURYOU_HUMAN_TOKEN");
     }
     const t = await runBin(["hook-unbind", "a", "--token", TOKEN], {
+      ...NO_CONFIG,
       env: ENV,
       isTTY: TTY,
       fetch: f,
@@ -88,6 +92,7 @@ describe("touryou（bin）", () => {
     const { f, seen } = fakeFetch({});
     for (const allow of [undefined, "true", "", "0"]) {
       const r = await runBin(["hook-unbind", "a"], {
+        ...NO_CONFIG,
         env: { ...ENV, TOURYOU_CLI_ALLOW_UNVERIFIED: allow },
         isTTY: TTY,
         fetch: f,
@@ -100,6 +105,7 @@ describe("touryou（bin）", () => {
   it("配布物（devBuild が false）では、TOURYOU_CLI_ALLOW_UNVERIFIED=1 でも動かない（何も送らない）", async () => {
     const { f, seen } = fakeFetch({ unbound: true, duplicate: false });
     const r = await runBin(["hook-unbind", "a"], {
+      ...NO_CONFIG,
       env: { ...ENV, TOURYOU_CLI_ALLOW_UNVERIFIED: "1" },
       devBuild: false,
       isTTY: TTY,
@@ -130,11 +136,65 @@ describe("touryou（bin）", () => {
     expect(seen.some((s) => s.headers.authorization !== undefined)).toBe(false);
   });
 
-  it("環境変数がなくても、$HOME/.touryou/config.json の stateDir から窓口と人間のトークンを自分で読む（#115。touryou ui と同じ）", async () => {
+  it("環境変数がなくても、cwd から上の .touryou/config.json の stateDir から窓口と人間のトークンを自分で読む（#115。touryou ui と同じ）。子の作業ツリーからも届く", async () => {
+    for (const cwd of ["/work/repo/src/a", "/work/repo/.touryou/worktrees/c1/src"]) {
+      const { f, seen } = fakeFetch({ unbound: true, duplicate: false });
+      const reads: string[] = [];
+      const r = await runBin(["reclaim", "a"], {
+        env: { HOME: "/home/u" },
+        cwd,
+        exists: (p) => p === "/work/repo/.touryou/config.json",
+        devBuild: false,
+        isTTY: TTY,
+        fetch: f,
+        readFile: (p) => {
+          if (p === "/work/repo/.touryou/config.json") return JSON.stringify({ stateDir: "/s" });
+          throw new Error("no file");
+        },
+        readSecret: (p) => {
+          reads.push(p);
+          if (p === "/s/port") return "7777\n";
+          if (p === "/s/human-token") return `${TOKEN}\n`;
+          throw new Error("no file");
+        },
+        sleep: async () => {},
+      });
+      expect(reads.sort(), cwd).toEqual(["/s/human-token", "/s/port"]);
+      // 「窓口・トークンがない」では止まらず、トークンを送る前の身元の確かめまで進む（身元の秘密がないので、トークンは送らない）
+      expect(r.stderr, cwd).not.toMatch(/TOURYOU_DAEMON_URL がなく|TOURYOU_HUMAN_TOKEN がなく/);
+      expect(seen.some((x) => x.headers.authorization !== undefined), cwd).toBe(false);
+      expect(r.stdout + r.stderr).not.toContain(TOKEN);
+    }
+  });
+
+  it("設定が見つからない: 旧パス $HOME/.touryou/config.json へは戻らず、理由と直し方（/touryou:setup・--config）を出して止まる（終了コード 2・何も送らない）", async () => {
+    const { f, seen } = fakeFetch({});
+    const read: string[] = [];
+    const r = await runBin(["reclaim", "a"], {
+      env: { HOME: "/home/u" },
+      cwd: "/work/other",
+      exists: () => false,
+      isTTY: TTY,
+      fetch: f,
+      readFile: (p) => {
+        read.push(p);
+        return JSON.stringify({ stateDir: "/s" });
+      },
+      readSecret: () => TOKEN,
+    });
+    expect(r.exitCode).toBe(2);
+    expect(r.stderr).toContain("見つからない");
+    expect(r.stderr).toContain("/touryou:setup");
+    expect(r.stderr).toContain("--config");
+    expect(read).toEqual([]);
+    expect(seen).toEqual([]);
+  });
+
+  it("環境変数がなくても、設定の stateDir から窓口と人間のトークンを自分で読む（#115。TOURYOU_DAEMON_CONFIG で指す）", async () => {
     const { f, seen } = fakeFetch({ unbound: true, duplicate: false });
     const reads: string[] = [];
     const r = await runBin(["reclaim", "a"], {
-      env: { HOME: "/home/u" },
+      env: { HOME: "/home/u", TOURYOU_DAEMON_CONFIG: "/home/u/.touryou/config.json" },
       devBuild: false,
       isTTY: TTY,
       fetch: f,
@@ -161,7 +221,7 @@ describe("touryou（bin）", () => {
     const { f, seen } = fakeFetch({});
     for (const port of [undefined, "abc", "70000"]) {
       const r = await runBin(["reclaim", "a"], {
-        env: { HOME: "/home/u" },
+        env: { HOME: "/home/u", TOURYOU_DAEMON_CONFIG: "/home/u/.touryou/config.json" },
         isTTY: TTY,
         fetch: f,
         readFile: () => JSON.stringify({ stateDir: "/s" }),

@@ -22,7 +22,7 @@ touryou reclaim <nodeId>
 ```
 
 - CLI が出す案内（「再実行する」など）のコマンドは、本体の場所 `"$HOME/.touryou/current/bin/touryou"` で始まる（PATH に `touryou` がなくても、そのまま貼って動く。#115）。
-- **環境変数は、なくてよい**（#115）。`touryou reclaim` などの人のコマンドは、`touryou ui` と同じく、`$HOME/.touryou/config.json`（`TOURYOU_DAEMON_CONFIG` があればそれ）の `stateDir` から、窓口（`port`）・人間のトークン（`human-token`。自分だけが読める・リンクでないファイルだけ）・身元の確認の秘密を自分で読む。環境変数があれば、それを先に使う。トークンは、引数・標準出力・標準エラー・履歴に出さない。
+- **環境変数は、なくてよい**（#115）。`touryou reclaim` などの人のコマンドは、`touryou ui` と同じく、設定ファイル（`TOURYOU_DAEMON_CONFIG`、なければ実行した場所から上へ `<dir>/.touryou/config.json`。見つからなければ、旧パス `$HOME/.touryou/config.json` へは戻らず、理由と直し方〔`/touryou:setup` または `--config`〕を出して終了コード 2 で止まる）の `stateDir` から、窓口（`port`）・人間のトークン（`human-token`。自分だけが読める・リンクでないファイルだけ）・身元の確認の秘密を自分で読む。環境変数があれば、それを先に使う。トークンは、引数・標準出力・標準エラー・履歴に出さない。
 - 窓口・人間のトークンが、環境変数にも設定にもない、または `TOURYOU_DAEMON_CONFIG` がない（開発のビルドで `TOURYOU_CLI_ALLOW_UNVERIFIED=1` でない）ときは、何も送らずに終了コード 2。
 - daemon の身元を確かめられないとき（`daemon_identity_failed`）は、トークンを送らずに終了コード 1（操作は実行されていない）。
 - 出力・エラーを出す直前に、文字列の中の `TOURYOU_HUMAN_TOKEN` の値を `***` に置き換える（daemon や偽の窓口が、応答にトークンを入れても出さない）。中継（relay）も、トークンと本文を、失敗の文面・記録に入れない。
@@ -39,11 +39,11 @@ touryou reclaim <nodeId>
 
 ## 状態画面を開く `touryou ui`
 
-`touryou ui`（ふつうは引数なし。複数の daemon があるときは、下の `--config`・`--list`）: 状態画面を、既定のブラウザ（macOS の `open`）で開く。**環境変数の `TOURYOU_HUMAN_TOKEN`・`TOURYOU_DAEMON_URL` は使わない**。`$HOME/.touryou/config.json`（`TOURYOU_DAEMON_CONFIG` があればそれ）の `stateDir` から、`port`・`human-token`・`daemon-identity` を自分で読み、daemon の身元を確かめてから、使い捨てのチケット（60 秒・1 回だけ）をもらって `http://127.0.0.1:<port>/ui#ticket=<チケット>` を開く（くわしくは `docs/ui.md` の「認証」）。
+`touryou ui`（ふつうは引数なし。複数の daemon があるときは、下の `--config`・`--list`）: 状態画面を、既定のブラウザ（macOS の `open`）で開く。**環境変数の `TOURYOU_HUMAN_TOKEN`・`TOURYOU_DAEMON_URL` は使わない**。設定ファイル（`--config` → `TOURYOU_DAEMON_CONFIG` → 実行した場所から上へ `<dir>/.touryou/config.json`）の `stateDir` から、`port`・`human-token`・`daemon-identity` を自分で読み、daemon の身元を確かめてから、使い捨てのチケット（60 秒・1 回だけ）をもらって `http://127.0.0.1:<port>/ui#ticket=<チケット>` を開く（くわしくは `docs/ui.md` の「認証」）。
 
 - トークン・チケット・URL は、標準出力・標準エラーに出さない。`open` の引数（`ps` に出る）は、使い捨てのチケットだけ。
 - 失敗（設定・`port`・`human-token` が読めない、daemon に届かない、身元が合わない、チケットをもらえない、ブラウザを開けない）は、原因と次の操作を出して終了コード 1。ブラウザを開けない（macOS でない・`open` が失敗した）ときは、「Mac のターミナルで `touryou ui` を実行してください」と出す。上で挙げた以外の引数を付けたら終了コード 2。
-- **複数の daemon（設定ごと。#165）**: どの daemon の画面を開くかは、`--config <絶対パス>` ＞ `TOURYOU_DAEMON_CONFIG` ＞ 候補が 2 つ以上のとき、実行した場所（cwd）が設定の `repoRoot` か `worktreeRoot` の中にあるもの（いちばん深い root）＞ `$HOME/.touryou/config.json` の順で決める。候補は、既定の設定と、`$HOME/Library/LaunchAgents` に置いた（常駐にした）別名の plist（`[<org>.]touryou.daemon-<8 文字>.plist`）の `--config` の設定（`--others`・版上げと同じ集合。`init` しただけで `$HOME/.touryou/launchd` にしかない plist は候補にしない。元の plist が消えて LaunchAgents にだけ残るものは候補にする）と、`TOURYOU_DAEMON_CONFIG` の設定（`--list` のとき。ほかは、環境変数があれば、それで決まる）。開いたときは、標準出力の先頭に `開いた設定: <設定のパス>` を出す。`touryou ui --list` は、候補の設定のパスと `repoRoot`・`worktreeRoot` の一覧だけを出す（トークン・ポートは出さず、開かない）。`HOME` が空のときは、既定の設定と別名の plist は候補に入らず、`--list` は環境変数の設定だけを出す（なければ理由を出して終了コード 1）。`--list` と `--config` の同時指定・`--config` が絶対パスでない・ほかの引数は終了コード 2。
+- **複数の daemon（設定ごと。#165）**: どの daemon の画面を開くかは、`--config <絶対パス>` ＞ `TOURYOU_DAEMON_CONFIG` ＞ 実行した場所（cwd）から上へ探した `<dir>/.touryou/config.json` ＞ 見つからないとき、実行した場所（cwd）が設定の `repoRoot` か `worktreeRoot` の中にあるもの（いちばん深い root）の順で決める（どれもなければ、旧パス `$HOME/.touryou/config.json` へは戻らず、理由と直し方を出して終了コード 1 で止まる）。候補は、従来の既定の設定と、`$HOME/Library/LaunchAgents` に置いた（常駐にした）別名の plist（`[<org>.]touryou.daemon-<8 文字>.plist`）の `--config` の設定（`--others`・版上げと同じ集合。`init` しただけで `$HOME/.touryou/launchd` にしかない plist は候補にしない。元の plist が消えて LaunchAgents にだけ残るものは候補にする）と、`TOURYOU_DAEMON_CONFIG` の設定（`--list` のとき。ほかは、環境変数があれば、それで決まる）。開いたときは、標準出力の先頭に `開いた設定: <設定のパス>` を出す。`touryou ui --list` は、候補の設定のパスと `repoRoot`・`worktreeRoot` の一覧だけを出す（トークン・ポートは出さず、開かない）。`HOME` が空のときは、既定の設定と別名の plist は候補に入らず、`--list` は環境変数の設定だけを出す（なければ理由を出して終了コード 1）。`--list` と `--config` の同時指定・`--config` が絶対パスでない・ほかの引数は終了コード 2。
 - **`touryou launchd`（#165）**: `--config <絶対パス>`（実パスにそろえて名前を決める）と `--others`（`init`・`apply`・`status`・`restart`・`stop`・`uninstall`。`--org` を付ければ、その組織の Label のものだけ。`apply`・`status`・`restart`・`stop` は、LaunchAgents に置いたものだけ）を受け取る。くわしくは `docs/launchd.md` の「複数の daemon を常駐させる」。
 - plugin の `/touryou:ui` は、これを 1 回実行するだけ（複数の daemon から選ぶときは、`--list` で一覧を出して利用者に選んでもらい、`--config` を付ける）。
 

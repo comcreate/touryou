@@ -1,7 +1,7 @@
 /**
  * `touryou ui`（Issue #88）: 状態画面を、使い捨てのチケットで、既定のブラウザで開く。
  *
- * 1. `$HOME/.touryou/config.json`（または `TOURYOU_DAEMON_CONFIG`）の `stateDir` から、`port` と `human-token` を自分で読む。
+ * 1. 設定（`--config` → `TOURYOU_DAEMON_CONFIG` → cwd から上の `.touryou/config.json`）の `stateDir` から、`port` と `human-token` を自分で読む。
  * 2. daemon の身元を確かめる（`docs/daemon-identity.md`。今の `touryou` コマンドと同じ）。合わなければ、トークンを送らずに止まる。
  * 3. `POST /v1/ui/ticket`（`human-token`）でチケット（60 秒・1 回だけ）をもらう。
  * 4. `http://127.0.0.1:<port>/ui#ticket=<チケット>` を、macOS の `open` で開く。
@@ -9,7 +9,9 @@
  * `human-token` は、メモリの中だけで使い、標準出力・標準エラー・引数・ログに出さない。チケットも、標準出力・標準エラーに出さない
  * （`open` の引数にだけ渡す。`ps` に出るのは、使い捨てのチケットだけ）。ブラウザを開けないときは、URL を出さずに止まる。
  */
+import { lstatSync } from "node:fs";
 import { join } from "node:path";
+import { locateConfig } from "@touryou/core";
 import { readSecureFile } from "@touryou/core/fs";
 import { createIdentityVerifier, IDENTITY_FILE, type IdentityVerifier } from "@touryou/mcp/relay";
 import type { CommandResult } from "./commands.js";
@@ -31,7 +33,19 @@ export interface UiDeps {
   readonly cwd?: string | (() => string);
   /** ディレクトリの一覧（試験用）。 */
   readonly readDir?: (path: string) => string[];
+  /** 設定ファイルがあるか（cwd から上へ探すときに使う。試験用。既定は lstat）。 */
+  readonly exists?: (path: string) => boolean;
 }
+
+/** 設定ファイルの名前があるか（リンクも「ある」。リンク・権限の拒否は、あとの読み取りが行う）。 */
+const configExists = (path: string): boolean => {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 const MAX_BYTES = 64 * 1024;
 const TICKET_SHAPE = /^[A-Za-z0-9_-]{43}$/;
@@ -159,29 +173,29 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
     deps.env.TOURYOU_DAEMON_CONFIG !== undefined && deps.env.TOURYOU_DAEMON_CONFIG !== ""
       ? deps.env.TOURYOU_DAEMON_CONFIG
       : undefined;
-  // 複数の daemon（設定ごと）があるときの候補。既定の設定・`touryou launchd init --config` で作った別名の設定・
-  // 環境変数 TOURYOU_DAEMON_CONFIG の設定（init していない daemon も、これで指せる）
-  // 候補が要るのは、--list と、選び方が実行場所（cwd）まで進むとき。--config か TOURYOU_DAEMON_CONFIG で決まるときは、
-  // 使わない候補の設定・plist を読まない
-  const needCandidates = list || (configArg === undefined && envConfig === undefined);
-  const paths: string[] = [];
-  const seen = new Set<string>();
-  const addPath = (p: string): void => {
-    // リンク経由の別の書き方でも、同じ設定は 1 つにまとめる（実パスで比べる）
-    const key = canonicalPath(p);
-    if (seen.has(key)) return;
-    seen.add(key);
-    paths.push(p);
-  };
-  if (needCandidates) {
+  // 複数の daemon（設定ごと）があるときの候補。旧来の設定（`$HOME/.touryou/config.json`）・`touryou launchd init --config` で作った
+  // 別名の設定・環境変数 TOURYOU_DAEMON_CONFIG の設定（init していない daemon も、これで指せる）。
+  // 候補が要るのは、--list と、cwd から上へ探しても設定が見つからないとき（兄弟の置き場の作業ツリーなど）だけ。
+  // 候補は「cwd が repoRoot・worktreeRoot の中にあるか」で選ぶ材料にするだけで、見つからないときの黙った戻り先にはしない
+  const buildCandidates = (): Candidate[] => {
+    const paths: string[] = [];
+    const seen = new Set<string>();
+    const addPath = (p: string): void => {
+      // リンク経由の別の書き方でも、同じ設定は 1 つにまとめる（実パスで比べる）
+      const key = canonicalPath(p);
+      if (seen.has(key)) return;
+      seen.add(key);
+      paths.push(p);
+    };
     if (defaultConfig !== undefined) {
       addPath(defaultConfig);
       for (const c of otherConfigs(home.replace(/\/+$/, ""), deps, read)) addPath(c);
     }
     if (envConfig !== undefined) addPath(envConfig);
-  }
-  const candidates: Candidate[] = paths.map((c) => ({ configPath: c, ...rootsOf(c, read) }));
+    return paths.map((c) => ({ configPath: c, ...rootsOf(c, read) }));
+  };
   if (list) {
+    const candidates = buildCandidates();
     // HOME が空で、環境変数の設定もないときは、探す場所がない。空の一覧で成功にせず、理由を出す
     if (candidates.length === 0) {
       return fail("daemon の設定ファイルが分からない（HOME がなく、TOURYOU_DAEMON_CONFIG もない）");
@@ -192,30 +206,38 @@ export async function runUi(argv: readonly string[], deps: UiDeps): Promise<Comm
       stderr: "",
     };
   }
-  // 選び方: --config > TOURYOU_DAEMON_CONFIG > 実行したディレクトリが repoRoot・worktreeRoot の中にある候補（いちばん深いもの） > 既定の設定
-  // cwd は、--config・TOURYOU_DAEMON_CONFIG で決まるとき、候補が 1 つ以下のときは読まない（消えた cwd でも開ける）
-  let cwd: string | undefined;
-  if (needCandidates && candidates.length >= 2 && deps.cwd !== undefined) {
+  // 選び方: --config > TOURYOU_DAEMON_CONFIG > cwd から上へ <dir>/.touryou/config.json（共有関数 locateConfig）
+  //   > 実行したディレクトリが repoRoot・worktreeRoot の中にある候補（いちばん深いもの）。どれも見つからなければ、
+  //   旧パス（$HOME/.touryou/config.json）へは戻らず、理由と直し方を出して止まる。
+  // cwd は、--config・TOURYOU_DAEMON_CONFIG で決まるときは読まない（消えた cwd でも開ける）
+  let configPath: string | undefined = configArg ?? envConfig;
+  if (configPath === undefined) {
+    let cwd: string | undefined;
     try {
       cwd = typeof deps.cwd === "function" ? deps.cwd() : deps.cwd;
     } catch {
       return fail(
-        "コマンドを実行したディレクトリを取得できない（削除された・入れない）ため、複数の daemon のどれを開くか決められない",
+        "コマンドを実行したディレクトリを取得できない（削除された・入れない）ため、開く daemon の設定を探せない",
         "存在するディレクトリへ移ってから、もう一度 ui を実行する",
         "または --config <設定ファイルの絶対パス> で開く daemon を指す（候補は ui --list で確かめる）",
       );
     }
-  }
-  const fromCwd =
-    cwd === undefined
-      ? undefined
-      : candidates
-          .map((c) => ({ c, depth: depthOf(cwd, c) }))
-          .filter((x): x is { c: Candidate; depth: number } => x.depth !== undefined)
-          .sort((a, b) => b.depth - a.depth)[0]?.c.configPath;
-  const configPath = configArg ?? envConfig ?? fromCwd ?? defaultConfig;
-  if (configPath === undefined) {
-    return fail("daemon の設定ファイルが分からない（HOME がない）", "/touryou:setup で設定を作る");
+    const located = locateConfig({ env: {}, cwd, exists: deps.exists ?? configExists });
+    if (located.ok) {
+      configPath = located.path;
+    } else {
+      const candidates = cwd === undefined ? [] : buildCandidates();
+      configPath =
+        cwd === undefined
+          ? undefined
+          : candidates
+              .map((c) => ({ c, depth: depthOf(cwd, c) }))
+              .filter((x): x is { c: Candidate; depth: number } => x.depth !== undefined)
+              .sort((a, b) => b.depth - a.depth)[0]?.c.configPath;
+      if (configPath === undefined) {
+        return fail(located.reason, located.fix, "候補は ui --list で確かめられる");
+      }
+    }
   }
   let stateDir: string;
   try {

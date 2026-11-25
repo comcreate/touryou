@@ -13,7 +13,7 @@
  */
 
 import { lstatSync, readFileSync } from "node:fs";
-import { ownMcpToolOf, PLUGIN_NAME } from "@touryou/core";
+import { locateConfig, ownMcpToolOf, PLUGIN_NAME } from "@touryou/core";
 import { type AclCheck, readSecureFile } from "@touryou/core/fs";
 
 const defaultReadFile = (path: string): string => readFileSync(path, "utf8");
@@ -39,11 +39,11 @@ export interface HookInput {
   readonly fetchImpl?: typeof fetch;
   readonly timeoutMs?: number;
   /**
-   * ファイルを読む（トークンのない形で、daemon の窓口を `$HOME/.touryou/config.json` の stateDir の port から知る）。
+   * ファイルを読む（トークンのない形で、daemon の窓口を、探した設定（TOURYOU_DAEMON_CONFIG → cwd から上の `.touryou/config.json`）の stateDir の port から知る）。
    * 読めなければ例外。既定は fs の readFileSync。
    */
   readonly readFile?: (path: string) => string;
-  /** ファイルがあるか（子の作業ツリーの印。既定は fs の existsSync）。 */
+  /** ファイルがあるか（子の作業ツリーの印・設定ファイルを上へ探すとき。既定は fs の lstat）。 */
   readonly exists?: (path: string) => boolean;
   /** 設定・port の ACL の確かめ（`readFile` を渡さないときに使う。既定は `defaultAclCheck`）。試験で差し替える。 */
   readonly acl?: AclCheck;
@@ -205,19 +205,20 @@ const TRANSIENT_WHY: Record<TransientCause, string> = {
 /** 設定・port のファイルの大きさの上限。 */
 const STATE_MAX_BYTES = 64 * 1024;
 
-/** `$HOME/.touryou/config.json`（または TOURYOU_DAEMON_CONFIG）の stateDir の port から、daemon の窓口を作る。なければ undefined。 */
+/**
+ * 設定ファイル（共有関数 `locateConfig`: TOURYOU_DAEMON_CONFIG → cwd から上へ `<dir>/.touryou/config.json`）の stateDir の port から、
+ * daemon の窓口を作る。設定が見つからない・確かめに通らないときは undefined（旧パス `$HOME/.touryou/config.json` へは戻らない）。
+ * undefined のとき、印のある子の作業ツリーでは PreToolUse を拒み（フェイルクローズ）、touryou を使っていないフォルダでは何もしない。
+ */
 function daemonUrlFromState(
   env: HookInput["env"],
+  cwd: string | undefined,
+  exists: (path: string) => boolean,
   read: (path: string, forbid: number) => string,
 ): string | undefined {
-  const home = env.HOME ?? "";
-  const configPath =
-    env.TOURYOU_DAEMON_CONFIG !== undefined && env.TOURYOU_DAEMON_CONFIG !== ""
-      ? env.TOURYOU_DAEMON_CONFIG
-      : home === ""
-        ? undefined
-        : `${home.replace(/\/+$/, "")}/.touryou/config.json`;
-  if (configPath === undefined) return undefined;
+  const located = locateConfig({ env, cwd, exists });
+  if (!located.ok) return undefined;
+  const configPath = located.path;
   const j = JSON.parse(read(configPath, 0o022)) as { stateDir?: unknown } | null;
   const stateDir = j?.stateDir;
   if (typeof stateDir !== "string" || !stateDir.startsWith("/")) return undefined;
@@ -264,6 +265,15 @@ async function sessionMode(
       return false;
     }
   };
+  // 設定を上へ探し始める場所: フック入力の cwd（セッションの作業場所）
+  const inputCwd = (): string | undefined => {
+    try {
+      const c = (JSON.parse(deps.input) as { cwd?: unknown }).cwd;
+      return typeof c === "string" ? c : undefined;
+    } catch {
+      return undefined;
+    }
+  };
   const unreachable = (why: string): HookResult =>
     childTree()
       ? {
@@ -289,7 +299,7 @@ async function sessionMode(
       try {
         // 設定・port は、daemon の port-file.ts と同じ確かめ（リンクでない・持ち主・権限・ACL）をしてから読む。
         // 確かめに失敗したら窓口が分からない扱い（印のある作業ツリーでは拒む。印がなければ黙って通す）。
-        url = daemonUrlFromState(deps.env, readState);
+        url = daemonUrlFromState(deps.env, inputCwd(), deps.exists ?? markExists, readState);
       } catch {
         url = undefined;
       }

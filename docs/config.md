@@ -8,6 +8,25 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 - **トークンの値は、設定ファイルに書きません**（トークンは daemon が `stateDir` に作ります）。
 - 前提: `git`（Xcode の Command Line Tools）が要ります（daemon が、子の作業ツリーを `git worktree` で作るため。Xcode か Command Line Tools のどちらかがあればよい）。入っていなければ、Terminal で `xcode-select --install` を実行します。git がないと、子の作成・回収は失敗し、原因の先頭に「git（Xcode Command Line Tools）が使えません」と出ます。
 
+## 設定ファイルの探し方（全入口で共通）
+
+`touryou`・フック（`touryou hook`）・`touryou ui`・`touryou-mcp --stdio`（`child_bind` を含む）は、次の順で設定ファイルを決めます（共有関数 `locateConfig`。正本は `packages/core/src/config-locate.ts`）。
+
+1. `--config <設定ファイル>`（`touryou ui`・`touryou-mcp --stdio` が取る引数）
+2. 環境変数 `TOURYOU_DAEMON_CONFIG`（空は無視する）
+3. 実行した場所（cwd）から上へ、各階層の `<dir>/.touryou/config.json` を探し、いちばん近いものを使う
+
+3 は、どの深さからでも、子の作業ツリー（`<repoRoot>/.touryou/worktrees/<子>`）の中からでも、親のリポジトリの `<repoRoot>/.touryou/config.json` に届きます。`$HOME` だけを特別に扱いません（cwd が `$HOME` の下にあれば、`$HOME/.touryou/config.json` も、上へ探す途中で見つかります）。
+
+**見つからないときは、旧パス（`$HOME/.touryou/config.json`）へ黙って戻りません。** 探した場所（cwd）と直し方（`/touryou:setup` を実行する、または `--config`・`TOURYOU_DAEMON_CONFIG` で指す）を出して止まります。
+
+入口ごとの違い:
+
+- `touryou-mcp --stdio`・`touryou`: 見つからなければ、`invalid_config`（mcp）・使い方の誤り（終了コード 2。トークンは送らない）で止まります。
+- フック: 設定が見つからない・読めないときは、印のある子の作業ツリーでは拒否し（fail-closed）、印のないフォルダ（touryou を使っていない場所）では、何もせずに通します。フックは、入力の `cwd` から上へ探します。
+- `touryou ui`: `--config`・環境変数がなく、cwd から上にも見つからないときだけ、候補（`touryou ui --list`）のうち、cwd が `repoRoot`・`worktreeRoot` の中にあるものを、いちばん深いもの（内側の `worktreeRoot` を含む）から選びます。それでも合うものがなければ、止まります。
+- `touryou launchd`: 常駐（launchd）の管理は、従来の既定の daemon（`$HOME/.touryou/config.json`）を前提にしています。`--config` を省略したときの既定は、この版では変えていません（リポジトリ単位の置き場への切り替えは、後続の変更で入ります）。
+
 ## 必須の項目
 
 | キー | 内容 |
@@ -204,8 +223,8 @@ mkdir -p <状態の置き場> && chmod 700 <状態の置き場>
 | 変数 | 使う側 | 内容 |
 |:--|:--|:--|
 | `TOURYOU_DAEMON_URL` | フック・`touryou` | 窓口の URL（`--daemon-url` の代わり） |
-| `TOURYOU_DAEMON_CONFIG` | `touryou`・フック・`touryou ui`・`touryou-mcp --stdio`（MCP） | 設定ファイルのパス（`--config` の代わり）。空は無視する。`touryou-mcp --stdio` では、優先順位は「`--config` の引数 → この環境変数 → `$HOME/.touryou/config.json`」。設定が `$HOME/.touryou` の外にあってもよい（設定ファイルの親ディレクトリが、リンクでない・自分の・`drwx------` か `drwxr-xr-x` であること） |
-| `TOURYOU_ROOT_TOKEN` | 使わない | 統合セッションの `touryou-mcp --stdio` は、設定（`TOURYOU_DAEMON_CONFIG`、なければ `$HOME/.touryou/config.json`）の `stateDir` の `root-token` だけから読む（環境変数に置くと、Claude Code の環境に残り、Bash などで見えうるため）。`TOURYOU_MCP_URL` も廃止 |
+| `TOURYOU_DAEMON_CONFIG` | `touryou`・フック・`touryou ui`・`touryou-mcp --stdio`（MCP） | 設定ファイルのパス（`--config` の代わり）。空は無視する。優先順位は「`--config` の引数 → この環境変数 → cwd から上へ `<dir>/.touryou/config.json`」で、見つからなければ止まる（上の「設定ファイルの探し方」）。設定が `$HOME/.touryou` の外にあってもよい（設定ファイルの親ディレクトリが、リンクでない・自分の・`drwx------` か `drwxr-xr-x` であること） |
+| `TOURYOU_ROOT_TOKEN` | 使わない | 統合セッションの `touryou-mcp --stdio` は、設定（`--config`・`TOURYOU_DAEMON_CONFIG`、なければ cwd から上の `.touryou/config.json`）の `stateDir` の `root-token` だけから読む（環境変数に置くと、Claude Code の環境に残り、Bash などで見えうるため）。`TOURYOU_MCP_URL` も廃止 |
 | `TOURYOU_NODE_TOKEN` | フック | 手動の CLI の子のフック専用のトークン（`touryou hook-env`） |
 
 手順の全体と確かめ方は [`manual-verification-checklist.md`](manual-verification-checklist.md) の H にあります。

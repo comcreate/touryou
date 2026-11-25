@@ -52,7 +52,7 @@ export const daemonMismatch = (): Failure =>
   failure(
     "bind_daemon_mismatch",
     "紐付けのコードは、いま接続している daemon ではなく、別の daemon が書いたもの（接続先違い。コードは送っていない）",
-    "作業を始めずに、会話で人（親）に、この子を作った daemon と、plugin（mcp）の接続先が同じかを確かめてもらう（--config・TOURYOU_DAEMON_CONFIG・$HOME/.touryou/config.json のどれが効いているか）",
+    "作業を始めずに、会話で人（親）に、この子を作った daemon と、plugin（mcp）の接続先が同じかを確かめてもらう（--config・TOURYOU_DAEMON_CONFIG・cwd から上の .touryou/config.json のどれが効いているか）",
     "接続先を直したら、Claude Code の /mcp で touryou を Reconnect し、child_bind を引数なしでもう一度呼ぶ",
     "それでも合わないときは、親に node_bindCode でコードを出し直してもらう",
   );

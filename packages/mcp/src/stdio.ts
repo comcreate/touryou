@@ -3,7 +3,8 @@
  * 統合セッションごとに 1 つ起動する。子用の HTTP の `touryou-mcp`（`main.ts`）は、そのまま残る。
  *
  * - 状態の置き場: 設定ファイルの `stateDir`。設定ファイルは、`--config` の引数 → 環境変数 `TOURYOU_DAEMON_CONFIG`（空は無視）→
- *   `$HOME/.touryou/config.json` の順に決める。設定ファイルの親ディレクトリも、下の `$HOME/.touryou` と同じ検査を通す。
+ *   cwd から上へ `<dir>/.touryou/config.json` の順に決める（共有関数 `locateConfig`）。見つからないときは、旧パスへ戻らず止まる。
+ *   設定ファイルの親ディレクトリも、下の置き場と同じ検査を通す。
  * - 根のトークン: `<stateDir>/root-token` だけから読む（環境変数は使わない。Claude Code の環境に残ると、Bash などで見えうるため）。
  *   ファイルは、リンクを開かない（`O_NOFOLLOW`）・通常のファイル・自分の・権限の文字列が `-rw-------`（macOS の拡張属性 `@` は可、
  *   ACL の `+` は不可）のときだけ読む。`$HOME/.touryou`・`stateDir`・その親も、リンクでない・自分の・権限の文字列が `drwx------` か
@@ -24,7 +25,14 @@ import { lstatSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { type Failure, failure, isSessionId, ok, type Result } from "@touryou/core";
+import {
+  type Failure,
+  failure,
+  isSessionId,
+  locateConfig,
+  ok,
+  type Result,
+} from "@touryou/core";
 import { aclProblemOfMode, modeString, readSecureFile } from "@touryou/core/fs";
 import { startAutoBind } from "./auto-bind.js";
 import { type CodeFileOps, isCodeShape, readCodeFile, removeCodeFile } from "./bind-code-file.js";
@@ -73,6 +81,8 @@ export interface FileOps {
   readonly modeString: (path: string) => string | undefined;
   /** リンクでない・ディレクトリ・自分の、を満たさなければ、理由。 */
   readonly checkDir: (path: string) => string | undefined;
+  /** 設定ファイルがあるか（cwd から上へ探すときに使う。内容・権限は `read` が確かめる）。 */
+  readonly exists: (path: string) => boolean;
 }
 
 function readOwned(path: string, forbid: number): string {
@@ -93,7 +103,22 @@ function checkDir(path: string): string | undefined {
   return undefined;
 }
 
-const defaultOps: FileOps = { read: readOwned, modeString: (p) => modeString(p), checkDir };
+/** 設定ファイルの名前があるか（リンクも「ある」。リンク・権限の拒否は、あとの `read` が行う）。 */
+function configExists(path: string): boolean {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const defaultOps: FileOps = {
+  read: readOwned,
+  modeString: (p) => modeString(p),
+  checkDir,
+  exists: configExists,
+};
 
 /** 設定・port の ACL（mode ビットは `read` が見る。ここは ACL だけ。分からないときは拒む）。 */
 const fileAclProblem = (path: string, ops: FileOps): string | undefined =>
@@ -193,16 +218,17 @@ export function resolveDaemonEndpoint(
         "touryou-mcp --stdio [--config <daemon の設定>]",
       );
   }
-  // 統合セッション用は $HOME/.touryou を置き場にする。
-  const home = env.HOME;
-  if (home === undefined || home === "" || !isAbsolute(home)) {
-    return fail("invalid_config", "HOME が絶対パスでない（置き場を決められない）", SETUP);
+  // 優先順位（全入口で共有）: --config の引数 → 環境変数 TOURYOU_DAEMON_CONFIG（空は無視）→ cwd から上へ <dir>/.touryou/config.json。
+  // 見つからないとき、旧パス（$HOME/.touryou/config.json）へは戻らず、理由と直し方を出して止まる
+  let cwd: string | undefined;
+  try {
+    cwd = (deps.cwd ?? (() => process.cwd()))();
+  } catch {
+    cwd = undefined;
   }
-  const touryou = join(home, ".touryou");
-  // 優先順位: --config の引数 → 環境変数 TOURYOU_DAEMON_CONFIG（空は無視）→ $HOME/.touryou/config.json（touryou の cli と同じ）
-  const envConfig = env.TOURYOU_DAEMON_CONFIG;
-  configPath ??=
-    envConfig === undefined || envConfig === "" ? join(touryou, "config.json") : envConfig;
+  const located = locateConfig({ arg: configPath, env, cwd, exists: ops.exists });
+  if (!located.ok) return fail("invalid_config", located.reason, located.fix);
+  configPath = located.path;
   const dirProblem = (dir: string): Result<never> | undefined => {
     const why = ops.checkDir(dir);
     if (why !== undefined)
@@ -519,7 +545,7 @@ export function openPendingStdioSession(
           ? "紐付けのコードのファイルが安全でない（リンク・持ち主が違う・権限が 0600 でない）ので読まなかった"
           : "紐付けのコードのファイルがない（使用済み・期限切れ・daemon の再起動のあと）か、このセッションが作業ツリーの一番上で起動されていない。ほかに、子を作った daemon と、この mcp の接続先の daemon が別の可能性もある（plugin が入っていないのとは限らない）",
         "作業を始めずに、会話で人（親）に「紐付けをやり直して」と頼む（親は node_bindCode でコードを出し直す）。出し直されたら、child_bind を引数なしでもう一度呼ぶ",
-        "出し直しても同じなら、親に、この子を作った daemon と、plugin（mcp）の接続先（--config・TOURYOU_DAEMON_CONFIG・$HOME/.touryou/config.json）が同じかを確かめてもらう",
+        "出し直しても同じなら、親に、この子を作った daemon と、plugin（mcp）の接続先（--config・TOURYOU_DAEMON_CONFIG・cwd から上の .touryou/config.json）が同じかを確かめてもらう",
         "人が claude attach で子の画面を開いたあとにこうなったなら、MCP がつなぎ直されて紐付けが外れている（#136）。自動のつなぎ直し（#145）は、セッションの ID・作業ツリーが記録と合わない・紐付けの期限が切れた・止められたなどで通らなかった。この場合、daemon が親の受信箱に「紐付けをやり直して」を出している（#186。届かなかったときは、人に頼む）。同じく、親にコードの出し直しを頼む",
       );
     }

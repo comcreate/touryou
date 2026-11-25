@@ -49,6 +49,11 @@ const ticketFetch = (status = 200, id = DAEMON_ID) => {
   return { f, seen };
 };
 
+/** 実行した場所（/home/u/proj）から上へ探すと、/home/u/.touryou/config.json に届く。実機の cwd・設定には触れない。 */
+const CWD = "/home/u/proj";
+const HOME_CONFIG = "/home/u/.touryou/config.json";
+const existsHome = (p: string): boolean => p === HOME_CONFIG;
+
 const run = async (opts: {
   read?: (p: string) => string;
   verify?: "ok" | "identity" | "transient";
@@ -58,6 +63,8 @@ const run = async (opts: {
   const opened: string[] = [];
   const r = await runBin(["ui"], {
     env: { HOME: "/home/u" },
+    cwd: CWD,
+    exists: existsHome,
     isTTY: TTY,
     fetch: opts.fetch ?? ticketFetch().f,
     ui: {
@@ -88,6 +95,8 @@ describe("touryou ui: 読めない設定・ポートの案内が、選ばれた�
   ) => {
     const r = await runBin(argv, {
       env: { HOME: "/home/u", ...env },
+      cwd: CWD,
+      exists: existsHome,
       isTTY: TTY,
       fetch: ticketFetch().f,
       ui: { readFile: read, verifierFor: verifier("ok"), openUrl: () => true },
@@ -224,12 +233,14 @@ describe("touryou ui（複数の daemon）", () => {
     env: Record<string, string>,
     cwd: string,
     over: Record<string, string | undefined> = {},
+    exists: (p: string) => boolean = () => false,
   ) => {
     const { f, seen } = ticketFetch();
     const opened: string[] = [];
     const r = await runBin(["ui", ...args], {
       env: { HOME: "/home/u", ...env },
       cwd,
+      exists,
       isTTY: TTY,
       fetch: f,
       ui: {
@@ -253,9 +264,47 @@ describe("touryou ui（複数の daemon）", () => {
     expect(a.opened).toEqual([`http://127.0.0.1:43210/ui#ticket=${TICKET}`]);
   });
 
-  it("どの root にも合わないときは、既定の設定にする", async () => {
+  it("どこにも設定が見つからず、どの root にも合わないときは、旧パスへ戻らず、理由と直し方を出して止まる", async () => {
     const r = await go([], {}, "/elsewhere");
-    expect(r.opened).toEqual([`http://127.0.0.1:43210/ui#ticket=${TICKET}`]);
+    expect(r.r.exitCode).toBe(1);
+    expect(r.opened).toEqual([]);
+    expect(r.seen).toEqual([]);
+    expect(r.r.stderr).toContain("見つからない");
+    expect(r.r.stderr).toContain("/touryou:setup");
+    expect(r.r.stderr).toContain("--config");
+  });
+
+  it("cwd から上へ見つかる .touryou/config.json が、候補の root より先に効く。子の作業ツリー（<根>/.touryou/worktrees/<子>）からも届く", async () => {
+    const over = {
+      "/work/b/.touryou/config.json": JSON.stringify({ stateDir: "/state-b" }),
+      "/work/a/.touryou/config.json": JSON.stringify({ stateDir: "/state" }),
+    };
+    const exists = (p: string) =>
+      p === "/work/b/.touryou/config.json" || p === "/work/a/.touryou/config.json";
+    // 候補では /work/a の root に合う場所でも、上に /work/b の設定があれば、そちら
+    const deep = await go([], {}, "/work/b/packages/x", over, exists);
+    expect(deep.opened).toEqual([`http://127.0.0.1:43211/ui#ticket=${TICKET}`]);
+    const child = await go([], {}, "/work/a/.touryou/worktrees/c1/src", over, exists);
+    expect(child.opened).toEqual([`http://127.0.0.1:43210/ui#ticket=${TICKET}`]);
+    expect(child.r.stdout).toContain("開いた設定: /work/a/.touryou/config.json");
+  });
+
+  it("worktreeRoot が repoRoot の内側にあるとき、いちばん深い root の設定を選ぶ（外側の root に落とさない）", async () => {
+    const over = {
+      // A: repoRoot /r の内側に worktreeRoot。B: 同じ repoRoot /r（外側）
+      [HOME_CONFIG]: JSON.stringify({
+        stateDir: "/state",
+        repoRoot: "/r",
+        worktreeRoot: "/r/.touryou/worktrees",
+      }),
+      [OTHER]: JSON.stringify({ stateDir: "/state-b", repoRoot: "/r" }),
+    };
+    const inner = await go([], {}, "/r/.touryou/worktrees/c1/src", over);
+    expect(inner.opened).toEqual([`http://127.0.0.1:43210/ui#ticket=${TICKET}`]);
+    // repoRoot の名前の前半だけが同じ別のフォルダは、中ではない（どの root にも合わず、止まる）
+    const near = await go([], {}, "/r-other/src", over);
+    expect(near.r.exitCode).toBe(1);
+    expect(near.opened).toEqual([]);
   });
 
   it("--config と TOURYOU_DAEMON_CONFIG は、実行場所より先に効く", async () => {
@@ -285,9 +334,10 @@ describe("touryou ui（複数の daemon）", () => {
     };
     const r = await go([], {}, "/wt/b/node-1/packages/x", over);
     expect(r.opened).toEqual([`http://127.0.0.1:43211/ui#ticket=${TICKET}`]);
-    // root の名前の前半だけが同じ別のフォルダは、中ではない
+    // root の名前の前半だけが同じ別のフォルダは、中ではない（どの root にも合わず、旧パスへ戻らずに止まる）
     const near = await go([], {}, "/wt/b-other", over);
-    expect(near.opened).toEqual([`http://127.0.0.1:43210/ui#ticket=${TICKET}`]);
+    expect(near.r.exitCode).toBe(1);
+    expect(near.opened).toEqual([]);
     // --list にも、worktreeRoot を出す
     const l = await go(["--list"], {}, "/work/a", over);
     expect(l.r.stdout).toContain(`${OTHER}（repoRoot: /work/b・worktreeRoot: /wt/b）`);
@@ -300,10 +350,10 @@ describe("touryou ui（複数の daemon）", () => {
     expect(byEnv.r.stdout).toContain(`開いた設定: ${OTHER}`);
     const byArg = await go(["--config", OTHER], {}, "/work/a");
     expect(byArg.r.stdout).toContain(`開いた設定: ${OTHER}`);
-    const byDefault = await go([], {}, "/elsewhere");
-    expect(byDefault.r.stdout).toContain("開いた設定: /home/u/.touryou/config.json");
-    expect(byDefault.r.stdout).not.toContain(TOKEN);
-    expect(byDefault.r.stdout).not.toContain(TICKET);
+    const byUpward = await go([], {}, "/home/u/proj", {}, existsHome);
+    expect(byUpward.r.stdout).toContain("開いた設定: /home/u/.touryou/config.json");
+    expect(byUpward.r.stdout).not.toContain(TOKEN);
+    expect(byUpward.r.stdout).not.toContain(TICKET);
   });
 
   it("--list は、init していない設定（TOURYOU_DAEMON_CONFIG）も出す", async () => {

@@ -24,6 +24,7 @@ export type NodeState = (typeof NODE_STATES)[number];
 
 export * from "./activity.js";
 export * from "./brief.js";
+export * from "./config-locate.js";
 export * from "./contract.js";
 export * from "./digest.js";
 export * from "./events.js";

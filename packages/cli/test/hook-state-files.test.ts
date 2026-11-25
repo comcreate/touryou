@@ -1,5 +1,5 @@
 /**
- * `touryou hook`（トークンのない形）が読む `$HOME/.touryou/config.json` と `<stateDir>/port` の確かめ。
+ * `touryou hook`（トークンのない形）が読む設定（TOURYOU_DAEMON_CONFIG、または cwd から上の `.touryou/config.json`）と `<stateDir>/port` の確かめ。
  * daemon の port-file.ts と同じ確かめ（リンクでない・持ち主・権限・ACL）をする。確かめに失敗したら、印のある作業ツリーでは
  * PreToolUse を拒み（fail-closed）、印のないところでは黙って通す。
  * macOS では `chmod +a` の終了コードを確かめてから、本物の ACL で確かめる。Linux では本物の ACL の試験はスキップする。
@@ -15,7 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { runHook } from "../src/hook.js";
 
@@ -64,12 +64,53 @@ describe("touryou hook の設定・port の確かめ", () => {
     const x = setup();
     const f = recorder();
     const r = await runHook({
-      env: { HOME: x.home },
+      env: { TOURYOU_DAEMON_CONFIG: x.config },
       input: pre(x.marked),
       fetchImpl: f.fetchImpl,
     });
     expect(r.code).toBe(0);
     expect(f.urls).toEqual(["http://127.0.0.1:4567/v1/hook"]);
+  });
+
+  it("設定は cwd から上へ探す: 深い場所・子の作業ツリー（<根>/.touryou/worktrees/<子>）からも、根の設定の port へ送る", async () => {
+    const x = setup();
+    const repo = join(dirname(x.home), "proj");
+    const state = join(repo, ".touryou", "state");
+    mkdirSync(state, { recursive: true });
+    writeFileSync(join(repo, ".touryou", "config.json"), JSON.stringify({ stateDir: state }), {
+      mode: 0o600,
+    });
+    writeFileSync(join(state, "port"), "5678\n", { mode: 0o600 });
+    const deep = join(repo, "src", "a");
+    const childTree = join(repo, ".touryou", "worktrees", "c1", "src");
+    mkdirSync(deep, { recursive: true });
+    mkdirSync(childTree, { recursive: true });
+    for (const cwd of [deep, childTree]) {
+      const f = recorder();
+      const r = await runHook({ env: {}, input: pre(cwd), fetchImpl: f.fetchImpl });
+      expect(r.code, cwd).toBe(0);
+      expect(f.urls, cwd).toEqual(["http://127.0.0.1:5678/v1/hook"]);
+    }
+  });
+
+  it("設定が見つからない: touryou を使っていないフォルダでは何もしない。印のある子の作業ツリーでは拒む（守りを外さない）。旧パス $HOME/.touryou へは戻らない", async () => {
+    const x = setup();
+    // x.home の .touryou/config.json はあるが、plain・marked の上にはない（HOME に置いても、見に行かない）
+    const f = recorder();
+    const silent = await runHook({
+      env: { HOME: x.home },
+      input: pre(x.plain),
+      fetchImpl: f.fetchImpl,
+    });
+    expect(silent).toEqual({ code: 0, stderr: "" });
+    const denied = await runHook({
+      env: { HOME: x.home },
+      input: pre(x.marked),
+      fetchImpl: f.fetchImpl,
+    });
+    expect(denied.code).toBe(2);
+    expect(denied.stderr).toContain("touryou の子の作業ツリー");
+    expect(f.urls).toEqual([]);
   });
 
   const breakers: [string, (x: ReturnType<typeof setup>) => void][] = [
@@ -101,14 +142,14 @@ describe("touryou hook の設定・port の確かめ", () => {
       brk(x);
       const f = recorder();
       const denied = await runHook({
-        env: { HOME: x.home },
+        env: { TOURYOU_DAEMON_CONFIG: x.config },
         input: pre(x.marked),
         fetchImpl: f.fetchImpl,
       });
       expect(denied.code).toBe(2);
       expect(denied.stderr).toContain("touryou の子の作業ツリー");
       const silent = await runHook({
-        env: { HOME: x.home },
+        env: { TOURYOU_DAEMON_CONFIG: x.config },
         input: pre(x.plain),
         fetchImpl: f.fetchImpl,
       });
@@ -123,14 +164,14 @@ describe("touryou hook の設定・port の確かめ", () => {
       const acl = (p: string) => (p === x[target] ? "ACL を確かめられない（差し替え）" : undefined);
       const f = recorder();
       const denied = await runHook({
-        env: { HOME: x.home },
+        env: { TOURYOU_DAEMON_CONFIG: x.config },
         input: pre(x.marked),
         fetchImpl: f.fetchImpl,
         acl,
       });
       expect(denied.code, target).toBe(2);
       const silent = await runHook({
-        env: { HOME: x.home },
+        env: { TOURYOU_DAEMON_CONFIG: x.config },
         input: pre(x.plain),
         fetchImpl: f.fetchImpl,
         acl,
@@ -151,7 +192,7 @@ describe("touryou hook の設定・port の確かめ", () => {
         expect(r.status, r.stderr).toBe(0);
         const f = recorder();
         expect(
-          (await runHook({ env: { HOME: x.home }, input: pre(x.marked), fetchImpl: f.fetchImpl }))
+          (await runHook({ env: { TOURYOU_DAEMON_CONFIG: x.config }, input: pre(x.marked), fetchImpl: f.fetchImpl }))
             .code,
         ).toBe(2);
         expect(f.urls).toEqual([]);

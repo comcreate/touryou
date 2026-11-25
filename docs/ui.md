@@ -43,7 +43,7 @@ daemon の窓口が、状態を見るための HTML 画面を配る。**状態�
 ## 認証（人間のトークン）
 
 - **推奨: `/touryou:ui`（Claude Code）か、Mac のターミナルで `touryou ui`（`$HOME/.touryou/current/bin/touryou ui`）。** 貼り付けなしで、既定のブラウザに開く（#88）。
-  1. `touryou ui` が、`$HOME/.touryou/config.json`（または `TOURYOU_DAEMON_CONFIG`）の `stateDir` から、`port` と `human-token` を自分で読む（`TOURYOU_HUMAN_TOKEN` は要らない）。
+  1. `touryou ui` が、設定ファイル（`--config` → `TOURYOU_DAEMON_CONFIG` → 実行した場所から上へ `<dir>/.touryou/config.json`。子の作業ツリーの中からも、親のリポジトリの設定に届く。[`config.md`](config.md) の「設定ファイルの探し方」）の `stateDir` から、`port` と `human-token` を自分で読む（`TOURYOU_HUMAN_TOKEN` は要らない）。見つからなければ、旧パス（`$HOME/.touryou/config.json`）へは戻らず、理由と直し方を出して止まる。
   2. daemon の身元を確かめる（`docs/daemon-identity.md`。今の `touryou` コマンドと同じ）。合わなければ、トークンを送らずに止まる。チケットの応答の `x-touryou-daemon-id` も、確かめた daemon と照らす。
   3. `POST /v1/ui/ticket` でチケットをもらい、`http://127.0.0.1:<port>/ui#ticket=<チケット>` を `open` で開く。**`ps`・ブラウザの履歴に残るのは、このチケットだけ**（60 秒・1 回だけ）。トークン・チケット・URL は、標準出力・標準エラーに出さない。
   4. 画面は、読み込んだ**最初に**フラグメントを取り出して `history.replaceState` でアドレスから消し、`POST /v1/ui/session` で、画面のセッションのトークンに交換する。チケットは、交換を試みた時点で（成否によらず）消える。
@@ -209,8 +209,9 @@ daemon の窓口が、状態を見るための HTML 画面を配る。**状態�
 
 1. `--config <絶対パス>`（絶対パスでなければ終了コード 2）
 2. 環境変数 `TOURYOU_DAEMON_CONFIG`（空は無視）
-3. 実行した場所（cwd）が、候補の設定の `repoRoot` か `worktreeRoot` の中にあるもの（いちばん深い root）。`repoRoot` の名前の前半だけが同じ別のフォルダは、中として数えません。候補は、既定の設定（`<H>/.touryou/config.json`）と、`<H>/Library/LaunchAgents` に置いた（常駐にした）別名の plist（`--config` の値）の設定です（`--others`・版上げと同じ集合。init しただけの plist は候補にしません。元の plist が消えて LaunchAgents にだけ残るものは候補にします）。`touryou ui --list` は、これに `TOURYOU_DAEMON_CONFIG` の設定も加えて並べます。1・2 で設定が決まるときは、使わない候補は読みません
-4. 既定の設定
+3. 実行した場所（cwd）から上へ探した、いちばん近い `<dir>/.touryou/config.json`（共有関数。子の作業ツリー `<repoRoot>/.touryou/worktrees/<子>` の中からも、親のリポジトリの設定に届く。[`config.md`](config.md)）
+4. 3 で見つからないときだけ、実行した場所（cwd）が、候補の設定の `repoRoot` か `worktreeRoot` の中にあるもの（いちばん深い root。内側の `worktreeRoot` も数える）。`repoRoot` の名前の前半だけが同じ別のフォルダは、中として数えません。候補は、従来の既定の設定（`<H>/.touryou/config.json`）と、`<H>/Library/LaunchAgents` に置いた（常駐にした）別名の plist（`--config` の値）の設定です（`--others`・版上げと同じ集合。init しただけの plist は候補にしません。元の plist が消えて LaunchAgents にだけ残るものは候補にします）。`touryou ui --list` は、これに `TOURYOU_DAEMON_CONFIG` の設定も加えて並べます。1・2 で設定が決まるときは、使わない候補は読みません
+5. どれも見つからなければ、旧パス（`<H>/.touryou/config.json`）へは戻らず、理由と直し方（`/touryou:setup`、または `--config`）を出して止まります（終了コード 1）
 
 - 開いたときの標準出力の先頭に、`開いた設定: <設定のパス>` を出します（環境変数・`--config` が優先されたときも、どの設定を開いたかが分かります）。トークン・チケット・URL は、これまでどおり出しません。
 - `touryou ui --list` は、選べる設定を `<パス>（repoRoot: …・worktreeRoot: …）` の形で出します（トークン・ポートは出さない）。候補は、既定の設定・別名の plist の設定・`TOURYOU_DAEMON_CONFIG` の設定（`init` していないものも。重ねては出さない）です。

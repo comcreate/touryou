@@ -8,10 +8,14 @@ import type { Relay } from "../src/relay.js";
 import {
   createReloadingRelay,
   openStdioSession,
-  resolveStdioTarget,
+  resolveStdioTarget as resolveStdioTargetRaw,
   runStdio,
   type StdioTarget,
 } from "../src/stdio.js";
+
+/** この試験の置き場（`home()`）は、`<h>/.touryou/config.json`。cwd の既定は `h`（リポジトリの根の代わり）。 */
+const resolveStdioTarget: typeof resolveStdioTargetRaw = (argv, env, deps = {}) =>
+  resolveStdioTargetRaw(argv, env, { cwd: () => env.HOME ?? "/", ...deps });
 
 const TOKEN = "abcdefghijklmnopqrstuvwxyz012345";
 const made: string[] = [];
@@ -190,12 +194,35 @@ describe("touryou-mcp --stdio の接続先とトークン", () => {
     expect(resolveStdioTarget([], { HOME: home({ port: "99999" }).h }).ok).toBe(false);
   });
 
-  it("HOME がない・設定ファイルがないなら、/setup の案内つきで失敗する", () => {
-    const r = resolveStdioTarget([], {});
-    expect(r.ok === false && r.error.nextActions.join(" ")).toContain("setup");
+  it("HOME がない・設定ファイルがないなら、/setup と --config の案内つきで失敗する", () => {
     const empty = mkdtempSync(join(tmpdir(), "touryou-stdio-empty-"));
     made.push(empty);
+    const r = resolveStdioTarget([], {}, { cwd: () => empty });
+    expect(r.ok).toBe(false);
+    const next = r.ok === false ? r.error.nextActions.join(" ") : "";
+    expect(next).toContain("/touryou:setup");
+    expect(next).toContain("--config");
     expect(resolveStdioTarget([], { HOME: empty }).ok).toBe(false);
+  });
+
+  it("見つからないとき、旧パス（$HOME/.touryou/config.json）へは戻らない（cwd が HOME の外）", () => {
+    const x = home();
+    const elsewhere = mkdtempSync(join(tmpdir(), "touryou-stdio-else-"));
+    made.push(elsewhere);
+    const r = resolveStdioTarget([], { HOME: x.h }, { cwd: () => elsewhere });
+    expect(r.ok).toBe(false);
+  });
+
+  it("cwd から上へ探す: 深い場所・子の作業ツリー（<根>/.touryou/worktrees/<子>）からも、根の設定に届く", () => {
+    const { h, state } = home();
+    const deep = join(h, "src", "a", "b");
+    const child = join(h, ".touryou", "worktrees", "child-1", "src");
+    mkdirSync(deep, { recursive: true });
+    mkdirSync(child, { recursive: true });
+    for (const cwd of [deep, child]) {
+      const r = resolveStdioTargetRaw([], {}, { cwd: () => cwd });
+      expect(r.ok && r.value.identityPath).toBe(join(state, "daemon-identity"));
+    }
   });
 });
 
@@ -322,7 +349,13 @@ describe("touryou-mcp --stdio の起動", () => {
 
   it("失敗は標準エラーにだけ出し、終了コードで返す（標準出力は使わない）", async () => {
     const err: string[] = [];
-    const code = await runStdio([], {}, { stderr: (x) => err.push(x) });
+    // 実際の cwd の上に設定があっても結果が変わらないよう、cwd は設定のない場所に固定する
+    const code = await runStdio(
+      [],
+      {},
+      { stderr: (x) => err.push(x) },
+      { cwd: () => "/nonexistent-touryou-cwd", files: { exists: () => false } },
+    );
     expect(code).toBe(2);
     expect(err.join("")).toMatch(/^\[touryou mcp\] 失敗 \[invalid_config\]/);
   });

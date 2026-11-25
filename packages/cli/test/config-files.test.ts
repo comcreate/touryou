@@ -56,7 +56,7 @@ describe("config.json の確かめ", () => {
         sleep: async () => {},
       });
       expect(r.exitCode, p).toBe(2);
-      expect(r.stderr).toContain("TOURYOU_DAEMON_CONFIG の設定ファイルを読めない");
+      expect(r.stderr).toContain(`daemon の設定ファイル（${p}）を読めない`);
     }
     expect(seen).toEqual([]);
   });

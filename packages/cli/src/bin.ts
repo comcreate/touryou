@@ -4,7 +4,8 @@
  *
  * - `TOURYOU_DAEMON_URL`: daemon の窓口（ループバックだけ）。なければ、daemon の設定の stateDir の port から作る（#115）。
  * - `TOURYOU_HUMAN_TOKEN`: 人間のトークン（`<stateDir>/human-token` の中身）。なければ、そのファイルを自分で読む（#115）。`--token` のような引数はない。
- * - `TOURYOU_DAEMON_CONFIG`: daemon の設定ファイル。`stateDir` の `daemon-identity` で、トークンつきの要求の直前に毎回、daemon の身元を
+ * - `TOURYOU_DAEMON_CONFIG`: daemon の設定ファイル。なければ、実行した場所から上へ `<dir>/.touryou/config.json` を探す
+ *   （共有関数 `locateConfig`。見つからないときは、旧パス `$HOME/.touryou/config.json` へ戻らず、理由と直し方を出して止まる）。`stateDir` の `daemon-identity` で、トークンつきの要求の直前に毎回、daemon の身元を
  *   確かめる（touryou-mcp と同じ）。ないと動かない。環境変数 `TOURYOU_CLI_ALLOW_UNVERIFIED` が**ちょうど `1`** のときだけ、検証なしで動く
  *   （開発用。手元の開発のビルドだけで効き、配布物では効かない。`dev-build.ts`）。
  *
@@ -15,11 +16,11 @@
  */
 import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { realpathSync } from "node:fs";
+import { lstatSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolveVersion, versionLine } from "@touryou/core";
+import { locateConfig, resolveVersion, versionLine } from "@touryou/core";
 import { readSecureFile } from "@touryou/core/fs";
 import { createIdentityVerifier, createRelay, IDENTITY_FILE } from "@touryou/mcp/relay";
 import { runChild } from "./child.js";
@@ -42,6 +43,8 @@ export interface BinDeps {
   readonly isTTY: { readonly stdin: boolean; readonly stdout: boolean };
   readonly fetch?: typeof fetch;
   readonly readFile?: (path: string) => string;
+  /** 設定ファイルがあるか（cwd から上へ探すときに使う。試験用。既定は lstat）。 */
+  readonly exists?: (path: string) => boolean;
   /** 秘密のファイル（stateDir の port・human-token）の読み取り（試験用）。既定は、自分だけが読める・リンクでないファイルだけ。 */
   readonly readSecret?: (path: string) => string;
   readonly newRequestId?: () => string;
@@ -101,7 +104,7 @@ const ghBySpawn: GhRunner = async (args) => {
 const usage = (cause: string): CommandResult => ({
   exitCode: 2,
   stdout: "",
-  stderr: `${cause}\n窓口と認証は、daemon の設定（$HOME/.touryou/config.json の stateDir。TOURYOU_DAEMON_CONFIG で別の場所も指せる）から自分で読む（touryou ui と同じ）。daemon を起動していれば、何も渡さなくてよい。\n環境変数で渡すこともできる（あれば、こちらを先に使う）: TOURYOU_DAEMON_URL（daemon の窓口）・TOURYOU_HUMAN_TOKEN（人間のトークン）・TOURYOU_DAEMON_CONFIG（daemon の設定ファイル。身元の確認に使う）\n例: export TOURYOU_HUMAN_TOKEN="$(cat <stateDir>/human-token)"（トークンを、コマンドの行に直接書かない）\n`,
+  stderr: `${cause}\n窓口と認証は、daemon の設定（TOURYOU_DAEMON_CONFIG、なければ実行した場所から上の .touryou/config.json の stateDir）から自分で読む（touryou ui と同じ）。daemon を起動していれば、何も渡さなくてよい。\n環境変数で渡すこともできる（あれば、こちらを先に使う）: TOURYOU_DAEMON_URL（daemon の窓口）・TOURYOU_HUMAN_TOKEN（人間のトークン）・TOURYOU_DAEMON_CONFIG（daemon の設定ファイル。身元の確認に使う）\n例: export TOURYOU_HUMAN_TOKEN="$(cat <stateDir>/human-token)"（トークンを、コマンドの行に直接書かない）\n`,
 });
 
 /** daemon の設定の `stateDir`（絶対パス）。読めない・形が違えば undefined。 */
@@ -121,18 +124,24 @@ function stateDirOf(path: string, readFile: (p: string) => string): string | und
 const nonEmpty = (v: string | undefined): string | undefined =>
   v === undefined || v === "" ? undefined : v;
 
+/** 設定ファイルがあるか（上へ探すとき。リンクも「ある」。リンク・権限の拒否は、あとの読み取りが行う）。 */
+const configExists = (path: string): boolean => {
+  try {
+    lstatSync(path);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 /**
- * daemon の設定（`TOURYOU_DAEMON_CONFIG`、なければ `$HOME/.touryou/config.json`）の stateDir から、窓口（port）と
- * 人間のトークン（human-token）を読む（#115。`touryou ui` と同じ置き場）。読めないものは undefined のまま返す。
+ * 見つけた daemon の設定（共有関数 `locateConfig`: TOURYOU_DAEMON_CONFIG → cwd から上へ `<dir>/.touryou/config.json`）の stateDir から、
+ * 窓口（port）と人間のトークン（human-token）を読む（#115。`touryou ui` と同じ置き場）。読めないものは undefined のまま返す。
  */
 function localDaemonOf(
-  deps: Pick<BinDeps, "env" | "readFile" | "readSecret">,
+  configPath: string,
+  deps: Pick<BinDeps, "readFile" | "readSecret">,
 ): { configPath: string; daemonUrl?: string; token?: string } | undefined {
-  const home = nonEmpty(deps.env.HOME);
-  const configPath =
-    nonEmpty(deps.env.TOURYOU_DAEMON_CONFIG) ??
-    (home === undefined ? undefined : `${home.replace(/\/+$/, "")}/.touryou/config.json`);
-  if (configPath === undefined) return undefined;
   const stateDir = stateDirOf(
     configPath,
     deps.readFile ?? ((p) => readSecureFile(p, { forbid: 0o022, maxBytes: 1024 * 1024 })),
@@ -256,6 +265,7 @@ export async function runBin(argv: readonly string[], deps: BinDeps): Promise<Co
       // cwd は、選びで必要になるまで取らない（削除済みの cwd でも、--config・環境変数で決まるなら開ける）
       cwd: deps.cwd ?? (() => process.cwd()),
       ...(deps.ui?.readDir === undefined ? {} : { readDir: deps.ui.readDir }),
+      ...(deps.exists === undefined ? {} : { exists: deps.exists }),
       ...(deps.fetch === undefined ? {} : { fetch: deps.fetch }),
       ...(deps.ui?.readFile === undefined ? {} : { readFile: deps.ui.readFile }),
       ...(deps.ui?.verifierFor === undefined ? {} : { verifierFor: deps.ui.verifierFor }),
@@ -286,18 +296,27 @@ export async function runBin(argv: readonly string[], deps: BinDeps): Promise<Co
   }
   // 窓口・人間のトークン・設定の場所は、環境変数があればそれを使い、なければ daemon の設定から自分で読む（#115。touryou ui と同じ）。
   // トークンは、メモリの中だけで使い、引数・標準出力・標準エラーに出さない（出力は redact で伏せる）
-  const local = localDaemonOf(deps);
+  let cwd: string | undefined;
+  try {
+    cwd = typeof deps.cwd === "function" ? deps.cwd() : (deps.cwd ?? process.cwd());
+  } catch {
+    cwd = undefined;
+  }
+  // 設定の探し方（全入口で共有）。見つからないとき、旧パス（$HOME/.touryou/config.json）へは戻らず、理由と直し方を出して止まる
+  const located = locateConfig({ env: deps.env, cwd, exists: deps.exists ?? configExists });
+  const local = located.ok ? localDaemonOf(located.path, deps) : undefined;
+  const notFound = located.ok ? "" : `。${located.reason}。直し方: ${located.fix}`;
   const daemonUrl = nonEmpty(deps.env.TOURYOU_DAEMON_URL) ?? local?.daemonUrl;
   const token = nonEmpty(deps.env.TOURYOU_HUMAN_TOKEN) ?? local?.token;
   if (daemonUrl === undefined)
     return usage(
-      "TOURYOU_DAEMON_URL がなく、daemon の設定からも窓口（stateDir の port）を読めない",
+      `TOURYOU_DAEMON_URL がなく、daemon の設定からも窓口（stateDir の port）を読めない${notFound}`,
     );
   if (token === undefined)
     return usage(
-      "TOURYOU_HUMAN_TOKEN がなく、daemon の設定からも人間のトークン（stateDir の human-token）を読めない",
+      `TOURYOU_HUMAN_TOKEN がなく、daemon の設定からも人間のトークン（stateDir の human-token）を読めない${notFound}`,
     );
-  const configPath = nonEmpty(deps.env.TOURYOU_DAEMON_CONFIG) ?? local?.configPath;
+  const configPath = located.ok ? located.path : undefined;
   let verifier: ReturnType<typeof createIdentityVerifier> | undefined;
   if (configPath !== undefined && configPath !== "") {
     // 既定は、他の人が書けない・リンクでない・自分の・ACL のないファイルだけを読む（daemon の loadConfigFile と同じ確かめ）
@@ -306,7 +325,7 @@ export async function runBin(argv: readonly string[], deps: BinDeps): Promise<Co
       deps.readFile ?? ((p) => readSecureFile(p, { forbid: 0o022, maxBytes: 1024 * 1024 })),
     );
     if (stateDir === undefined) {
-      return usage("TOURYOU_DAEMON_CONFIG の設定ファイルを読めない（stateDir が絶対パスでない）");
+      return usage(`daemon の設定ファイル（${configPath}）を読めない（stateDir が絶対パスでない）`);
     }
     verifier = createIdentityVerifier({
       daemonUrl,
@@ -317,7 +336,7 @@ export async function runBin(argv: readonly string[], deps: BinDeps): Promise<Co
     });
   } else if (!(deps.devBuild ?? DEV_BUILD) || deps.env.TOURYOU_CLI_ALLOW_UNVERIFIED !== "1") {
     return usage(
-      "TOURYOU_DAEMON_CONFIG がない（daemon の身元を確認できないので、動かない）。（TOURYOU_CLI_ALLOW_UNVERIFIED=1 は開発のビルドの試験用で、配布物では効かない）",
+      `daemon の設定ファイルがない（daemon の身元を確認できないので、動かない）${notFound}。（TOURYOU_CLI_ALLOW_UNVERIFIED=1 は開発のビルドの試験用で、配布物では効かない）`,
     );
   }
   const relay = createRelay({

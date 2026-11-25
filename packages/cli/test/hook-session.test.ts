@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { runHook } from "../src/hook.js";
 
 /** `touryou hook` のトークンのない形（`claude --bg` の子。daemon が session_id で引く）。 */
-const ENV = { HOME: "/h" };
+const ENV = { TOURYOU_DAEMON_CONFIG: "/h/.touryou/config.json" };
 const files: Record<string, string> = {
   "/h/.touryou/config.json": JSON.stringify({ stateDir: "/h/.touryou/state" }),
   "/h/.touryou/state/port": "4567\n",
@@ -66,7 +66,14 @@ describe("touryou hook（トークンなし）", () => {
       code: 0,
       stderr: "",
     });
-    expect(await runHook({ env: { HOME: "/x" }, input: pre, readFile, fetchImpl: never })).toEqual({
+    expect(
+      await runHook({
+        env: { TOURYOU_DAEMON_CONFIG: "/x/.touryou/config.json" },
+        input: pre,
+        readFile,
+        fetchImpl: never,
+      }),
+    ).toEqual({
       code: 0,
       stderr: "",
     });

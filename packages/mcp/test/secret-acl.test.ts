@@ -11,7 +11,11 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { BIND_CODE_FILE, readCodeFile } from "../src/bind-code-file.js";
 import { readIdentityFileSecure } from "../src/identity.js";
-import { resolveDaemonEndpoint } from "../src/stdio.js";
+import { resolveDaemonEndpoint as resolveDaemonEndpointRaw } from "../src/stdio.js";
+
+/** この試験の置き場（`home()`）は `<h>/.touryou/config.json`。cwd の既定は `h`（リポジトリの根の代わり）。 */
+const resolveDaemonEndpoint: typeof resolveDaemonEndpointRaw = (argv, env, deps = {}) =>
+  resolveDaemonEndpointRaw(argv, env, { cwd: () => env.HOME ?? "/", ...deps });
 
 const isMac = process.platform === "darwin";
 const made: string[] = [];
@@ -119,7 +123,7 @@ const outside = (port: number) => {
   return { dir, state, config: join(dir, "config.json") };
 };
 
-describe("設定ファイルの決め方（--config → TOURYOU_DAEMON_CONFIG → $HOME/.touryou/config.json）", () => {
+describe("設定ファイルの決め方（--config → TOURYOU_DAEMON_CONFIG → cwd から上へ .touryou/config.json）", () => {
   const url = (r: ReturnType<typeof resolveDaemonEndpoint>) => (r.ok ? r.value.daemonUrl : r.error);
 
   it("環境変数だけ: その設定の daemon に向く（$HOME/.touryou の外でも、親ディレクトリの検査が通る）", () => {
@@ -138,12 +142,12 @@ describe("設定ファイルの決め方（--config → TOURYOU_DAEMON_CONFIG �
     });
     expect(url(r)).toBe("http://127.0.0.1:45678");
   });
-  it("環境変数が空: 無視して、$HOME/.touryou/config.json", () => {
+  it("環境変数が空: 無視して、cwd から上の .touryou/config.json", () => {
     const x = home();
     const r = resolveDaemonEndpoint([], { HOME: x.h, TOURYOU_DAEMON_CONFIG: "" });
     expect(url(r)).toBe("http://127.0.0.1:45678");
   });
-  it("どちらもない: $HOME/.touryou/config.json", () => {
+  it("どちらもない: cwd から上の .touryou/config.json", () => {
     const x = home();
     expect(url(resolveDaemonEndpoint([], { HOME: x.h }))).toBe("http://127.0.0.1:45678");
   });

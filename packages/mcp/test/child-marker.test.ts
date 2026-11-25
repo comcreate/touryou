@@ -137,7 +137,7 @@ describe("runStdio の紐付け待ち", () => {
     const err: string[] = [];
     const run = runStdio(
       [],
-      { HOME: h },
+      { HOME: h, TOURYOU_DAEMON_CONFIG: join(touryou, "config.json") },
       { stderr: (x) => err.push(x) },
       {
         streams: { stdin, stdout },
