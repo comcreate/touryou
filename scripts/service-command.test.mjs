@@ -55,7 +55,10 @@ test("uninstall: 問いを先に聞き、1 回だけ実行する。終了コー�
   assert.match(u, /\*\*1 回だけ\*\*実行する/);
   assert.doesNotMatch(u, /--remove-token/);
   assert.match(u, /`"\$HOME\/\.touryou\/current\/bin\/touryou" supervisor uninstall --yes`/);
-  assert.ok(u.indexOf("定型文（外す）") < u.indexOf("supervisor uninstall --yes"), "実行の前に問い");
+  assert.ok(
+    u.indexOf("定型文（外す）") < u.indexOf("supervisor uninstall --yes"),
+    "実行の前に問い",
+  );
   assert.match(u, /終了コード 1 で、出力に「残した」の行があるときは、失敗ではない/);
   assert.match(rules, /`uninstall` の終了コード 1 の「残した」は、下のとおり失敗ではない/);
 });

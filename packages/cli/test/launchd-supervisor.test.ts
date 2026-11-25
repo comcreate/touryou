@@ -93,9 +93,9 @@ describe("supervisor apply / uninstall", () => {
     expect(r.exitCode).toBe(0);
     const dest = join(s.home, "Library", "LaunchAgents", `${SUPERVISOR_LABEL}.plist`);
     expect(readFileSync(dest, "utf8")).toContain("AbandonProcessGroup");
-    expect(s.calls.some((c) => c[0] === "launchctl" && c[1] === "bootstrap" && c[2] === "gui/501")).toBe(
-      true,
-    );
+    expect(
+      s.calls.some((c) => c[0] === "launchctl" && c[1] === "bootstrap" && c[2] === "gui/501"),
+    ).toBe(true);
   });
   it("uninstall --yes は、生成した plist を消す", async () => {
     const s = setup();
@@ -131,6 +131,8 @@ describe("supervisor restart / status", () => {
 
 describe("reportLine", () => {
   it("登録簿が壊れていれば、理由を出す", () => {
-    expect(reportLine({ kind: "broken", reason: "r", fix: "f" } as never)).toContain("登録簿が使えない");
+    expect(reportLine({ kind: "broken", reason: "r", fix: "f" } as never)).toContain(
+      "登録簿が使えない",
+    );
   });
 });

@@ -41,7 +41,13 @@ import {
   plainPath,
   readDaemonPlist,
 } from "./launchd-plists.js";
-import { addToRegistry, inspectEntries, readRegistry, registryPath, removeFromRegistry } from "./registry.js";
+import {
+  addToRegistry,
+  inspectEntries,
+  readRegistry,
+  registryPath,
+  removeFromRegistry,
+} from "./registry.js";
 import {
   DAEMON_PID_FILE,
   detectDaemon,
@@ -199,7 +205,10 @@ const isTarget = (t: Target | CommandResult): t is Target => "kind" in t;
 
 /** インストール済みの plist の PATH（なければ既定）。daemon の設定の検査を、daemon が動くときと同じ PATH で行う。 */
 function pathOf(ctx: Ctx): string {
-  const plist = readDaemonPlist([join(ctx.base, "launchd"), join(ctx.home, "Library", "LaunchAgents")], SUPERVISOR_PLIST);
+  const plist = readDaemonPlist(
+    [join(ctx.base, "launchd"), join(ctx.home, "Library", "LaunchAgents")],
+    SUPERVISOR_PLIST,
+  );
   return (plist === undefined ? undefined : pathValueOf(plist.text)) ?? DEFAULT_PATH;
 }
 
@@ -217,13 +226,20 @@ function loaded(ctx: Ctx): { loaded: boolean; state?: string; pid?: string } {
   if (r.status !== 0) return { loaded: false };
   const state = /^\s*state = (\S+)/m.exec(r.stdout)?.[1];
   const pid = /^\s*pid = (\d+)/m.exec(r.stdout)?.[1];
-  return { loaded: true, ...(state === undefined ? {} : { state }), ...(pid === undefined ? {} : { pid }) };
+  return {
+    loaded: true,
+    ...(state === undefined ? {} : { state }),
+    ...(pid === undefined ? {} : { pid }),
+  };
 }
 
 /** init: plist を `<base>/launchd` に作る（同じ内容なら何もしない。違う内容の既存は上書きしない）。 */
 function init(ctx: Ctx, pathValue: string): CommandResult {
   if (lstatOr(join(ctx.base, "current")) === undefined) {
-    return fail("/setup が済んでいない（HOME の .touryou に current がない）。先に /setup を実行する", 1);
+    return fail(
+      "/setup が済んでいない（HOME の .touryou に current がない）。先に /setup を実行する",
+      1,
+    );
   }
   const text = plistFor(ctx, pathValue);
   const dir = join(ctx.base, "launchd");
@@ -231,7 +247,10 @@ function init(ctx: Ctx, pathValue: string): CommandResult {
   for (const d of [dir, logsDir]) {
     const st = lstatOr(d);
     if (st !== undefined && !st.isDirectory()) {
-      return fail(`${d} が通常のディレクトリでない（シンボリックリンクなど）。何も書かずに止めた`, 1);
+      return fail(
+        `${d} が通常のディレクトリでない（シンボリックリンクなど）。何も書かずに止めた`,
+        1,
+      );
     }
   }
   const st = lstatOr(ctx.plistSrc);
@@ -244,7 +263,9 @@ function init(ctx: Ctx, pathValue: string): CommandResult {
   mkdirSync(logsDir, { recursive: true, mode: 0o700 });
   mkdirSync(dir, { recursive: true, mode: 0o755 });
   if (st === undefined) writeAtomic(ctx.plistSrc, text, 0o644);
-  return ok([st === undefined ? `生成した: ${ctx.plistSrc}` : `既存と同じ（そのまま）: ${ctx.plistSrc}`]);
+  return ok([
+    st === undefined ? `生成した: ${ctx.plistSrc}` : `既存と同じ（そのまま）: ${ctx.plistSrc}`,
+  ]);
 }
 
 async function apply(ctx: Ctx, pathValue: string): Promise<CommandResult> {
@@ -254,7 +275,10 @@ async function apply(ctx: Ctx, pathValue: string): Promise<CommandResult> {
   const agents = join(ctx.home, "Library", "LaunchAgents");
   const agentsSt = lstatOr(agents);
   if (agentsSt !== undefined && !agentsSt.isDirectory()) {
-    return fail(`${agents} が通常のディレクトリでない（シンボリックリンクなど）。何も変えずに止めた`, 1);
+    return fail(
+      `${agents} が通常のディレクトリでない（シンボリックリンクなど）。何も変えずに止めた`,
+      1,
+    );
   }
   const text = plistFor(ctx, pathValue);
   const destSt = lstatOr(ctx.plistDest);
@@ -278,7 +302,11 @@ async function apply(ctx: Ctx, pathValue: string): Promise<CommandResult> {
   } else {
     const r = ctx.deps.run("launchctl", ["bootstrap", ctx.domain, ctx.plistDest]);
     if (r.status !== 0) {
-      return fail(`launchctl bootstrap ${SUPERVISOR_LABEL} に失敗（終了コード ${r.status ?? "なし"}）: ${r.stderr.trim()}`, 1, `${out.join("\n")}\n`);
+      return fail(
+        `launchctl bootstrap ${SUPERVISOR_LABEL} に失敗（終了コード ${r.status ?? "なし"}）: ${r.stderr.trim()}`,
+        1,
+        `${out.join("\n")}\n`,
+      );
     }
     out.push(`${SUPERVISOR_LABEL}: 読み込んだ`);
   }
@@ -292,7 +320,8 @@ async function apply(ctx: Ctx, pathValue: string): Promise<CommandResult> {
 function stop(ctx: Ctx): CommandResult {
   if (!loaded(ctx).loaded) return ok([`${SUPERVISOR_LABEL}: 読み込まれていない（そのまま）`]);
   const r = ctx.deps.run("launchctl", ["bootout", `${ctx.domain}/${SUPERVISOR_LABEL}`]);
-  if (r.status !== 0) return fail(`launchctl bootout ${SUPERVISOR_LABEL} に失敗: ${r.stderr.trim()}`, 1);
+  if (r.status !== 0)
+    return fail(`launchctl bootout ${SUPERVISOR_LABEL} に失敗: ${r.stderr.trim()}`, 1);
   return ok([
     `${SUPERVISOR_LABEL}: 止めた`,
     "起こした daemon は止まらない（supervisor が落ちても、daemon は残る）。plist は残るので、次のログインで、また動く。すぐ動かすなら supervisor apply --yes",
@@ -305,7 +334,10 @@ function uninstall(ctx: Ctx): CommandResult {
   if (loaded(ctx).loaded) {
     const r = ctx.deps.run("launchctl", ["bootout", `${ctx.domain}/${SUPERVISOR_LABEL}`]);
     if (r.status !== 0) {
-      return fail(`launchctl bootout ${SUPERVISOR_LABEL} に失敗: ${r.stderr.trim()}。何も消していない`, 1);
+      return fail(
+        `launchctl bootout ${SUPERVISOR_LABEL} に失敗: ${r.stderr.trim()}。何も消していない`,
+        1,
+      );
     }
     out.push(`${SUPERVISOR_LABEL}: 止めた`);
   }
@@ -337,7 +369,8 @@ function uninstall(ctx: Ctx): CommandResult {
 
 /** 設定 1 つの、実態（読み取りだけ）。 */
 async function describeEntry(ctx: Ctx, config: string, present: boolean): Promise<string> {
-  if (!present) return `${config}: 設定ファイルがない（登録だけが残っている。外すなら supervisor unregister --config <設定>）`;
+  if (!present)
+    return `${config}: 設定ファイルがない（登録だけが残っている。外すなら supervisor unregister --config <設定>）`;
   const dirs = readStateDir(config);
   if ("invalid" in dirs) return `${config}: ${dirs.invalid}`;
   const live = await detectDaemon(dirs.stateDir, {
@@ -365,12 +398,21 @@ async function status(ctx: Ctx, target: Target): Promise<CommandResult> {
   const reg = readRegistry(ctx.registry);
   if (reg.kind === "broken") return fail(`${reg.reason}\n${reg.fix}`, 1, `${lines.join("\n")}\n`);
   const entries = inspectEntries(reg.configs, ctx.deps.exists);
-  const shown = target.kind === "one" ? entries.filter((e) => e.config === target.config) : target.kind === "all" ? entries : [];
+  const shown =
+    target.kind === "one"
+      ? entries.filter((e) => e.config === target.config)
+      : target.kind === "all"
+        ? entries
+        : [];
   if (target.kind === "one" && shown.length === 0) {
-    lines.push(`${target.config}: 登録されていない（登録するのは /touryou:setup、または supervisor register）`);
+    lines.push(
+      `${target.config}: 登録されていない（登録するのは /touryou:setup、または supervisor register）`,
+    );
   }
   if (target.kind === "none") {
-    lines.push(`対象のリポジトリが決まらない（${target.reason}）。登録済み: ${reg.configs.length} 件（全部を見るなら --all）`);
+    lines.push(
+      `対象のリポジトリが決まらない（${target.reason}）。登録済み: ${reg.configs.length} 件（全部を見るなら --all）`,
+    );
   }
   for (const e of shown) lines.push(await describeEntry(ctx, e.config, e.present));
   const okAll = info.loaded && info.state === "running";
@@ -379,9 +421,15 @@ async function status(ctx: Ctx, target: Target): Promise<CommandResult> {
 
 function register(ctx: Ctx, target: Target): CommandResult {
   if (target.kind !== "one") {
-    return fail(target.kind === "all" ? "register は、--all を取らない（--config か、リポジトリの中で実行する）" : target.reason, 1);
+    return fail(
+      target.kind === "all"
+        ? "register は、--all を取らない（--config か、リポジトリの中で実行する）"
+        : target.reason,
+      1,
+    );
   }
-  if (!ctx.deps.exists(target.config)) return fail(`設定ファイルがない（${target.config}）。先に /touryou:setup を実行する`, 1);
+  if (!ctx.deps.exists(target.config))
+    return fail(`設定ファイルがない（${target.config}）。先に /touryou:setup を実行する`, 1);
   const problem = configProblem(ctx.home, pathOf(ctx), ctx.deps.checkConfig, target.config);
   if (problem !== undefined) return fail(problem, 1);
   const r = addToRegistry(ctx.registry, target.config);
@@ -415,14 +463,16 @@ async function restart(ctx: Ctx, target: Target): Promise<CommandResult> {
   if (reg.kind === "broken") return fail(`${reg.reason}\n${reg.fix}`, 1);
   const configs = target.kind === "all" ? reg.configs : [target.config];
   const kill = ctx.deps.kill ?? ((pid, sig) => process.kill(pid, sig));
-  const alive = ctx.deps.isPidAlive ?? ((pid) => {
-    try {
-      process.kill(pid, 0);
-      return true;
-    } catch (e) {
-      return (e as NodeJS.ErrnoException).code === "EPERM";
-    }
-  });
+  const alive =
+    ctx.deps.isPidAlive ??
+    ((pid) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch (e) {
+        return (e as NodeJS.ErrnoException).code === "EPERM";
+      }
+    });
   const out: string[] = [];
   let failed = false;
   for (const c of configs) {
@@ -467,7 +517,9 @@ export async function runSupervisorCommand(
 ): Promise<CommandResult> {
   const sub = argv[0] as Sub;
   if (!SUPERVISOR_SUBCOMMANDS.includes(sub) || sub === "run") {
-    return fail(`不明なサブコマンド: ${argv[0] ?? ""}（init・apply・status・stop・restart・register・unregister・uninstall）`);
+    return fail(
+      `不明なサブコマンド: ${argv[0] ?? ""}（init・apply・status・stop・restart・register・unregister・uninstall）`,
+    );
   }
   let configArg: string | undefined;
   let all = false;
@@ -507,10 +559,13 @@ export async function runSupervisorCommand(
   }
   let pathValue = DEFAULT_PATH;
   if (pathPrefix !== undefined) {
-    if (sub !== "init" && sub !== "apply") return fail("--path-prefix は、init・apply だけで使える");
+    if (sub !== "init" && sub !== "apply")
+      return fail("--path-prefix は、init・apply だけで使える");
     const dirs = pathPrefix.split(":");
     if (dirs.some((d) => d === "" || !plainPath(d))) {
-      return fail("--path-prefix は、絶対パスのディレクトリ（コロン区切り）にする。英数字・. _ / @ + 空白 - だけが使える（.. の要素・// は使えない）");
+      return fail(
+        "--path-prefix は、絶対パスのディレクトリ（コロン区切り）にする。英数字・. _ / @ + 空白 - だけが使える（.. の要素・// は使えない）",
+      );
     }
     pathValue = `${pathPrefix}:${DEFAULT_PATH}`;
   }
