@@ -46,27 +46,27 @@ describe("detectDaemon（動いているかの判定）", () => {
   it("窓口が 401 を返せば running（手で起こしたものも見つかる）", async () => {
     const { stateDir } = makeRepo("a");
     writeFileSync(join(stateDir, "port"), "5555\n");
-    expect(await detectDaemon(stateDir, { probe: async (p) => (p === 5555 ? 401 : undefined) })).toBe(
-      "running",
-    );
+    expect(
+      await detectDaemon(stateDir, { probe: async (p) => (p === 5555 ? 401 : undefined) }),
+    ).toBe("running");
   });
 
   it("ロック（pid）だけ残り、応答がないとき: pid が生きていれば unresponsive（起動しない）", async () => {
     const { stateDir } = makeRepo("a");
     writeFileSync(join(stateDir, "port"), "5555\n");
     writeFileSync(join(stateDir, DAEMON_PID_FILE), "777\n");
-    expect(await detectDaemon(stateDir, { probe: async () => undefined, isPidAlive: () => true })).toBe(
-      "unresponsive",
-    );
+    expect(
+      await detectDaemon(stateDir, { probe: async () => undefined, isPidAlive: () => true }),
+    ).toBe("unresponsive");
   });
 
   it("ロックだけ残り、応答も pid もない（異常終了の残り）なら absent（起動してよい）", async () => {
     const { stateDir } = makeRepo("a");
     writeFileSync(join(stateDir, "port"), "5555\n");
     writeFileSync(join(stateDir, DAEMON_PID_FILE), "777\n");
-    expect(await detectDaemon(stateDir, { probe: async () => undefined, isPidAlive: () => false })).toBe(
-      "absent",
-    );
+    expect(
+      await detectDaemon(stateDir, { probe: async () => undefined, isPidAlive: () => false }),
+    ).toBe("absent");
   });
 
   it("401 以外の応答（別のものが同じポートを使っている）は、動いているとは見なさない", async () => {
@@ -114,7 +114,11 @@ describe("reconcile", () => {
     const d = deps();
     const r = await reconcile(d);
     expect(d.spawned).toEqual([a.config]);
-    expect(r.kind === "ok" && r.entries.map((e) => e.state)).toEqual(["missing", "invalid", "started"]);
+    expect(r.kind === "ok" && r.entries.map((e) => e.state)).toEqual([
+      "missing",
+      "invalid",
+      "started",
+    ]);
     const again = await reconcile(deps({ isPidAlive: () => false }));
     expect(again.kind === "ok" && again.entries[0]?.config).toBe(gone);
   });

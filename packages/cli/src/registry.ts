@@ -73,7 +73,11 @@ export type RegistryWrite =
 /** 登録する（すでにあれば何もしない）。登録簿が壊れているときは、書かずに理由と直し方を返す。 */
 export function addToRegistry(path: string, config: string): RegistryWrite {
   if (!config.startsWith("/")) {
-    return { ok: false, reason: "設定ファイルは絶対パスで登録する", fix: `絶対パスで指定する: ${config}` };
+    return {
+      ok: false,
+      reason: "設定ファイルは絶対パスで登録する",
+      fix: `絶対パスで指定する: ${config}`,
+    };
   }
   const cur = readRegistry(path);
   if (cur.kind === "broken") return { ok: false, reason: cur.reason, fix: cur.fix };

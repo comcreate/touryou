@@ -63,7 +63,9 @@ function readStateDir(config: string): { stateDir: string } | { invalid: string 
     }
     return { stateDir };
   } catch (e) {
-    return { invalid: `設定を読めない（${config}: ${String(e instanceof Error ? e.message : e)}）` };
+    return {
+      invalid: `設定を読めない（${config}: ${String(e instanceof Error ? e.message : e)}）`,
+    };
   }
 }
 
