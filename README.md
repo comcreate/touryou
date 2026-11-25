@@ -71,7 +71,17 @@ claude plugin marketplace add comcreate/touryou
 | `/touryou:start` | 接続を確かめる |
 | `/touryou:status` | 木の状態と未解決の項目を要約 |
 | `/touryou:ui` | 状態画面を開く |
-| `/touryou:service` | 常駐の確認・再起動・停止 |
+| `/touryou:service` | 常駐（supervisor）と daemon の確認・再起動・停止・外す |
+
+## 常駐（supervisor）
+
+常駐の項目は、macOS のログイン項目に出る **supervisor の 1 つだけ**です（Label `touryou.supervisor`）。supervisor が、登録簿（`$HOME/.touryou/registry.json`）に載った設定ごとに daemon を起こして見張ります。同じ設定の daemon がすでに動いていれば、起こしません（先勝ち）。supervisor を止めても、起こした daemon は止まりません。
+
+- daemon の設定・状態・ログは、リポジトリごとの `<repoRoot>/.touryou/` に置きます。設定ファイルは、実行した場所から上へ `.touryou/config.json` を探して見つけます（[`docs/config.md`](docs/config.md)）。
+- 操作は `/touryou:service`、または `touryou supervisor`（`status`・`restart`・`stop`・`register`・`unregister`・`uninstall`。対象は `--config <設定>` か `--all`）。
+- 版を上げたあと、古い版の daemon は自動では入れ替わりません。`/touryou:service restart` で、supervisor が新しい版で起こし直します。
+
+仕組みと既知の限界は [`docs/launchd.md`](docs/launchd.md)。
 
 ## 更新
 
