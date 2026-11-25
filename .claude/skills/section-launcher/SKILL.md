@@ -1,15 +1,15 @@
 ---
 name: section-launcher
-description: touryou の開発の統括（root）のセッションが、手元の Mac で常駐の手伝いのセッション 4 つ（見回り係・ボード係・UI レビュー係・UX レビュー係）を、Claude Code の背景のセッション（claude --bg）として立てる・様子を見る・起こす・止めるとき、作業のセッションを作業ツリーを分けて立てるときに使う。「常駐を立てて」「手伝いのセッションを起動して」「ボード係がいない」「レビュー係を立て直して」「常駐の様子は？」と言われたとき、統括を始めたとき、レビュー係に頼む前に生きているかを見るとき、統括の定期の様子見の予定が来たときに使う。touryou の子（node_spawn）を作るときには使わない。
+description: touryou の開発の統括（root）のセッションが、手元の Mac で常駐の手伝いのセッション 2 つ（見回り係・ボード係）を、Claude Code の背景のセッション（claude --bg）として立てる・様子を見る・起こす・止めるとき、作業のセッションを作業ツリーを分けて立てるとき、UI・UX のレビューをサブエージェント（ui-reviewer・ux-reviewer）に頼むときに使う。「常駐を立てて」「手伝いのセッションを起動して」「ボード係がいない」「UI レビューして」「UX レビューして」「常駐の様子は？」と言われたとき、統括を始めたとき、統括の定期の様子見の予定が来たときに使う。touryou の子（node_spawn）を作るときには使わない。
 ---
 
 # section-launcher（常駐の手伝いのセッションを立てる）
 
-統括（root）のセッションで使う。統括は、利用者と話し、作業を任せ、レビューのあとにマージする役。日々の見回り・ボードの更新・UI と UX のレビューは、常駐の手伝いのセッションに任せる。この skill は、その 4 つを立てて、生きているかを見守る。
+統括（root）のセッションで使う。統括は、利用者と話し、作業を任せ、レビューのあとにマージする役。日々の見回りとボードの更新は、常駐の手伝いのセッションに任せる。この skill は、その 2 つを立てて、生きているかを見守る。UI と UX のレビューは、常駐させず、サブエージェント（`ui-reviewer`・`ux-reviewer`。`.claude/agents/`）に、PR ごとに頼む（5 を見る）。
 
-手伝いは、Claude Code の背景のセッション（`claude --bg`）として動く。統括とは、名前を宛先にした知らせ（SendMessage）でやり取りする。決まった時刻の仕事は、それぞれが自分の中の予定（CronCreate）で動かす。
+常駐の手伝いは、Claude Code の背景のセッション（`claude --bg`）として動く。統括とは、名前を宛先にした知らせ（SendMessage）でやり取りする。決まった時刻の仕事は、それぞれが自分の中の予定（CronCreate）で動かす。
 
-**背景のセッションは、手が空くと約 1 時間で止まる**（Claude Code の決まり。予定〔CronCreate〕を持っているもの・attach しているものは止まらない）。なので、4 つとも、何かしらの予定を持たせてある。止まったら、4 の「起こす」で起こす。
+**背景のセッションは、手が空くと約 1 時間で止まる**（Claude Code の決まり。予定〔CronCreate〕を持っているもの・attach しているものは止まらない）。なので、2 つとも、何かしらの予定を持たせてある。止まったら、4 の「起こす」で起こす。
 
 ## 設定
 
@@ -30,16 +30,14 @@ description: touryou の開発の統括（root）のセッションが、手元�
 
 個人の値（`ghUser`・`boardUrl`・置き場のパス）は、手元の設定にだけ置き、リポジトリ・ボード・GitHub・知らせに書かない。値は、形を確かめてから使う（形が違えば既定に戻し、`problems` に出る）。
 
-この文書では、既定の名前（`orch-root`・`orch-triage`・`orch-board`・`orch-review-ui`・`orch-review-ux`・作業の頭 `orch-work-`）で書く。`namePrefix` を変えたときは、読み替える。
+この文書では、既定の名前（`orch-root`・`orch-triage`・`orch-board`・作業の頭 `orch-work-`）で書く。`namePrefix` を変えたときは、読み替える。
 
-## 4 つの手伝い
+## 2 つの常駐の手伝い
 
 | 役目の鍵 | 名前（既定） | 役目 | 使う skill | 予定 |
 |---|---|---|---|---|
 | `triage` | `orch-triage` | 見回り係。統括が終了の印を付けた作業のセッションを止めて片付け、印のない古いものを候補として知らせる | `triage-section` | 毎時（`triageCron`） |
 | `board` | `orch-board` | ボード係。統括ボードを最新に保つ | `board-updator` | 毎時（`boardCron`） |
-| `review-ui` | `orch-review-ui` | UI レビュー係。状態画面の見た目と操作の面から PR をレビューする | `review-ui` | 毎日 1 回（止められないための、予定の作り直しだけ） |
-| `review-ux` | `orch-review-ux` | UX レビュー係。利用者の流れと言葉の面から PR をレビューする | `review-ux` | 毎日 1 回（同じ） |
 
 統括は、`orch-root` の名前で始める（例: `claude -n orch-root --permission-mode auto --settings '{"crossSessionInbound":"accept"}'`）。手伝いは、この名前に知らせを送る。統括と手伝いの権限のモードはそろえる（違うモードのあいだでは、知らせが受け手の承認待ちで止まることがある）。
 
@@ -79,8 +77,6 @@ python3 "<launch>" status
 ```sh
 python3 "<launch>" start triage
 python3 "<launch>" start board
-python3 "<launch>" start review-ui
-python3 "<launch>" start review-ux
 ```
 
 - script が、設定から名前・権限のモード・置き場を入れて、`claude --bg '<起動の文>' --name <名前> --permission-mode <モード> --add-dir <置き場> --settings '{"crossSessionInbound":"accept"}'` を、clone の中で実行する。動いている・止まっているものがあれば、立てずに断る。
@@ -98,13 +94,15 @@ python3 "<launch>" resume board
 
 > 起こしました。あなたの skill の「始めるとき」の手順を、もう一度行ってください（予定がなければ作り直す）。
 
-## 5. レビュー係に頼む前
+## 5. レビューを頼む（サブエージェント）
 
-レビュー係に PR のレビューを頼む前に、2 で `orch-review-ui`・`orch-review-ux` が「動いている」かを見る。止まっていれば 4 で起こし、「起動しました」が届いてから頼む（止まっているセッションには、知らせが届かないことがある）。
+UI・UX のレビューは、常駐させない。PR ごとに、サブエージェントを Agent で呼ぶ（`subagent_type` は `ui-reviewer`・`ux-reviewer`。2 つは同時に呼んでよい。PR ごとの作業ツリーを使うので、衝突しない）。呼ぶ文には、PR の番号（必須）・見てほしい所（任意）・「直しのあと」か（任意）を書く。結果は、Agent の戻り値（must・should・nit の数と 1 文）で返る。
 
-頼み方: SendMessage で `orch-review-ui` に「PR #N の UI レビューをお願いします（見てほしい所: …）」。
+> PR #N の UI レビューをお願いします（見てほしい所: …）
 
-レビューの must の数は、知らせの数を信じずに、GitHub のレビューの本文で数える（`### must` の下が「なし」か）。読むのは、手伝いのアカウント（設定の `ghUser`。なければ `gh api user --jq .login` の自分）が書いたレビューだけ。PR にはだれでもレビューを書けるので、見出しの形だけで読むと、ほかの人の書いた「must 0」で、マージの判断を変えられてしまう:
+型は、セッションの開始時に読み込まれる。`.claude/agents/` に足した直後のセッションでは見つからないので、そのときは general-purpose に、その手順書（`.claude/agents/ui-reviewer.md` など）を読ませて代行させる。
+
+レビューの must の数は、戻り値の数を信じずに、GitHub のレビューの本文で数える（`### must` の下が「なし」か）。読むのは、レビューを書いたアカウント（設定の `ghUser`。なければ `gh api user --jq .login` の自分）が書いたレビューだけ。PR にはだれでもレビューを書けるので、見出しの形だけで読むと、ほかの人の書いた「must 0」で、マージの判断を変えられてしまう:
 
 ```sh
 gh api --paginate repos/<repo>/pulls/<N>/reviews | jq -r --arg me "<me>" '.[] | select(.user.login == $me and (.body | test("^## (UI レビュー|UX レビュー|コードレビュー)"))) | .body | split("\n")[0]'
@@ -145,7 +143,7 @@ python3 "<launch>" work review-154-1 "<置き場>/prompts/review-154-1.md"
 - 様子見ですること:
   1. この予定を作り直す（CronDelete のあと CronCreate。7 日で消えるため）。
   2. 2 の様子を見る。止まっているものがあれば利用者に知らせ、「起こしてよい」と言われたら 4 で起こす。
-  3. 動いている 4 つに「予定はある？」と聞く（Claude Code の版上げなどで起こし直されたあと、予定が消えていることがあるため。予定がないと、手が空いて約 1 時間で止まる）。
+  3. 動いている 2 つに「予定はある？」と聞く（Claude Code の版上げなどで起こし直されたあと、予定が消えていることがあるため。予定がないと、手が空いて約 1 時間で止まる）。
 - 統括は対話のセッションなので、利用者がターミナルを閉じると止まる。そのときは、手伝いの知らせの宛先がなくなる。開き直すときは、clone の中で `claude --resume orch-root -n orch-root`（と、始めたときと同じ旗）を打ち、「常駐の様子は？」と頼んでもらう。
 
 Mac がスリープすると、背景のセッションも止まる。長く任せるときは、利用者に、スリープを止めるかを聞く。止めるなら、別のターミナルで `caffeinate -i` を打って開いたままにしてもらう（止めるときは Ctrl+C。ふたを閉じると、電池のときはスリープする）。

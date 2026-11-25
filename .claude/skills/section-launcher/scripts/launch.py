@@ -2,8 +2,8 @@
 """統括の常駐の手伝い（背景のセッション）を、設定から組み立てて立てる・起こす・止める。
 
 使い方（統括のセッションで、touryou の clone の中から）:
-  python3 launch.py status                         4 つの手伝いのようす（動いている・止まっている・ない）
-  python3 launch.py start <役目> [--model M] [--effort E]   新しく立てる（triage・board・review-ui・review-ux）
+  python3 launch.py status                         2 つの手伝いのようす（動いている・止まっている・ない）
+  python3 launch.py start <役目> [--model M] [--effort E]   新しく立てる（triage・board）
   python3 launch.py resume <役目>                  止まっているものを、前の会話のまま起こす
   python3 launch.py stop <役目>                    動いているものを止める（会話は残る）
   python3 launch.py work <題> <指示のファイル>      作業のセッションを、作業ツリーを分けて立てる
@@ -31,8 +31,6 @@ spec.loader.exec_module(orch_config)
 ROLES = {
     "triage": ("triage", "見回り係", "triage-section"),
     "board": ("board", "ボード係", "board-updator"),
-    "review-ui": ("reviewUi", "UI レビュー係", "review-ui"),
-    "review-ux": ("reviewUx", "UX レビュー係", "review-ux"),
 }
 SETTINGS = json.dumps({"crossSessionInbound": "accept"})
 SLUG = r"^[a-z0-9][a-z0-9-]{0,40}$"

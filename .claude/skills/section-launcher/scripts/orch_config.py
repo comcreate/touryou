@@ -55,8 +55,6 @@ ROLES = {
     "root": "root",
     "triage": "triage",
     "board": "board",
-    "reviewUi": "review-ui",
-    "reviewUx": "review-ux",
 }
 
 
