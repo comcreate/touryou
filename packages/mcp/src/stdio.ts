@@ -25,14 +25,7 @@ import { lstatSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  type Failure,
-  failure,
-  isSessionId,
-  locateConfig,
-  ok,
-  type Result,
-} from "@touryou/core";
+import { type Failure, failure, isSessionId, locateConfig, ok, type Result } from "@touryou/core";
 import { aclProblemOfMode, modeString, readSecureFile } from "@touryou/core/fs";
 import { startAutoBind } from "./auto-bind.js";
 import { type CodeFileOps, isCodeShape, readCodeFile, removeCodeFile } from "./bind-code-file.js";

@@ -192,8 +192,13 @@ describe("touryou hook の設定・port の確かめ", () => {
         expect(r.status, r.stderr).toBe(0);
         const f = recorder();
         expect(
-          (await runHook({ env: { TOURYOU_DAEMON_CONFIG: x.config }, input: pre(x.marked), fetchImpl: f.fetchImpl }))
-            .code,
+          (
+            await runHook({
+              env: { TOURYOU_DAEMON_CONFIG: x.config },
+              input: pre(x.marked),
+              fetchImpl: f.fetchImpl,
+            })
+          ).code,
         ).toBe(2);
         expect(f.urls).toEqual([]);
       }

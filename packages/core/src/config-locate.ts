@@ -59,7 +59,8 @@ export function locateConfig(input: LocateConfigInput): LocateConfigResult {
   if (cwd === undefined || !cwd.startsWith("/")) {
     return {
       ok: false,
-      reason: "daemon の設定ファイルを探せない（--config も TOURYOU_DAEMON_CONFIG もなく、実行した場所も分からない）",
+      reason:
+        "daemon の設定ファイルを探せない（--config も TOURYOU_DAEMON_CONFIG もなく、実行した場所も分からない）",
       fix: CONFIG_NOT_FOUND_FIX,
     };
   }

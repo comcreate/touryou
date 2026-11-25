@@ -162,7 +162,10 @@ describe("touryou（bin）", () => {
       expect(reads.sort(), cwd).toEqual(["/s/human-token", "/s/port"]);
       // 「窓口・トークンがない」では止まらず、トークンを送る前の身元の確かめまで進む（身元の秘密がないので、トークンは送らない）
       expect(r.stderr, cwd).not.toMatch(/TOURYOU_DAEMON_URL がなく|TOURYOU_HUMAN_TOKEN がなく/);
-      expect(seen.some((x) => x.headers.authorization !== undefined), cwd).toBe(false);
+      expect(
+        seen.some((x) => x.headers.authorization !== undefined),
+        cwd,
+      ).toBe(false);
       expect(r.stdout + r.stderr).not.toContain(TOKEN);
     }
   });
