@@ -353,7 +353,13 @@ export function createGitPorts(
       return new Set(
         Array.isArray(raw) ? raw.filter((p): p is string => typeof p === "string") : [],
       );
-    } catch {
+    } catch (e) {
+      // 記録がない（古い作業ツリー）は、想定どおりなので残さない。壊れている・読めないときだけ残す
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+        process.stderr.write(
+          `${JSON.stringify({ at: new Date().toISOString(), event: "worktreeSeedRecordUnreadable", path, reason: e instanceof Error ? e.message : String(e) })}\n`,
+        );
+      }
       return new Set();
     }
   };
@@ -1083,8 +1089,11 @@ export function createGitPorts(
             writeFileSync(join(gitDir.stdout.trim(), SEEDED_RECORD_FILE), JSON.stringify(copied), {
               mode: 0o644,
             });
-          } catch {
-            // 記録の失敗は、処理を止めない
+          } catch (e) {
+            // 記録の失敗は、処理を止めない。ただし、写したファイルが回収の判定で未追跡に数えられる原因になるので、残す
+            process.stderr.write(
+              `${JSON.stringify({ at: new Date().toISOString(), event: "worktreeSeedRecordFailed", nodeId, reason: e instanceof Error ? e.message : String(e) })}\n`,
+            );
           }
           try {
             onSeed({ nodeId, copied, skipped, missing: seedPlan.value.missing });

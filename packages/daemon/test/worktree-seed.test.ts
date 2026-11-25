@@ -14,7 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { createGitPorts, nodeGit } from "../src/git-ports.js";
+import { createGitPorts, nodeGit, SEEDED_RECORD_FILE } from "../src/git-ports.js";
 
 const git = (cwd: string, ...args: string[]): string =>
   execFileSync("git", args, {
@@ -102,7 +102,7 @@ describe("作業ツリーへの設定ファイルのコピー", () => {
     if (!r.ok) throw new Error(r.error.cause);
     const wt = r.value.worktreePath;
     const gitDir = git(wt, "rev-parse", "--absolute-git-dir");
-    expect(JSON.parse(readFileSync(join(gitDir, "touryou-seeded"), "utf8"))).toEqual([".envrc"]);
+    expect(JSON.parse(readFileSync(join(gitDir, SEEDED_RECORD_FILE), "utf8"))).toEqual([".envrc"]);
     // 一覧を空に書き換えても、記録が判定元なので、写したファイルは数えない
     writeFileSync(
       join(repoRoot, ".claude", "touryou-worktree-files.json"),
@@ -125,9 +125,21 @@ describe("作業ツリーへの設定ファイルのコピー", () => {
     const r = await ports.provisionWorktree({ parentId: "root", nodeId: "c1" });
     if (!r.ok) throw new Error(r.error.cause);
     const gitDir = git(r.value.worktreePath, "rev-parse", "--absolute-git-dir");
-    rmSync(join(gitDir, "touryou-seeded"));
+    rmSync(join(gitDir, SEEDED_RECORD_FILE));
     expect((await ports.factsFor("c1"))?.clean).toBe(false);
     expect((await ports.lossFor("c1"))?.untracked).toBe(1);
+  });
+
+  it("記録が壊れている・配列でないときは、従来どおり数える（安全側）", async () => {
+    const { ports } = setup({ files: [".envrc"] });
+    const r = await ports.provisionWorktree({ parentId: "root", nodeId: "c1" });
+    if (!r.ok) throw new Error(r.error.cause);
+    const gitDir = git(r.value.worktreePath, "rev-parse", "--absolute-git-dir");
+    for (const body of ["{壊れた", '{"a":1}']) {
+      writeFileSync(join(gitDir, SEEDED_RECORD_FILE), body);
+      expect((await ports.factsFor("c1"))?.clean).toBe(false);
+      expect((await ports.lossFor("c1"))?.untracked).toBe(1);
+    }
   });
 
   it("一覧がなければ、何も写さない", async () => {
