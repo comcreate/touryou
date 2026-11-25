@@ -350,7 +350,9 @@ export function createGitPorts(
       const raw: unknown = JSON.parse(
         readFileSync(join(gitDir.stdout.trim(), SEEDED_RECORD_FILE), "utf8"),
       );
-      return new Set(Array.isArray(raw) ? raw.filter((p): p is string => typeof p === "string") : []);
+      return new Set(
+        Array.isArray(raw) ? raw.filter((p): p is string => typeof p === "string") : [],
+      );
     } catch {
       return new Set();
     }
