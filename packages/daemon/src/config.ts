@@ -390,16 +390,17 @@ export function parseConfig(text: string): Result<DaemonConfig, Failure> {
     paths[k] = p;
   }
   const { stateDir, repoRoot, worktreeRoot, rootCwd } = paths;
-  // 許す重なりは、`stateDir` が `repoRoot` の真に内側にある 1 つだけ（gitignore 済みかは、起動時に git で確かめる。
-  // `state-dir-ignore.ts`）。同じ場所・`stateDir` が `repoRoot` を囲む・`worktreeRoot` が絡む重なりは、拒否のまま。
+  // 許す重なりは、`stateDir`・`worktreeRoot` が `repoRoot` の真に内側にある場合だけ（gitignore 済み・未追跡かは、起動時に
+  // git で確かめる。`state-dir-ignore.ts`）。同じ場所・`repoRoot` を囲む向き・`stateDir`⇔`worktreeRoot` の重なりは、拒否のまま。
   const stateInsideRepo = stateDir !== repoRoot && isPathUnder(stateDir, repoRoot);
+  const worktreeInsideRepo = worktreeRoot !== repoRoot && isPathUnder(worktreeRoot, repoRoot);
   if (
     overlaps(stateDir, worktreeRoot) ||
     (overlaps(stateDir, repoRoot) && !stateInsideRepo) ||
-    overlaps(worktreeRoot, repoRoot)
+    (overlaps(worktreeRoot, repoRoot) && !worktreeInsideRepo)
   ) {
     return bad(
-      "stateDir・repoRoot・worktreeRoot は、互いに重なってはならない（ただし stateDir は、gitignore 済みなら repoRoot の内側に置ける）",
+      "stateDir・repoRoot・worktreeRoot は、互いに重なってはならない（ただし stateDir・worktreeRoot は、gitignore 済み・未追跡なら repoRoot の内側に置ける。stateDir と worktreeRoot は重ねられない）",
     );
   }
   if (!isPathUnder(rootCwd, repoRoot))

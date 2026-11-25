@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { failure, ok } from "@touryou/core";
 import { afterEach, describe, expect, it } from "vitest";
 import type { Daemon, WorktreePorts } from "../src/compose.js";
@@ -305,13 +305,97 @@ describe("stateDir が repoRoot の内側にあるとき（#218）", () => {
     expect(s.err.join("")).toContain("検査が通らない");
   });
 
-  it("worktreeRoot が repoRoot の内側なら、従来どおり設定の段で拒否する", async () => {
+  it("worktreeRoot が repoRoot を囲む・同じ場所なら、設定の段で拒否する", async () => {
     const s = setup();
-    const worktreeRoot = join(s.config.repoRoot as string, "wt");
-    writeFileSync(s.path, JSON.stringify({ ...s.config, worktreeRoot }));
-    const r = await main(["--config", s.path], s.deps);
-    expect(r.exitCode).toBe(1);
+    for (const worktreeRoot of [s.config.repoRoot as string, dirname(s.config.repoRoot as string)]) {
+      writeFileSync(s.path, JSON.stringify({ ...s.config, worktreeRoot }));
+      const r = await main(["--config", s.path], s.deps);
+      expect(r.exitCode).toBe(1);
+    }
     expect(s.err.join("")).toContain("重なってはならない");
+  });
+});
+
+describe("worktreeRoot が repoRoot の内側にあるとき（#288）", () => {
+  const gitInit = (repo: string): void => {
+    execFileSync("git", ["init", "-q"], { cwd: repo, stdio: "ignore" });
+  };
+  const inside = () => {
+    const s = setup();
+    const worktreeRoot = join(s.config.repoRoot as string, ".touryou", "worktrees");
+    writeFileSync(s.path, JSON.stringify({ ...s.config, worktreeRoot }));
+    return { ...s, repo: s.config.repoRoot as string };
+  };
+  /** 起動も --check-config も、同じ結果になる（通る・通らない）。 */
+  const both = async (s: ReturnType<typeof inside>) => {
+    const started = await main(["--config", s.path], s.deps);
+    if (started.daemon) running.push(started.daemon);
+    const checked = await main(["--check-config", "--config", s.path], s.deps);
+    return { started: started.exitCode, checked: checked.exitCode };
+  };
+
+  it("ignore 済みで未追跡なら、起動も --check-config も通る（自己 ignore は置かない）", async () => {
+    const s = inside();
+    gitInit(s.repo);
+    writeFileSync(join(s.repo, ".gitignore"), ".touryou/\n");
+    expect(await both(s)).toEqual({ started: 0, checked: 0 });
+    expect(s.err.join("")).toBe("");
+    // touryou 自身は、.touryou/ に .gitignore を書かない
+    expect(() => statSync(join(s.repo, ".touryou", ".gitignore"))).toThrow();
+  });
+
+  it("ignore されていなければ、起動も --check-config も、理由と直し方つきで拒否する", async () => {
+    const s = inside();
+    gitInit(s.repo);
+    expect(await both(s)).toEqual({ started: 1, checked: 1 });
+    const err = s.err.join("");
+    expect(err).toContain("worktreeRoot");
+    expect(err).toContain("gitignore されていない");
+    expect(err).toContain(".gitignore に .touryou/worktrees/ を足す");
+  });
+
+  it("追跡されているファイルを含むなら、拒否する", async () => {
+    const s = inside();
+    gitInit(s.repo);
+    writeFileSync(join(s.repo, ".gitignore"), ".touryou/\n");
+    mkdirSync(join(s.repo, ".touryou", "worktrees"), { recursive: true });
+    writeFileSync(join(s.repo, ".touryou", "worktrees", "x.txt"), "x\n");
+    execFileSync("git", ["add", "-f", ".touryou/worktrees/x.txt"], {
+      cwd: s.repo,
+      stdio: "ignore",
+    });
+    expect(await both(s)).toEqual({ started: 1, checked: 1 });
+    expect(s.err.join("")).toContain("追跡されているファイルを含む");
+  });
+
+  it("stateDir と重なる（worktreeRoot が stateDir の中・同じ場所）なら、ignore 済みでも拒否する", async () => {
+    const s = inside();
+    gitInit(s.repo);
+    writeFileSync(join(s.repo, ".gitignore"), ".touryou/\n");
+    const dir = join(s.repo, ".touryou");
+    for (const [stateDir, worktreeRoot] of [
+      [dir, join(dir, "worktrees")],
+      [join(dir, "worktrees"), join(dir, "worktrees")],
+    ] as const) {
+      writeFileSync(s.path, JSON.stringify({ ...s.config, stateDir, worktreeRoot }));
+      expect(await both(s)).toEqual({ started: 1, checked: 1 });
+    }
+    expect(s.err.join("")).toContain("重なってはならない");
+  });
+
+  it("検査の関数を差し替えられる。失敗なら、createDaemon まで進まない", async () => {
+    const s = inside();
+    let called = 0;
+    const r = await main(["--config", s.path], {
+      ...s.deps,
+      checkWorktreeRoot: async () => {
+        called += 1;
+        return { ok: false, error: failure("invalidConfig", "検査が通らない", "直す") };
+      },
+    });
+    expect(called).toBe(1);
+    expect(r.exitCode).toBe(1);
+    expect(s.err.join("")).toContain("検査が通らない");
   });
 });
 

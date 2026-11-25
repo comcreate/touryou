@@ -117,6 +117,8 @@ export const DRAWER_WRITABLE_FILES = ["code", "report"] as const;
 export type ProtectedKind =
   | "stateDir"
   | "daemonConfig"
+  /** `<repoRoot>/.touryou/` 全体（state・config.json・logs・ほかの子の作業ツリー）。その子自身の作業ツリーは `allow` で除く。 */
+  | "touryouDir"
   | "processEnv"
   | "hookSettings"
   | "hookSettingsWrite"
@@ -126,6 +128,7 @@ export type ProtectedKind =
 const KIND_TEXT: Readonly<Record<ProtectedKind, string>> = {
   stateDir: "daemon の状態の置き場",
   daemonConfig: "daemon の設定ファイル",
+  touryouDir: "リポジトリの touryou の置き場（.touryou/。自分の作業ツリー以外）",
   processEnv: "プロセスの環境変数（/proc の environ）",
   hookSettings: "見張り（フック）の設定",
   hookSettingsWrite: "見張り（フック）の設定の置き場",

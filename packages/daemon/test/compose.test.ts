@@ -15,7 +15,7 @@ import {
 } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import {
@@ -458,6 +458,30 @@ describe("起動の安全", () => {
     const made = createDaemon({ ...r.config, worktreeRoot: join(link, "not-yet", "wt") }, r.deps);
     expect(made.ok).toBe(false);
     if (!made.ok) expect(made.error.code).toBe("invalidConfig");
+  });
+
+  it("worktreeRoot が repoRoot の内側（真に内側）なら、実パスの検査は通る。同じ場所・囲む向き・リンクで stateDir に入るものは拒否（#288）", () => {
+    const r = rig();
+    const inner = join(r.config.repoRoot, ".touryou", "worktrees");
+    const ok = createDaemon({ ...r.config, worktreeRoot: inner }, r.deps);
+    expect(ok.ok).toBe(true);
+    if (ok.ok) {
+      const d = ok.value;
+      cleanups.push(() => d.stop().catch(() => undefined));
+    }
+    for (const worktreeRoot of [r.config.repoRoot, dirname(r.config.repoRoot)]) {
+      const made = createDaemon({ ...r.config, worktreeRoot }, r.deps);
+      expect(made.ok, worktreeRoot).toBe(false);
+      if (!made.ok) expect(made.error.code).toBe("invalidConfig");
+    }
+    // 内側のリンクで stateDir に入る置き場は、実パスで比べるので拒否される
+    mkdirSync(r.config.stateDir, { recursive: true, mode: 0o700 });
+    mkdirSync(join(r.config.repoRoot, ".touryou"), { recursive: true });
+    const link = join(r.config.repoRoot, ".touryou", "to-state");
+    symlinkSync(r.config.stateDir, link);
+    const viaLink = createDaemon({ ...r.config, worktreeRoot: join(link, "wt") }, r.deps);
+    expect(viaLink.ok).toBe(false);
+    if (!viaLink.ok) expect(viaLink.error.code).toBe("invalidConfig");
   });
 
   it("起動時に子の引き出しの置き場（0700）を作り、要る子の鍵でない引き出しを消す", async () => {

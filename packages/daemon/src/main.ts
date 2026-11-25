@@ -10,7 +10,7 @@ import type { Failure, Result } from "@touryou/core";
 import { createDaemon, type Daemon, type WorktreePorts } from "./compose.js";
 import { type DaemonConfig, loadConfigFile } from "./config.js";
 import { isPort, StartFailure } from "./port-file.js";
-import { checkStateDirIgnored } from "./state-dir-ignore.js";
+import { checkStateDirIgnored, checkWorktreeRootIgnored } from "./state-dir-ignore.js";
 
 export interface MainDeps {
   /** git の作業ツリーの口。 */
@@ -31,6 +31,10 @@ export interface MainDeps {
   readonly checkStateDir?: (
     config: Pick<DaemonConfig, "stateDir" | "repoRoot">,
   ) => Promise<Result<undefined, Failure>>;
+  /** worktreeRoot が repoRoot の内側にあるときの、同じ確かめ（既定は `checkWorktreeRootIgnored`）。試験で差し替える。 */
+  readonly checkWorktreeRoot?: (
+    config: Pick<DaemonConfig, "worktreeRoot" | "repoRoot">,
+  ) => Promise<Result<undefined, Failure>>;
 }
 
 export interface MainResult {
@@ -43,7 +47,7 @@ const USAGE = `使い方:
   touryou-daemon --config <設定ファイルの絶対パス> [--port <1〜65535>]
   touryou-daemon --check-config --config <設定ファイルの絶対パス>
   --check-config  起動せず、設定の読み込みと実パスの検査（repoRoot・rootCwd・worktreeRoot があり、実パスで、
-                  repoRoot が git のリポジトリ。stateDir が repoRoot の内側なら、gitignore 済み・未追跡）だけを行う
+                  repoRoot が git のリポジトリ。stateDir・worktreeRoot が repoRoot の内側なら、gitignore 済み・未追跡）だけを行う
                   （touryou launchd init・apply が、常駐にする前に使う）
   --port      窓口のポート（設定の port より優先。どちらもなければ、前回のポートを stateDir に保存して使い続ける）
   -h, --help  この使い方を表示する（終了コード 0）
@@ -107,6 +111,14 @@ export async function main(argv: readonly string[], deps: MainDeps): Promise<Mai
   const stateDirIgnored = await (deps.checkStateDir ?? checkStateDirIgnored)(config.value);
   if (!stateDirIgnored.ok) {
     deps.stderr(formatFailure(stateDirIgnored.error));
+    return { exitCode: 1 };
+  }
+  // worktreeRoot も同じ（内側のときだけ、ignore 済み・未追跡を確かめる。自己 ignore は置かない。#288）
+  const worktreeRootIgnored = await (deps.checkWorktreeRoot ?? checkWorktreeRootIgnored)(
+    config.value,
+  );
+  if (!worktreeRootIgnored.ok) {
+    deps.stderr(formatFailure(worktreeRootIgnored.error));
     return { exitCode: 1 };
   }
   if (checkOnly) {

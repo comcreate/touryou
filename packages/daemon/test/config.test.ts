@@ -59,12 +59,30 @@ describe("parseConfig（設定は厳密に検査し、不正なら起動を失�
 
   it("置き場が重なる（状態の置き場が作業ツリーの置き場の中、など）設定は拒否する", () => {
     bad({ stateDir: "/work/worktrees/state" }, "重な");
-    bad({ worktreeRoot: "/work/repo/wt" }, "重な");
     bad({ worktreeRoot: "/var/touryou/state/wt" }, "重な"); // 子の作業ツリーが stateDir の中
     bad({ stateDir: "/work/repo" }, "重な"); // repoRoot と同じ場所
     bad({ stateDir: "/work" }, "重な"); // stateDir が repoRoot を囲む
-    bad({ stateDir: "/work/repo/.touryou", worktreeRoot: "/work/repo/.touryou/wt" }, "重な");
-    bad({ stateDir: "/work/repo/.touryou", worktreeRoot: "/work/repo/wt" }, "重な"); // worktreeRoot は内側に置けない
+    bad({ worktreeRoot: "/work/repo" }, "重な"); // worktreeRoot が repoRoot と同じ場所
+    bad({ worktreeRoot: "/work" }, "重な"); // worktreeRoot が repoRoot を囲む
+    bad({ stateDir: "/work/repo/.touryou", worktreeRoot: "/work/repo/.touryou/wt" }, "重な"); // stateDir の中
+    bad({ stateDir: "/work/repo/wt/state", worktreeRoot: "/work/repo/wt" }, "重な"); // worktreeRoot が stateDir を囲む
+    bad({ stateDir: "/work/repo/.touryou", worktreeRoot: "/work/repo/.touryou" }, "重な"); // 同じ場所
+  });
+
+  it("worktreeRoot は、repoRoot の内側に置ける（gitignore 済み・未追跡かは、起動時に git で確かめる。#288）", () => {
+    const r = parseConfig(
+      JSON.stringify({ ...base, worktreeRoot: "/work/repo/.touryou/worktrees" }),
+    );
+    expect(r.ok && r.value.worktreeRoot).toBe("/work/repo/.touryou/worktrees");
+    // stateDir も内側（重ならない別の場所）でよい
+    const both = parseConfig(
+      JSON.stringify({
+        ...base,
+        stateDir: "/work/repo/.touryou/state",
+        worktreeRoot: "/work/repo/.touryou/worktrees",
+      }),
+    );
+    expect(both.ok).toBe(true);
   });
 
   it("stateDir は、repoRoot の内側に置ける（gitignore 済みかは、起動時に git で確かめる）", () => {

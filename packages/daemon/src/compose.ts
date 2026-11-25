@@ -360,11 +360,13 @@ function realOverlap(config: DaemonConfig): string | undefined {
   // APFS は大文字小文字・Unicode の正規化の違いを区別しないので、そろえてから比べる（区別する FS では、厳しめに倒れる）。
   const f = foldPath;
   const o = (a: string, b: string): boolean => isPathUnder(f(a), f(b)) || isPathUnder(f(b), f(a));
-  // 許す重なりは、stateDir が repoRoot の真に内側にある 1 つだけ（gitignore 済みかは、main.ts が起動の前に
-  // `checkStateDirIgnored` で確かめる）。リンクで外へ出る・同じ場所・囲む向きは、実パスで比べるので拒否される。
+  // 許す重なりは、stateDir・worktreeRoot が repoRoot の真に内側にある場合だけ（gitignore 済み・未追跡かは、main.ts が
+  // 起動の前に `checkStateDirIgnored`・`checkWorktreeRootIgnored` で確かめる）。リンクで外へ出る・同じ場所・囲む向き・
+  // stateDir⇔worktreeRoot の重なりは、実パスで比べるので拒否される。
   const stateInsideRepo = f(s) !== f(r) && isPathUnder(f(s), f(r));
-  if (o(s, w) || (o(s, r) && !stateInsideRepo) || o(w, r)) {
-    return "stateDir・repoRoot・worktreeRoot が、リンクを解決すると重なる（stateDir だけは、gitignore 済みなら repoRoot の内側に置ける）";
+  const worktreeInsideRepo = f(w) !== f(r) && isPathUnder(f(w), f(r));
+  if (o(s, w) || (o(s, r) && !stateInsideRepo) || (o(w, r) && !worktreeInsideRepo)) {
+    return "stateDir・repoRoot・worktreeRoot が、リンクを解決すると重なる（stateDir・worktreeRoot だけは、gitignore 済み・未追跡なら repoRoot の内側に置ける）";
   }
   return undefined;
 }
@@ -490,9 +492,16 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
     );
   }
   const protectedStateDir = realpathSync(config.stateDir);
-  const protectedRoots: { path: string; kind: "stateDir" | "daemonConfig" }[] = [
+  // `<repoRoot>/.touryou/` 全体を、子から既定で守る（読み書きとも。#288）。まだなくても、実パスで比べる。
+  // その子自身の作業ツリーだけは、フックの `allow` で除く（`ownWorktreeAllow`）。
+  const touryouDirRoot = realPathForWrite(join(config.repoRoot, ".touryou"));
+  const protectedRoots: { path: string; kind: "stateDir" | "daemonConfig" | "touryouDir" }[] = [
     { path: protectedStateDir, kind: "stateDir" },
+    { path: touryouDirRoot, kind: "touryouDir" },
   ];
+  /** 子の作業ツリー（実パス）が `.touryou/` の中にあるときだけ、その作業ツリーを禁じる場所から除く（厳密に、その 1 つだけ）。 */
+  const ownWorktreeAllow = (wt: string): string[] =>
+    isPathUnder(foldPath(wt), foldPath(touryouDirRoot)) ? [wt] : [];
   if (deps.configPath !== undefined) {
     try {
       protectedRoots.push({ path: realpathSync(deps.configPath), kind: "daemonConfig" });
@@ -1595,7 +1604,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
             ? []
             : [{ path: settings.exclude, kind: "hookSettings" as const }]),
         ],
-        allow: [],
+        allow: ownWorktreeAllow(wt),
         home: (deps.parentEnv ?? process.env).HOME,
         writeDenied: [join(settings.worktree, ".claude")],
         drawer,
@@ -1750,7 +1759,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
         // ほかのノードの git のディレクトリ（`.git/worktrees/<ほかの名前>/`。紐付けのコードのファイルがある）は、読み取りも禁じる。
         // 自分の git のディレクトリは除く（自分のコードは mcp が読む。mcp はフックを通らない）。
         roots,
-        allow: gitDir === undefined ? [] : [gitDir],
+        allow: [...(gitDir === undefined ? [] : [gitDir]), ...ownWorktreeAllow(wt)],
         writeDenied: gitDir === undefined ? [join(wt, ".git")] : [gitDir, join(wt, ".git")],
         home: (deps.parentEnv ?? process.env).HOME,
         worktree: wt,
@@ -1782,7 +1791,10 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           here,
           wt,
           resolveHookPath,
-          roots.map((r) => r.path),
+          // 作業ツリーを含む禁じる場所（`.touryou/`）は、探す先が作業ツリーの中に限られるので、重なりの拒否から除く
+          roots
+            .filter((r) => !isPathUnder(foldPath(wt), foldPath(r.path)))
+            .map((r) => r.path),
         ))
       ) {
         return { allow: true, permit: "readOnlySearch" };

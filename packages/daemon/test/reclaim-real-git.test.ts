@@ -24,14 +24,16 @@ const git = (cwd: string, ...args: string[]): string =>
   }).trim();
 
 /** 実際の git で、破棄の判断を経た停止ノードを回収する（実 SDK の確認で、未追跡のファイルがあると回収できなかった）。 */
-const setup = async (mode: "discard" | "verified" = "discard") => {
+const setup = async (mode: "discard" | "verified" = "discard", inner = false) => {
   const base = realpathSync(mkdtempSync(join(tmpdir(), "touryou-reclaim-")));
   const repoRoot = join(base, "repo");
-  const worktreeRoot = join(base, "worktrees");
+  // inner: 置き場を repoRoot の内側（<repoRoot>/.touryou/worktrees。.gitignore で ignore 済み）にする（#288）
+  const worktreeRoot = inner ? join(repoRoot, ".touryou", "worktrees") : join(base, "worktrees");
   mkdirSync(repoRoot);
-  mkdirSync(worktreeRoot);
+  mkdirSync(worktreeRoot, { recursive: true });
   git(repoRoot, "init", "-q", "-b", "main");
   writeFileSync(join(repoRoot, "a.txt"), "a\n");
+  if (inner) writeFileSync(join(repoRoot, ".gitignore"), ".touryou/\n");
   git(repoRoot, "add", ".");
   git(repoRoot, "commit", "-q", "-m", "init");
   const made = createGitPorts(
@@ -384,5 +386,40 @@ describe("破棄の判断を経た停止ノードの回収（実際の git）", 
     expect(git(s.repoRoot, "branch", "--list", "touryou/*")).not.toBe("");
     expect(git(s.repoRoot, "for-each-ref", "refs/touryou/discarded/")).toBe("");
     expect(stateOf(s.log.state(), "c1")).toBe("stopped");
+  });
+});
+
+describe("置き場が repoRoot の内側（<repoRoot>/.touryou/worktrees。ignore 済み）でも、作成・commit・回収・削除が動く（#288。実際の git）", () => {
+  it("子の作成・commit ができ、親のリポジトリの状態は汚れない（ignore 済みで、入れ子の git を載せない）", async () => {
+    const s = await setup("discard", true);
+    expect(s.wt.startsWith(join(s.repoRoot, ".touryou", "worktrees"))).toBe(true);
+    // 子の commit は、子のブランチに積まれる（作業ツリーの HEAD）。親の main は動かない
+    expect(git(s.wt, "log", "-1", "--format=%s")).toBe("work");
+    expect(git(s.repoRoot, "log", "-1", "--format=%s", "main")).toBe("init");
+    // 親の status は、入れ子の作業ツリーを載せない。add -A でも載らない
+    expect(git(s.repoRoot, "status", "--porcelain")).toBe("");
+    git(s.repoRoot, "add", "-A");
+    expect(git(s.repoRoot, "status", "--porcelain")).toBe("");
+  });
+
+  it("破棄の判断を経た回収（worktree remove --force）で、内側の作業ツリーとブランチを消し、アーカイブする", async () => {
+    const s = await setup("discard", true);
+    expect((await s.call("node.reclaimInstruct", "human", "c1")).ok).toBe(true);
+    const tip = git(s.wt, "rev-parse", "HEAD");
+    const done = await s.call("node.reclaim", "integrator", "c1");
+    expect(done.ok).toBe(true);
+    expect(s.log.state().nodes.find((x) => x.id === "c1")?.lastCommit).toBe(tip);
+    expect(existsSync(s.wt)).toBe(false);
+    expect(git(s.repoRoot, "branch", "--list", "touryou/*")).toBe("");
+    expect(git(s.repoRoot, "worktree", "list", "--porcelain")).not.toContain(s.wt);
+    expect(stateOf(s.log.state(), "c1")).toBe("archived");
+  });
+
+  it("統合済みの通常の回収（worktree remove）も、内側の作業ツリーで動く", async () => {
+    const s = await setup("verified", true);
+    expect((await s.call("node.reclaim", "integrator", "c1")).ok).toBe(true);
+    expect(existsSync(s.wt)).toBe(false);
+    expect(git(s.repoRoot, "branch", "--list", "touryou/*")).toBe("");
+    expect(stateOf(s.log.state(), "c1")).toBe("archived");
   });
 });
