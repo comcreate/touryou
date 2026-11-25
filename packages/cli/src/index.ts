@@ -6,3 +6,5 @@
  */
 export * from "./client.js";
 export * from "./commands.js";
+export * from "./registry.js";
+export * from "./supervisor.js";
