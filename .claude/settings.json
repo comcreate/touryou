@@ -1,7 +1,8 @@
 {
   "enabledPlugins": {
     "frontend-design@anthropic-plugin-directory": true,
-    "touryou@touryou": true
+    "touryou@touryou": true,
+    "sdd-workflow@ai-sdd-workflow": true
   },
   "extraKnownMarketplaces": {
     "touryou": {
@@ -9,6 +10,12 @@
         "source": "github",
         "repo": "comcreate/touryou",
         "ref": "marketplace-v0.1.6"
+      }
+    },
+    "ai-sdd-workflow": {
+      "source": {
+        "source": "github",
+        "repo": "comcreate/ai-sdd-workflow"
       }
     }
   }
