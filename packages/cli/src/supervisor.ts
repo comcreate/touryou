@@ -145,8 +145,8 @@ export async function reconcile(deps: SupervisorDeps): Promise<SupervisorReport>
     rmSync(join(dirs.stateDir, DAEMON_PID_FILE), { force: true }); // 異常終了の残り
     try {
       const logFile = join(dirname(item.config), "logs", "daemon.log");
+      mkdirSync(dirs.stateDir, { recursive: true, mode: 0o700 }); // 起こす前に作る（起こしたあとの失敗で、pid が残らなくなるのを避ける）
       const pid = deps.spawnDaemon(item.config, logFile);
-      mkdirSync(dirs.stateDir, { recursive: true, mode: 0o700 });
       writeFileSync(join(dirs.stateDir, DAEMON_PID_FILE), `${pid}\n`, { mode: 0o600 });
       entries.push({ config: item.config, state: "started", pid });
     } catch (e) {
@@ -179,6 +179,7 @@ export function makeSpawnDaemon(daemonCommand: readonly string[]) {
     } finally {
       closeSync(fd);
     }
+    child.on("error", () => {}); // 実行ファイルがない等の非同期の失敗で、supervisor が落ちないように（pid がなければ下で throw する）
     child.unref();
     if (child.pid === undefined) throw new Error("プロセスを起こせなかった");
     return child.pid;
@@ -196,6 +197,15 @@ export function superviseLoop(
     if (stopped) return;
     try {
       options.onReport(await reconcile(deps));
+    } catch (e) {
+      // 1 周の失敗で supervisor を落とさない。次の周で、やり直す
+      try {
+        options.onReport({
+          kind: "broken",
+          reason: `1 周の処理に失敗（${String(e instanceof Error ? e.message : e)}）`,
+          fix: "原因を直す。supervisor は次の周でやり直す",
+        });
+      } catch {}
     } finally {
       if (!stopped) timer = setTimeout(() => void tick(), options.intervalMs);
     }

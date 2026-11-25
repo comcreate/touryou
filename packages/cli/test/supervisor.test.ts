@@ -9,6 +9,7 @@ import {
   makeSpawnDaemon,
   reconcile,
   type SupervisorDeps,
+  superviseLoop,
 } from "../src/supervisor.js";
 
 let root: string;
@@ -190,5 +191,33 @@ server.listen(0, "127.0.0.1", () => writeFileSync(join(stateDir, "port"), server
     if (s2?.state === "started") pids.push(s2.pid);
     await waitRunning(b.stateDir);
     if (s1?.state === "started") expect(() => process.kill(s1.pid, 0)).not.toThrow();
+  });
+});
+
+describe("落ちない作り", () => {
+  it("実行ファイルがなくても、非同期の error で supervisor が落ちない（起こせなかったと投げる）", async () => {
+    const spawnDaemon = makeSpawnDaemon([join(root, "no-such-daemon")]);
+    expect(() => spawnDaemon(join(root, "config.json"), join(root, "logs", "daemon.log"))).toThrow(
+      "プロセスを起こせなかった",
+    );
+    await new Promise((r) => setTimeout(r, 100)); // 'error' が出る時間を与える。未処理なら、ここで試験が落ちる
+  });
+
+  it("1 周の処理が throw しても、supervisor は落ちず、broken で報告して次の周を続ける", async () => {
+    const a = makeRepo("a");
+    addToRegistry(registryPath(root), a.config);
+    const reports: string[] = [];
+    const loop = superviseLoop(
+      deps({
+        exists: () => {
+          throw new Error("exists が失敗");
+        },
+      }),
+      { intervalMs: 10, onReport: (r) => reports.push(r.kind) },
+    );
+    await new Promise((r) => setTimeout(r, 100));
+    loop.stop();
+    expect(reports.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(reports)).toEqual(new Set(["broken"]));
   });
 });
