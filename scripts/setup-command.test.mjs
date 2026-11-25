@@ -394,12 +394,16 @@ test("setup.md: 別名の daemon だけが常駐のとき（LAUNCHD_OTHERS: pres
   assert.match(line, /\/touryou:service/);
 });
 
-test("service.md: uninstall-all は「合計で最大 2 回」で、「1 回だけ」と矛盾しない（#165）", () => {
+test("service.md: uninstall-all は supervisor uninstall --yes を 1 回だけ実行し、--others を使わない（#300）", () => {
   const service = readFileSync(join(root, "plugin", "commands", "service.md"), "utf8");
-  assert.match(service, /合計で最大 2 回/);
-  assert.match(service, /uninstall --yes --others`（もう 1 回）/);
-  // uninstall-all の手順の行に、「1 回だけ」が残っていない
-  const lines = service.split("\n").filter((l) => /uninstall --yes --others/.test(l));
-  assert.ok(lines.length > 0);
-  for (const l of lines) assert.doesNotMatch(l, /1 回だけ/);
+  const lines = service.split("\n");
+  const start = lines.findIndex((l) => l.startsWith("- **uninstall-all**"));
+  assert.ok(start >= 0, "uninstall-all の節がある");
+  // 節は、次の「- **」で始まる行（なければ末尾）まで
+  const next = lines.findIndex((l, i) => i > start && l.startsWith("- **"));
+  const section = lines.slice(start, next === -1 ? undefined : next).join("\n");
+  assert.match(section, /1 回だけ/);
+  assert.match(section, /supervisor uninstall --yes/);
+  assert.doesNotMatch(section, /--others/);
+  assert.doesNotMatch(section, /最大 2 回/);
 });
