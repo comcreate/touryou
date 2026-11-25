@@ -178,13 +178,13 @@ test("限界の明記と承認の回数: 安全は人の確認と script の sha
     /auto モード（権限の自動判定）[^\n]*自動判定で止められたときは、出た文面をそのまま利用者に伝え/,
   );
   assert.match(text, /\*\*チャットでの「はい」[^\n]*auto モードでも必ず取る\*\*/);
-  // 承認の要る Bash は、手順 1・2・3-A の 1 つずつ（と、常駐の版上げの 1 つ）
+  // 承認の要る Bash は、手順 1・2（新規の設定か、移行のどちらか）・3-A の 1 つずつ（と、常駐の版上げの 1 つ）
   const cmds = [
     ...body.matchAll(
-      /`((?:env -u BASH_ENV -u ENV bash "\$\{CLAUDE_PLUGIN_ROOT\}|R="<repoRoot>"|"\$HOME\/\.touryou\/current\/bin\/touryou" launchd init &&)[^`]*)`/g,
+      /`((?:env -u BASH_ENV -u ENV bash "\$\{CLAUDE_PLUGIN_ROOT\}|R="<repoRoot>"|"\$HOME\/\.touryou\/current\/bin\/touryou" (?:supervisor register|migrate --yes))[^`]*)`/g,
     ),
   ];
-  assert.equal(cmds.length, 4, cmds.map((m) => m[1]).join("\n"));
+  assert.equal(cmds.length, 5, cmds.map((m) => m[1]).join("\n"));
 });
 
 const CONFIG_CMD = () => command(2, 'R="<repoRoot>"');
@@ -207,28 +207,33 @@ for (const shell of SHELLS) {
     const repo = join(home, "repo");
     mkdirSync(repo);
     assert.equal(spawnSync("git", ["init", "-q", repo]).status, 0);
+    // .touryou/ が ignore されていないと、書かない（daemon の検査が通らないため）
+    assert.notEqual(runConfig(shell, home, repo, join(repo, ".touryou", "worktrees")).status, 0);
+    assert.ok(!existsSync(join(repo, ".touryou")));
+    writeFileSync(join(repo, ".gitignore"), ".touryou/\n");
     const r = runConfig(
       shell,
       home,
       repo,
-      join(home, "wt"),
+      join(repo, ".touryou", "worktrees"),
       '"git status", "git add", "git commit"',
     );
     assert.equal(r.status, 0, r.stderr);
     assert.match(r.stdout, /OK/);
-    const f = join(home, ".touryou", "config.json");
+    const f = join(repo, ".touryou", "config.json");
     const j = JSON.parse(readFileSync(f, "utf8"));
     const doc = readFileSync(join(root, "docs", "config.md"), "utf8");
     const required = [
       ...(/## 必須の項目\n([\s\S]*?)\n## /.exec(doc)?.[1] ?? "").matchAll(/^\| `(\w+)` \|/gm),
     ].map((m) => m[1]);
     assert.deepEqual(Object.keys(j), required);
-    assert.equal(j.stateDir, join(home, ".touryou", "state"));
+    assert.equal(j.stateDir, join(repo, ".touryou", "state"));
+    assert.equal(j.worktreeRoot, join(repo, ".touryou", "worktrees"));
     assert.equal(j.repoRoot, repo);
     assert.equal(j.rootCwd, repo);
     assert.deepEqual(j.rootScope.allowedCommands, ["git status", "git add", "git commit"]);
     assert.equal(statSync(f).mode & 0o777, 0o600);
-    assert.equal(statSync(join(home, ".touryou", "state")).mode & 0o777, 0o700);
+    assert.equal(statSync(join(repo, ".touryou", "state")).mode & 0o777, 0o700);
     // すでにある → 上書きしない
     writeFileSync(f, "{}");
     assert.notEqual(runConfig(shell, home, repo, join(home, "wt")).status, 0);
@@ -263,10 +268,10 @@ test("手順 3: 常駐は、同意の定型文にはっきり「はい」のと�
     /`--yes`・`--restart-daemon` は、利用者が定型文の問いにチャットで「はい」と答えたあとにだけ付ける。承認ダイアログの許可だけでは付けない/,
   );
   assert.match(s, /それ以外（「いいえ」・あいまい・質問）は、登録せずに 3-B へ進む/);
-  assert.ok(s.indexOf("**同意**") < s.indexOf("launchd apply --yes"), "apply の前に同意を取る");
+  assert.ok(s.indexOf("**同意**") < s.indexOf("supervisor apply --yes"), "apply の前に同意を取る");
   assert.match(
     s,
-    /`"\$HOME\/\.touryou\/current\/bin\/touryou" launchd init && "\$HOME\/\.touryou\/current\/bin\/touryou" launchd apply --yes`/,
+    /`"\$HOME\/\.touryou\/current\/bin\/touryou" supervisor register --config "<repoRoot>\/\.touryou\/config\.json" && "\$HOME\/\.touryou\/current\/bin\/touryou" supervisor init && "\$HOME\/\.touryou\/current\/bin\/touryou" supervisor apply --yes`/,
   );
   assert.match(rules, /\*\*子の認証は扱わない\*\*/);
   for (const re of [/setup-token/, /oauth-token/, /run-mcp\.sh/, /--daemon-url/])
@@ -406,4 +411,23 @@ test("service.md: uninstall-all は supervisor uninstall --yes を 1 回だけ�
   assert.match(section, /supervisor uninstall --yes/);
   assert.doesNotMatch(section, /--others/);
   assert.doesNotMatch(section, /最大 2 回/);
+});
+
+test("setup.md: 前の置き場からの移行は touryou migrate の 1 コマンド。同意のあとだけ。元は消さない（#301）", () => {
+  const s = step(2);
+  assert.match(s, /`CONFIG: absent` で `LEGACY_CONFIG: present`/);
+  assert.match(s, /\*\*元は消さない\*\*/);
+  assert.match(s, /手順 3 は要らない/);
+  const mig = s.slice(s.indexOf("**移行（"));
+  assert.ok(mig.indexOf("**同意**") < mig.indexOf('touryou" migrate --yes'), "migrate の前に同意を取る");
+  assert.match(mig, /\*\*はっきり「はい」のときだけ\*\*進む/);
+  assert.match(mig, /`"\$HOME\/\.touryou\/current\/bin\/touryou" migrate --yes`/);
+  // 設定の置き場は、リポジトリの .touryou/（前の置き場には、新しく書かない）。worktreeRoot の推奨
+  assert.match(s, /推奨は `<repoRoot>\/\.touryou\/worktrees`/);
+  assert.match(s, /`\.touryou\/` は、`<repoRoot>\/\.gitignore` に入れる/);
+  assert.doesNotMatch(CONFIG_CMD(), /\$HOME\/\.touryou\/config\.json/);
+  // install-runtime.sh が LEGACY_CONFIG を出す
+  const sh = readFileSync(join(root, "plugin", "scripts", "install-runtime.sh"), "utf8");
+  assert.match(sh, /echo "LEGACY_CONFIG: present"/);
+  assert.match(sh, /echo "LEGACY_CONFIG: absent"/);
 });

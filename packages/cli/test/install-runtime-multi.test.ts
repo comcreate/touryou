@@ -12,6 +12,7 @@ import {
   readFileSync,
   readlinkSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -278,6 +279,15 @@ describe("finish の出力（CONFIG・SUPERVISOR。#300）", () => {
     const tb = makeTarball("0.9.0");
     const r = run(makePlugin("0.9.0", tb), h, tb, [], {}, h);
     expect(r.stdout).toContain("CONFIG: absent");
+    expect(r.stdout).toContain("LEGACY_CONFIG: present"); // 移行（touryou migrate）の対象
+  });
+  it("前の置き場の設定がなければ LEGACY_CONFIG: absent。リンクは、あるとみなさない（#301）", () => {
+    const h = homeWith({});
+    const tb = makeTarball("0.9.0");
+    expect(run(makePlugin("0.9.0", tb), h, tb, [], {}, h).stdout).toContain("LEGACY_CONFIG: absent");
+    writeFileSync(join(h, "real.json"), "{}");
+    symlinkSync(join(h, "real.json"), join(h, ".touryou", "config.json"));
+    expect(run(makePlugin("0.9.0", tb), h, tb, [], {}, h).stdout).toContain("LEGACY_CONFIG: absent");
   });
   it("supervisor の plist が LaunchAgents にあれば SUPERVISOR: present、なければ absent", () => {
     const h = homeWith({});
