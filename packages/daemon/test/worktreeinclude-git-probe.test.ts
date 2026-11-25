@@ -2,12 +2,7 @@
 // 設計: .sdd/task/294/design-draft.md の 3 章（案 A）・10 章（実測が要る項目）。
 // daemon の本体（src）は使わない。git の挙動そのものを固定し、挙動が変わったら気づけるようにする。
 import { execFileSync } from "node:child_process";
-import {
-  mkdirSync,
-  mkdtempSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -42,23 +37,20 @@ const makeRepo = () => {
   /** `.worktreeinclude` に書く内容を置き、`git ls-files -z -o -i --exclude-from=<F>` の候補を返す。 */
   const candidates = (include: string): string[] => {
     write(".worktreeinclude", include);
-    const out = run([
-      "ls-files",
-      "-z",
-      "-o",
-      "-i",
-      "--exclude-from=.worktreeinclude",
-    ]);
-    return out.split("\0").filter((s) => s !== "").sort();
+    const out = run(["ls-files", "-z", "-o", "-i", "--exclude-from=.worktreeinclude"]);
+    return out
+      .split("\0")
+      .filter((s) => s !== "")
+      .sort();
   };
   /** `git check-ignore -z --stdin`。一致なしは終了コード 1 なので、空の配列にする。 */
   const checkIgnore = (paths: string[]): string[] => {
     try {
-      const out = run(
-        ["check-ignore", "-z", "--stdin"],
-        paths.map((p) => `${p}\0`).join(""),
-      );
-      return out.split("\0").filter((s) => s !== "").sort();
+      const out = run(["check-ignore", "-z", "--stdin"], paths.map((p) => `${p}\0`).join(""));
+      return out
+        .split("\0")
+        .filter((s) => s !== "")
+        .sort();
     } catch (e) {
       if ((e as { status?: number }).status === 1) return [];
       throw e;
@@ -99,10 +91,7 @@ describe("案 A の 1 段目: ls-files -z -o -i --exclude-from=F", () => {
     r.write(".gitignore", "*.env\n");
     r.write("日本語 名.env");
     r.write("sub dir/a b.env");
-    expect(r.candidates("# コメント\n\n*.env\n")).toEqual([
-      "sub dir/a b.env",
-      "日本語 名.env",
-    ]);
+    expect(r.candidates("# コメント\n\n*.env\n")).toEqual(["sub dir/a b.env", "日本語 名.env"]);
   });
 
   it("`!`（否定）は後勝ち。先頭の `/` は repoRoot に固定、`/` なしは任意の深さに一致する", () => {
@@ -136,10 +125,7 @@ describe("案 A の 1 段目: ls-files -z -o -i --exclude-from=F", () => {
     expect(r.candidates("/bin/\n")).toEqual(["bin/a", "bin/sub/b"]);
     expect(r.candidates("/bin/**\n")).toEqual(["bin/a", "bin/sub/b"]);
     // 中身は check-ignore でも gitignore 済みとして出る
-    expect(r.checkIgnore(["bin/a", "bin/sub/b"])).toEqual([
-      "bin/a",
-      "bin/sub/b",
-    ]);
+    expect(r.checkIgnore(["bin/a", "bin/sub/b"])).toEqual(["bin/a", "bin/sub/b"]);
   });
 
   it("`**/` の規則（git の gitignore と同じ）: 先頭の `**/` は任意の深さ、途中の `/**/` は 0 個以上のディレクトリ", () => {
@@ -168,9 +154,7 @@ describe("案 A の 1 段目: ls-files -z -o -i --exclude-from=F", () => {
     // どんなパターンでも、`.git` の中身は出ない
     const all = r.candidates("*\n!.gitignore\n");
     expect(all.some((p) => p === ".git" || p.startsWith(".git/"))).toBe(false);
-    expect(all.some((p) => p.includes("/.git/") || p.endsWith("/.git"))).toBe(
-      false,
-    );
+    expect(all.some((p) => p.includes("/.git/") || p.endsWith("/.git"))).toBe(false);
     // 入れ子のリポジトリの中のファイルは、1 件ずつは出ない
     expect(all).not.toContain("nested/inner.env");
     expect(r.candidates("*.env\n")).toEqual(["top.env"]);
@@ -231,13 +215,7 @@ describe("案 A の 2 段目: check-ignore -z --stdin", () => {
     r.write("untracked.txt");
     r.write("x.env");
     expect(
-      r.checkIgnore([
-        "bin/untracked",
-        "untracked.txt",
-        "tracked.txt",
-        "bin/forced",
-        "x.env",
-      ]),
+      r.checkIgnore(["bin/untracked", "untracked.txt", "tracked.txt", "bin/forced", "x.env"]),
     ).toEqual(["bin/untracked", "x.env"]);
   });
 
