@@ -34,6 +34,7 @@ import {
   runLaunchdService,
   SERVICE_SUBCOMMANDS,
 } from "./launchd-service.js";
+import { runSupervisorCommand, superviseForever } from "./launchd-supervisor.js";
 import { runUi, type UiDeps } from "./ui.js";
 
 export interface BinDeps {
@@ -185,6 +186,22 @@ function cliPackageVersion(readFile?: (p: string) => string): string {
   }
 }
 
+/** `touryou supervisor run`: SIGTERM・SIGINT で見張りだけを止める（起こした daemon には触れない）。 */
+function runSupervisorRun(deps: BinDeps): Promise<CommandResult> {
+  const home = deps.env.HOME;
+  if (home === undefined || !isAbsolute(home)) {
+    return Promise.resolve({ exitCode: 2, stdout: "", stderr: "HOME が、絶対パスでない・空\n" });
+  }
+  const ac = new AbortController();
+  for (const sig of ["SIGTERM", "SIGINT"] as const) process.once(sig, () => ac.abort());
+  return superviseForever({
+    home,
+    nodeExe: process.execPath,
+    signal: ac.signal,
+    write: (line) => process.stdout.write(`${line}\n`),
+  });
+}
+
 export async function runBin(argv: readonly string[], deps: BinDeps): Promise<CommandResult> {
   if (argv[0] === "--version" || argv[0] === "-v") {
     // 配布物の版（窓口・トークンは使わない）。daemon・mcp・cli の食い違いの切り分け。
@@ -256,6 +273,43 @@ export async function runBin(argv: readonly string[], deps: BinDeps): Promise<Co
     return runLaunchd(argv.slice(1), {
       env: deps.env,
       checkConfig: deps.launchd?.checkConfig ?? checkConfigBySpawn,
+    });
+  }
+  if (argv[0] === "supervisor") {
+    // 常駐の supervisor（登録簿の設定ごとに daemon を起こして見張る）と、その操作。daemon の窓口・トークンは使わない
+    if (argv[1] === "run") return runSupervisorRun(deps);
+    const doFetch = deps.fetch ?? fetch;
+    return runSupervisorCommand(argv.slice(1), {
+      env: deps.env,
+      cwd: () => {
+        try {
+          return typeof deps.cwd === "function" ? deps.cwd() : (deps.cwd ?? process.cwd());
+        } catch {
+          return undefined; // 削除済みの cwd
+        }
+      },
+      exists: deps.exists ?? configExists,
+      checkConfig: deps.launchd?.checkConfig ?? checkConfigBySpawn,
+      run:
+        deps.launchd?.run ??
+        ((cmd, args) => {
+          const r = spawnSync(cmd, args, { encoding: "utf8", timeout: 30_000 });
+          return { status: r.status, stdout: r.stdout ?? "", stderr: r.stderr ?? "" };
+        }),
+      uid: deps.launchd?.uid ?? (() => process.getuid?.() ?? -1),
+      probe:
+        deps.launchd?.probe ??
+        (async (port) => {
+          try {
+            const res = await doFetch(`http://127.0.0.1:${port}/v1/whoami`, {
+              signal: AbortSignal.timeout(2000),
+            });
+            await res.body?.cancel();
+            return res.status;
+          } catch {
+            return undefined;
+          }
+        }),
     });
   }
   if (argv[0] === "ui" && !argv.includes("--help") && !argv.includes("-h")) {

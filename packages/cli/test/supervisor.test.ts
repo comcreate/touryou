@@ -134,6 +134,106 @@ describe("reconcile", () => {
   });
 });
 
+describe("連続失敗の抑制（起動直後に落ちる daemon）", () => {
+  it("起こした直後に落ちたら、待ち時間のあいだは起こし直さず backoff を返す。待ちを過ぎたら、起こす", async () => {
+    const a = makeRepo("a");
+    addToRegistry(registryPath(root), a.config);
+    let t = 0;
+    const failures = new Map();
+    const d = deps({ failures, now: () => t, backoffBaseMs: 1000, backoffMaxMs: 8000 });
+    const states = async (): Promise<string | undefined> => {
+      const r = await reconcile(d);
+      return r.kind === "ok" ? r.entries[0]?.state : undefined;
+    };
+    expect(await states()).toBe("started"); // 1 周目: 起こす
+    t = 100;
+    expect(await states()).toBe("backoff"); // 落ちていた（動いている姿を見ていない）→ 1 回目の失敗。2 秒待つ
+    expect(d.spawned).toEqual([a.config]);
+    t = 1000;
+    expect(await states()).toBe("backoff");
+    expect(d.spawned).toEqual([a.config]);
+    t = 2200;
+    expect(await states()).toBe("started"); // 待ちを過ぎた
+    t = 2300;
+    expect(await states()).toBe("backoff"); // 2 回目の失敗。4 秒待つ
+    t = 6200;
+    expect(await states()).toBe("backoff");
+    t = 6400;
+    expect(await states()).toBe("started");
+    expect(d.spawned).toEqual([a.config, a.config, a.config]);
+  });
+
+  it("待ち時間は上限で止まる", async () => {
+    const a = makeRepo("a");
+    addToRegistry(registryPath(root), a.config);
+    let t = 0;
+    const d = deps({
+      failures: new Map(),
+      now: () => t,
+      backoffBaseMs: 1000,
+      backoffMaxMs: 3000,
+    });
+    for (let i = 0; i < 6; i++) {
+      await reconcile(d);
+      t += 10;
+      await reconcile(d); // 落ちていた → 失敗
+      t += 3000; // 上限の待ちを過ぎる
+    }
+    const r = await reconcile(d);
+    expect(r.kind === "ok" && r.entries[0]?.state).toBe("started");
+  });
+
+  it("動いている姿を見たら、失敗の数え直し（長く動いて落ちたものは、すぐ起こし直す）", async () => {
+    const a = makeRepo("a");
+    addToRegistry(registryPath(root), a.config);
+    writeFileSync(join(a.stateDir, "port"), "5555\n");
+    let alive = false;
+    const failures = new Map();
+    const d = deps({
+      failures,
+      now: () => 0,
+      probe: async () => (alive ? 401 : undefined),
+    });
+    await reconcile(d); // 起こす
+    alive = true;
+    await reconcile(d); // 動いている姿を見る
+    expect(failures.size).toBe(0);
+    alive = false;
+    const r = await reconcile(d); // 落ちた。罰しない
+    expect(r.kind === "ok" && r.entries[0]?.state).toBe("started");
+    expect(d.spawned.length).toBe(2);
+  });
+
+  it("起動の失敗（spawn の例外）も、待ってから次を試す", async () => {
+    const a = makeRepo("a");
+    addToRegistry(registryPath(root), a.config);
+    let t = 0;
+    const d = deps({
+      failures: new Map(),
+      now: () => t,
+      backoffBaseMs: 1000,
+      spawnDaemon: () => {
+        throw new Error("だめ");
+      },
+    });
+    const first = await reconcile(d);
+    expect(first.kind === "ok" && first.entries[0]?.state).toBe("startFailed");
+    t = 500;
+    const second = await reconcile(d);
+    expect(second.kind === "ok" && second.entries[0]?.state).toBe("backoff");
+  });
+
+  it("superviseLoop は、失敗の記録をループの中に持つ（毎周は起こさない）", async () => {
+    const a = makeRepo("a");
+    addToRegistry(registryPath(root), a.config);
+    const d = deps({ backoffBaseMs: 60_000 });
+    const loop = superviseLoop(d, { intervalMs: 10, onReport: () => {} });
+    await new Promise((r) => setTimeout(r, 120));
+    loop.stop();
+    expect(d.spawned).toEqual([a.config]); // 何周しても、起こしたのは 1 回だけ
+  });
+});
+
 describe("supervisor が落ちても daemon が残る（実プロセス）", () => {
   const pids: number[] = [];
   afterEach(() => {

@@ -151,7 +151,7 @@ const fail = (cause: string, exitCode: 1 | 2 = 2): CommandResult => ({
   stderr: `${cause}\n`,
 });
 
-const xml = (s: string): string =>
+export const xml = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
 /**
@@ -248,7 +248,7 @@ export const v011ProgramArguments = (base: string): readonly string[] => [
   join(base, "config.json"),
 ];
 
-const plistBody = (
+export const plistBody = (
   programArguments: string,
   opts: {
     readonly label: string;
@@ -257,6 +257,8 @@ const plistBody = (
     readonly path: string;
   },
   associated = "",
+  /** ThrottleInterval の次に足すキー（supervisor の AbandonProcessGroup。daemon の plist では空）。 */
+  extra = "",
 ): string => `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -272,7 +274,7 @@ const plistBody = (
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key>
   <dict><key>SuccessfulExit</key><false/></dict>
-  <key>ThrottleInterval</key><integer>30</integer>
+  <key>ThrottleInterval</key><integer>30</integer>${extra}
   <key>Umask</key><integer>63</integer>
   <key>StandardOutPath</key><string>${xml(opts.log)}</string>
   <key>StandardErrorPath</key><string>${xml(opts.log)}</string>
@@ -280,7 +282,7 @@ const plistBody = (
 </plist>
 `;
 
-const argsArray = (args: readonly string[]): string =>
+export const argsArray = (args: readonly string[]): string =>
   `<array>\n${args.map((a) => `    <string>${xml(a)}</string>`).join("\n")}\n  </array>`;
 
 /**

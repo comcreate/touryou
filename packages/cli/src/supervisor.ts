@@ -38,7 +38,21 @@ export type SupervisorEntryState =
   | { readonly config: string; readonly state: "unresponsive"; readonly reason: string }
   | { readonly config: string; readonly state: "missing"; readonly reason: string }
   | { readonly config: string; readonly state: "invalid"; readonly reason: string }
-  | { readonly config: string; readonly state: "startFailed"; readonly reason: string };
+  | { readonly config: string; readonly state: "startFailed"; readonly reason: string }
+  | { readonly config: string; readonly state: "backoff"; readonly reason: string };
+
+/** 起動のあと、一度も動いている姿を見ずに落ちた回数と、次に起こしてよい時刻（メモリの中だけ）。 */
+export interface StartFailure {
+  /** 連続の失敗の回数。動いている姿を見たら 0 に戻す（記録ごと消す）。 */
+  readonly count: number;
+  /** この時刻（ms）までは、起こさない。 */
+  readonly nextAt: number;
+  /** 起こしたあと、まだ動いている姿を見ていない（次の周で absent なら失敗）。 */
+  readonly awaiting: boolean;
+}
+
+export const BACKOFF_BASE_MS = 30_000;
+export const BACKOFF_MAX_MS = 15 * 60_000;
 
 export type SupervisorReport =
   | { readonly kind: "ok"; readonly entries: readonly SupervisorEntryState[] }
@@ -52,10 +66,25 @@ export interface SupervisorDeps {
   readonly probe?: (port: number) => Promise<number | undefined>;
   readonly isPidAlive?: (pid: number) => boolean;
   readonly exists?: (path: string) => boolean;
+  /**
+   * 連続の失敗の記録（設定のパスごと）。渡すと、起こした直後に落ちる daemon を、毎周は起こし直さない（指数の待ち）。
+   * 渡さなければ、周ごとに状態を持たず、足りなければ毎周起こす。
+   */
+  readonly failures?: Map<string, StartFailure>;
+  readonly now?: () => number;
+  readonly backoffBaseMs?: number;
+  readonly backoffMaxMs?: number;
+}
+
+/** 失敗の回数から、次に起こしてよい時刻までの待ち（ms）。 */
+function backoffDelay(count: number, deps: SupervisorDeps): number {
+  const base = deps.backoffBaseMs ?? BACKOFF_BASE_MS;
+  const max = deps.backoffMaxMs ?? BACKOFF_MAX_MS;
+  return Math.min(base * 2 ** count, max);
 }
 
 /** 設定ファイルから stateDir を読む（検査の本体は daemon の `--check-config`。ここでは場所だけ）。 */
-function readStateDir(config: string): { stateDir: string } | { invalid: string } {
+export function readStateDir(config: string): { stateDir: string } | { invalid: string } {
   try {
     const stateDir = (JSON.parse(readFileSync(config, "utf8")) as { stateDir?: unknown }).stateDir;
     if (typeof stateDir !== "string" || !stateDir.startsWith("/")) {
@@ -126,6 +155,8 @@ export async function reconcile(deps: SupervisorDeps): Promise<SupervisorReport>
       continue;
     }
     const live = await detectDaemon(dirs.stateDir, deps);
+    const now = (deps.now ?? Date.now)();
+    if (live === "running") deps.failures?.delete(item.config); // 動いている姿を見たら、失敗の数え直し
     if (live === "running") {
       entries.push({
         config: item.config,
@@ -143,13 +174,39 @@ export async function reconcile(deps: SupervisorDeps): Promise<SupervisorReport>
       continue;
     }
     rmSync(join(dirs.stateDir, DAEMON_PID_FILE), { force: true }); // 異常終了の残り
+    const logFile = join(dirname(item.config), "logs", "daemon.log");
+    // 起こしたのに、動いている姿を見ないまま落ちた = 失敗。連続の回数に応じて、待ってから起こす
+    let prev = deps.failures?.get(item.config);
+    if (deps.failures !== undefined && prev?.awaiting === true) {
+      const count = prev.count + 1;
+      prev = { count, nextAt: now + backoffDelay(count, deps), awaiting: false };
+      deps.failures.set(item.config, prev);
+    }
+    if (prev !== undefined && now < prev.nextAt) {
+      entries.push({
+        config: item.config,
+        state: "backoff",
+        reason: `起動直後に落ちる（連続 ${prev.count} 回）。${Math.ceil((prev.nextAt - now) / 1000)} 秒あとまで、起こさない。原因はログ（${logFile}）を見る`,
+      });
+      continue;
+    }
     try {
-      const logFile = join(dirname(item.config), "logs", "daemon.log");
       mkdirSync(dirs.stateDir, { recursive: true, mode: 0o700 }); // 起こす前に作る（起こしたあとの失敗で、pid が残らなくなるのを避ける）
       const pid = deps.spawnDaemon(item.config, logFile);
       writeFileSync(join(dirs.stateDir, DAEMON_PID_FILE), `${pid}\n`, { mode: 0o600 });
+      deps.failures?.set(item.config, {
+        count: prev?.count ?? 0,
+        nextAt: 0,
+        awaiting: true,
+      });
       entries.push({ config: item.config, state: "started", pid });
     } catch (e) {
+      const count = (prev?.count ?? 0) + 1;
+      deps.failures?.set(item.config, {
+        count,
+        nextAt: now + backoffDelay(count, deps),
+        awaiting: false,
+      });
       entries.push({
         config: item.config,
         state: "startFailed",
@@ -193,10 +250,12 @@ export function superviseLoop(
 ): { stop: () => void } {
   let stopped = false;
   let timer: NodeJS.Timeout | undefined;
+  // 連続の失敗の記録は、ループの間だけメモリに持つ（supervisor が起動し直されたら、数え直し）
+  const loopDeps: SupervisorDeps = { ...deps, failures: deps.failures ?? new Map() };
   const tick = async (): Promise<void> => {
     if (stopped) return;
     try {
-      options.onReport(await reconcile(deps));
+      options.onReport(await reconcile(loopDeps));
     } catch (e) {
       // 1 周の失敗で supervisor を落とさない。次の周で、やり直す
       try {
