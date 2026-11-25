@@ -4,6 +4,14 @@
 
 ## 0.1.7（2026-11-25）
 
+### 破壊的変更（#288・#300・#301。移行の注意）
+
+- **設定・state・作業ツリー・ログの置き場が、リポジトリ単位（`<repoRoot>/.touryou/`）になった**（#288）。`config.json`・`state/`・`worktrees/`・`logs/` を、リポジトリごとの `.touryou/` に置く。**`.touryou/` は、`<repoRoot>/.gitignore` に入れる**（daemon が、起動と `--check-config` で、`stateDir`・`worktreeRoot` が ignore 済み・未追跡かを確かめる。TouRyou は `.gitignore` を書き換えない）。`/touryou:setup` の `worktreeRoot` の推奨は `<repoRoot>/.touryou/worktrees`。
+- **設定ファイルの探し方が変わった**（#296・#300）。`--config` → `TOURYOU_DAEMON_CONFIG` → 実行した場所から上へ `<dir>/.touryou/config.json`、の順（共有関数 `locateConfig`。`packages/core/src/config-locate.ts`）。**見つからないとき、旧パス `$HOME/.touryou/config.json` へは黙って戻らない**（探した場所と直し方を出して止まる）。前の置き場だけにある設定は、`touryou migrate` で移す（下）。
+- **常駐の項目が、supervisor の 1 つ（Label `touryou.supervisor`）になった**（#300）。supervisor が、登録簿（`$HOME/.touryou/registry.json`）の設定ごとに daemon を起こして見張る。daemon ごとの plist（`touryou.daemon`・`touryou.daemon-<8 文字>`）は、前の形になる（`touryou launchd` は残るが、新しくは作らない）。`/touryou:service` は、supervisor 向けの操作（`status`・`restart`・`stop`・`unregister`・`uninstall`・`uninstall-all`。対象は `--config`・`--all`）になった。supervisor を止める・外しても、起こした daemon は止まらない。
+- **前の置き場からの移行は `touryou migrate --yes`（`/touryou:setup` が案内する。#301）**。対象は、前の既定の設定（`$HOME/.touryou/config.json`・`$HOME/.touryou/state`・常駐 `touryou.daemon`）が指す 1 つのリポジトリだけ。「コピー → 検査 → 切り替え」の順で、**元は消さない**。(1) 前の daemon を止める（止まらなければ、コピーせずに断る）。(2) `state` をコピーする（権限を保つ。リンクは断る）。(3) 新しい設定（`stateDir` だけを新しい `state` に変える。`worktreeRoot` は前の値のまま）を、daemon と同じ検査（`--check-config`）にかける。(4) 通ったら `config.json` にして、登録簿に足し、supervisor を入れて動かし、新しい daemon が応答してから、前の常駐を外す。(5) どこかで失敗したら、作ったものだけを消し、止めた前の常駐を起動し直す（元の設定・state は変わらない）。前の常駐を外すだけが失敗したときは、新しい daemon は動いているので、戻さずに、手で外す手順を出す（終了コード 1）。別名の daemon（`launchd init --config`）は移さない。
+- **`touryou launchd`（`--config` を省略したときの既定）は、前の置き場のまま**。移行したあとは、`touryou supervisor` と `/touryou:service` を使う。
+
 ### 利用者に見える変更
 
 - **回収した子の、範囲の拡張の頼みが、承認待ちに残り続けるのを直した**（#279）。子が回収可能になる（回収・削除される）とき、その子の未決の頼みを却下として閉じ、受信箱の違反の項目も解決にする。すでに残っている古い項目は、daemon の起動時の整理と回収のときに片付く。
@@ -82,7 +90,7 @@ v0.1.6 を入れている Mac で、次のとおり（細部は `docs/setup-veri
 
 1. plugin を上げる（`claude plugin marketplace update touryou` → `claude plugin update touryou@touryou --scope user`）。公開の直後は、marketplace の反映（自動の PR のマージと `marketplace-v0.1.7` の tag 付け）が済むまで、`already at the latest version` と出て更新が見えないことがある。
 2. 新しいセッションで `/touryou:setup` を実行する（本体が v0.1.7 に入れ替わる）。
-3. 常駐（launchd）させているときは、`/touryou:setup` が daemon の起動し直しの同意を聞くので、「はい」と答える。
+3. 常駐（launchd）させているときは、`/touryou:setup` が daemon の起動し直しの同意を聞くので、「はい」と答える。**前の置き場（`$HOME/.touryou/config.json`）に設定があるときは、`/touryou:setup` が、リポジトリの `.touryou/` への移行（`touryou migrate`）を案内する**。先に、`<repoRoot>/.gitignore` に `.touryou/` を足しておく。移行のあとは、常駐が supervisor の 1 つになる（ログイン項目の `TouRyou` は 1 項目のまま）。
 4. 上げる前から開いている統合セッションは、`/mcp` で `plugin:touryou:node` を Reconnect し、`/touryou:start` で接続を確かめる。
 5. 状態画面は、`/touryou:ui` で開き直す。
 6. サブ統括（#168）を使うときは、daemon が v0.1.7 に入れ替わったあとに、統合ノードの子を作る。v0.1.6 の daemon は、統合ノードの子の紐付けを断る。

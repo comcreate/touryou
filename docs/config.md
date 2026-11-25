@@ -26,7 +26,17 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 - フック: 設定が見つからない・読めないときは、印のある子の作業ツリーでは拒否し（fail-closed）、印のないフォルダ（touryou を使っていない場所）では、何もせずに通します。フックは、入力の `cwd` から上へ探します。
 - `touryou ui`: `--config`・環境変数がなく、cwd から上にも見つからないときだけ、候補（`touryou ui --list`）のうち、cwd が `repoRoot`・`worktreeRoot` の中にあるものを、いちばん深いもの（内側の `worktreeRoot` を含む）から選びます。それでも合うものがなければ、止まります。
 - `touryou supervisor`（常駐の操作。`status`・`restart`・`register`・`unregister` など）: 対象は、`--config <設定ファイル>`、`--all`（登録簿の全部）、どちらもなければ、上の 3 と同じに、実行した場所から上へ探した設定です。常駐（launchd）の項目は supervisor の 1 つで、daemon は、登録簿（`$HOME/.touryou/registry.json`）の設定ごとに supervisor が起こします（`docs/launchd.md`）。daemon の設定は、リポジトリごとの `<repoRoot>/.touryou/config.json` に置きます。
-- `touryou launchd`（前の形。設定ごとの daemon の plist）: 移行（#301）までの間だけ残しています。`--config` を省略したときの既定は、従来のまま `$HOME/.touryou/config.json` です。
+- `touryou launchd`（前の形。設定ごとの daemon の plist）: 移行（`touryou migrate`。下）の前の置き場の常駐のために残しています。`--config` を省略したときの既定は、従来のまま `$HOME/.touryou/config.json` です。新しい置き場では使いません（`touryou supervisor` を使う）。
+
+## 前の置き場からの移行（`touryou migrate`。#301）
+
+前の置き場（`$HOME/.touryou/config.json`・`$HOME/.touryou/state`・常駐 `touryou.daemon`）は、リポジトリ単位の置き場（`<repoRoot>/.touryou/config.json`・`.touryou/state`）に移します。`/touryou:setup` が、`LEGACY_CONFIG: present` のときに案内します（手で行うなら `"$HOME/.touryou/current/bin/touryou" migrate --yes`）。
+
+- 順は「コピー → 検査 → 切り替え」。**元の設定・`state` は消しません**（動作を確かめてから、自分で消します）。前の設定が指す `repoRoot` の 1 つだけを移します（複数のリポジトリは、それぞれのリポジトリで `/setup`）。別名の daemon（`launchd init --config`）は移しません。
+- 新しい設定は、前の設定の値のままで、`stateDir` だけを `<repoRoot>/.touryou/state` に置き換えます（`worktreeRoot` は前の値のまま。動いている子の作業ツリーと、記録の中のパスを置き去りにしないため。推奨の `<repoRoot>/.touryou/worktrees` は、新しく設定を書くときだけです）。
+- 検査は、daemon と同じ `--check-config`（`stateDir`・`worktreeRoot` が `repoRoot` の内側なら、ignore 済み・未追跡か）です。**先に `<repoRoot>/.gitignore` に `.touryou/` を足しておきます**（TouRyou は `.gitignore` を書き換えません。通らなければ、移行は何も残さずに止まります）。
+- 新しい置き場に、`config.json`・`state` がすでにあれば、上書きも併合もせずに断ります。前の daemon が動いたままなら（手で起こしたもの）、コピーせずに断ります（SQLite を一貫してコピーできないため）。
+- 失敗したとき: 作ったもの（新しい `state`・設定・登録簿の 1 行）だけを消し、止めた前の常駐を起動し直します。前の置き場は変わりません。前の常駐を外す段だけが失敗したときは、新しい daemon が動いているので、戻さずに、手で外す手順（`touryou launchd uninstall --yes`）を出して終了コード 1 で終わります。
 
 ## 必須の項目
 

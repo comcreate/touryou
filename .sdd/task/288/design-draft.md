@@ -76,7 +76,7 @@
 - 1 つの小さな関数を、mcp・hook・CLI・launchd・ui で共有する。順は `--config` → `TOURYOU_DAEMON_CONFIG` → cwd から上へ `<dir>/.touryou/config.json`。
 - 子の cwd（`<repoRoot>/.touryou/worktrees/<子>`）からも届く。兄弟の置き場の作業ツリーは届かないので、親が環境変数で渡す。
 - 見つからないとき: 理由と直し方（`/touryou:setup` を実行する、または `--config` を指定する）を出して止まる。旧パスへ戻らない。hook は、touryou を使っていないフォルダでは何もしない（守りを外さない範囲で）。
-- 置き場所: 共有の小さな関数をどのパッケージに置くか（`@touryou/core` か）は **未決（5-6）**。
+- 置き場所: 共有の小さな関数をどのパッケージに置くか（`@touryou/core` か）は `@touryou/core` の `config-locate.ts`（5-6。解消済み）。
 - `ui` の「いちばん深い root」の選び方（`ui.ts:195`）は、内側の `worktreeRoot` でも正しいか、テストで確かめる。
 
 ### 4-3. 子からの保護（決定 9）
@@ -98,7 +98,7 @@
 - 対象: 既存の `~/.touryou/config.json`・`state`・常駐（`touryou.daemon`）→ `<repoRoot>/.touryou/`。
 - 手順: 同意を取る → 新しい置き場へコピー → 検査（daemon と同じ設定の検査・stateDir の中身が読める） → 切り替え（常駐の付け替え） → 元は消さずに残す。失敗したら、元のまま動く状態に戻る。
 - 実行するのは `/touryou:setup`。承認の回数（定型文の「約 3 回」）が増えるので、文面を直す。
-- 詳細（複数リポジトリがある場合・やり直し）は **未決（5-5）**。
+- 実行は `touryou migrate --yes`（`/setup` は同意後に呼ぶだけ）。詳細は 5-5（解消済み）。
 
 ## 5. 未決（選択肢と、私の推奨）
 
@@ -122,12 +122,16 @@
 - 決定: 実行したセッションのリポジトリ（cwd から探した設定）を基本に、引数で指定できる。
 - 細部（実装時に決める）: 引数は `--config <設定>`（今と同じ）に加え、全部を対象にする `--all`。一覧は登録簿から出す（今は plist から出している）。
 
-### 5-5. 移行の細部
-- 複数リポジトリがある場合、どれを移すか（`/touryou:setup` を実行したリポジトリ 1 つだけ移し、残りは、そのリポジトリで `/touryou:setup` を実行したときに移す、が安全）。
-- 失敗のやり直し、移行中に子が動いているとき（子の道具が一時的に届かないので、動いている子がいれば止めて待つ）。
+### 5-5. 移行の細部（解消済み。#301）
+- 実行は `touryou migrate --yes`（cli のコード。`packages/cli/src/migrate.ts`）。`/touryou:setup` は、同意を取ってこの 1 コマンドを呼ぶだけ（承認の回数を安定させ、戻しを試験で守るため）。
+- 1 回の実行は 1 リポジトリ（旧設定の `repoRoot`）。別名 daemon・複数の旧設定は対象外。
+- 順: 旧 daemon を止める → state をコピー → 新設定を一時ファイルに書く（`stateDir` だけ置き換え。`worktreeRoot` は旧のまま。動いている子・DB 内のパスを孤立させないため）→ `--check-config` で検査 → `config.json` に切り替え → 登録簿・supervisor の apply → 新 daemon の応答を待つ → 旧常駐を外す。
+- 失敗したら、積んだ手順を逆順で戻す（新 daemon を止める・作ったものを消す・旧常駐を起動し直す）。元の設定・state は消さない。旧常駐を外す段だけの失敗は戻さず、手での外し方を出す。supervisor の plist は戻さない。
+- 成功したら `~/.touryou/legacy-migrated.json` を書く。`/setup` の `LEGACY_CONFIG:` はこの印で absent になる（再度の移行を勧めない）。
+- 詳細は `docs/launchd.md` の「前の置き場からの移行」。
 
-### 5-6. 共有関数の置き場
-- `@touryou/core` に置く案が自然（mcp・cli・daemon が共有）。`packages/core` が、ファイル I/O を持ってよいか（`@touryou/core/fs` が既にある）を、実装前に確かめる（**未確認**）。
+### 5-6. 共有関数の置き場（解消済み。#296）
+- `@touryou/core` の `config-locate.ts`（`locateConfig`。純粋で、存在確認 `exists` を注入）に置いた。mcp・cli・daemon が共有する。
 
 ### 5-7. `rootCwd`・`rootScope` の既定、`config.json` の保護
 - `<repoRoot>/.touryou/config.json` は、子から保護する（4-3 の既定拒否に含まれる）。`rootScope` の既定は、/setup が書く最小の形のまま（`writableLocations: ["src"]`・`forbiddenLocations: [".git"]`）。`.touryou` を `forbiddenLocations` に足すか（二重の守り）は、4-3 の実装後に判断する。

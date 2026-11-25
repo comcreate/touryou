@@ -289,6 +289,13 @@ describe("finish の出力（CONFIG・SUPERVISOR。#300）", () => {
     symlinkSync(join(h, "real.json"), join(h, ".touryou", "config.json"));
     expect(run(makePlugin("0.9.0", tb), h, tb, [], {}, h).stdout).toContain("LEGACY_CONFIG: absent");
   });
+  it("移行済みの印（legacy-migrated.json）があれば、前の設定が残っていても LEGACY_CONFIG: absent", () => {
+    const h = homeWith({});
+    writeFileSync(join(h, ".touryou", "config.json"), "{}");
+    writeFileSync(join(h, ".touryou", "legacy-migrated.json"), "{}");
+    const tb = makeTarball("0.9.0");
+    expect(run(makePlugin("0.9.0", tb), h, tb, [], {}, h).stdout).toContain("LEGACY_CONFIG: absent");
+  });
   it("supervisor の plist が LaunchAgents にあれば SUPERVISOR: present、なければ absent", () => {
     const h = homeWith({});
     const tb = makeTarball("0.9.0");

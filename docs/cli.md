@@ -138,6 +138,15 @@ touryou answer <decisionId> --choice "<選択肢>" --yes --expect <digest>  # �
 
 **子の作業範囲の判定（FR_014。`hook-policy.ts`）での扱い**: そのノード自身の引き出しだけ、禁じる場所（stateDir）の中のまま、次の 2 つを許す。(1) Bash の `touryou child bind|report` の `--dir` の値（引き出しそのもの）。例外が効くのは、区切りの先頭の語が `touryouCommand`（設定。なければ `touryou` か末尾が `/touryou` の語）と一致し、続く 2 語が `child` と `bind`・`report` の命令だけ。その命令の `--dir` が自分の引き出しそのものでなければ、拒否する。外すのは `--dir` の値だけで、ほかの語はふつうに判定する。(2) Write の道具で `<引き出し>/code`・`<引き出し>/report` を書くこと。引き出しの中のファイルの語（`token` とその一時ファイル `token.tmp-…` を含む）・グロブ・`cd`・読み取りの道具（Read・Glob・Grep など）は、禁じる場所のまま拒否する。ほかのノードの引き出しも拒否する。今これが効くのは CLI の子だけで、Desktop の子には、作業範囲外の拒否のフックが効くようになってから効く（`docs/desktop-runtime.md` の (a)）。
 
+## 前の置き場からの移行 `touryou migrate --yes`（#301）
+
+`touryou migrate --yes`: 前の置き場（`$HOME/.touryou/config.json`・`$HOME/.touryou/state`・常駐 `touryou.daemon`）を、リポジトリ単位の置き場（`<repoRoot>/.touryou/config.json`・`.touryou/state`）と supervisor に切り替える。「コピー → 検査 → 切り替え」で、**前の設定・state は消さない**。daemon の窓口・トークンは使わない。`launchctl`・`lsregister` は、前の daemon を止める・外すときと、supervisor を入れるときだけ実行する。
+
+- **`--yes` が必須**（`apply`・`uninstall` と同じ。同意を取ったことの印。ないときは、何もせずに終了コード 2）。ほかの引数は終了コード 2。
+- 前の設定がなければ、何もせずに終了コード 0（「移行するものがない」）。前の設定が、リンクや JSON でない・`repoRoot` が絶対パスでない・実在しない、新しい置き場に `config.json`・`state` がすでにある、登録簿が壊れている、は、何も変えずに終了コード 1。
+- 順と、段ごとの失敗時の戻し方は、`docs/launchd.md` の「前の置き場からの移行」。検査は daemon の `--check-config` で、通らなければ（例: `.touryou/` が `.gitignore` に入っていない）、作ったものを消して終了コード 1（出力に `.gitignore` の案内が付く）。前の常駐を外す段だけが失敗したときは、戻さず、終了コード 1（新しい daemon は動いている）。
+- 成功したら、移行済みの印（`$HOME/.touryou/legacy-migrated.json`）を書く（`/setup` が、また移行を勧めない）。
+
 ## 常駐の生成 `touryou launchd init`
 
 `touryou launchd init [--org <組織の逆ドメイン>] [--path-prefix <ディレクトリ>] [--config <絶対パス>]`（`--config` は、設定ごとの別の daemon にするとき。下の「常駐の操作」）: daemon を launchd で常駐させるための plist を `$HOME/.touryou` の下に生成する。plist は、同梱の node（`current/bin/node`）で daemon の JS（`current/lib/dist/bin.js`）を直に起こす（起動スクリプト・shell を通さない。#64）。

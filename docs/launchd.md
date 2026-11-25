@@ -9,7 +9,7 @@ macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動か�
 
 ## supervisor 構成（#288・#300。これが新しい形）
 
-常駐の項目は **supervisor の 1 つだけ**（Label `touryou.supervisor`）です。supervisor が、登録簿（`<H>/.touryou/registry.json`。`{"configs": [設定の絶対パス, …]}`）の設定ごとに、daemon を別のプロセスで起こして見張ります。daemon ごとの plist は作りません（以下の「前の形」は、移行〔#301〕までの間だけ残ります）。
+常駐の項目は **supervisor の 1 つだけ**（Label `touryou.supervisor`）です。supervisor が、登録簿（`<H>/.touryou/registry.json`。`{"configs": [設定の絶対パス, …]}`）の設定ごとに、daemon を別のプロセスで起こして見張ります。daemon ごとの plist は作りません（以下の「前の形」は、前の置き場から移行〔`touryou migrate`。下の「前の置き場からの移行」〕するまでの間だけ使います）。
 
 | 項目 | 内容 |
 |:--|:--|
@@ -39,9 +39,30 @@ macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動か�
 
 - **版上げで、古い版の daemon が残る**: 先勝ちのため、supervisor の下で動いている daemon は、版を上げても自動では入れ替わりません。`touryou supervisor restart` で終了を送ると、supervisor が、新しい版（`current` のリンク先）で起こし直します。
 - supervisor が落ちている間は、daemon が落ちても起こし直されません（KeepAlive が supervisor を起こし直すまで）。
-- 前の形（daemon ごとの plist）と、supervisor を同じ設定に使うと、daemon が二重に起動しようとします（後から起動するものは、先勝ちで起こされず、`savedPortUnavailable`・`storeLocked` では起動しません）。移行は #301 で行います。
+- 前の形（daemon ごとの plist）と、supervisor を同じ設定に使うと、daemon が二重に起動しようとします（後から起動するものは、先勝ちで起こされず、`savedPortUnavailable`・`storeLocked` では起動しません）。移行（`touryou migrate`）は、前の daemon を止めて、前の常駐を、新しい daemon が応答してから外すので、この二重を作りません。
 
-## 前の形（daemon ごとの plist。移行まで）
+### 前の置き場からの移行（`touryou migrate --yes`。#301）
+
+前の置き場（`<H>/.touryou/config.json`・`<H>/.touryou/state`・Label `touryou.daemon` の常駐）を、リポジトリの `<repoRoot>/.touryou/` と supervisor に切り替えます。`/touryou:setup` が、前の置き場の設定があるとき（`LEGACY_CONFIG: present`）に、同意のあとで実行します。設定の細部は `docs/config.md` の「前の置き場からの移行」。
+
+| 段 | 内容 | 失敗したとき |
+|:--|:--|:--|
+| 0. 下調べ | 前の設定（通常のファイル・JSON）・`repoRoot` が実在する・新しい置き場に `config.json`・`state` がない・登録簿が読める（読み取りだけ） | 何も変えずに終了コード 1 |
+| 1. 前の daemon を止める | `touryou.daemon` が読み込まれていれば `launchd stop`。窓口と pid が `absent` になるまで待つ（手で起こしたものは、止めずに断る） | 起動し直す（止めていれば）。終了コード 1 |
+| 2. `state` のコピー | 権限を保つ。`daemon.pid`・リンク・特殊ファイルは写さない（リンクは断る）。前の `state` がなければ空で作る | 作った `state`（と、作った空の `.touryou/`）を消す |
+| 3. 新しい設定を一時の名前で書く | `config.json.migrating`（0600）。`stateDir` だけを新しい `state` に置き換える | 一時の設定を消す |
+| 4. 検査 | `touryou-daemon --check-config --config <一時の設定>`。通らなければ、`.gitignore` に `.touryou/` を足すよう案内する | 作ったものを消す |
+| 5. 名前を変える | `config.json` にする（ここから新しい置き場が「設定済み」） | — |
+| 6. 切り替え | 登録簿に足す → `supervisor apply --yes` → 新しい daemon の窓口が応答する（`daemon.pid` と `port`、未認証の `whoami` が 401）まで待つ | 登録簿の 1 行・新しい daemon（`daemon.pid` に SIGTERM）・設定・`state` を消し、前の常駐を起動し直す |
+| 7. 前の常駐を外す | `launchd uninstall --yes`（新しい daemon が応答してからだけ）。そのあと TouRyou.app の LaunchServices の登録を `lsregister -f` で戻す | **戻さない**（新しいほうが動いている）。手で外す手順を出して終了コード 1 |
+
+- **元は消しません**（前の設定・`state`）。前の `.touryou/launchd` の plist も残ります。要らなければ、動作を確かめてから自分で消します。成功すると、移行済みの印（`<H>/.touryou/legacy-migrated.json`）を書きます。印があると、`/setup` の `LEGACY_CONFIG:` は、前の設定が残っていても `absent` になります（また移行を勧めない）。
+- 失敗して戻すとき、段 6 で入れた supervisor（plist と読み込み）は、そのまま残ります（登録簿の 1 行だけを外すので、daemon は起こされません）。
+- 移行のあと、前の `touryou launchd` の操作ではなく、`touryou supervisor`・`/touryou:service` を使います。
+- 対象は、前の設定の `repoRoot` の 1 つだけ。別名の daemon（`launchd init --config`）は、そのまま動き、移行の対象にはなりません。
+- 移行のあと、このセッションの node は、新しい daemon に `/mcp` の Reconnect でつなぎ直します。
+
+## 前の形（daemon ごとの plist。移行までの間）
 
 以下は、前の形（`touryou launchd init|apply|…`。daemon ごとに plist を作る）の説明です。
 
@@ -154,7 +175,7 @@ root（`repoRoot`）ごとに daemon を分けるとき、設定ファイルご�
 
 **どの daemon につなぐか（環境変数の渡し方）**:
 
-- 統合セッションの `touryou-mcp --stdio` は、`--config`・`TOURYOU_DAEMON_CONFIG`（なければ、実行した場所から上へ `<dir>/.touryou/config.json`。見つからなければ、旧パス `<H>/.touryou/config.json` へは戻らず止まる）の `stateDir` の `root-token`・`port` を読みます。なお、`touryou launchd` 自身の `--config` 省略時の既定（`<H>/.touryou/config.json`）は、この版では変えていません（リポジトリ単位の置き場への切り替えは後続の変更）。別の daemon につなぐときは、統合セッション（`claude`）を起動する端末で `export TOURYOU_DAEMON_CONFIG=<設定の絶対パス>` してから起動します。
+- 統合セッションの `touryou-mcp --stdio` は、`--config`・`TOURYOU_DAEMON_CONFIG`（なければ、実行した場所から上へ `<dir>/.touryou/config.json`。見つからなければ、旧パス `<H>/.touryou/config.json` へは戻らず止まる）の `stateDir` の `root-token`・`port` を読みます。なお、`touryou launchd` 自身の `--config` 省略時の既定（`<H>/.touryou/config.json`）は、変えていません（`touryou launchd` は前の置き場のためのもの。リポジトリ単位の置き場への切り替えは、`touryou migrate`〔上の「前の置き場からの移行」〕と `touryou supervisor`）。別の daemon につなぐときは、統合セッション（`claude`）を起動する端末で `export TOURYOU_DAEMON_CONFIG=<設定の絶対パス>` してから起動します。
 - **設定ごとの MCP の登録（#224）**: 別の設定（`--config`）の daemon につなぐ MCP は、plugin の `node` とは別に、`claude mcp add touryou-<名前> -- "<H>/.touryou/current/bin/touryou-mcp" --stdio --config <設定の絶対パス>` で登録できます（`--config` が固定されるので、環境変数 `TOURYOU_DAEMON_CONFIG` は要りません）。`touryou launchd init --config <設定> [--name <名前>]` は、この命令を出力の「【MCP を登録する】」に出します（**実行はしません**。`claude` の設定は init の責務の外。理由は `.sdd/adr/touryou-224-mcp-per-daemon.md`）。`<名前>` は `--name`（小文字の英数字とハイフン。32 文字まで）、なければ設定の `repoRoot` のフォルダ名から作ります。既定の設定の daemon は、今までどおり plugin の `node` です。つながった daemon は、統合セッションの `whoami` の `daemon.repoRoot`・`daemon.daemonId` で確かめられます（子のセッションには出しません）。この登録は、シムを通らないので、daemon が動いていないと `/mcp` に failed と出ます（daemon を起こしてから Reconnect します）。
 - `touryou ui` は、`--config <絶対パス>` ＞ `TOURYOU_DAEMON_CONFIG` ＞ 候補が 2 つ以上あるときはコマンドを実行した場所が `repoRoot` か `worktreeRoot` の中にあるもの（いちばん深い root）＞ 既定の設定、の順で選びます。候補は、既定の設定と、`<H>/Library/LaunchAgents` に置いた別名の plist の設定です（`--others` と同じ集合。`init` しただけの plist は候補にしません）。`touryou ui --list` で、設定のパスと `repoRoot` の一覧を見られます（`docs/ui.md`）。
 
