@@ -25,7 +25,8 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 - `touryou-mcp --stdio`・`touryou`: 見つからなければ、`invalid_config`（mcp）・使い方の誤り（終了コード 2。トークンは送らない）で止まります。
 - フック: 設定が見つからない・読めないときは、印のある子の作業ツリーでは拒否し（fail-closed）、印のないフォルダ（touryou を使っていない場所）では、何もせずに通します。フックは、入力の `cwd` から上へ探します。
 - `touryou ui`: `--config`・環境変数がなく、cwd から上にも見つからないときだけ、候補（`touryou ui --list`）のうち、cwd が `repoRoot`・`worktreeRoot` の中にあるものを、いちばん深いもの（内側の `worktreeRoot` を含む）から選びます。それでも合うものがなければ、止まります。
-- `touryou launchd`: 常駐（launchd）の管理は、従来の既定の daemon（`$HOME/.touryou/config.json`）を前提にしています。`--config` を省略したときの既定は、この版では変えていません（リポジトリ単位の置き場への切り替えは、後続の変更で入ります）。
+- `touryou supervisor`（常駐の操作。`status`・`restart`・`register`・`unregister` など）: 対象は、`--config <設定ファイル>`、`--all`（登録簿の全部）、どちらもなければ、上の 3 と同じに、実行した場所から上へ探した設定です。常駐（launchd）の項目は supervisor の 1 つで、daemon は、登録簿（`$HOME/.touryou/registry.json`）の設定ごとに supervisor が起こします（`docs/launchd.md`）。daemon の設定は、リポジトリごとの `<repoRoot>/.touryou/config.json` に置きます。
+- `touryou launchd`（前の形。設定ごとの daemon の plist）: 移行（#301）までの間だけ残しています。`--config` を省略したときの既定は、従来のまま `$HOME/.touryou/config.json` です。
 
 ## 必須の項目
 
@@ -51,6 +52,8 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 理由: `stateDir` にはトークン（`root-token`）と SQLite が入り、`worktreeRoot` の下の子の作業ツリーは入れ子の git になります。ignore されていないと、`git add -A` で、トークンや壊れた埋め込みリポジトリを誤って載せてしまうためです。ignore 済みなら、入れ子の作業ツリーの作成・commit・`worktree remove` は、外に置いたときと同じに動きます（テストで確かめています）。置き場が `.gitignore` から外れる・追跡される変更は、起動のときにしか確かめません。
 
 内側の `.touryou/` は、子から守られます。子は、`<repoRoot>/.touryou/` の、自分の作業ツリー以外（state・`config.json`・logs・ほかの子の作業ツリー）を、読み取りも書き込みもできません（リンクを解決した実パスで比べます）。
+
+子の範囲の例には、`forbiddenLocations` に `.touryou` を入れます（`.touryou` は、daemon がもともと守っているので〔`compose.ts` の `protectedRoots`・フックの `touryouDir`〕、設定の読み込みでは足しません。子の範囲は親の `forbiddenLocations` をすべて含める決まりなので、親〔`rootScope`〕に書いたら、子の範囲にも同じものを入れます）。
 
 調べる場所（出典: `packages/daemon/src/config.ts` の `parseConfig`、`packages/daemon/src/compose.ts` の `realOverlap`・`protectedRoots`、`packages/daemon/src/state-dir-ignore.ts` の `checkStateDirIgnored`・`checkWorktreeRootIgnored`）:
 
@@ -130,7 +133,7 @@ SDK による子の起動・子の認証・子の HOME の隔離・子用の HTT
 
 ```json
 {
-  "rootScope": { "writableLocations": ["src"], "forbiddenLocations": [".git"], "allowedCommands": ["git status"] },
+  "rootScope": { "writableLocations": ["src"], "forbiddenLocations": [".git", ".touryou"], "allowedCommands": ["git status"] },
   "permissions": {
     "allow": ["Bash(grep -rn:*)", "mcp__playwright__browser_snapshot"],
     "deny": ["Bash(git push:*)", "mcp__playwright__browser_navigate"],
@@ -205,7 +208,7 @@ SDK による子の起動・子の認証・子の HOME の隔離・子用の HTT
   "rootCwd": "<作業するリポジトリ>",
   "rootScope": {
     "writableLocations": ["src", "docs"],
-    "forbiddenLocations": [".git"],
+    "forbiddenLocations": [".git", ".touryou"],
     "allowedCommands": ["git status", "pnpm test"]
   },
   "maxTurns": 100,

@@ -15,15 +15,23 @@ test("allowed-tools は Read だけ（Bash などを事前に許可しない）"
   assert.match(front[1], /^allowed-tools: Read$/m);
 });
 
-test("launchctl を直接は実行しない。使うのは touryou launchd の決まったサブコマンドだけ", () => {
+test("launchctl を直接は実行しない。使うのは touryou supervisor の決まったサブコマンドだけ", () => {
   assert.match(rules, /`launchctl` を直接は実行しない/);
   assert.doesNotMatch(body, /launchctl (?:bootstrap|bootout|kickstart|load|unload)/);
-  for (const sub of ["status", "restart", "stop"]) {
+  assert.doesNotMatch(body, /touryou" launchd /);
+  for (const sub of ["status", "restart", "stop", "unregister"]) {
     assert.match(
       item(sub),
-      new RegExp(`\`"\\$HOME/\\.touryou/current/bin/touryou" launchd ${sub}\``),
+      new RegExp(`\`"\\$HOME/\\.touryou/current/bin/touryou" supervisor ${sub}\``),
     );
   }
+});
+
+test("対象は、このセッションのリポジトリの設定。--config・--all で変える。聞かずに --all を使わない", () => {
+  assert.match(rules, /このセッションを開いているリポジトリの設定/);
+  assert.match(rules, /`--config <設定ファイルの絶対パス>`/);
+  assert.match(rules, /`--all`/);
+  assert.match(rules, /\*\*聞かずに、`--all` を使わない\*\*/);
 });
 
 test("--yes は、チャットで「はい」と答えたあとだけ。承認ダイアログの許可だけでは付けない", () => {
@@ -46,8 +54,8 @@ test("uninstall: 問いを先に聞き、1 回だけ実行する。終了コー�
   assert.match(u, /はっきり「はい」でなければ、何もせずに終わる/);
   assert.match(u, /\*\*1 回だけ\*\*実行する/);
   assert.doesNotMatch(u, /--remove-token/);
-  assert.match(u, /`"\$HOME\/\.touryou\/current\/bin\/touryou" launchd uninstall --yes`/);
-  assert.ok(u.indexOf("定型文（外す）") < u.indexOf("launchd uninstall --yes"), "実行の前に問い");
+  assert.match(u, /`"\$HOME\/\.touryou\/current\/bin\/touryou" supervisor uninstall --yes`/);
+  assert.ok(u.indexOf("定型文（外す）") < u.indexOf("supervisor uninstall --yes"), "実行の前に問い");
   assert.match(u, /終了コード 1 で、出力に「残した」の行があるときは、失敗ではない/);
   assert.match(rules, /`uninstall` の終了コード 1 の「残した」は、下のとおり失敗ではない/);
 });
@@ -62,11 +70,11 @@ test("status・restart: 読み込まれていないときは restart を案内�
   assert.match(item("status"), /次のログインでまた動く/);
   assert.match(
     item("status"),
-    /定型文（再開）で尋ね、\*\*はっきり「はい」のときだけ\*\* `"\$HOME\/\.touryou\/current\/bin\/touryou" launchd apply --yes`。それ以外は、何もせずに終わる/,
+    /定型文（再開）で尋ね、\*\*はっきり「はい」のときだけ\*\* `"\$HOME\/\.touryou\/current\/bin\/touryou" supervisor apply --yes`。それ以外は、何もせずに終わる/,
   );
   assert.match(
     item("status"),
-    /定型文（再開）: 「止めている daemon を、いま読み込み直して動かします（常駐の設定はそのまま）。/,
+    /定型文（再開）: 「止めている supervisor を、いま読み込み直して動かします（常駐の設定はそのまま）。/,
   );
   assert.doesNotMatch(item("status"), /手順 3-A の 1 と同じく/);
   assert.match(item("status"), /出力のその行の括弧の中で分ける[^\n]*両方を並べて利用者に尋ねない/);
@@ -79,18 +87,12 @@ test("status・restart: 読み込まれていないときは restart を案内�
   assert.match(item("restart"), /読み込み済みのときだけ使える/);
 });
 
-test("uninstall-all: 先に status --others で件数を数え、定型文（はいの前）に、分けた daemon の件数と承認が最大 2 回出ることを入れる", () => {
+test("uninstall-all: 定型文（はいの前）に、起こした daemon は止まらないことを入れる。分けた daemon の件数は数えない", () => {
   const u = item("uninstall-all");
-  assert.match(
-    u,
-    /launchd status --others --json` で確かめ、出力の JSON の `count` を件数 N とする/,
-  );
   const formula = /定型文（まとめて外す）:([^\n]*)/.exec(u)?.[1] ?? "";
-  assert.match(formula, /ほかのリポジトリ用に分けた daemon（N 件）も止めて外します/);
-  assert.match(formula, /承認の確認が最大 2 回出ます/);
-  assert.ok(u.indexOf("launchd status --others") < u.indexOf("定型文（まとめて外す）"));
-  assert.ok(u.indexOf("定型文（まとめて外す）") < u.indexOf("launchd uninstall --yes"));
-  assert.match(u, /N が 1 以上のときだけ、続けて/);
+  assert.match(formula, /起こした daemon は、supervisor を外しても止まらない/);
+  assert.ok(u.indexOf("定型文（まとめて外す）") < u.indexOf("supervisor uninstall --yes"));
+  assert.doesNotMatch(body, /--others/);
   assert.doesNotMatch(body, /別名の daemon/);
 });
 
@@ -102,10 +104,10 @@ test("uninstall-all: 「はい」のあと 1 回だけ uninstall --yes。plugin�
   );
   assert.match(
     u,
-    /実行するのは\*\*合計で最大 2 回\*\*: まず `"\$HOME\/\.touryou\/current\/bin\/touryou" launchd uninstall --yes`（1 回）/,
+    /\*\*1 回だけ\*\*実行する: `"\$HOME\/\.touryou\/current\/bin\/touryou" supervisor uninstall --yes`/,
   );
   assert.ok(
-    u.indexOf("定型文（まとめて外す）") < u.indexOf("launchd uninstall --yes"),
+    u.indexOf("定型文（まとめて外す）") < u.indexOf("supervisor uninstall --yes"),
     "実行の前に問い",
   );
   assert.match(u, /\*\*会話の中では実行しない\*\*/);

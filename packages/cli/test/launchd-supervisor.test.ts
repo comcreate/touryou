@@ -48,7 +48,7 @@ describe("supervisor の plist", () => {
     expect(text).toContain("<key>AbandonProcessGroup</key><true/>");
     expect(text).toContain("<string>supervisor</string>");
     expect(text).toContain("<string>run</string>");
-    expect(text).toContain("/Users/u/.touryou/TouRyou.app/Contents/MacOS/TouRyou");
+    expect(text).toContain("/Users/u/.touryou/current/TouRyou.app/Contents/MacOS/TouRyou");
   });
 });
 

@@ -37,6 +37,7 @@ REPO_URL="https://github.com/comcreate/touryou"
 DIST_DIR="touryou-darwin-arm64"
 TARGET="darwin-arm64"
 LABEL_PLIST="touryou.daemon.plist"
+SUPERVISOR_PLIST="touryou.supervisor.plist"
 # 自分の場所は、読み込んだ時点で決める（bash 3.2 は、source した file の関数の中で BASH_SOURCE[0] が自分を指さないことがある）
 SELF="${BASH_SOURCE[0]:-$0}"
 CONTACT="この plugin を配布した COMCREATE（連絡先: contact@comcreate-info.com）"
@@ -59,13 +60,29 @@ say() { mask "[touryou setup] $*"; }
 finish() {
   # $1: 終了コード, $2: RESULT の語。成功のときは、/setup が次に進むための、設定・常駐の有無も出す（中身は出さない）
   if [ "$1" = 0 ]; then
-    if [ -f "${HOME}/.touryou/config.json" ]; then echo "CONFIG: present"; else echo "CONFIG: absent"; fi
+    # 設定は、実行した場所から上へ探した <リポジトリ>/.touryou/config.json（#300。前の置き場 ${HOME}/.touryou/config.json には、戻らない）
+    if config_in_ancestors; then echo "CONFIG: present"; else echo "CONFIG: absent"; fi
     if [ -f "${HOME}/Library/LaunchAgents/${LABEL_PLIST}" ]; then echo "LAUNCHD: present"; else echo "LAUNCHD: absent"; fi
+    # supervisor（Label touryou.supervisor。登録簿の設定ごとに daemon を起こして見張る常駐。#300）
+    if [ -f "${HOME}/Library/LaunchAgents/${SUPERVISOR_PLIST}" ]; then echo "SUPERVISOR: present"; else echo "SUPERVISOR: absent"; fi
     # 設定ごとの別名の daemon（touryou launchd init --config で作り、LaunchAgents に置いたもの）があるときだけ出す（#165）
     if has_extra_daemons; then echo "LAUNCHD_OTHERS: present"; fi
   fi
   printf 'RESULT: %s\n' "$2"
   exit "$1"
+}
+config_in_ancestors() {
+  # 実行した場所（${PWD}）から上へ、<dir>/.touryou/config.json（通常のファイル）があるか。${HOME}/.touryou は、置き場の（設定の）親ではない
+  # （${HOME}/.touryou/config.json は前の置き場。ここでは見ない）。シンボリックリンクは、辿らない（-f と -L の両方で確かめる）
+  local d="${PWD:-}" f
+  [ -n "${d}" ] || return 1
+  while :; do
+    f="${d%/}/.touryou/config.json"
+    if [ "${d%/}" != "${HOME%/}" ] && [ -f "${f}" ] && [ ! -L "${f}" ]; then return 0; fi
+    [ "${d}" = "/" ] || [ -z "${d}" ] && return 1
+    d="${d%/*}"
+    [ -n "${d}" ] || d="/"
+  done
 }
 has_extra_daemons() {
   # 設定ごとの別名の daemon（#165）の plist が、LaunchAgents に置いて（常駐にして）あるか。--others（stop・apply・restart）の対象と同じにする

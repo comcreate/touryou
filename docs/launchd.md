@@ -7,6 +7,44 @@ macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動か�
 - 文書では、パスを記号で書きます: `<H>` は、自分の `$HOME` の絶対パス（`printf %s "$HOME"` で得る）。
 - 事実（docs の記載・コードで確認）と、推測・未確認は、分けて書きます。
 
+## supervisor 構成（#288・#300。これが新しい形）
+
+常駐の項目は **supervisor の 1 つだけ**（Label `touryou.supervisor`）です。supervisor が、登録簿（`<H>/.touryou/registry.json`。`{"configs": [設定の絶対パス, …]}`）の設定ごとに、daemon を別のプロセスで起こして見張ります。daemon ごとの plist は作りません（以下の「前の形」は、移行〔#301〕までの間だけ残ります）。
+
+| 項目 | 内容 |
+|:--|:--|
+| plist | `<H>/.touryou/launchd/touryou.supervisor.plist` に生成し、`<H>/Library/LaunchAgents/` に置く。ProgramArguments は、`TouRyou.app` の node で、同梱の `touryou` の `supervisor run`。`KeepAlive` は `SuccessfulExit` が false（異常終了のときだけ起こし直す）・`ThrottleInterval` あり |
+| `AbandonProcessGroup` | **true**。daemon は detached（独立のプロセスグループ）で起こすが、念のため、launchd が supervisor を止める・外すときに、同じグループの子を殺さないようにする。supervisor を止めても、起こした daemon は止まらない |
+| ログ | supervisor: `<H>/.touryou/logs/supervisor.log`。daemon ごと: `<repoRoot>/.touryou/logs/`（daemon が書く） |
+| 登録 | `touryou supervisor register`（設定の検査〔`--check-config`〕を通ったものだけ。実行した場所から上へ探した設定、または `--config <絶対パス>`）。外すのは `unregister`（登録簿の 1 行だけ。daemon・設定・state には触れない） |
+| 見張り | 既定は 30 秒ごと。daemon の窓口が応答すれば（未認証の `GET /v1/whoami` が 401）何もしない。**同じ設定の daemon がすでに動いていれば、起こさない（先勝ち）**。動いていなければ、`daemon.pid` に pid を記録して起こす |
+| 連続失敗の抑制 | 起こしたのに、一度も応答しないまま落ちる設定は、30 秒から倍々（上限 15 分）で、次に起こすまでの間を延ばす。応答が確認できれば、元に戻る。supervisor の出力には `backoff`（理由つき）と出る |
+
+### コマンド
+
+| コマンド | 内容 |
+|:--|:--|
+| `touryou supervisor run` | 見張りの本体（launchd が起こす。端末から動かすと前面で動く）。SIGTERM・SIGINT で見張りだけを止める（daemon には触れない） |
+| `touryou supervisor init` | plist を `<H>/.touryou/launchd` に生成する（`--path-prefix <ディレクトリ[:…]>` で PATH の先頭に足す。同じ内容なら何もせず、違う内容の既存は上書きしない） |
+| `touryou supervisor apply --yes` | plist を LaunchAgents に置き、`launchctl bootstrap` で読み込む（同意のあとだけ） |
+| `touryou supervisor status [--config <設定>｜--all]` | supervisor の読み込みの状態と、対象の設定ごとの daemon の有無（読み取りだけ） |
+| `touryou supervisor stop` | supervisor を止める（起こした daemon は止まらない。plist は残るので、次のログインでまた動く） |
+| `touryou supervisor restart [--config <設定>｜--all]` | supervisor が起こした daemon（`daemon.pid` の記録があるもの）に SIGTERM を送る。supervisor が、次の周で起こし直す。手で起こした daemon には送らない |
+| `touryou supervisor register` / `unregister` | 登録簿に足す・外す |
+| `touryou supervisor uninstall --yes` | supervisor を止め、生成した plist を消す（ログ・登録簿・各リポジトリの `.touryou` は残す。daemon は止まらない。前の形の plist が LaunchAgents に残っていなければ、`lsregister -u` も行う） |
+
+`--config` と `--all` は、同時には指定できません。どちらも付けないときの対象は、実行した場所から上へ探した設定です（`docs/config.md` の「設定ファイルの探し方」）。
+
+### 既知の限界
+
+- **版上げで、古い版の daemon が残る**: 先勝ちのため、supervisor の下で動いている daemon は、版を上げても自動では入れ替わりません。`touryou supervisor restart` で終了を送ると、supervisor が、新しい版（`current` のリンク先）で起こし直します。
+- supervisor が落ちている間は、daemon が落ちても起こし直されません（KeepAlive が supervisor を起こし直すまで）。
+- 前の形（daemon ごとの plist）と、supervisor を同じ設定に使うと、daemon が二重に起動しようとします（後から起動するものは、先勝ちで起こされず、`savedPortUnavailable`・`storeLocked` では起動しません）。移行は #301 で行います。
+
+## 前の形（daemon ごとの plist。移行まで）
+
+以下は、前の形（`touryou launchd init|apply|…`。daemon ごとに plist を作る）の説明です。
+
 ## 0. 前提と、できないこと
 
 | 項目 | 内容 | 区分 |

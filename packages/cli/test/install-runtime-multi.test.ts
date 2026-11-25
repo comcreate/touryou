@@ -109,6 +109,7 @@ const run = (
   tarball: string,
   args: string[] = [],
   env: Record<string, string> = {},
+  cwd: string = tmpdir(),
 ) => {
   const body = [
     'source "$1"; shift',
@@ -120,6 +121,7 @@ const run = (
   return spawnSync("bash", ["-c", body, "_", join(P, "scripts", "install-runtime.sh"), ...args], {
     env: { PATH: process.env.PATH ?? "", HOME: home, SRC: tarball, ...env },
     encoding: "utf8",
+    cwd,
   });
 };
 const out = (r: { stdout: string; stderr: string }): string => `${r.stdout}${r.stderr}`;
@@ -252,6 +254,37 @@ describe("finish の出力（LAUNCHD・LAUNCHD_OTHERS）", () => {
     const r = run(makePlugin("0.9.0", tb), h, tb);
     expect(r.stdout).toContain("LAUNCHD: absent");
     expect(r.stdout).not.toContain("LAUNCHD_OTHERS");
+  });
+});
+
+describe("finish の出力（CONFIG・SUPERVISOR。#300）", () => {
+  const present = (dir: string): string => {
+    mkdirSync(join(dir, ".touryou"), { recursive: true });
+    writeFileSync(join(dir, ".touryou", "config.json"), "{}");
+    return dir;
+  };
+  it("実行した場所から上へ <リポジトリ>/.touryou/config.json を探す（深い場所からでも見つかる）", () => {
+    const h = homeWith({});
+    const repo = present(join(tmp(), "repo"));
+    const deep = join(repo, "a", "b");
+    mkdirSync(deep, { recursive: true });
+    const tb = makeTarball("0.9.0");
+    const r = run(makePlugin("0.9.0", tb), h, tb, [], {}, deep);
+    expect(r.stdout).toContain("CONFIG: present");
+  });
+  it("前の置き場（$HOME/.touryou/config.json）だけがあっても、CONFIG: absent（前の置き場には戻らない）", () => {
+    const h = homeWith({});
+    writeFileSync(join(h, ".touryou", "config.json"), "{}");
+    const tb = makeTarball("0.9.0");
+    const r = run(makePlugin("0.9.0", tb), h, tb, [], {}, h);
+    expect(r.stdout).toContain("CONFIG: absent");
+  });
+  it("supervisor の plist が LaunchAgents にあれば SUPERVISOR: present、なければ absent", () => {
+    const h = homeWith({});
+    const tb = makeTarball("0.9.0");
+    expect(run(makePlugin("0.9.0", tb), h, tb).stdout).toContain("SUPERVISOR: absent");
+    writeFileSync(join(h, "Library", "LaunchAgents", "touryou.supervisor.plist"), "<plist/>");
+    expect(run(makePlugin("0.9.0", tb), h, tb).stdout).toContain("SUPERVISOR: present");
   });
 });
 

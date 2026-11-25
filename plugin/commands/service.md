@@ -1,40 +1,42 @@
 ---
-description: 常駐（launchd）の daemon を、確かめる・起動し直す・止める・外す（引数 status・restart・stop・uninstall・uninstall-all）
+description: 常駐（launchd の supervisor）と、その見張りの daemon を、確かめる・起動し直す・止める・外す（引数 status・restart・stop・unregister・uninstall・uninstall-all。対象は --config・--all）
 allowed-tools: Read
 ---
 
-`/touryou:setup` の手順 3-A で常駐にした daemon を操作します。引数（`$ARGUMENTS`）は `status`・`restart`・`stop`・`uninstall`・`uninstall-all` のどれか 1 つ。なければ `status`。それ以外なら、使い方を伝えて終わる。
+`/touryou:setup` で常駐にした supervisor（launchd の項目は 1 つだけ）と、supervisor が見張る daemon を操作します。引数（`$ARGUMENTS`）は `status`・`restart`・`stop`・`unregister`・`uninstall`・`uninstall-all` のどれか 1 つ。なければ `status`。それ以外なら、使い方を伝えて終わる。
 
 ## 進め方の決まり
 
-- **この文書に書かれたコマンドを、書かれたとおりに実行する**。使うのは `"$HOME/.touryou/current/bin/touryou" launchd` の決まったサブコマンドだけ。`launchctl` を直接は実行しない。ファイルを消すのは、`uninstall` のサブコマンドだけ（自分で消すコマンドは実行しない。`uninstall-all` の plugin・`$HOME/.touryou` の削除も、会話の中では実行せず、ターミナルのブロックとして出すだけ）。コマンドが失敗したら、書き換えて実行し直さずに止まり、出力をそのまま人に伝える（`uninstall` の終了コード 1 の「残した」は、下のとおり失敗ではない）。
+- **この文書に書かれたコマンドを、書かれたとおりに実行する**。使うのは `"$HOME/.touryou/current/bin/touryou" supervisor` の決まったサブコマンドだけ。`launchctl` を直接は実行しない。ファイルを消すのは、`uninstall` のサブコマンドだけ（自分で消すコマンドは実行しない。`uninstall-all` の plugin・`$HOME/.touryou` の削除も、会話の中では実行せず、ターミナルのブロックとして出すだけ）。コマンドが失敗したら、書き換えて実行し直さずに止まり、出力をそのまま人に伝える（`uninstall` の終了コード 1 の「残した」は、下のとおり失敗ではない）。
 - このコマンドは、`Read` 以外を、事前に許可していない。コマンドごとに、承認の確認が出る（正常）。
-- **`--yes` は、利用者が定型文の問いにチャットで「はい」と答えたあとにだけ付ける。承認ダイアログの許可だけでは付けない**。`restart`・`stop` も、チャットの「はい」のあとだけ実行する。
+- **`--yes` は、利用者が定型文の問いにチャットで「はい」と答えたあとにだけ付ける。承認ダイアログの許可だけでは付けない**。`restart`・`stop`・`unregister` も、チャットの「はい」のあとだけ実行する。
 - `root-token` の中身は、読まない・出さない。
-- `--org` を、`/setup` のときと変えていなければ、付けない（省略すると Label は `touryou.daemon`）。
-- **複数の daemon（設定ごと。#165）**: root ごとに daemon を分けているとき（`touryou launchd init --config <設定>` で作った、ほかのリポジトリ用に分けた daemon〔2 つ目以降〕。Label の決め方・`--others` の細かい規則は `docs/launchd.md`）は、**どの daemon を対象にするかを、実行の前に利用者に聞く**。選び方は 3 つ: 既定の設定（`$HOME/.touryou/config.json`。引数を付けない）／ある設定（コマンドの最後に `--config <設定ファイルの絶対パス>` を付ける）／ほかのリポジトリ用に分けた daemon すべて（`--others` を付ける）。どれかが分からなければ、`"$HOME/.touryou/current/bin/touryou" ui --list` で設定の一覧（既定と別名の設定。repoRoot つき）を出して、利用者に選んでもらう。**聞かずに、すべてを対象にしない**。選んだ `--config <設定>`・`--others` は、`status`・`restart`・`stop`・`uninstall`・`apply` のコマンドの最後にそのまま付ける。定型文（再開・起動し直し・止める・外す）は、対象の daemon の設定（またはすべて）を添えて尋ねる。`uninstall-all` は、既定の設定に加えて、ほかのリポジトリ用に分けた daemon も外す（既定の設定の分を 1 回、分けた daemon があるときだけ `--others` 付きで続けて 1 回。合計で最大 2 回）。
+- **構造**: 常駐の項目は supervisor の 1 つ（Label `touryou.supervisor`）。supervisor は、登録簿（`$HOME/.touryou/registry.json`）の設定ごとに、daemon を別のプロセスで起こして見張る。daemon の設定・state・ログは、各リポジトリの `.touryou/` にある。supervisor を止めても、起こした daemon は止まらない。
+- **対象の決め方**: 既定の対象は、**このセッションを開いているリポジトリの設定**（実行した場所から上へ探した `<repoRoot>/.touryou/config.json`）。引数は付けない。ほかのリポジトリは、コマンドの最後に `--config <設定ファイルの絶対パス>`、登録されたものすべては `--all` を付ける（同時には指定できない）。見つからないとき、または別のリポジトリのつもりのときは、`"$HOME/.touryou/current/bin/touryou" ui --list` で設定の一覧を出して、利用者に選んでもらう。**聞かずに、`--all` を使わない**。定型文は、対象の設定（または全部）を添えて尋ねる。
 
 ## 引数ごとの手順
 
-- **status**: `"$HOME/.touryou/current/bin/touryou" launchd status`。出力（読み込みの状態・終了コード・窓口の応答）を、そのまま要約して伝える。終了コードが 0 以外のときは、出力の「最後の失敗」の行（`daemon.log` の最後の `失敗 [code]: …`。値は伏せてある）もそのまま伝える。それが `invalidConfig`（`repoRoot` などが、ない・実パスでない・git のリポジトリでない）なら、起動のたびに落ち続けているので、`stop` で止めてから、設定を直す（または `/touryou:setup` をやり直す）よう案内する（自分で `config.json` を書き換えない）。読み込まれていないときは、**出力のその行の括弧の中で分ける**（`touryou launchd status` が、LaunchAgents の plist の有無で、どちらか 1 つだけを出す。両方を並べて利用者に尋ねない）。**読み込まれていないときは、`restart` を案内しない**（読み込まれていないと使えない）。
-  - 「（常駐にしていない）」: 常駐の登録は `/setup` の手順 3-A の役目なので、そう伝えて終わる（ここで `apply` を尋ねない）。
-  - 「（stop で止めた後）」: 次のログインでまた動く、と伝え、**続けて、その場で**次の定型文（再開）で尋ね、**はっきり「はい」のときだけ** `"$HOME/.touryou/current/bin/touryou" launchd apply --yes`。それ以外は、何もせずに終わる。
-  定型文（再開）: 「止めている daemon を、いま読み込み直して動かします（常駐の設定はそのまま）。よいですか（はい／いいえ）」
-- **restart**: 読み込み済みのときだけ使える（`stop` の後・常駐にしていないときは、`launchd restart` が「先に apply --yes」で終わる。先に `status` で読み込み済みかを見て、読み込まれていなければ、status の行の案内に従う）。次の定型文で尋ね、**はっきり「はい」のときだけ** `"$HOME/.touryou/current/bin/touryou" launchd restart`（daemon を起動し直し、窓口の応答を待つ）。それ以外（「いいえ」・あいまい・質問）は、何もせずに終わる。
-  定型文: 「daemon を起動し直します。動いている子のセッションは止まりません（daemon が戻るまでの間は、子の道具が届かないことがあります）。よいですか（はい／いいえ）」
-- **stop**: 次の定型文で尋ね、**はっきり「はい」のときだけ** `"$HOME/.touryou/current/bin/touryou" launchd stop`（daemon を止める）。それ以外は、何もせずに終わる。
-  定型文: 「daemon を止めます。動いている子のセッションは止まりませんが、daemon を動かし直すまで、子の道具は届きません。常駐の設定は残るので、次にログインしたときに、また自動で動きます。よいですか（はい／いいえ）」
+- **status**: `"$HOME/.touryou/current/bin/touryou" supervisor status`（対象を変えるときは最後に `--config <設定>` か `--all`）。出力（supervisor の読み込みの状態と、対象の設定ごとの daemon の有無）を、そのまま要約して伝える。終了コードが 0 以外のときは、出力の理由もそのまま伝える。読み込まれていないときは、**出力のその行の括弧の中で分ける**（`supervisor status` が、LaunchAgents の plist の有無で、どちらか 1 つだけを出す。両方を並べて利用者に尋ねない）。**読み込まれていないときは、`restart` を案内しない**（supervisor が動いていないと、daemon は起こし直されない）。
+  - 「（常駐にしていない）」: 常駐の登録は `/setup` の役目なので、そう伝えて終わる（ここで `apply` を尋ねない）。
+  - 「（stop で止めた後）」: 次のログインでまた動く、と伝え、**続けて、その場で**次の定型文（再開）で尋ね、**はっきり「はい」のときだけ** `"$HOME/.touryou/current/bin/touryou" supervisor apply --yes`。それ以外は、何もせずに終わる。
+  定型文（再開）: 「止めている supervisor を、いま読み込み直して動かします（常駐の設定はそのまま）。登録された設定の daemon を、起こして見張ります。よいですか（はい／いいえ）」
+- **restart**: 読み込み済みのときだけ使える（先に `status` で、読み込み済みかを見る）。次の定型文で尋ね、**はっきり「はい」のときだけ** `"$HOME/.touryou/current/bin/touryou" supervisor restart`（対象の daemon に終了を送る。supervisor が、次の周〔30 秒以内〕で起こし直す。supervisor が起こしたものだけ。手で起こした daemon には送らない）。それ以外（「いいえ」・あいまい・質問）は、何もせずに終わる。
+  定型文: 「{対象} の daemon を起動し直します。動いている子のセッションは止まりません（daemon が戻るまでの間は、子の道具が届かないことがあります）。よいですか（はい／いいえ）」
+- **stop**: 次の定型文で尋ね、**はっきり「はい」のときだけ** `"$HOME/.touryou/current/bin/touryou" supervisor stop`（supervisor の見張りを止める。起こした daemon は止まらない）。それ以外は、何もせずに終わる。
+  定型文: 「supervisor の見張りを止めます。動いている daemon と子のセッションは止まりません。ただし、daemon が落ちても起こし直されません。常駐の設定は残るので、次にログインしたときに、また自動で動きます。よいですか（はい／いいえ）」
+- **unregister**: このリポジトリ（または `--config`・`--all` の対象）を、見張りの対象（登録簿）から外す。次の定型文で尋ね、**はっきり「はい」のときだけ** `"$HOME/.touryou/current/bin/touryou" supervisor unregister`（対象の指定は上の決まり）。登録簿の 1 行だけを外す。daemon・設定・state には触れない。それ以外は、何もせずに終わる。
+  定型文: 「{対象} を、supervisor の見張りの対象から外します（動いている daemon は、そのまま動きます。落ちても起こし直されなくなります）。よいですか（はい／いいえ）」
 - **uninstall**: **実行の前に、次の定型文で尋ねる**。はっきり「はい」でなければ、何もせずに終わる。
-  定型文（外す）: 「常駐をやめます。daemon を止め、TouRyou が作った plist（前の版の起動スクリプトがあれば、それも）を消します（ログと daemon の状態は残します）。ログイン項目の項目も、動かなくなります。よいですか（はい／いいえ）」
-  「はい」のあと、**1 回だけ**実行する: `"$HOME/.touryou/current/bin/touryou" launchd uninstall --yes`。
+  定型文（外す）: 「常駐をやめます。supervisor を止め、TouRyou が作った plist を消します（ログ・登録簿・各リポジトリの設定と daemon の状態は残します。動いている daemon は止まりません）。ログイン項目の項目も、動かなくなります。よいですか（はい／いいえ）」
+  「はい」のあと、**1 回だけ**実行する: `"$HOME/.touryou/current/bin/touryou" supervisor uninstall --yes`。
   結果の伝え方: 終了コード 0 なら、消したものを伝える。**終了コード 1 で、出力に「残した」の行があるときは、失敗ではない**（TouRyou が生成したものと判定できない〔手で直した・リンクなど〕ので残した）。残したものと理由を伝えて終える（やり直さない。消すかは、利用者が自分で決める）。終了コード 1 で「何も消していない」のとき（止めるのに失敗）・終了コード 2 は、出力を伝えて止まる。
   外したあと、手で起動するときは、`/setup` の手順 3-B。
-- **uninstall-all**: TouRyou をまとめて外す（常駐・plugin・marketplace・`$HOME/.touryou`）。**先に**、ほかのリポジトリ用に分けた daemon があるかを、読み取りだけの `"$HOME/.touryou/current/bin/touryou" launchd status --others --json` で確かめ、出力の JSON の `count` を件数 N とする（分けた daemon がなければ N は 0。終了コードが 0 でないとき、または JSON を読めないときは、書き換えず、出力を伝えて止まる）。**実行の前に、次の定型文で尋ねる**。はっきり「はい」でなければ、何もせずに終わる。
-  定型文（まとめて外す）: 「TouRyou をまとめて外します。いま、常駐（daemon）を止めて外します。{N が 1 以上のときだけ: ほかのリポジトリ用に分けた daemon（N 件）も止めて外します。}plugin・marketplace・$HOME/.touryou（ログと daemon の状態を含む）は、この会話を終えたあとに、ターミナルで消すコマンドを出します。動いている子のセッション（claude）は止まりませんが、daemon がなくなるので、子の道具は届かなくなります。{N が 1 以上のときだけ: このあと、コマンドの承認の確認が最大 2 回出ます（既定の daemon の分と、分けた daemon の分）。}よいですか（はい／いいえ）」（`{…}` は文面に出さない。N が 0 のときは、その部分を丸ごと省く）
-  「はい」のあと、実行するのは**合計で最大 2 回**: まず `"$HOME/.touryou/current/bin/touryou" launchd uninstall --yes`（1 回）。N が 1 以上のときだけ、続けて `"$HOME/.touryou/current/bin/touryou" launchd uninstall --yes --others`（もう 1 回）。同じコマンドを繰り返さない。常駐にしていなかったときも、同じものを実行する（消すものがなければ、何も消さずに終わる）。
+- **uninstall-all**: TouRyou をまとめて外す（常駐・plugin・marketplace・`$HOME/.touryou`）。**実行の前に、次の定型文で尋ねる**。はっきり「はい」でなければ、何もせずに終わる。
+  定型文（まとめて外す）: 「TouRyou をまとめて外します。いま、常駐（supervisor）を止めて外します。plugin・marketplace・$HOME/.touryou（ログと登録簿を含む）は、この会話を終えたあとに、ターミナルで消すコマンドを出します。起こした daemon は、supervisor を外しても止まらないので、手で止めてもらいます。動いている子のセッション（claude）は止まりませんが、daemon がなくなると、子の道具は届かなくなります。よいですか（はい／いいえ）」
+  「はい」のあと、**1 回だけ**実行する: `"$HOME/.touryou/current/bin/touryou" supervisor uninstall --yes`。
   結果: 終了コード 0、または終了コード 1 で「残した」の行があるときは、消したもの・残したもの（理由）を伝えて、次へ進む。終了コード 1 で「何も消していない」（止めるのに失敗）・終了コード 2 は、出力を伝えて止まる（次のブロックは出さない）。
   続けて、次のことを伝え、ブロックを出す（**会話の中では実行しない**）。
-  - 手で起動した daemon（`/setup` の手順 3-B）があれば、先にそのターミナルで Ctrl-C で止める。
+  - 起こした daemon（supervisor が起こしたもの・手で起こしたもの）は、supervisor を外しても止まらない。下のブロックの 1 行目（`pgrep`）が出すプロセスを、利用者が確かめて、自分で止める（手で起こしたものは、そのターミナルで Ctrl-C）。
   - この会話を `/exit` で終える（Claude Code のほかの会話・デスクトップ版も閉じる）。
   - `CLAUDE_CONFIG_DIR` を分けて使っているなら、ブロックの前に、同じターミナルで `export CLAUDE_CONFIG_DIR=<plugin を入れたときの値>` を実行する（`<…>` は自分の値に置き換える）。分けていなければ、要らない。
   - 1 行目が何かを出したら（TouRyou のプロセスがまだ動いている）、そこで止める。止めてから、やり直す。
