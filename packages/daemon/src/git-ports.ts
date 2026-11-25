@@ -18,7 +18,14 @@
 
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  realpathSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import {
   type Failure,
@@ -36,6 +43,9 @@ import { copySeed, planSeed, readSeedList } from "./worktree-seed.js";
  * `packages/mcp/src/child-marker.ts` の `CHILD_WORKTREE_MARKER` と同じ値にする。
  */
 export const CHILD_WORKTREE_MARKER = "touryou-child";
+
+/** 作業ツリーを作るときに写したパスの記録（JSON の配列）。印と同じ場所（作業ツリーの git のディレクトリ）に置く。 */
+export const SEEDED_RECORD_FILE = "touryou-seeded";
 
 export interface GitResult {
   readonly code: number | null;
@@ -329,10 +339,21 @@ export function createGitPorts(
       process.stderr.write(
         `${JSON.stringify({ at: new Date().toISOString(), event: "worktreeSeeded", ...e })}\n`,
       ));
-  /** 作業ツリーに写したファイル（一覧の内容）。回収の判定で、失われるものに数えない。一覧を読めなければ空。 */
-  const seededPaths = (): ReadonlySet<string> => {
-    const list = readSeedList(repoRoot);
-    return new Set(list.ok ? list.value : []);
+  /**
+   * 作業ツリーを作るときに写したファイルの記録（`<gitDir>/touryou-seeded`）。回収の判定で、失われるものに数えない。
+   * 一覧（JSON）は読み直さない（後から変わっても判定がずれない）。記録がない（古い作業ツリー）・読めない・形が違うなら空（従来どおり数える）。
+   */
+  const seededPaths = async (path: string): Promise<ReadonlySet<string>> => {
+    const gitDir = await git(["rev-parse", "--absolute-git-dir"], path);
+    if (gitDir.code !== 0 || gitDir.stdout.trim() === "") return new Set();
+    try {
+      const raw: unknown = JSON.parse(
+        readFileSync(join(gitDir.stdout.trim(), SEEDED_RECORD_FILE), "utf8"),
+      );
+      return new Set(Array.isArray(raw) ? raw.filter((p): p is string => typeof p === "string") : []);
+    } catch {
+      return new Set();
+    }
   };
 
   // git の操作は直列に行う（作業ツリーの追加・削除は、リポジトリの内部で競合しうる）。
@@ -473,7 +494,7 @@ export function createGitPorts(
 
   /** きれいか: 未保存の変更・未追跡のファイルがなく、gitignore の対象は、再生成できるもの（許可リスト）かリンクだけ。調べられなければ false。 */
   const isClean = async (path: string): Promise<boolean> => {
-    const seeded = seededPaths();
+    const seeded = await seededPaths(path);
     const lines = await statusLines(path, seeded);
     return (
       lines !== undefined &&
@@ -530,7 +551,7 @@ export function createGitPorts(
       }
     }
     if (branchOnly) return out; // 作業ツリーがないので、未保存の変更・未追跡のファイルは、ない
-    const seeded = seededPaths();
+    const seeded = await seededPaths(path);
     const lines = await statusLines(path, seeded);
     if (lines === undefined) out.workingTreeUnknown = true;
     else {
@@ -1055,6 +1076,14 @@ export function createGitPorts(
         }
         if (seedPlan.value.copy.length > 0 || seedPlan.value.missing.length > 0) {
           const { copied, skipped } = copySeed(repoRoot, path, seedPlan.value);
+          // 写したパスの記録。回収の判定は、一覧でなくこれを読む。書けなければ記録なし（従来どおり数える＝安全側）。
+          try {
+            writeFileSync(join(gitDir.stdout.trim(), SEEDED_RECORD_FILE), JSON.stringify(copied), {
+              mode: 0o644,
+            });
+          } catch {
+            // 記録の失敗は、処理を止めない
+          }
           try {
             onSeed({ nodeId, copied, skipped, missing: seedPlan.value.missing });
           } catch {

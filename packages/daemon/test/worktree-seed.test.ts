@@ -6,6 +6,7 @@ import {
   mkdtempSync,
   readFileSync,
   realpathSync,
+  rmSync,
   statSync,
   symlinkSync,
   writeFileSync,
@@ -93,6 +94,40 @@ describe("作業ツリーへの設定ファイルのコピー", () => {
     expect(readFileSync(join(repoRoot, ".envrc"), "utf8")).toBe("export A=1\n");
     expect((await ports.factsFor("c1"))?.clean).toBe(true);
     expect((await ports.lossFor("c1"))?.untracked).toBe(0);
+  });
+
+  it("写したパスを <gitDir>/touryou-seeded に記録する（一覧を後から変えても、回収の判定は変わらない）", async () => {
+    const { repoRoot, ports } = setup({ files: [".envrc"] });
+    const r = await ports.provisionWorktree({ parentId: "root", nodeId: "c1" });
+    if (!r.ok) throw new Error(r.error.cause);
+    const wt = r.value.worktreePath;
+    const gitDir = git(wt, "rev-parse", "--absolute-git-dir");
+    expect(JSON.parse(readFileSync(join(gitDir, "touryou-seeded"), "utf8"))).toEqual([".envrc"]);
+    // 一覧を空に書き換えても、記録が判定元なので、写したファイルは数えない
+    writeFileSync(
+      join(repoRoot, ".claude", "touryou-worktree-files.json"),
+      JSON.stringify({ files: [] }),
+    );
+    expect((await ports.factsFor("c1"))?.clean).toBe(true);
+    expect((await ports.lossFor("c1"))?.untracked).toBe(0);
+    // 一覧に足しても、記録にないファイルは数える
+    writeFileSync(
+      join(repoRoot, ".claude", "touryou-worktree-files.json"),
+      JSON.stringify({ files: [".envrc", "secret"] }),
+    );
+    writeFileSync(join(wt, "secret"), "s\n");
+    expect((await ports.factsFor("c1"))?.clean).toBe(false);
+    expect((await ports.lossFor("c1"))?.untracked).toBe(1);
+  });
+
+  it("記録がない（古い作業ツリー）ときは、従来どおり数える", async () => {
+    const { ports } = setup({ files: [".envrc"] });
+    const r = await ports.provisionWorktree({ parentId: "root", nodeId: "c1" });
+    if (!r.ok) throw new Error(r.error.cause);
+    const gitDir = git(r.value.worktreePath, "rev-parse", "--absolute-git-dir");
+    rmSync(join(gitDir, "touryou-seeded"));
+    expect((await ports.factsFor("c1"))?.clean).toBe(false);
+    expect((await ports.lossFor("c1"))?.untracked).toBe(1);
   });
 
   it("一覧がなければ、何も写さない", async () => {
