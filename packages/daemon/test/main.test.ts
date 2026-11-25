@@ -307,7 +307,10 @@ describe("stateDir が repoRoot の内側にあるとき（#218）", () => {
 
   it("worktreeRoot が repoRoot を囲む・同じ場所なら、設定の段で拒否する", async () => {
     const s = setup();
-    for (const worktreeRoot of [s.config.repoRoot as string, dirname(s.config.repoRoot as string)]) {
+    for (const worktreeRoot of [
+      s.config.repoRoot as string,
+      dirname(s.config.repoRoot as string),
+    ]) {
       writeFileSync(s.path, JSON.stringify({ ...s.config, worktreeRoot }));
       const r = await main(["--config", s.path], s.deps);
       expect(r.exitCode).toBe(1);

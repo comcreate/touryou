@@ -1792,9 +1792,7 @@ export function createDaemon(config: DaemonConfig, deps: DaemonDeps): Result<Dae
           wt,
           resolveHookPath,
           // 作業ツリーを含む禁じる場所（`.touryou/`）は、探す先が作業ツリーの中に限られるので、重なりの拒否から除く
-          roots
-            .filter((r) => !isPathUnder(foldPath(wt), foldPath(r.path)))
-            .map((r) => r.path),
+          roots.filter((r) => !isPathUnder(foldPath(wt), foldPath(r.path))).map((r) => r.path),
         ))
       ) {
         return { allow: true, permit: "readOnlySearch" };
