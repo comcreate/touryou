@@ -74,7 +74,7 @@ finish() {
 config_in_ancestors() {
   # 実行した場所（${PWD}）から上へ、<dir>/.touryou/config.json（通常のファイル）があるか。${HOME}/.touryou は、置き場の（設定の）親ではない
   # （${HOME}/.touryou/config.json は前の置き場。ここでは見ない）。シンボリックリンクは、辿らない（-f と -L の両方で確かめる）
-  # ${HOME} は実体のパスで比べる（macOS の /var と /private/var のように、同じ場所が別の名前で見えることがある）
+  # ${HOME} は実体のパスで比べる（macOS では、tmp 配下のリンクなどで、同じ場所が別の名前で見えることがある）
   local d="${PWD:-}" f home
   [ -n "${d}" ] || return 1
   home="$(cd "${HOME}" 2>/dev/null && pwd -P)" || home="${HOME%/}"
