@@ -175,7 +175,7 @@ const START_DAEMON = "daemon が動いていません。launchd か touryou-daem
 /** daemon は動いているのに届かないとき（touryou migrate・版上げのあとなど）の、古い接続の見立て。 */
 const STALE_CONNECTION =
   "daemon が動いているのに届かないなら、この接続が古い（touryou migrate・版上げ・設定の置き場の移動のあと、開いたままのセッションは前の接続のまま）。/mcp で plugin:touryou:node を Reconnect する（なければ Claude Code を起動し直し、/touryou:start で確かめる）";
-const FIX_DIR ="chmod 700 で直す（ACL は chmod -N で外す）";
+const FIX_DIR = "chmod 700 で直す（ACL は chmod -N で外す）";
 
 /** 接続先（daemon の窓口・身元の秘密の場所）。根のトークンは持たない（紐付け待ちの道は、これだけを使う）。 */
 export interface DaemonEndpoint {
