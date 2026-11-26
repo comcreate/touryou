@@ -79,7 +79,7 @@ claude plugin marketplace add comcreate/touryou
 
 - daemon の設定・状態・ログは、リポジトリごとの `<repoRoot>/.touryou/` に置きます。設定ファイルは、実行した場所から上へ `.touryou/config.json` を探して見つけます（[`docs/config.md`](docs/config.md)）。
 - 操作は `/touryou:service`、または `touryou supervisor`（`status`・`restart`・`stop`・`register`・`unregister`・`uninstall`。対象は `--config <設定>` か `--all`）。
-- 版を上げたあと、古い版の daemon は自動では入れ替わりません。`/touryou:service restart` で、supervisor が新しい版で起こし直します。
+- 版を上げる（`/touryou:setup`。同意を 1 回取る）と、supervisor を読み込み直し、登録簿のすべての daemon を、新しい版で起こし直します（30 秒以内）。手で起こした daemon は止めないので、端末で止めてから、supervisor に起こさせてください（`/touryou:service restart`）。
 
 仕組みと既知の限界は [`docs/launchd.md`](docs/launchd.md)。
 

@@ -37,7 +37,7 @@ macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動か�
 
 ### 既知の限界
 
-- **版上げで、古い版の daemon が残る**: 先勝ちのため、supervisor の下で動いている daemon は、版を上げても自動では入れ替わりません。`touryou supervisor restart` で終了を送ると、supervisor が、新しい版（`current` のリンク先）で起こし直します。
+- **版上げで、古い版の daemon が残る**: 先勝ちのため、supervisor の下で動いている daemon は、`current` を付け替えただけでは入れ替わりません。`/touryou:setup` の版上げ（`--restart-daemon`）は、supervisor を止め → `current` を付け替え → 新しい版で `supervisor apply --yes` → `supervisor restart --all` の順に、これを済ませます（同意は 1 回）。手で上げるときは、`touryou supervisor stop` → 付け替え → `supervisor apply --yes` → `supervisor restart --all` です。`restart` は、supervisor が起こした記録（`daemon.pid`）のある daemon にだけ終了を送り、supervisor が新しい版（`current` のリンク先）で起こし直します。
 - supervisor が落ちている間は、daemon が落ちても起こし直されません（KeepAlive が supervisor を起こし直すまで）。
 - 前の形（daemon ごとの plist）と、supervisor を同じ設定に使うと、daemon が二重に起動しようとします（後から起動するものは、先勝ちで起こされず、`savedPortUnavailable`・`storeLocked` では起動しません）。移行（`touryou migrate`）は、前の daemon を止めて、前の常駐を、新しい daemon が応答してから外すので、この二重を作りません。
 
