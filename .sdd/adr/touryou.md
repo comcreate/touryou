@@ -249,3 +249,10 @@ category: "developer-tooling"
 - **Rationale**: 紐付けの経路を 1 本に保てる（一度きり・10 分・SHA-256 保持の既存の防御をそのまま使う）。ロールがノードの属性で決まるので、子が自分で統合に昇格する経路ができない。権限の違いは `ROLE_OPERATIONS` と部分木の規則で表され、サブ統括の操作は自分の部分木の外に効かない。
 - **Relation to earlier decisions**: 2026-11-20 の「つなぎ直しは子ロールのトークンを出し直す」を、「そのノードのロールのトークン」に広げる（条件 (1)〜(4) は変えない）。
 - **Rejected alternatives**: 統合用の別の bind 経路 — 経路が 2 本になり、防御（期限・スロットル）を二重に保つ必要がある。root が統合トークンを代行発行 — 一度きり・期限の仕組みを迂回し、root に秘密の受け渡しが集中する。統合ノードの紐付けを今後も不可にする — #168 の目的を満たさない。
+
+## 2026-11-27 設定の「cwd から上へ」の探索は、git のリポジトリの根で止める（#312）
+
+- **Decision**: `findConfigUpward`（`locateConfig` の 3 番目の段）と、導入の script の `config_in_ancestors` は、cwd から上へ `<dir>/.touryou/config.json` を探すとき、**その階層の設定を調べたあと、`<dir>/.git/HEAD` がある階層（git のリポジトリの根）で止まる**。リンクした作業ツリー（`.git` がファイル）は根とみなさず、上へ続ける。`$HOME` は、TS 側では特別扱いしない（設計書 4-2 のまま）。script は、これまでどおり `$HOME/.touryou/config.json`（前の置き場）を当てない。core は純粋なまま、既存の `exists` だけで判定する（`.git/HEAD` の有無）。
+- **Rationale**: 上限なしに `/` まで探すと、リポジトリの外の祖先（`~/src/github.com/<org>/.touryou/config.json` など）にある別のリポジトリの設定を、その下の設定のない別のリポジトリが拾う。すると `/touryou:setup` が `CONFIG: present` と判定して作成・移行（`touryou migrate`）を案内せず、mcp・hook・cli は別の `repoRoot` の daemon につながる。リポジトリ単位の置き場（#288）の考え方（設定はリポジトリのもの）に合わせ、探す範囲もリポジトリまでにする。`.git/HEAD` で見るのは、子の作業ツリー（`<repoRoot>/.touryou/worktrees/<子>`）と、`repoRoot` の外に置いた `worktreeRoot` の子が、`.git` がファイルなので止まらず、親の設定に届くようにするため（子の mcp は設定を明示で渡されず、この探索に頼る）。
+- **守りが残らない所**: 設定が根の外にある環境（リポジトリの外の祖先に置いた設定を、リポジトリの中から使う）は、探索では届かない。`--config`・`TOURYOU_DAEMON_CONFIG` で指す。また、別のリポジトリのリンクした作業ツリーは、根ではないので、外の祖先まで上へ続く（親の設定を指す印の検証は、この決定に含めない）。`$HOME` が git のリポジトリでないとき、TS は `$HOME/.touryou/config.json` を、リポジトリでない場所からの探索で当てうる（script は当てない）。
+- **Rejected alternatives**: 根で止めず、`$HOME` までに限る — 別の祖先（`$HOME` の下の組織のフォルダ）の設定を拾う問題が残る。最初の `.git`（ファイルを含む）で止める — 子の作業ツリーが親の設定に届かない（`docs/config.md` の約束を破る）。`$HOME` を TS でも除く — 設計書 4-2 と既存の試験の前提（`$HOME` を根にした固定）を変え、本題に効かない。

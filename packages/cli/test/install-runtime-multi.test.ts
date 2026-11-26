@@ -273,6 +273,37 @@ describe("finish の出力（CONFIG・SUPERVISOR。#300）", () => {
     const r = run(makePlugin("0.9.0", tb), h, tb, [], {}, deep);
     expect(r.stdout).toContain("CONFIG: present");
   });
+  it("git のリポジトリの根（.git/HEAD）で止まる: 外の祖先の設定は拾わず、CONFIG: absent（#312）", () => {
+    const h = homeWith({});
+    const outer = present(join(tmp(), "outer"));
+    const repo = join(outer, "other-repo");
+    mkdirSync(join(repo, ".git"), { recursive: true });
+    writeFileSync(join(repo, ".git", "HEAD"), "ref: refs/heads/main\n");
+    const deep = join(repo, "src");
+    mkdirSync(deep, { recursive: true });
+    const tb = makeTarball("0.9.0");
+    const r = run(makePlugin("0.9.0", tb), h, tb, [], {}, deep);
+    expect(r.stdout).toContain("CONFIG: absent");
+  });
+  it("根の階層の設定は、根で止まる前に当たる（#312）", () => {
+    const h = homeWith({});
+    const repo = present(join(tmp(), "repo"));
+    mkdirSync(join(repo, ".git"), { recursive: true });
+    writeFileSync(join(repo, ".git", "HEAD"), "ref: refs/heads/main\n");
+    const tb = makeTarball("0.9.0");
+    const r = run(makePlugin("0.9.0", tb), h, tb, [], {}, repo);
+    expect(r.stdout).toContain("CONFIG: present");
+  });
+  it("リンクした作業ツリー（.git がファイル）は根でない: 外に置いた worktreeRoot の祖先の設定に届く（#312）", () => {
+    const h = homeWith({});
+    const outer = present(join(tmp(), "outer"));
+    const wt = join(outer, ".touryou", ".worktrees", "child-1");
+    mkdirSync(wt, { recursive: true });
+    writeFileSync(join(wt, ".git"), "gitdir: /elsewhere/.git/worktrees/child-1\n");
+    const tb = makeTarball("0.9.0");
+    const r = run(makePlugin("0.9.0", tb), h, tb, [], {}, wt);
+    expect(r.stdout).toContain("CONFIG: present");
+  });
   it("前の置き場（$HOME/.touryou/config.json）だけがあっても、CONFIG: absent（前の置き場には戻らない）", () => {
     const h = homeWith({});
     writeFileSync(join(h, ".touryou", "config.json"), "{}");

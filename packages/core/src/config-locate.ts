@@ -5,8 +5,8 @@
  * 見つからないときは、旧パス（`$HOME/.touryou/config.json`）へ黙って戻らず、理由と直し方を返す。
  *
  * - 純粋な文字列の処理だけ（ファイルの有無は `exists` で受け取る。core 本体は node: に依存しない）。
- * - 旧パスへ戻るコードは持たない。`$HOME` の下で実行したとき、上へ探す途中で `$HOME/.touryou/config.json` があれば当たるのは、
- *   設計書 4-2 の「cwd から上へ」の素直な帰結（特別扱いはしない）。
+ * - 旧パスへ戻るコードは持たない。`$HOME` の下の git のリポジトリでない場所で実行したとき、上へ探す途中で `$HOME/.touryou/config.json` があれば
+ *   当たるのは、設計書 4-2 の「cwd から上へ」の素直な帰結（`$HOME` は特別扱いしない）。リポジトリの中からは、根で止まるので届かない（#312）。
  */
 
 export type ConfigSource = "arg" | "env" | "cwd";
@@ -32,7 +32,12 @@ export const CONFIG_NOT_FOUND_FIX =
 
 const trimSlash = (p: string): string => (p.length > 1 ? p.replace(/\/+$/, "") : p);
 
-/** cwd から上へ、`<dir>/.touryou/config.json` がある最初の（いちばん近い）ものを返す。 */
+/**
+ * cwd から上へ、`<dir>/.touryou/config.json` がある最初の（いちばん近い）ものを返す。探す範囲は、git のリポジトリの根
+ * （`<dir>/.git/HEAD` がある階層）までに区切る（#312）。その階層の設定を調べたあと、止まる。リポジトリの外の祖先にある、別のリポジトリの設定を
+ * 拾わないため。リンクした作業ツリー（子の作業ツリーなど）は、`.git` がファイルで `.git/HEAD` がないので根ではなく、親の
+ * `<repoRoot>/.touryou/config.json`（や、リポジトリの外に置いた `worktreeRoot` の祖先の設定）へ届く。
+ */
 export function findConfigUpward(
   cwd: string,
   exists: (path: string) => boolean,
@@ -42,6 +47,7 @@ export function findConfigUpward(
     const candidate = `${dir === "/" ? "" : dir}/.touryou/config.json`;
     if (exists(candidate)) return candidate;
     if (dir === "/") return undefined;
+    if (exists(`${dir}/.git/HEAD`)) return undefined;
     const i = dir.lastIndexOf("/");
     dir = i <= 0 ? "/" : dir.slice(0, i);
   }

@@ -90,7 +90,9 @@ claude plugin marketplace update touryou
 claude plugin update touryou@touryou --scope user
 ```
 
-Claude Code を開き直して、もう一度 `/touryou:setup`。うまくいかないときは [`docs/plugin.md`](docs/plugin.md)。
+Claude Code を開き直して、もう一度 `/touryou:setup`。
+
+新しい版が見えない（`already at the latest version` のまま）ときは、marketplace が古い tag に固定されているかもしれません。`claude plugin marketplace list` で touryou の Source を見て、`@marketplace-v0.1.6` のように `@marketplace-v<版>` が付いていたら、その tag を取り直すだけで上がりません。直し方は [`docs/plugin.md`](docs/plugin.md) の「新しい版」（user の設定の `extraKnownMarketplaces.touryou.source` の `ref` を新しい版の `marketplace-v<版>` にして、`claude plugin marketplace add "comcreate/touryou#marketplace-v<新しい版>"` をし直す）。公開の直後は、反映が済むまで見えないこともあります。そのほかのうまくいかないときも [`docs/plugin.md`](docs/plugin.md)。
 
 ## 知っておくこと
 

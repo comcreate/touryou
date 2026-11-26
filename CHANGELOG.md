@@ -2,6 +2,9 @@
 
 ## 未公開
 
+- **設定ファイルの「実行した場所から上へ」の探索を、git のリポジトリの根（`.git/HEAD` のある階層）で止めるようにした**（#312）。これまでは `/` まで上へ探したので、リポジトリの外の祖先（たとえば `~/src/github.com/<org>/.touryou/config.json`）にある別のリポジトリの設定を、その下の設定のない別のリポジトリが拾い、`/touryou:setup` が `CONFIG: present` と判定して作成・移行を案内しなかった。リンクした作業ツリー（子の作業ツリー）は根とみなさず、親の設定へ届く。設定が根の外にあるときは `--config`・`TOURYOU_DAEMON_CONFIG` で指す（`docs/config.md`）。
+- **plugin の版上げの案内に、marketplace の `ref` の確かめ方と直し方を足した**。`claude plugin marketplace list` の Source に `@marketplace-v<版>`（たとえば `@marketplace-v0.1.6`）が付いていると、`claude plugin update` が最新を検出できない（README の「更新」・`/touryou:setup` の「plugin が古い」の定型文・`docs/plugin.md`）。
+
 ## 0.1.7（2026-11-26）
 
 ### 破壊的変更（#288・#300・#301。移行の注意）
