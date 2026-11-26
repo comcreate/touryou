@@ -2,9 +2,9 @@
 
 統合セッション用の `touryou-mcp --stdio` を、Claude デスクトップアプリの拡張機能（`.mcpb`）としても配る。デスクトップアプリの普通のチャットと、Cowork（**このコンピュータで実行するとき**）から、TouRyou の道具を使える。
 
-- 中身は touryou-mcp の JS だけ（1 ファイル。ネイティブなし）。**daemon は入っていない**。daemon は、これまでどおり `/setup` で `$HOME/.touryou` に置き、手か launchd で起動する（`docs/plugin.md`・`docs/launchd.md`）。
+- 中身は touryou-mcp の JS だけ（1 ファイル。ネイティブなし）。**daemon は入っていない**。daemon は、これまでどおり `/setup` で本体を `$HOME/.touryou` に置き、手か常駐（launchd の supervisor）で起動する（`docs/plugin.md`・`docs/launchd.md`）。
 - Node は、デスクトップアプリが内蔵するものを使う（manifest の要件は `>=22`）。
-- 設定・トークンは拡張機能に入れない。touryou-mcp が `$HOME/.touryou/config.json` の `stateDir` から、根のトークン・daemon の窓口・身元を自分で読む（plugin の stdio と同じ。`docs/plugin.md`）。
+- 設定・トークンは拡張機能に入れない。touryou-mcp が、設定ファイル（`--config` → `TOURYOU_DAEMON_CONFIG` → 実行した場所から上へ `<dir>/.touryou/config.json`）の `stateDir` から、根のトークン・daemon の窓口・身元を自分で読む（plugin の stdio と同じ。`docs/plugin.md`）。
 - 対象は macOS（arm64）だけ。
 
 ## 入れ方（コマンドで。おすすめ）

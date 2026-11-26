@@ -94,7 +94,7 @@ proof = hex( HMAC-SHA256( key  = secret を 16 進として解釈したバイト
    （送ったあとの失敗に、この待ちは使わない。401・403・`x-touryou-daemon-id` の不一致も、やり直さない）。標準エラーの記録: `{"event":"daemonRetry","attempt":n,"reason":"identityFileMissing|refused|unavailable","waitMs":…}`・
    `{"event":"daemonRecovered","attempts":n}`・尽きたら `{"event":"daemonGaveUp"}`（トークン・daemonId・nonce・パスは出さない）。`touryou`（CLI）・`touryou child` も、同じ部品（`createIdentityVerifier`）で同じように動く。起動時の確認（`--strict-start`）は、この待ちを使わず、下の自前の待ちを使う。
 4. **ファイルは、毎回開き直して読む**（古い `secret` を、メモリに長く持たない。3 の読み直しもこれ）。
-5. **検証なしでは動かない（fail-closed）**: `touryou-mcp --stdio` は、`--config` がなければ `$HOME/.touryou/config.json` を読み、検証なしで動く道はない
+5. **検証なしでは動かない（fail-closed）**: `touryou-mcp --stdio` は、設定ファイルを「`--config` → 環境変数 `TOURYOU_DAEMON_CONFIG` → 実行した場所から上へ `<dir>/.touryou/config.json`」の順に決めて読み（見つからなければ、旧パス `$HOME/.touryou/config.json` へは戻らず止まる。`docs/config.md` の「設定ファイルの探し方」）、検証なしで動く道はない
    （検証を飛ばす環境変数はない）。
    `--config` があるのに、ファイルが読めない・形が違うときは、**身元の失敗として扱う**（トークンを送らない。1 の毎回の検証の中で、3 のやり直しを 1 度）。
 6. **`stateDir` が相対パスなら、拒否する**（設定ファイルの `stateDir` は絶対パス。daemon の設定の検査と同じ。相対パスだと、読むファイルが、起動した場所で変わってしまう）。起動を失敗させる。

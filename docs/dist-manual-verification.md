@@ -168,7 +168,7 @@ echo "$in" | env -i PATH=/usr/bin:/bin HOME="$empty" TOURYOU_DAEMON_URL=http://1
 
 ## 6. touryou-mcp（`--stdio`）
 
-`touryou-mcp` の入口は、統合セッション用の `--stdio` だけ。`$HOME/.touryou/config.json` の `stateDir` から、根のトークン（`root-token`）・daemon の窓口（`port`）・daemon の身元を自分で読む。トークンは、引数・環境変数に出ない。ここでは、`/setup` で `$HOME/.touryou` に置き、その設定の daemon（常駐か手で起動）が動いている状態で、手で起動して initialize に答えることだけを確かめる（会話からの確かめは、`docs/manual-verification-checklist.md` の N）。
+`touryou-mcp` の入口は、統合セッション用の `--stdio` だけ。設定ファイル（`--config` → `TOURYOU_DAEMON_CONFIG` → 実行した場所から上へ `<dir>/.touryou/config.json`）の `stateDir` から、根のトークン（`root-token`）・daemon の窓口（`port`）・daemon の身元を自分で読む。トークンは、引数・環境変数に出ない。ここでは、`/setup` で本体を `$HOME/.touryou` に置き、リポジトリの `<repoRoot>/.touryou/config.json` の daemon（常駐か手で起動）が動いている状態で、そのリポジトリの中から、手で起動して initialize に答えることだけを確かめる（会話からの確かめは、`docs/manual-verification-checklist.md` の N）。
 
 ```sh
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"check","version":"0"}}}' \
