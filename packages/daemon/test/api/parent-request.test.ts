@@ -189,14 +189,14 @@ describe("parent.request・parent.report", () => {
     expect(q.value.kind).toBe("launch");
     expect(
       q.value.command.startsWith(
-        'cd /w/trees/a && claude --bg \'最初に touryou の child_bind を引数なしで呼んで、受信箱の手順に従って\' --name a --model opus --effort high --permission-mode dontAsk --settings \'{"crossSessionInbound":"accept","permissions":{"allow":[',
+        '(cd /w/trees/a && claude --bg \'最初に touryou の child_bind を引数なしで呼んで、受信箱の手順に従って\' --name a --model opus --effort high --permission-mode dontAsk --settings \'{"crossSessionInbound":"accept","permissions":{"allow":[',
       ),
     ).toBe(true);
     expect(q.value.command).toContain('"mcp__node__child_bind"');
     expect(q.value.command).not.toContain(code);
     expect(q.value.next).toContain(q.value.requestRef);
     const f = r.call("parent.request", { nodeId: "a", forkSessionRef: "parent-1" });
-    expect(f.ok && f.value.command.endsWith("--resume parent-1 --fork-session")).toBe(true);
+    expect(f.ok && f.value.command.endsWith("--resume parent-1 --fork-session)")).toBe(true);
   });
 
   it("parent.request: 起動する道具の許可は、ノードのロールで決まる（サブ統括は統合の道具＋child_bind、子は子の道具）（#168 PR3）", async () => {

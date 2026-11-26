@@ -78,7 +78,7 @@ daemon は、CLI の子を起動しない。親のセッションが起動する
 
 TouRyou は、**セッションを起動しません**。**Anthropic の認証も扱いません**（子は、親と同じ Claude Code のログインで動きます）。CLI の子は、親のセッション（Claude Code）が Bash で起動します。
 
-1. **起動**: 統合が `node_spawn` を呼ぶと、TouRyou は作業ツリーを作り、親のセッションに「受信箱を読んで…（番号）」の知らせを届ける。親は `parent_request` で受け取ったコマンド `cd <作業ツリー> && claude --bg '<指示>' --name <名前> [--plugin-dir <plugin の場所>] --permission-mode dontAsk --settings '{"crossSessionInbound":"accept","permissions":{"allow":[...],"deny":[...]}}'`（`--plugin-dir` は、親の mcp の plugin の場所〔例: `<H>/.claude/plugins/…`〕が確かめを通ったときだけ入る。`--permission-mode` の前に `--model`・`--effort`、フォークのときは後ろに `--resume <id> --fork-session` が入ることがある）を、そのまま Bash で実行し、`parent_report` で報告する。
+1. **起動**: 統合が `node_spawn` を呼ぶと、TouRyou は作業ツリーを作り、親のセッションに「受信箱を読んで…（番号）」の知らせを届ける。親は `parent_request` で受け取ったコマンド `(cd <作業ツリー> && claude --bg '<指示>' --name <名前> [--plugin-dir <plugin の場所>] --permission-mode dontAsk --settings '{"crossSessionInbound":"accept","permissions":{"allow":[...],"deny":[...]}}')`（全体を `( )` で囲み、統合のシェルの cwd を子の作業ツリーに残さない。`--plugin-dir` は、親の mcp の plugin の場所〔例: `<H>/.claude/plugins/…`〕が確かめを通ったときだけ入る。`--permission-mode` の前に `--model`・`--effort`、フォークのときは後ろに `--resume <id> --fork-session` が入ることがある）を、そのまま Bash で実行し、`parent_report` で報告する。
 2. **紐付け**: 子は最初の番で `child_bind` を引数なしで呼ぶ（コードは、mcp が作業ツリーの git のディレクトリのファイルから読む）。続けて `inbox_fetch` でブリーフと指示を読む。
 3. **知らせ**: 以後、親から子・子から親への連絡は、受信箱と 1 行の知らせ（受信箱を読め）で届く。
 4. **停止**: `node_stop` は 2 段。子へ停止の知らせ → 猶予 → 親に `claude stop <子>` を依頼。子のセッションの id が記録にないとき（起動の報告に `sessionRef` がなかった）は、親はコマンドを組まず、`claude agents --json` で調べた id を `parent_report` の `sessionRef` で返す。TouRyou がその id で依頼を作り直す。

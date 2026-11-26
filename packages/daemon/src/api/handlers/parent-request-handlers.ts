@@ -2,7 +2,7 @@
  * 親への依頼の中身と、親の報告（設計 6.1・6.2）。`parent.request`・`parent.report`。
  *
  * - `parent.request`: 子の最も新しい、まだ報告のない依頼を返す。どれも、親がそのまま Bash で実行する文（変数なし・値は引用済み）。
- *   - 起動（launch）: `cd <作業ツリー> && claude --bg …`。紐付けのコードは入れない（子の mcp が、作業ツリーの git のディレクトリの
+ *   - 起動（launch）: `(cd <作業ツリー> && claude --bg …)`。紐付けのコードは入れない（子の mcp が、作業ツリーの git のディレクトリの
  *     `touryou-bind-code` から読む）。
  *   - 停止（stop）: `claude stop <子のセッション>`。
  *   - 削除（remove）: `claude rm <子のセッション>`。成果を捨てる旗（`--discard-unpushed`）は、人間が破棄を決めたノード

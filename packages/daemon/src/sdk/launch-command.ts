@@ -1,7 +1,10 @@
 /**
  * 親への起動の依頼の文（設計 6.2）。親の skill が、そのまま Bash で実行できる、変数のないコマンドの文を作る。
  *
- * - 形: `cd <作業ツリー> && claude --bg <指示> --name <名前> [--model <モデル>] [--effort <深さ>] --permission-mode dontAsk --settings '<JSON>'`
+ * - 形: `(cd <作業ツリー> && claude --bg <指示> --name <名前> [--model <モデル>] [--effort <深さ>] --permission-mode dontAsk --settings '<JSON>')`
+ *   全体を `( )` で囲む（サブシェル）。囲まないと、`cd` が親（統合）のセッションの Bash の cwd に残る（Claude Code は、作業ディレクトリの中への
+ *   `cd` を次の呼び出しへ引き継ぐ）。作業ツリーが親のリポジトリの中（`<repoRoot>/.touryou/worktrees`）にあると、親が子の作業ツリーの中にいる扱いになり、
+ *   フックが、紐付けのない親の道具（`parent_report`・`inbox_fetch`・Bash）を拒否してしまう。
  *   plugin の場所が分かれば、`--permission-mode` の前に `--plugin-dir '<場所>'` を足す。
  *   JSON は `{"crossSessionInbound":"accept","permissions":{"allow":[...],"deny":[...]}}`。allow・deny は `childAllowList`が範囲から作る。
  *   フォークのときは、後ろに `--resume <親の id> --fork-session` を足す。
@@ -64,7 +67,7 @@ export interface LaunchCommandInput {
 
 export function buildLaunchCommand(input: LaunchCommandInput): string {
   const parts = [
-    "cd",
+    "(cd",
     shellWord(input.worktree),
     "&&",
     "claude",
@@ -83,5 +86,5 @@ export function buildLaunchCommand(input: LaunchCommandInput): string {
       ? []
       : ["--resume", shellWord(input.forkSessionRef), "--fork-session"]),
   ];
-  return parts.join(" ");
+  return `${parts.join(" ")})`;
 }

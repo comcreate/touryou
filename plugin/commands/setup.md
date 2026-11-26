@@ -131,12 +131,12 @@ CLI の子は、親のセッション（統合）が Bash で `claude` のコマ
   - `Bash(claude --bg:*)`: 前方一致なので、任意の指示・任意の旗（`--dangerously-skip-permissions`・別の `--settings`・`--permission-mode bypassPermissions` など）の起動も、確認なしで通る。勧めない（起動のたびに確認が出るので、画面のコマンドを目で見る）。入れるなら、任意の旗の起動も通ることを分かったうえで入れる。
   - `Bash(claude rm:*)`: `--discard-unpushed`（未 push の成果を捨てる）つきの削除も、確認なしで通る。入れない（毎回の確認で目で見る）。
 - 注意:
-  - 起動のコマンドは `cd <作業ツリー> && claude --bg … [--plugin-dir <plugin の場所>] --permission-mode dontAsk --settings …` の形（`--plugin-dir` は、親の plugin の場所が確かめを通ったときだけ。子に plugin が付かなかったときは受信箱に出る）。`cd` の部分で確認が出るかは、Claude Code の版によって違うことがある。
+  - 起動のコマンドは `(cd <作業ツリー> && claude --bg … [--plugin-dir <plugin の場所>] --permission-mode dontAsk --settings …)` の形（全体を `( )` で囲むので、統合のシェルの場所は変わらない）（`--plugin-dir` は、親の plugin の場所が確かめを通ったときだけ。子に plugin が付かなかったときは受信箱に出る）。`cd` の部分で確認が出るかは、Claude Code の版によって違うことがある。
   - **Bash の確認の画面では、いちばん上の「1. Yes」だけを選ぶ**。次のものは選ばない:
     - 「Yes, and don't ask again for: cd *」: 以後、`cd` で始まれば `&&` のあとに何がつながっても確認なしで通ってしまう（起動・停止・削除以外の任意のコマンドも通る）。
     - 「Yes, and switch to auto mode」: 以後の操作がすべて確認なしになる。
     - 「Yes, allow reading from … from this project」: 範囲外の読み取りまで黙って許してしまう。
-    理由は、TouRyou の依頼のコマンド（`cd <作業ツリー> && claude …`・`claude stop`・`claude rm`・`claude agents --json`）だけを、毎回、目で見て通すため。減らしたいときは、下の「`permissions.allow` に足す」の 2 つだけを足す（`cd *` などの広い許可は足さない）。
+    理由は、TouRyou の依頼のコマンド（`(cd <作業ツリー> && claude …)`・`claude stop`・`claude rm`・`claude agents --json`）だけを、毎回、目で見て通すため。減らしたいときは、下の「`permissions.allow` に足す」の 2 つだけを足す（`cd *` などの広い許可は足さない）。
   - 変数を含むコマンドは「A variable in this command can't be checked before it runs」の確認が、許可の一覧があっても出る。TouRyou の依頼のコマンドは、変数のない形にしてある。書き換えないで実行する。
   - 足したあとは、Claude Code の `/permissions` で、入ったかを確かめられる。
 

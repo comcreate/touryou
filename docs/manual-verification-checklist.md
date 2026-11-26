@@ -91,7 +91,7 @@
 
 | # | 確かめること | 手順 | 期待（可） |
 |:--|:--|:--|:--|
-| A1-1 | 親が起動の文を受け取り、実行できる | 統合セッションで子を 1 つ作る（`node_spawn`）。親が `inbox_fetch` で起動の依頼の項目を読み、`parent_request` で文を受け取り、Bash で実行する | 文は `cd <作業ツリー> && claude --bg '<指示>' --name <名前> … --permission-mode dontAsk --settings '…'` の形。変数を含まず、ふつうのモードでも「A variable in this command can't be checked」の確認が出ない。`claude agents --json` に子が出る |
+| A1-1 | 親が起動の文を受け取り、実行できる | 統合セッションで子を 1 つ作る（`node_spawn`）。親が `inbox_fetch` で起動の依頼の項目を読み、`parent_request` で文を受け取り、Bash で実行する | 文は `(cd <作業ツリー> && claude --bg '<指示>' --name <名前> … --permission-mode dontAsk --settings '…')` の形（全体が `( )`）。変数を含まず、ふつうのモードでも「A variable in this command can't be checked」の確認が出ない。`claude agents --json` に子が出る。**実行のあと、統合のシェルの場所が子の作業ツリーに変わらず、`parent_report`・`inbox_fetch` が拒否されない**（作業ツリーが `<repoRoot>/.touryou/worktrees` のとき。#cwd 持ち越し） |
 | A1-2 | 子の mcp の作業ディレクトリ | A1-1 の子の、plugin の stdio の mcp の作業ディレクトリ（`process.cwd()`）が、その作業ツリーか | 作業ツリーの一番上。違えば紐付けが断られる |
 | A1-3 | 子が `child_bind` を呼べる | 子の最初の番で、skill が `child_bind` を引数なしで呼び、続けて `inbox_fetch` を呼ぶ | 紐付けが通り、道具の一覧が子のものに変わる（`tools/list_changed` を Claude Code が読み直す） |
 | A1-4 | 紐付けのコードが漏れない | A1-1〜A1-3 のあと、起動の文・会話の出力・daemon の記録・状態の置き場を、コードの形で探す | 作業ツリーの git のディレクトリの `touryou-bind-code` は 0600 の通常のファイルで、その中身は、ほかのどこにも見つからない |

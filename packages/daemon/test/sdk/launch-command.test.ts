@@ -17,9 +17,9 @@ const SETTINGS = childLaunchSettings(PERMS);
 const buildLaunchCommand = (i: Omit<Parameters<typeof build>[0], "permissions">): string =>
   build({ ...i, permissions: PERMS });
 
-/** sh で、`claude` の代わりに引数を 1 行ずつ出す関数を置いて、文の語の分かれ方を確かめる（cd は試験の都合で外す）。 */
+/** sh で、`claude` の代わりに引数を 1 行ずつ出す関数を置いて、文の語の分かれ方を確かめる（cd と、全体を囲む `)` は試験の都合で外す）。 */
 const argsOf = (command: string): string[] => {
-  const tail = command.slice(command.indexOf("&& ") + 3);
+  const tail = command.slice(command.indexOf("&& ") + 3, -1);
   const out = execFileSync(
     "sh",
     ["-c", `claude() { for a in "$@"; do printf '%s\\0' "$a"; done; }; ${tail}`],
@@ -31,14 +31,15 @@ const argsOf = (command: string): string[] => {
 };
 
 describe("起動の依頼の文（設計 6.2）", () => {
-  it("形: cd <作業ツリー> && claude --bg <指示> --name <名前> --model --effort --settings", () => {
+  it("形: (cd <作業ツリー> && claude --bg <指示> --name <名前> --model --effort --settings", () => {
     const c = buildLaunchCommand({
       worktree: "/w/trees/a",
       name: "node-1",
       model: "claude-opus-5[1m]",
       effort: "high",
     });
-    expect(c.startsWith("cd /w/trees/a && claude --bg '")).toBe(true);
+    expect(c.startsWith("(cd /w/trees/a && claude --bg '")).toBe(true);
+    expect(c.endsWith(")")).toBe(true);
     expect(argsOf(c)).toEqual([
       "--bg",
       CHILD_LAUNCH_INSTRUCTION,
@@ -77,7 +78,7 @@ describe("起動の依頼の文（設計 6.2）", () => {
     const c = buildLaunchCommand({ worktree: wt, name: "n" });
     const out = execFileSync(
       "sh",
-      ["-c", `set -- ${c.slice(3, c.indexOf(" && "))}; printf '%s' "$1"`],
+      ["-c", `set -- ${c.slice(4, c.indexOf(" && "))}; printf '%s' "$1"`],
       {
         encoding: "utf8",
       },
@@ -137,6 +138,14 @@ describe("起動の依頼の文（設計 6.2）", () => {
     expect(argsOf(buildLaunchCommand({ worktree: "/w/a", name: "n" }))).not.toContain(
       "--plugin-dir",
     );
+  });
+
+  it("実行しても、呼び出し元のシェルの cwd が変わらない（サブシェル。統合の cwd が子の作業ツリーに残らない）", () => {
+    const c = buildLaunchCommand({ worktree: "/tmp", name: "n" });
+    const out = execFileSync("sh", ["-c", `cd / && claude() { :; }; ${c}; pwd`], {
+      encoding: "utf8",
+    });
+    expect(out.trim()).toBe("/");
   });
 
   it("モデル・深さの形", () => {
