@@ -2,7 +2,7 @@
 
 ## 未公開
 
-## 0.1.7（2026-11-25）
+## 0.1.7（2026-11-26）
 
 ### 破壊的変更（#288・#300・#301。移行の注意）
 
@@ -85,6 +85,8 @@
 - git の挙動の試験を足した（#298。#294 の PR 0）。ファイルの一覧を git だけで照合する案が、git の挙動として成り立つかを確かめる試験で、動作は変えていない。
 - 人の判断が要る issue を、クリックで答えられる形に整える調査担当 `decision-investigator` を足した（#297。`.claude/agents/decision-investigator.md`）。
 - UI・UX のレビュー係を、常駐のセッションから、サブエージェント `ui-reviewer`・`ux-reviewer` に移した（#302。`.claude/agents/`）。製品の動作は変えていない。
+- ボード係の skill（`board-updator`）を、SkillEvaluator の指摘に沿って直し、評価の試験（`evals/evals.json`）を足した（#306）。製品の動作は変えていない。
+- AI-SDD の `sdd-workflow` plugin を、このリポジトリの project scope で有効にした（#307。`.claude/settings.json`）。製品の動作は変えていない。
 - #159 PR2b の専用の試験を足した: opt-in の木の取り消せない操作の確認ゲート（`confirmationRequired`・`confirmationUnavailable`）と、CLI・Desktop の混在の compose。discarded-drop の compose 経由と、CLI の子の bind までの hook の試験は未達。
 
 ### 注意
