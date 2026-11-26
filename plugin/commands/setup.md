@@ -155,7 +155,9 @@ plugin を新しい版にしたあと（`claude plugin marketplace update touryo
 
 **はっきり「はい」のときだけ** `env -u BASH_ENV -u ENV bash "${CLAUDE_PLUGIN_ROOT}/scripts/install-runtime.sh" --restart-daemon` を実行する（タイムアウトは最大 10 分）。この実行の前に、手順 1 の定型文（script を実行する前）を、もう一度言う（1 回目の実行は、取得の前に終わっているため。取得するか・取得済みのものを使い直すかは、この 2 回目で決まる）。それ以外（「いいえ」・あいまい・質問）は、何もせずに、版を上げずに終わる（今の版のまま動き続ける）。
 
-script は、新しい版を置いて `--help` を確かめたあとで、今の版の `touryou launchd init`（今の生成物が、引数なしの init と同じかの確かめ。違えば、止めずに終わる）→ `touryou launchd stop` → `current` の付け替え → 新しい版の `touryou launchd apply --yes` の順に行う。新しい版の `apply` が失敗したら、`current` を前の版に戻して、前の版で `apply --yes` をやり直す。**ほかのリポジトリ用に分けた daemon（`touryou launchd init --config` で作ったもの。出力に `LAUNCHD_OTHERS: present`）があるときは、登録されたすべてを、同じ順で止めて（`launchd stop --others`）・起動し直す（`launchd apply --yes --others`）**（1 つでも起動しなければ、`current` を前の版に戻す）。同意の問い（上の定型文）は、1 回で、すべての daemon に及ぶ。組織の名前つき（`--org`）の常駐は、起動し直さずに止まる（`docs/launchd.md` の手作業の手順で上げる）。
+**supervisor（`SUPERVISOR: present`。0.1.7 の常駐）のときは、次の順に行う**: 新しい版を置いて `--help` を確かめ、登録簿（`$HOME/.touryou/registry.json`）の設定を新しい版の daemon で検査する（通らなければ、何も止めずに終わる）→ 今の版の `touryou supervisor stop`（起こした daemon は止まらない）→ `current` の付け替え → 新しい版の `touryou supervisor apply --yes` → 新しい版の `touryou supervisor restart --all`（動いている daemon に終了を送る。新しい supervisor が、30 秒以内に新しい版で起こし直す）。新しい版の `apply` が失敗したら、新しい版の `supervisor stop` で止め、`current` を前の版に戻して、前の版で `supervisor apply --yes` をやり直す。`restart --all` が失敗するのは、supervisor が起こした記録のない daemon（手で起こしたもの）があるときで、版上げは成功のまま、警告を出す（その daemon は、端末で止めてから、supervisor に起こさせる）。
+
+supervisor ではなく、前の置き場の常駐（`LAUNCHD: present`）のときは、script は、新しい版を置いて `--help` を確かめたあとで、今の版の `touryou launchd init`（今の生成物が、引数なしの init と同じかの確かめ。違えば、止めずに終わる）→ `touryou launchd stop` → `current` の付け替え → 新しい版の `touryou launchd apply --yes` の順に行う。新しい版の `apply` が失敗したら、`current` を前の版に戻して、前の版で `apply --yes` をやり直す。**ほかのリポジトリ用に分けた daemon（`touryou launchd init --config` で作ったもの。出力に `LAUNCHD_OTHERS: present`）があるときは、登録されたすべてを、同じ順で止めて（`launchd stop --others`）・起動し直す（`launchd apply --yes --others`）**（1 つでも起動しなければ、`current` を前の版に戻す）。同意の問い（上の定型文）は、1 回で、すべての daemon に及ぶ。組織の名前つき（`--org`）の常駐は、起動し直さずに止まる（`docs/launchd.md` の手作業の手順で上げる）。
 
 ## 版を上げたあと
 

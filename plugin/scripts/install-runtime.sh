@@ -119,6 +119,13 @@ plist_config_of() {
   # $1: plist。ProgramArguments の --config の値（次の行の <string>）。なければ空
   awk 'f { s = $0; sub(/^[[:space:]]*<string>/, "", s); sub(/<\/string>.*$/, "", s); print s; exit } index($0, "<string>--config</string>") { f = 1 }' "$1"
 }
+registry_configs() {
+  # 登録簿（supervisor が見張る設定の一覧）の設定のパスを、1 行に 1 つ出す。ない・読めないときは何も出さない
+  # 登録簿は、touryou が整形して書く（configs の配列。1 行に 1 つの "<絶対パス>"）。パスは、引用符を含まない
+  local f="${HOME}/.touryou/registry.json"
+  [ -f "${f}" ] && [ ! -L "${f}" ] || return 0
+  sed -n 's/^[[:space:]]*"\(\/[^"]*\)",\{0,1\}[[:space:]]*$/\1/p' "${f}"
+}
 cleanup_lists() {
   # 中身の一覧の一時ディレクトリを消す（work に残さない）。消すのは、置き場の中の .lists. で始まるものだけ
   case "${LISTS}" in "${BASE:-/nonexistent}"/.lists.*) rm -rf "${LISTS}" ;; esac
@@ -228,10 +235,16 @@ restore_old() {
       state="current は v${old} に戻したが、別名の daemon は止められず、v${ver} のまま動いているものが残りうる（v${old} で読み込み直していない）"
       die "${why}（別名の daemon を止められず、v${old} で読み込み直せなかった）" "/touryou:service status で確かめる。touryou launchd stop --others で止めてから、touryou launchd apply --yes --others で起動し直す" "${state}"
     fi
+    # 新しい版の supervisor を読み込んだあと（supapplied=1）は、読み込み済みを apply が「そのまま」と扱うので、先に新しい版の stop で止める
+    if [ "${hassup:-0}" = 1 ] && [ "${supapplied:-0}" = 1 ] && ! run_masked "${VDIR}/${DIST_DIR}/bin/touryou" supervisor stop; then
+      state="current は v${old} に戻したが、supervisor は止められず、v${ver} のまま動いているものが残りうる（v${old} で読み込み直していない）"
+      die "${why}（supervisor を止められず、v${old} で読み込み直せなかった）" "/touryou:service status で確かめる。touryou supervisor stop で止めてから、touryou supervisor apply --yes で起動し直す" "${state}"
+    fi
     if { [ "${hasdef:-0}" != 1 ] || [ "${migrated:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd init; } &&
       { [ "${hasdef:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd apply --yes; } &&
       { [ "${hasext:-0}" != 1 ] || [ "${migrated:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd init --others; } &&
-      { [ "${hasext:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd apply --yes --others; }; then
+      { [ "${hasext:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" launchd apply --yes --others; } &&
+      { [ "${hassup:-0}" != 1 ] || run_masked "${BASE}/current/bin/touryou" supervisor apply --yes; }; then
       state="current は v${old} に戻し、常駐の daemon は v${old} で動いている。v${ver} は \$HOME/.touryou/v${ver} に置いたまま"
       die "${why}（v${old} に戻した）" "出力を確かめ、${CONTACT} に相談する" "${state}"
     fi
@@ -410,16 +423,21 @@ main() {
 
   # 常駐の有無（plist があるか）。版を変える前に決める
   # 常駐の daemon は、既定の設定の 1 つ（hasdef）と、設定ごとの別名の daemon（hasext。touryou launchd init --config。#165）。
-  # どちらかがあれば managed。登録されたすべてを、止める → 付け替え → 起動し直す
-  local managed=0 hasdef=0 hasext=0 agents="${HOME}/Library/LaunchAgents"
+  # 0.1.7 からは、常駐の項目は supervisor の 1 つ（hassup。touryou.supervisor.plist）。supervisor が登録簿の daemon を起こして見張る。
+  # どれかがあれば managed。登録されたすべてを、止める → 付け替え → 起動し直す
+  local managed=0 hasdef=0 hasext=0 hassup=0 agents="${HOME}/Library/LaunchAgents"
   if [ -n "${old}" ] && [ -f "${agents}/${LABEL_PLIST}" ]; then hasdef=1; fi
   if [ -n "${old}" ] && has_extra_daemons; then hasext=1; fi
-  if [ "${hasdef}" = 1 ] || [ "${hasext}" = 1 ]; then managed=1; fi
+  if [ -n "${old}" ] && [ -f "${agents}/${SUPERVISOR_PLIST}" ]; then hassup=1; fi
+  if [ "${hasdef}" = 1 ] || [ "${hasext}" = 1 ] || [ "${hassup}" = 1 ]; then managed=1; fi
   if [ -n "${old}" ] && [ "${hasdef}" = 0 ] && ls "${agents}"/*.touryou.daemon.plist >/dev/null 2>&1; then
     die "常駐（launchd）が、組織の名前つき（--org）で設定されている。この script は、それを起動し直さない" "docs/launchd.md の手作業の手順で版を上げる"
   fi
   if [ "${managed}" = 1 ] && [ "${consent}" = 0 ]; then
     say "常駐（launchd）の daemon が設定されています（v${old}）。v${ver} に入れ替えるには、daemon を止めて起動し直します（動いている子のセッションは止まりません。daemon が戻るまでの間は、子の道具が届かないことがあります）"
+    if [ "${hassup}" = 1 ]; then
+      say "supervisor（常駐）が設定されています。supervisor を読み込み直し、登録簿のすべての daemon を、v${ver} で起動し直します（supervisor が起こしたものだけ。手で起こした daemon は止めません）"
+    fi
     say "何も変えていません。利用者の「はい」を取ってから、--restart-daemon を付けて、もう一度実行してください"
     finish 3 need-restart-consent
   fi
@@ -485,7 +503,7 @@ main() {
   say "v${ver} を \$HOME/.touryou/v${ver} に置きました（touryou-daemon --help が動くことを確かめました）"
 
   # 9・10. 付け替え（常駐なら、止めて → 付け替え → 起動し直す）
-  local prev="" migrated=0
+  local prev="" migrated=0 supapplied=0
   [ -L "${BASE}/current" ] && prev="$(readlink "${BASE}/current")"
   if [ "${managed}" = 1 ]; then
     # 止める前に、新しい版の daemon で設定を検査する（通らない設定で起動し直すと、起動のたびに落ち続ける。Issue #65）。
@@ -509,6 +527,18 @@ main() {
 $(extra_daemon_plists)
 EOF
     fi
+    # supervisor の登録簿の設定も、止める前に、新しい版の daemon で検査する（通らない設定は、daemon を止めたあと、起こし直されない）
+    if [ "${hassup}" = 1 ]; then
+      local reg_cfg
+      while IFS= read -r reg_cfg; do
+        [ -n "${reg_cfg}" ] && [ -f "${reg_cfg}" ] || continue
+        if ! run_masked "${VDIR}/${DIST_DIR}/bin/touryou-daemon" --check-config --config "${reg_cfg}"; then
+          die "登録簿の設定（${reg_cfg}）が、v${ver} の daemon の設定の検査を通らない（上の「失敗」の行）" "その設定を直すか、touryou supervisor unregister --config <設定> で登録を外してから、もう一度 /touryou:setup" "daemon・supervisor は止めていない（v${old} のまま）。v${ver} は \$HOME/.touryou/v${ver} に置いたが、current は v${old} のまま"
+        fi
+      done <<EOF
+$(registry_configs)
+EOF
+    fi
     say "常駐の daemon（v${old}）を止めます"
     if [ "${hasdef}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd init; then
       die "v${old} の launchd init が通らない（上の出力。生成物が、引数なしの launchd init と違う〔--org・--path-prefix を手で付けた、など〕か、v${old} の設定の検査が通らない）" "docs/launchd.md の手作業の手順で版を上げる" "daemon は止めていない（v${old} のまま動いている）。v${ver} は \$HOME/.touryou/v${ver} に置いたが、current は v${old} のまま"
@@ -522,6 +552,10 @@ EOF
     fi
     if [ "${hasext}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd stop --others; then
       restore_old "設定ごとの別名の常駐の daemon を止められなかった"
+    fi
+    # supervisor を止める（起こした daemon は止まらない。daemon の起こし直しは、付け替えのあとの最後）
+    if [ "${hassup}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" supervisor stop; then
+      restore_old "supervisor を止められなかった"
     fi
     # ここから先は、daemon が止まっている。どこで失敗しても、current を前の版に戻して起動し直してから止まる（NFR_015）
     if ! swap_link "${VDIR}/${DIST_DIR}" "${BASE}/current"; then
@@ -544,6 +578,19 @@ EOF
     fi
     if [ "${hasext}" = 1 ] && ! run_masked "${BASE}/current/bin/touryou" launchd apply --yes --others; then
       restore_old "v${ver} の、設定ごとの別名の daemon が起動しなかった"
+    fi
+    if [ "${hassup}" = 1 ]; then
+      # 新しい版の supervisor を読み込む（前の版のプロセスは、止めてある）。失敗なら、前の版の supervisor に戻す
+      supapplied=1
+      if ! run_masked "${BASE}/current/bin/touryou" supervisor apply --yes; then
+        restore_old "v${ver} の supervisor が起動しなかった"
+      fi
+      # 動いている daemon は、前の版のまま。終了を送ると、新しい supervisor が、次の周（30 秒以内）に v${ver} で起こし直す。
+      # ここは最後の手順（戻せない）。supervisor が起こした記録のない daemon（手で起こしたもの）は止められず、失敗が返るが、版の上げ自体は成功
+      if ! run_masked "${BASE}/current/bin/touryou" supervisor restart --all; then
+        say "止められなかった daemon があります（supervisor が起こした記録のない、手で起こしたものなど。上の出力）。それは v${old} のまま動いています。端末で止めてから、supervisor に起こさせてください"
+      fi
+      say "supervisor を v${ver} で読み込みました。daemon は、30 秒以内に v${ver} で起こし直されます（/touryou:service status で確かめる）"
     fi
     say "常駐の daemon を v${ver} で起動し直しました。開いている統合セッションは、/mcp で plugin:touryou:node を Reconnect してください"
     finish 0 upgraded-restarted

@@ -49,6 +49,8 @@ const makeTarball = (
     failInit = false,
     failUninstall = false,
     failStop = false,
+    failSupApply = false,
+    failSupRestart = false,
     daemonOk = true,
     configBad = false,
   } = {},
@@ -62,7 +64,7 @@ const makeTarball = (
   );
   writeFileSync(
     join(bin, "touryou"),
-    `#!/bin/sh\necho "v${ver} $*" >> "$HOME/calls.log"\n[ "$1 $2" = "launchd stop" ] && [ -n "\${STUB_FAIL_STOP:-}" ] && exit 1\n[ "$1 $2" = "launchd stop" ] && exit ${failStop ? 1 : 0}\n[ "$1 $2" = "launchd apply" ] && [ -n "\${STUB_FAIL_APPLY_ALL:-}" ] && exit 1\n[ "$1 $2" = "launchd apply" ] && exit ${failApply ? 1 : 0}\n[ "$1 $2" = "launchd init" ] && exit ${failInit ? 1 : 0}\n[ "$1 $2" = "launchd uninstall" ] && exit ${failUninstall ? 1 : 0}\nexit 0\n`,
+    `#!/bin/sh\necho "v${ver} $*" >> "$HOME/calls.log"\n[ "$1 $2" = "launchd stop" ] && [ -n "\${STUB_FAIL_STOP:-}" ] && exit 1\n[ "$1 $2" = "launchd stop" ] && exit ${failStop ? 1 : 0}\n[ "$1 $2" = "launchd apply" ] && [ -n "\${STUB_FAIL_APPLY_ALL:-}" ] && exit 1\n[ "$1 $2" = "launchd apply" ] && exit ${failApply ? 1 : 0}\n[ "$1 $2" = "launchd init" ] && exit ${failInit ? 1 : 0}\n[ "$1 $2" = "launchd uninstall" ] && exit ${failUninstall ? 1 : 0}\n[ "$1 $2" = "supervisor apply" ] && exit ${failSupApply ? 1 : 0}\n[ "$1 $2" = "supervisor restart" ] && exit ${failSupRestart ? 1 : 0}\nexit 0\n`,
   );
   chmodSync(join(bin, "touryou-daemon"), 0o755);
   chmodSync(join(bin, "touryou"), 0o755);
@@ -960,4 +962,85 @@ test("版上げの新しい道（設定の検査・init・apply・uninstall）�
       f,
     );
   }
+});
+
+// supervisor（0.1.7 の常駐。touryou.supervisor.plist だけがある環境）
+const supervisorHome = ({ configs } = {}) => {
+  const old = makeTarball("0.9.0");
+  const h = newHome();
+  assert.equal(install(makePlugin("0.9.0", old), h, old).status, 0);
+  mkdirSync(join(h, "Library", "LaunchAgents"), { recursive: true });
+  writeFileSync(join(h, "Library", "LaunchAgents", "touryou.supervisor.plist"), "<plist/>");
+  if (configs !== undefined) {
+    writeFileSync(
+      join(h, ".touryou", "registry.json"),
+      `${JSON.stringify({ configs }, null, 2)}\n`,
+    );
+  }
+  return h;
+};
+
+test("版が変わる（supervisor だけ）・同意なし: 何も変えず（取得もしない）、終了コード 3。supervisor の文を出す", () => {
+  const h = supervisorHome();
+  rmSync(join(h, "fetch.log"));
+  const tb = makeTarball("1.0.0");
+  const r = install(makePlugin("1.0.0", tb), h, tb);
+  assert.equal(r.status, 3, out(r));
+  assert.match(r.stdout, /RESULT: need-restart-consent/);
+  assert.match(r.stdout, /supervisor（常駐）が設定されています/);
+  assert.equal(cur(h), join(h, ".touryou", "v0.9.0", "touryou-darwin-arm64"));
+  assert.ok(!existsSync(join(h, "fetch.log")));
+  assert.deepEqual(lines(join(h, "calls.log")), []);
+});
+
+test("版が変わる（supervisor だけ）・--restart-daemon: 古い版で stop → 付け替え → 新しい版で apply --yes と restart --all。launchd には触らない", () => {
+  const h = supervisorHome();
+  const tb = makeTarball("1.0.0");
+  const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"]);
+  assert.equal(r.status, 0, out(r));
+  assert.match(r.stdout, /RESULT: upgraded-restarted/);
+  assert.equal(cur(h), join(h, ".touryou", "v1.0.0", "touryou-darwin-arm64"));
+  assert.deepEqual(lines(join(h, "calls.log")), [
+    "v0.9.0 supervisor stop",
+    "v1.0.0 supervisor apply --yes",
+    "v1.0.0 supervisor restart --all",
+  ]);
+});
+
+test("版が変わる（supervisor だけ）・新しい版の supervisor apply が失敗: 新しい版で止め、current を古い版に戻して、古い版の apply で起動し直す", () => {
+  const h = supervisorHome();
+  const tb = makeTarball("1.0.0", { failSupApply: true });
+  const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"]);
+  assert.equal(r.status, 1, out(r));
+  assert.equal(cur(h), join(h, ".touryou", "v0.9.0", "touryou-darwin-arm64"));
+  assert.deepEqual(lines(join(h, "calls.log")), [
+    "v0.9.0 supervisor stop",
+    "v1.0.0 supervisor apply --yes",
+    "v1.0.0 supervisor stop",
+    "v0.9.0 supervisor apply --yes",
+  ]);
+  assert.match(r.stdout, /v0\.9\.0 で動いている/);
+});
+
+test("版が変わる（supervisor だけ）・restart --all が失敗（手で起こした daemon など）: 版上げは成功のまま、警告を出す", () => {
+  const h = supervisorHome();
+  const tb = makeTarball("1.0.0", { failSupRestart: true });
+  const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"]);
+  assert.equal(r.status, 0, out(r));
+  assert.match(r.stdout, /RESULT: upgraded-restarted/);
+  assert.match(r.stdout, /止められなかった daemon があります/);
+  assert.equal(cur(h), join(h, ".touryou", "v1.0.0", "touryou-darwin-arm64"));
+});
+
+test("版が変わる（supervisor だけ）・登録簿の設定が新しい版の検査を通らない: 何も止めずに終わる", () => {
+  const cfgDir = tmp();
+  const cfg = join(cfgDir, "config.json");
+  writeFileSync(cfg, "{}");
+  const h = supervisorHome({ configs: [cfg] });
+  const tb = makeTarball("1.0.0", { configBad: true });
+  const r = install(makePlugin("1.0.0", tb), h, tb, ["--restart-daemon"]);
+  assert.equal(r.status, 1, out(r));
+  assert.match(r.stdout, /登録簿の設定/);
+  assert.equal(cur(h), join(h, ".touryou", "v0.9.0", "touryou-darwin-arm64"));
+  assert.deepEqual(lines(join(h, "calls.log")), []);
 });
