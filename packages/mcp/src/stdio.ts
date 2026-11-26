@@ -172,7 +172,10 @@ const fail = (
 const SETUP =
   "Claude Code で /touryou:setup を先に実行する（デスクトップアプリの拡張機能で使うときも、Claude Code で実行する。docs/desktop-extension.md）";
 const START_DAEMON = "daemon が動いていません。launchd か touryou-daemon で起動してください";
-const FIX_DIR = "chmod 700 で直す（ACL は chmod -N で外す）";
+/** daemon は動いているのに届かないとき（touryou migrate・版上げのあとなど）の、古い接続の見立て。 */
+const STALE_CONNECTION =
+  "daemon が動いているのに届かないなら、この接続が古い（touryou migrate・版上げ・設定の置き場の移動のあと、開いたままのセッションは前の接続のまま）。/mcp で plugin:touryou:node を Reconnect する（なければ Claude Code を起動し直し、/touryou:start で確かめる）";
+const FIX_DIR ="chmod 700 で直す（ACL は chmod -N で外す）";
 
 /** 接続先（daemon の窓口・身元の秘密の場所）。根のトークンは持たない（紐付け待ちの道は、これだけを使う）。 */
 export interface DaemonEndpoint {
@@ -420,6 +423,7 @@ export async function openStdioSession(
       "daemon_unreachable",
       START_DAEMON,
       "launchd（docs/launchd.md）か、touryou-daemon --config で起動してから、/mcp で Reconnect する",
+      STALE_CONNECTION,
     );
   }
   return session;
@@ -849,7 +853,7 @@ export function startNotifications(
       }
       return ok(nodeId);
     } catch {
-      return fail("daemon_unreachable", START_DAEMON, "daemon を起動する");
+      return fail("daemon_unreachable", START_DAEMON, "daemon を起動する", STALE_CONNECTION);
     }
   };
   const start = (

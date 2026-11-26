@@ -4,6 +4,8 @@
 
 - **設定ファイルは、いま居るリポジトリの中だけで探すようにした**（#312）。**リポジトリの外の祖先**（たとえば `~/src/github.com/<org>/.touryou/config.json`）**に置いた設定は、もう自動では見つからない**。そこに置いているときは、`--config`・`TOURYOU_DAEMON_CONFIG` で指す（`docs/config.md`）。これまでは、設定のない別のリポジトリでも、その祖先の設定を拾って「設定がある」と誤判定し、`/touryou:setup` が設定の作成・移行を案内しなかった。git worktree で作った作業ツリー（子の作業ツリー）からは、これまでどおり親の設定に届く。
 - **plugin の版上げの案内に、marketplace の `ref` の確かめ方と直し方を足した**。`claude plugin marketplace list` の Source に `@marketplace-v<版>`（たとえば `@marketplace-v0.1.6`）が付いていると、`claude plugin update` が最新を検出できない（README の「更新」・`/touryou:setup` の「plugin が古い」の定型文・`docs/plugin.md`）。
+- **`touryou migrate`・版上げのあとの接続の案内を、実際に合わせた**: 開いたままの統合セッションの node は前の接続のままで、自動ではつながらない。`/setup`・`/start`・`docs/plugin.md` の案内と、道具の `daemon_unreachable` の次の操作に、「daemon が動いているのに届かないなら、`/mcp` で Reconnect」を足した。
+- **範囲違反の子が `stopIncomplete` で残る見え方の説明を足した**: 範囲違反の記録は子の状態を変えない。`stopIncomplete` は、停止の代行依頼（`claude stop` の実行と確認）の途中で、範囲違反の失敗ではない（`plugin/skills/integrator/SKILL.md`）。
 
 ## 0.1.7（2026-11-26）
 
