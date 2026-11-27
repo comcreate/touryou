@@ -591,6 +591,11 @@ export const APP_TEXT = {
   "yours.tabInbox": { ja: "受信箱の知らせ", en: "Inbox notices" },
   "yours.tabJudge": { ja: "判断・答え待ち", en: "Decisions & waiting" },
   "yours.unresolved": { ja: "未解決 {n} 件", en: "{n} unresolved" },
+  // 受信箱が上限で切れているとき（{n} は実数。画面に出している知らせは、その一部）
+  "yours.unresolvedCut": {
+    ja: "未解決 {n} 件（一部を表示）",
+    en: "{n} unresolved (showing some)",
+  },
   "yours.inboxLead": {
     ja: "あなたの答えを待っているものと、最近のやり取りです。",
     en: "What is waiting for your answer, and recent exchanges.",

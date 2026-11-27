@@ -61,6 +61,28 @@ describe("uiViewOf の stopDelegated", () => {
   });
 });
 
+describe("uiViewOf の inboxTotal", () => {
+  const items = (count: number): OrchEvent[] =>
+    Array.from({ length: count }, (_, k) => added(`i${k}`, "info", "a"));
+
+  it("上限を超える未解決のとき、inbox は上限で切り、inboxTotal は実数を返し、truncated に inbox が入る", () => {
+    const over = UI_LIMITS.inbox + 50;
+    const v = uiViewOf(must([...base(), ...items(over)]));
+    expect(v.inbox).toHaveLength(UI_LIMITS.inbox);
+    expect(v.inboxTotal).toBe(over);
+    expect(v.truncated).toContain("inbox");
+  });
+
+  it("上限に収まるときは、inboxTotal は inbox の件数と同じで、truncated に inbox は入らない", () => {
+    const v = uiViewOf(must([...base(), ...items(3)]));
+    expect(v.inbox).toHaveLength(3);
+    expect(v.inboxTotal).toBe(3);
+    expect(v.truncated).not.toContain("inbox");
+    expect(uiViewOf(must(base())).inboxTotal).toBe(0);
+  });
+
+});
+
 describe("uiViewOf の cli（#136）", () => {
   it("親が起動（launch）を done で報告した子にだけ cli を付ける。failed・未報告・ほかの依頼には付けない", () => {
     const req = (ref: string, kind: string) =>

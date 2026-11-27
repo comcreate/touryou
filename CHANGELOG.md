@@ -2,6 +2,7 @@
 
 ## 未公開
 
+- **状態画面の「あなたの番」の見出し「未解決 N 件」が、受信箱の上限（200 件）で切った件数のまま出るのを直した**。人が答える項目が 0 件でも「未解決 200 件」と出ていた。表示モデルに、上限で切る前の受信箱の未解決の実数 `inboxTotal` を足し（`packages/core/src/ui-view.ts`。切らないときは `inbox` の件数と同じ）、見出しは、画面に出した件数に、切った分を足した実数にした。切ったときは「未解決 N 件（一部を表示）」（英語は「N unresolved (showing some)」）と出し、切っていないときは従来の「未解決 N 件」のまま。見出しの数は、これまでどおり「判断・答え待ち」と「受信箱の知らせ」の両方の合計。
 - **設定ファイルは、いま居るリポジトリの中だけで探すようにした**（#312）。**リポジトリの外の祖先**（たとえば `~/src/github.com/<org>/.touryou/config.json`）**に置いた設定は、もう自動では見つからない**。そこに置いているときは、`--config`・`TOURYOU_DAEMON_CONFIG` で指す（`docs/config.md`）。これまでは、設定のない別のリポジトリでも、その祖先の設定を拾って「設定がある」と誤判定し、`/touryou:setup` が設定の作成・移行を案内しなかった。git worktree で作った作業ツリー（子の作業ツリー）からは、これまでどおり親の設定に届く。
 - **plugin の版上げの案内に、marketplace の `ref` の確かめ方と直し方を足した**。`claude plugin marketplace list` の Source に `@marketplace-v<版>`（たとえば `@marketplace-v0.1.6`）が付いていると、`claude plugin update` が最新を検出できない（README の「更新」・`/touryou:setup` の「plugin が古い」の定型文・`docs/plugin.md`）。
 - **`touryou migrate`・版上げのあとの接続の案内を、実際に合わせた**: 開いたままの統合セッションの node は前の接続のままで、自動ではつながらない。`/setup`・`/start`・`docs/plugin.md` の案内と、道具の `daemon_unreachable` の次の操作に、「daemon が動いているのに届かないなら、`/mcp` で Reconnect」を足した。利用者には、道具が届かないと言われたら、daemon が動いていても、まず `/mcp` で Reconnect する、と案内する。
