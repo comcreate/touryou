@@ -31,7 +31,7 @@ const bin = (h) => join(h, ".touryou", "current", "bin");
 /** 偽の touryou-mcp（JSON-RPC の最低限を、手で話す。initialize・tools/list・tools/call）。 */
 const FAKE = `
 if (require("node:fs").existsSync(process.env.HOME + "/down")) {
-  process.stderr.write("[touryou mcp] 失敗 [daemon_unreachable]\\n");
+  process.stderr.write("[touryou mcp] 失敗 [daemon_unreachable]: 接続できない /Users/secret/.touryou/root-token tok_SECRET123\\n  次の操作: daemon を起動する\\n");
   process.exit(1);
 }
 let buf = "";
@@ -211,6 +211,26 @@ test("配布物があっても daemon が動いていない（試しの起動が
   assert.equal((await s.wait((m) => m.id === 5)).error.code, -32601);
   rmSync(join(h, "down"));
   await s.wait((m) => m.method === "notifications/tools/list_changed", 15_000);
+  s.p.stdin.end();
+  assert.equal(await s.exit, 0);
+});
+
+test("試しの起動が失敗したら、失敗の種類を標準エラーと initialize の instructions に出す。トークン・パスの値は出さない", async () => {
+  const h = home();
+  writeFileSync(join(h, "down"), "");
+  placeFake(h);
+  const s = start(h);
+  let err = "";
+  s.p.stderr.on("data", (d) => {
+    err += d;
+  });
+  s.send(INIT);
+  const init = await s.wait((m) => m.id === 1);
+  assert.match(init.result.instructions, /daemon_unreachable/);
+  assert.match(err, /理由: daemon_unreachable/);
+  for (const out of [err, JSON.stringify(s.msgs)]) {
+    assert.doesNotMatch(out, /SECRET|\/Users\/secret|root-token/, "個人の値を出さない");
+  }
   s.p.stdin.end();
   assert.equal(await s.exit, 0);
 });
