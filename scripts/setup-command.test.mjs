@@ -413,6 +413,31 @@ test("service.md: uninstall-all は supervisor uninstall --yes を 1 回だけ�
   assert.doesNotMatch(section, /最大 2 回/);
 });
 
+test("setup.md: .gitignore の追記はコミットまで頼む（ターミナルで。内部の言葉は利用者に見せる文に入れない）", () => {
+  const m = text.match(/定型文（\.gitignore）: 「([^」]*)」/);
+  assert.ok(m, "定型文（.gitignore）がある");
+  assert.match(m[1], /ターミナルでコミットしてください/);
+  assert.match(m[1], /コミットしていない変更/);
+  assert.match(m[1], /\.git\/info\/exclude/);
+  assert.doesNotMatch(m[1], /node_integrate|targetDirty|daemon/);
+});
+
+test("setup.md: .git/info/exclude に足したと言われたら、読み直さずに進める", () => {
+  assert.match(text, /\.git\/info\/exclude` に足したと言われたときは、`\.gitignore` を読み直さず/);
+});
+
+test("setup.md: 決まりの適用範囲は /setup の実行中だけ。setup の外では持ち出さない", () => {
+  const rules = text.slice(text.indexOf("## 進め方の決まり"), text.indexOf("## 手順"));
+  assert.match(rules, /適用範囲: 以下の決まり[^。]*`\/touryou:setup` を実行している間だけ/);
+  assert.match(rules, /setup の外の会話[^。]*案内しない/);
+});
+
+test("setup.md: 版上げの同意の問いに、ログイン項目の TouRyou（1 項目）の言葉がある", () => {
+  const m = text.match(/定型文: 「(常駐している daemon を、いったん止めて[^」]*)」/);
+  assert.ok(m, "版上げの同意の問いがある");
+  assert.match(m[1], /ログイン項目の \*\*TouRyou\*\*（1 項目）/);
+});
+
 test("setup.md: 前の置き場からの移行は touryou migrate の 1 コマンド。同意のあとだけ。元は消さない（#301）", () => {
   const s = step(2);
   assert.match(s, /`CONFIG: absent` で `LEGACY_CONFIG: present`/);
