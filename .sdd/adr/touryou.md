@@ -5,15 +5,15 @@ type: "adr"
 status: "approved"
 sdd-phase: "implement"
 created: "2026-11-11"
-updated: "2026-11-18"
-depends-on: ["spec-touryou", "design-touryou"]
+updated: "2026-11-27"
+depends-on: ["spec-touryou"]
 tags: ["claude-code", "mcp", "orchestration"]
 category: "developer-tooling"
 ---
 
 # TouRyou 決定ログ
 
-技術設計は [touryou_design.md](../specification/touryou_design.md) にある。
+未解決の課題は [open-issues.md](../task/touryou-open-issues/open-issues.md) にある。
 
 ## 2026-11-11 セッションを起動せず親のセッションに依頼する
 
@@ -322,3 +322,27 @@ category: "developer-tooling"
 - **Rationale**: 上限なしに `/` まで探すと、リポジトリの外の祖先（`~/src/github.com/<org>/.touryou/config.json` など）にある別のリポジトリの設定を、その下の設定のない別のリポジトリが拾う。すると `/touryou:setup` が `CONFIG: present` と判定して作成・移行（`touryou migrate`）を案内せず、mcp・hook・cli は別の `repoRoot` の daemon につながる。リポジトリ単位の置き場（#288）の考え方（設定はリポジトリのもの）に合わせ、探す範囲もリポジトリまでにする。`.git/HEAD` で見るのは、子の作業ツリー（`<repoRoot>/.touryou/worktrees/<子>`）と、`repoRoot` の外に置いた `worktreeRoot` の子が、`.git` がファイルなので止まらず、親の設定に届くようにするため（子の mcp は設定を明示で渡されず、この探索に頼る）。
 - **守りが残らない所**: 設定が根の外にある環境（リポジトリの外の祖先に置いた設定を、リポジトリの中から使う）は、探索では届かない。`--config`・`TOURYOU_DAEMON_CONFIG` で指す。また、別のリポジトリのリンクした作業ツリーは、根ではないので、外の祖先まで上へ続く（親の設定を指す印の検証は、この決定に含めない）。`$HOME` が git のリポジトリでないとき、TS は `$HOME/.touryou/config.json` を、リポジトリでない場所からの探索で当てうる（script は当てない）。
 - **Rejected alternatives**: 根で止めず、`$HOME` までに限る — 別の祖先（`$HOME` の下の組織のフォルダ）の設定を拾う問題が残る。最初の `.git`（ファイルを含む）で止める — 子の作業ツリーが親の設定に届かない（`docs/config.md` の約束を破る）。`$HOME` を TS でも除く — 設計書 4-2 と既存の試験の前提（`$HOME` を根にした固定）を変え、本題に効かない。
+
+## 2026-11-14 技術スタックは憲法の技術制約と Library-First に合わせて選ぶ
+
+- **Decision**: 言語・実行は TypeScript（ESM、Node.js 22 以上）、MCP は MCP TypeScript SDK と zod、状態の保持は SQLite（better-sqlite3。追記型のイベントログ）、テストは Vitest と fast-check とする。子の起動は使わない（親のセッションが `claude --bg` で起動するか、人間が Claude Desktop で開く）。
+- **Rationale**: 言語とテストは憲法の技術制約による。MCP は Library-First に従い、独自プロトコルを作らない（憲法）。子を起動しなければ、認証を扱わずに済む。状態の保持は、再起動後の復元（NFR_002）と時系列の記録（NFR_011）を、追記型のイベントログという 1 つの仕組みで満たせる。
+- **Rejected alternatives**: None considered。
+
+## 2026-11-17 作業ツリーの中を探す読み取りだけのコマンドは範囲によらずフックで許し、子の許可の一覧には足さない
+
+- **Decision**: 作業ツリーの中を探す読み取りだけのコマンド（`ls`・`find`・`grep`・`git ls-files`・`git grep`）は、範囲の `allowedCommands` によらず、フックが許す（FR_014: 読み込みは制限しない）。許すのは、オプションがコマンドごとの許す表にあり、パスが作業ツリーの中にあり、禁じる場所に当たらないときだけ。子の permissions には足さない。CLI の子（dontAsk）のフックは許したときに明示の許可を返し、Desktop の子（SDK）のフックは明示の許可を返さない。
+- **Rationale**: Claude Code の native 版は Glob・Grep の道具を出さず、Bash で探させるため、探索を許さないと子が作業ツリーを調べられない。permissions に `Bash(find:*)` を足すと、フックのない子で `find -exec` まで通ってしまう。
+- **Rejected alternatives**: `Bash(find:*)` などを子の permissions に足す案 — フックのない子で `find -exec` まで通る。
+
+## 2026-11-17 承認した範囲の拡張だけにあるコマンドは、フックが明示の許可を返して子がすぐ使えるようにする（#91）
+
+- **Decision**: CLI の子のフックは、有効な範囲（ブリーフ＋承認済みの拡張。イベント列から毎回導く）で判定する。承認済みの拡張だけにあるコマンドで、区切りで分けた各部分の語が数まで同じ（完全一致）、かつ起動のときの一覧と同じ規則（`cd` 始まり・1 語だけ・任意のコードが動く形の禁止）を通る Bash には、明示の許可（`permissionDecision: "allow"`）を返す。前方一致のぶんはフックだけ通し、Claude Code の判定に任せる。書き込みの拡張（`kind: "write"`）も、有効な範囲で通る場所への書き込みの道具に明示の許可を返す（禁じる場所の `Edit` の deny は効いたまま）。承認の時点では、任意のコードが動く形を断らず、明示の許可を付けないだけにする。
+- **Rationale**: 起動のあとに承認した拡張は、起動のときの `permissions.allow` に入らず、dontAsk の子はそのコマンドを断られてしまう。deny・ask の規則は明示の許可のあとも効くので、許しを広げすぎない。
+- **Rejected alternatives**: None considered。
+
+## 2026-11-23 結び直しの案 1-B（起動直後の 1 回だけ）と 1-C（idle 失効のあとにも通す）は採らない（#255 の却下案の補足）
+
+- **Decision**: 紐付けの戻しで、起動直後の 1 回だけ結び直す案（1-B）と、daemon が idle 失効のあとにもコードなしの結び直しを通す案（1-C）は採らず、1-A（起動直後と定期の確かめ）と 2-A（統括が利用者に聞いて `node_bindCode`）の組み合わせにする。
+- **Rationale**: 1-B は、`claude attach`・Reconnect のあと（経路 A）は戻るが、起動のときにまだコードのファイルがない場合（idle 失効のあとに親が出し直す場合。経路 C）が戻らないため。1-C は、トークンの期限の設計（#189・#198）と失効の印の扱いを変え、守りへの影響が大きいため（投資の評価は `.sdd/task/255/investigation.md` の案 1-C）。
+- **Rejected alternatives**: 1-B（起動直後の 1 回だけ）— 経路 C が戻らない。1-C（idle 失効のあとにも結び直しを通す）— 使われていないセッションのトークンを残す守りが薄まる。
