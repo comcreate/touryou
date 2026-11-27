@@ -84,6 +84,8 @@ macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動か�
 
 ## 1. 生成する（`touryou launchd init`）
 
+移行前の人だけ。新しく始める人は打たない。
+
 ```sh
 "$HOME/.touryou/current/bin/touryou" launchd init [--org <逆ドメイン>] [--path-prefix <git のある場所>]
 ```
@@ -150,6 +152,8 @@ macOS（arm64）で、`touryou-daemon` を、ログイン時に自動で動か�
 ### 複数の daemon を常駐させる（root ごとに分ける。#165）
 
 root（`repoRoot`）ごとに daemon を分けるとき、設定ファイルごとに別の daemon として常駐させられます。単一の root の利用者は、何も変えなくてよい（引数なしは、これまでどおり `<H>/.touryou/config.json`・Label `touryou.daemon`・`logs/daemon.log`）。
+
+移行前の人だけ。新しく始める人は打たない。
 
 ```sh
 "$HOME/.touryou/current/bin/touryou" launchd init  --config <設定の絶対パス>

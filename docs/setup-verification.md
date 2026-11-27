@@ -11,6 +11,7 @@
 
 - **取得先は本番（`https://github.com/comcreate/touryou`）に固定のまま**。script には手を入れず、試しのための差し替えの道（引数・環境変数）も使わない。写しが取るのは、直前の Release の本物の tar.gz。
 - 本番に pre-release を出して確かめる案は採らない（`docs/release.md` の「採用しない案」）。
+- **置き場は 2 つ（0.1.7 から）**: 本体（`current`・`v<版>`・`work`・登録簿 `registry.json`・supervisor の plist の生成先・supervisor のログ）は `$HOME/.touryou`。設定・state・作業ツリー・daemon のログは、リポジトリごとの `<repoRoot>/.touryou/`（`config.json`・`state/`・`worktrees/`・`logs/`。`.gitignore` に `.touryou/` を入れる）。常駐の項目は supervisor の 1 つ（Label `touryou.supervisor`）で、登録簿の設定ごとに daemon を起こす。前の置き場（`$HOME/.touryou/config.json`・`state`・常駐 `touryou.daemon`）からは `touryou migrate` で移す（C の「前の置き場からの移行」）。
 - 版や sha256 の値は、この文書に書かない。その場で取った `.sha256` から使い、手順の中で確かめる。
 - コマンドは、zsh（noclobber が有効）に 1 行ずつ貼れる形にしている。上書きは `>|`、変数は `${V}` の形。`gh` は使わない（curl だけで取れる。A' のフォークのアカウント名を取る 1 か所だけ例外）。
 
@@ -31,6 +32,15 @@ mkdir -p "${W}/dl"
 
 確かめる: `git status` がきれい。`${W}` は作業の場所（終わったら消す）。
 
+試しのリポジトリを作る（`/setup` の `repoRoot` に使う。設定・state・作業ツリーは、この中の `.touryou/` に作られ、`rm -rf "${W}"` で消える。`.gitignore` に `.touryou/` を先に入れておく。入れずに始めると、`/setup` の「`.gitignore` に足してください」の定型文〔手順 2〕の確かめになる）。
+
+```sh
+mkdir -p "${W}/repo" && git -C "${W}/repo" init -q && printf '.touryou/\n' >| "${W}/repo/.gitignore" && git -C "${W}/repo" add .gitignore && git -C "${W}/repo" commit -q -m init
+git -C "${W}/repo" rev-parse --is-inside-work-tree
+```
+
+確かめる: 最後の行が `true`。
+
 marketplace から touryou の plugin を入れていても、`--plugin-dir` の写しが、そのセッションの間だけ同じ名前の plugin を置き換える（公式の文書の plugins/loading）。無効にするのは任意。`/plugin` で無効にしたときは、8 の後片付けで必ず有効に戻す（戻し忘れると、ふだんのセッションで touryou が動かない）。
 
 ### 1. いまの ~/.touryou と常駐を退避する
@@ -43,16 +53,23 @@ readlink "${HOME}/.touryou/current"
 ls -l "${HOME}/Library/LaunchAgents/" | grep touryou
 ```
 
-常駐（plist がある）なら、自分の引数を確かめる。plist の名前が `touryou.daemon.plist` なら `--org` なし、`<逆ドメイン>.touryou.daemon.plist` なら `--org <逆ドメイン>`。`PATH` の先頭が `/usr/bin:/bin:/usr/sbin:/sbin` より前に足されていれば、その部分が `--path-prefix`。
+常駐（plist がある）なら、種類と自分の引数を確かめる。`touryou.supervisor.plist` なら 0.1.7 の supervisor（`--org` はない）。`touryou.daemon.plist`（`<逆ドメイン>.touryou.daemon.plist`）なら、前の置き場の常駐（v0.1.6 以前の形。`--org` の有無は、ファイル名で分かる）。`PATH` の先頭が `/usr/bin:/bin:/usr/sbin:/sbin` より前に足されていれば、その部分が `--path-prefix`。
 
 ```sh
-plutil -extract EnvironmentVariables.PATH raw "${HOME}/Library/LaunchAgents/touryou.daemon.plist"
+plutil -extract EnvironmentVariables.PATH raw "${HOME}/Library/LaunchAgents/touryou.supervisor.plist"
 ```
 
-（`--org` 付きのときは、ファイル名をその名前にする。）下の 1 行は、常駐していなければ何もしない（そのまま貼ってよい。plist がないとき、`cp` の `*touryou.daemon.plist` は zsh で `no matches found` になるため、`if` で守っている）。plist を写しておき、外す（起動の script〔`bin/run-daemon.sh`〕・`logs`・`state` は、次の `mv` で `~/.touryou` ごと退避される）。`--org` 付きのときは、`uninstall` にも同じ `--org` を付ける。
+下の 1 行は、supervisor の常駐がなければ何もしない（そのまま貼ってよい）。plist を写しておき、外す（`uninstall` は、supervisor を止めて plist を消す。ログ・登録簿 `registry.json`・各リポジトリの `.touryou/` は残る。登録簿・ログは、次の `mv` で `~/.touryou` ごと退避される）。**supervisor を外しても、起こした daemon は止まらない**（ふだんの daemon は、動いたままでよい。試しの登録簿には載らず、試しの supervisor は起こさない・見張らない）。終了コード 1 で出力に「残した」の行があるときは、失敗ではない（TouRyou が生成したと判定できない plist を残した。そのまま次へ進んでよい）。
 
 ```sh
-if ls "${HOME}/Library/LaunchAgents/" | grep -q 'touryou\.daemon\.plist$'; then mkdir -p "${HOME}/touryou-verify-launchd" && find "${HOME}/Library/LaunchAgents" -maxdepth 1 -name '*touryou.daemon.plist' -exec cp -fp {} "${HOME}/touryou-verify-launchd/" \; && "${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes; else echo "常駐なし。飛ばします"; fi
+if ls "${HOME}/Library/LaunchAgents/" | grep -q 'touryou\.supervisor\.plist$'; then mkdir -p "${HOME}/touryou-verify-launchd" && cp -fp "${HOME}/Library/LaunchAgents/touryou.supervisor.plist" "${HOME}/touryou-verify-launchd/" && "${HOME}/.touryou/current/bin/touryou" supervisor uninstall --yes; else echo "supervisor の常駐なし。飛ばします"; fi
+```
+
+前の置き場の常駐（`touryou.daemon.plist`。v0.1.6 以前の形）が残っているときは、続けて、次の 2 行で外す（なければ何もしない。plist がないとき、`cp` の `*touryou.daemon.plist` は zsh で `no matches found` になるため、`if` で守っている）。1 行目で plist を写し、2 行目で外す。1 行目が失敗したら、2 行目は打たない（写しがないまま外すと、あとで比べられない）。`--org` 付きのときは、`uninstall` にも同じ `--org` を付ける。
+
+```sh
+if ls "${HOME}/Library/LaunchAgents/" | grep -q 'touryou\.daemon\.plist$'; then mkdir -p "${HOME}/touryou-verify-launchd" && find "${HOME}/Library/LaunchAgents" -maxdepth 1 -name '*touryou.daemon.plist' -exec cp -fp {} "${HOME}/touryou-verify-launchd/" \; ; else echo "前の置き場の常駐なし。飛ばします"; fi
+if ls "${HOME}/Library/LaunchAgents/" | grep -q 'touryou\.daemon\.plist$'; then "${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes; fi
 ```
 
 `~/.touryou` を退避する。
@@ -62,7 +79,7 @@ command mv -f "${HOME}/.touryou" "${HOME}/.touryou.before-verify"
 ls -ld "${HOME}/.touryou"
 ```
 
-確かめる: 最後の `ls` が「No such file or directory」。`ls "${HOME}/Library/LaunchAgents/" | grep touryou` が何も出さない。`--org` 付きで常駐させていたときは、`docs/launchd.md` の手作業の手順で外す。
+確かめる: 最後の `ls` が「No such file or directory」。`ls "${HOME}/Library/LaunchAgents/" | grep touryou` が何も出さない。前の置き場の常駐を `--org` 付きで作っていたとき、またはほかのリポジトリ用に分けた daemon（`touryou.daemon-<8 文字>`）があるときは、`docs/launchd.md` の手作業の手順で外す。
 
 ### 2. plugin の写しと checksums.json
 
@@ -111,15 +128,16 @@ ls "${W}/plugin/scripts/"
 claude --plugin-dir "${W}/plugin"
 ```
 
-セッションの中で `/touryou:setup` を最後まで（手順 3 で「常駐」を選び、同意に「はい」）。
+セッションの中で `/touryou:setup` を最後まで（手順 1 の導入のあと、手順 2 の設定、手順 3 で「常駐」を選び、同意に「はい」。常駐の登録は `supervisor register` → `init` → `apply --yes`）。
 
-設定の問い（`repoRoot`・`worktreeRoot`）には、絶対パスを答える。`$HOME/...` と答えると、`setup.md` の決まり（入力のパスに `$` を含むと止まる）で止まる。先にターミナルで出した値を入れる。
+設定の問い（`repoRoot`・`worktreeRoot`）には、絶対パスを答える。`$HOME/...` と答えると、`setup.md` の決まり（入力のパスに `$` を含むと止まる）で止まる。先にターミナルで出した値を入れる。`repoRoot` は、0 で作った試しのリポジトリ。`worktreeRoot` は、推奨の `<repoRoot>/.touryou/worktrees`。
 
 ```sh
-echo "${HOME}/touryou-verify/worktrees"
+echo "${W}/repo"
+echo "${W}/repo/.touryou/worktrees"
 ```
 
-作業ツリーの置き場を `${W}`（`~/touryou-verify`）の下にすると、8 の後片付けの `rm -rf "${W}"` でいっしょに消える。
+設定・state・作業ツリーが `${W}`（`~/touryou-verify`）の下に作られるので、8 の後片付けの `rm -rf "${W}"` でいっしょに消える。
 
 確かめる:
 
@@ -130,9 +148,11 @@ echo "${HOME}/touryou-verify/worktrees"
 ls -l@ "${HOME}/.touryou/work"
 ls -lR@ "${HOME}/.touryou/current/" | grep -c com.apple.quarantine
 readlink "${HOME}/.touryou/current"
+ls -l "${W}/repo/.touryou/config.json"
+"${HOME}/.touryou/current/bin/touryou" supervisor status
 ```
 
-  quarantine が 0。`current` が `…/v${V}/touryou-darwin-arm64`。
+  quarantine が 0。`current` が `…/v${V}/touryou-darwin-arm64`。`config.json` が `-rw-------`。status が、supervisor の読み込み済みと、`${W}/repo` の設定の daemon を示す（daemon は、30 秒以内に supervisor が起こす）。`${HOME}/Library/LaunchAgents/` に `touryou.supervisor.plist` が 1 つだけあり、`touryou.daemon` の plist は作られていない。
 
 ### 4. S13 同じ版
 
@@ -145,16 +165,16 @@ readlink "${HOME}/.touryou/current"
 本物のバイナリ・script は直さない。入れた版を `v0.0.0-verify` の名前で複製し、`current` と常駐をそちらに向けて、「古い版が常駐している」状態を作る。セッションは閉じておく。
 
 ```sh
-"${HOME}/.touryou/current/bin/touryou" launchd stop
+"${HOME}/.touryou/current/bin/touryou" supervisor stop
 command cp -Rp "${HOME}/.touryou/v${V}" "${HOME}/.touryou/v0.0.0-verify"
 ln -sfn "${HOME}/.touryou/v0.0.0-verify/touryou-darwin-arm64" "${HOME}/.touryou/current"
 readlink "${HOME}/.touryou/current"
-"${HOME}/.touryou/current/bin/touryou" launchd init
-"${HOME}/.touryou/current/bin/touryou" launchd apply --yes
-"${HOME}/.touryou/current/bin/touryou" launchd status
+"${HOME}/.touryou/current/bin/touryou" supervisor init
+"${HOME}/.touryou/current/bin/touryou" supervisor apply --yes
+"${HOME}/.touryou/current/bin/touryou" supervisor status
 ```
 
-確かめる: `current` が `…/v0.0.0-verify/touryou-darwin-arm64`。status が running。
+確かめる: `current` が `…/v0.0.0-verify/touryou-darwin-arm64`。status が、supervisor の読み込み済みと、`${W}/repo` の設定の daemon を示す。`supervisor stop` で、起こした daemon は止まらない（`supervisor status` で daemon が残っていてよい）。
 
 ### 6. S12 版上げ（常駐あり）
 
@@ -166,22 +186,22 @@ claude --plugin-dir "${W}/plugin"
 
 - セッションの始まりに、版の違いの知らせ（本体 v0.0.0-verify と plugin v`${V}`）が、画面に `SessionStart:startup says: touryou の本体（v0.0.0-verify）と plugin（v<版>）の版が違います。…` の形で出る（SessionStart の systemMessage。v0.1.1 の前の A' で確かめた）。出なければ、出なかったことと、`/touryou:setup` の中で Claude が知らせを読んでいるか（additionalContext）を記録する。
 - `/touryou:setup` で、script が終了コード 3（`RESULT: need-restart-consent`）で何も変えずに止まり、定型文で起動し直しの同意を聞かれる。
-- 「はい」のあと、`--restart-daemon` 付きで、止める → 付け替え → `apply --yes`。承認は 2 回（引数なしと `--restart-daemon`）。取得済みの tar.gz は照合だけで取り直さない（`~/.touryou/work` に残っているため）。
-- `/touryou:service status` が running。セッションを出てから、
+- 「はい」のあと、`--restart-daemon` 付きで、新しい版を置いて `--help` を確かめ、登録簿の設定を新しい版の daemon で検査する → `supervisor stop` → 付け替え → `supervisor apply --yes` → `supervisor restart --all`（`docs/launchd.md` の「既知の限界」）。承認は 2 回（引数なしと `--restart-daemon`）。終了コード 3 のあとに、ほかのリポジトリ用に分けた daemon の件数を数える `launchd status --others`（読み取りだけ）の承認が、もう 1 回出ることがある。取得済みの tar.gz は照合だけで取り直さない（`~/.touryou/work` に残っているため）。
+- `/touryou:service status` が、supervisor の読み込み済みと、`${W}/repo` の daemon を示す。`restart --all` の警告（supervisor が起こした記録のない daemon）が出ないこと。セッションを出てから、
 
 ```sh
 readlink "${HOME}/.touryou/current"
-"${HOME}/.touryou/current/bin/touryou" launchd status
+"${HOME}/.touryou/current/bin/touryou" supervisor status
 ```
 
-  `current` が `…/v${V}/touryou-darwin-arm64` に戻っている。
+  `current` が `…/v${V}/touryou-darwin-arm64` に戻っている。status が、supervisor の読み込み済みと、`${W}/repo` の daemon（30 秒以内に、新しい版で起こし直される）を示す。
 
 ### 7. 任意: 常駐なしの版上げ
 
-常駐を外し、5 と同じに古い版を模造してから `/touryou:setup`。
+常駐を外し（`supervisor uninstall`。起こした daemon は止まらない）、5 と同じに古い版を模造してから `/touryou:setup`。
 
 ```sh
-"${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes
+"${HOME}/.touryou/current/bin/touryou" supervisor uninstall --yes
 ln -sfn "${HOME}/.touryou/v0.0.0-verify/touryou-darwin-arm64" "${HOME}/.touryou/current"
 claude --plugin-dir "${W}/plugin"
 ```
@@ -192,23 +212,37 @@ claude --plugin-dir "${W}/plugin"
 
 **2〜7 のどこで失敗・中断しても、ここを上から通せば元に戻る**（試しのものは消し、1 で退避したものを戻すだけ）。
 
-試しの `~/.touryou` と常駐を外し、1 で退避したものを戻す。下の 1 行は、1 で退避した `~/.touryou.before-verify` があるときだけ、外す・消す・戻すを行う。ないときは「退避がない（もう戻っているかもしれない）。止めます」と出して、何もしない（**2 回打っても、戻したものを消さない**。前に、外す・消す・戻すを別々の行で 2 回打ち、1 回目で戻した `~/.touryou` を 2 回目の `rm` が消したことがある）。中の `uninstall` は、試しの常駐がない・`~/.touryou` がないなどで失敗してもよい（失敗しても、消す・戻すに進む）。
+先に、試しの daemon を止める（**supervisor を外しても、起こした daemon は止まらない**ため）。supervisor は、daemon を `--config <設定>` つきで起こすので、試しのリポジトリの設定の daemon は、`${W}/repo/` を含むコマンドで見つかる。出たものが試しのもの（`${W}/repo/.touryou/config.json`）だけであることを見て、pid を `kill <pid>`（SIGTERM）で止め、もう一度 `pgrep` が何も出さないことを確かめる（ふだんの daemon は、パスが違うので出ない。止めない）。
 
 ```sh
-if [ -d "${HOME}/.touryou.before-verify" ]; then "${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes; rm -rf "${HOME}/.touryou" && command mv -f "${HOME}/.touryou.before-verify" "${HOME}/.touryou" && readlink "${HOME}/.touryou/current"; else echo "退避がない（もう戻っているかもしれない）。止めます"; fi
+pgrep -fl "${W}/repo/"
+```
+
+試しの `~/.touryou` と常駐を外し、1 で退避したものを戻す。下の 1 行は、1 で退避した `~/.touryou.before-verify` があるときだけ、外す・消す・戻すを行う。ないときは「退避がない（もう戻っているかもしれない）。止めます」と出して、何もしない（**2 回打っても、戻したものを消さない**。前に、外す・消す・戻すを別々の行で 2 回打ち、1 回目で戻した `~/.touryou` を 2 回目の `rm` が消したことがある）。中の `supervisor uninstall` は、試しの常駐がない・`~/.touryou` がない・「残した」の行つきの終了コード 1 などで失敗してもよい（失敗しても、消す・戻すに進む）。
+
+```sh
+if [ -d "${HOME}/.touryou.before-verify" ]; then "${HOME}/.touryou/current/bin/touryou" supervisor uninstall --yes; rm -rf "${HOME}/.touryou" && command mv -f "${HOME}/.touryou.before-verify" "${HOME}/.touryou" && readlink "${HOME}/.touryou/current"; else echo "退避がない（もう戻っているかもしれない）。止めます"; fi
 ```
 
 「止めます」と出たら、1 で記録したものを見て、次のどちらかにする。
 
-- 1 で `~/.touryou` があった（退避した）とき: もう戻っている。`readlink "${HOME}/.touryou/current"` が 1 で記録したものと同じかを確かめ、次の `launchd init` 以降に進む。
-- 1 で `~/.touryou` がなかった（1 の最初の `ls` が「No such file or directory」で、退避するものがなかった）とき: 試しの `~/.touryou` と常駐が残っている。次の 2 行を **1 回だけ** 打って外す（戻すものはない。1 で常駐でなかったので、次の `launchd init` 以降は飛ばす）。
+- 1 で `~/.touryou` があった（退避した）とき: もう戻っている。`readlink "${HOME}/.touryou/current"` が 1 で記録したものと同じかを確かめ、次の「常駐を戻す」に進む。
+- 1 で `~/.touryou` がなかった（1 の最初の `ls` が「No such file or directory」で、退避するものがなかった）とき: 試しの `~/.touryou` と常駐が残っている。次の 2 行を **1 回だけ** 打って外す（戻すものはない。1 で常駐でなかったので、次の「常駐を戻す」は飛ばす）。
 
 ```sh
-"${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes
+"${HOME}/.touryou/current/bin/touryou" supervisor uninstall --yes
 rm -rf "${HOME}/.touryou"
 ```
 
-1 で常駐だったときは、1 で確かめた引数と同じ引数で init し直して、戻す（`--org` を付けていたら、`init`・`apply`・`status` の全部に同じものを付ける。`--path-prefix` は `init` にだけ付ける〔`PATH` は `init` が plist に書く。`apply`・`status` は受けず、付けると失敗する〕。付けないと元の常駐にならない）。
+1 で常駐だったときは、1 で確かめた引数と同じ引数で init し直して、戻す。supervisor の常駐だったとき（`--path-prefix` を付けていたら、`init` にだけ付ける〔`PATH` は `init` が plist に書く。`apply`・`status` は受けず、付けると失敗する〕。付けないと元の常駐にならない。登録簿は、退避したものの中にあり、そのまま戻る）:
+
+```sh
+"${HOME}/.touryou/current/bin/touryou" supervisor init
+"${HOME}/.touryou/current/bin/touryou" supervisor apply --yes
+"${HOME}/.touryou/current/bin/touryou" supervisor status
+```
+
+前の置き場の常駐（`touryou.daemon`。v0.1.6 以前の形）だったときは、従来のとおり（`--org` を付けていたら、`init`・`apply`・`status` の全部に同じものを付ける。`--path-prefix` は `init` にだけ付ける）:
 
 ```sh
 "${HOME}/.touryou/current/bin/touryou" launchd init
@@ -222,10 +256,10 @@ rm -rf "${HOME}/.touryou"
 rm -rf "${W}"
 ```
 
-確かめる: `current` が 1 で記録したものと同じ。常駐だったときは status が running。常駐だったときは、`"${HOME}/Library/LaunchAgents/"` の plist と `"${HOME}/touryou-verify-launchd/"` の写しを比べ、`diff` が同じと出たときだけ写しを消す（下の 1 行。違いが出たら写しは消えずに残るので、違いを見て直す。`--org` 付きのときは、2 つのファイル名をその名前にする）。
+確かめる: `current` が 1 で記録したものと同じ。常駐だったときは、`supervisor status`（前の置き場の常駐なら `launchd status`）が、読み込み済み・running。常駐だったときは、`"${HOME}/Library/LaunchAgents/"` の plist と `"${HOME}/touryou-verify-launchd/"` の写しを比べ、`diff` が同じと出たときだけ写しを消す（下の 1 行。違いが出たら写しは消えずに残るので、違いを見て直す。前の置き場の常駐だったときは、2 つのファイル名を `touryou.daemon.plist`〔`--org` 付きなら、その名前〕にする）。
 
 ```sh
-diff "${HOME}/Library/LaunchAgents/touryou.daemon.plist" "${HOME}/touryou-verify-launchd/touryou.daemon.plist" && rm -rf "${HOME}/touryou-verify-launchd"
+diff "${HOME}/Library/LaunchAgents/touryou.supervisor.plist" "${HOME}/touryou-verify-launchd/touryou.supervisor.plist" && rm -rf "${HOME}/touryou-verify-launchd"
 ```
 
 結果（S10〜S13 の可・不可と、出た表示）を、リリースの準備の PR か Issue に書く。
@@ -324,7 +358,7 @@ A' の 7 のあと、8（後片付け）の前に、同じ Mac で行う。A' �
 | 順 | 確かめる | チェックリストの項目 | 可の目安 |
 |:--|:--|:--|:--|
 | 1 | 入れる・/setup | S10〜S13（A' で済み） | A' のとおり |
-| 2 | daemon の常駐 | S3〜S6・L | `touryou launchd status` が running。ログアウト・ログインのあとも running（L は、常駐の形を変えたときだけ） |
+| 2 | daemon の常駐（supervisor） | S3〜S6・L（チェックリストの S・L は、前の形の `touryou launchd` で書かれている。supervisor では、`touryou supervisor apply|status|restart|stop|uninstall` に読み替える。読み替えを直すのは、チェックリスト側の課題） | `touryou supervisor status` が、supervisor の読み込み済みと、試しのリポジトリの daemon を示す。ログアウト・ログインのあとも同じ（L は、常駐の形を変えたときだけ） |
 | 3 | 統合セッションの MCP と中継 | N・Q（Q8 を除く。Q8 は C） | 統合セッションで `/touryou:start` がつながる |
 | 4 | 状態画面 | U・V・G | `/touryou:ui` で開き、木・カード・関係図が出る |
 | 5 | 子の起動と止め | A1・A2（範囲や知らせを変えたときは A3・A4 も） | 子が起動して紐付き、画面に出る。止める・消すが効く |
@@ -363,10 +397,10 @@ marketplace の PR をマージする前に、本番の Release の zip を手�
 ```sh
 readlink "${HOME}/.touryou/current"
 ls "${HOME}/Library/LaunchAgents/" | grep touryou
-"${HOME}/.touryou/current/bin/touryou" launchd status
+"${HOME}/.touryou/current/bin/touryou" supervisor status
 ```
 
-確かめる: `current` が前の版、常駐が running。
+確かめる: `current` が前の版、常駐が読み込み済み。前の版が v0.1.6 以前（前の置き場の常駐。`touryou.daemon.plist`）のときは、最後の行を `launchd status` にして running を見る（版上げは前の置き場の常駐のまま行われる。移行は、下の「前の置き場からの移行」）。
 
 zip を取り、展開して写しにする（`checksums.json` は zip の中のものをそのまま使う）。
 
@@ -391,15 +425,32 @@ claude --plugin-dir "${W}/plugin"
 
 ```sh
 readlink "${HOME}/.touryou/current"
-"${HOME}/.touryou/current/bin/touryou" launchd status
+"${HOME}/.touryou/current/bin/touryou" supervisor status
 ls "${HOME}/Library/LaunchAgents/" | grep touryou
 ```
 
-  `current` が `…/v${V}/touryou-darwin-arm64`、常駐が running。
-- 前の版が v0.1.0 のときは（#64）、plist が新しい形になっている（`plutil -p "${HOME}/Library/LaunchAgents/touryou.daemon.plist"` の `ProgramArguments` の先頭が `…/current/TouRyou.app/Contents/MacOS/TouRyou`。前の版が v0.1.1〔先頭が `…/current/bin/node`〕のときも、同じ新しい形になる。`--org` 付きのときは、その名前の plist）。`"${HOME}/.touryou/bin/run-daemon.sh"` が消えている。システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」で、`run-daemon.sh` が消え、**TouRyou**（1 項目。「開発元を識別できない項目」と出るのは、ad-hoc の署名のためで正常）が出る（`sh`・`bash` の項目は TouRyou の項目ではない。`docs/launchd.md`）。
+  `current` が `…/v${V}/touryou-darwin-arm64`、常駐が読み込み済み（前の版が v0.1.6 以前の前の置き場の常駐のときは、`supervisor status` でなく `launchd status` が running）。
+- 前の版が v0.1.0 のときは（#64。前の置き場の常駐の形）、plist が新しい形になっている（`plutil -p "${HOME}/Library/LaunchAgents/touryou.daemon.plist"` の `ProgramArguments` の先頭が `…/current/TouRyou.app/Contents/MacOS/TouRyou`。前の版が v0.1.1〔先頭が `…/current/bin/node`〕のときも、同じ新しい形になる。`--org` 付きのときは、その名前の plist）。`"${HOME}/.touryou/bin/run-daemon.sh"` が消えている。システム設定の「一般」→「ログイン項目と機能拡張」→「バックグラウンドでの実行を許可」で、`run-daemon.sh` が消え、**TouRyou**（1 項目。「開発元を識別できない項目」と出るのは、ad-hoc の署名のためで正常）が出る（`sh`・`bash` の項目は TouRyou の項目ではない。`docs/launchd.md`）。
 - **S13**: もう一度 `claude --plugin-dir "${W}/plugin"` で `/touryou:setup`。`RESULT: already`。
 
 後片付け: `rm -rf "${W}"`。上げた本体（`current` が新しい版）と常駐は、そのままでよい（marketplace の PR のマージのあと、update で plugin も同じ版になる）。通らなければ、marketplace の PR をマージしない（`docs/release.md` の「やり直す」）。結果は、リリースの準備の PR か Issue に書く。
+
+### 前の置き場からの移行（0.1.7 を初めて入れるときに、前の置き場がある Mac で）
+
+前の版（v0.1.6 以前）を入れ、前の置き場（`$HOME/.touryou/config.json`・`state`・常駐 `touryou.daemon`）で使っている Mac で、版上げ（上）のあとに行う。移行の段（`docs/launchd.md` の「前の置き場からの移行」）と、`/touryou:setup` の「移行」（手順 2）を通す。**元は消えない**ので、前の置き場を残したまま確かめられる。
+
+1. 新しいセッションで `/touryou:setup`。出力の `CONFIG: absent`・`LEGACY_CONFIG: present` を見て、手順 3 でなく移行へ進む。`.gitignore` に `.touryou/` がなければ、定型文（`.gitignore`）で足してもらう。
+2. 移行の定型文に「はい」のあと、`touryou migrate --yes`（承認は、導入と移行の 2 回）。
+
+```sh
+"${HOME}/.touryou/current/bin/touryou" supervisor status
+ls -l "<repoRoot>/.touryou/config.json"
+ls -d "<repoRoot>/.touryou/state"
+ls "${HOME}/.touryou/legacy-migrated.json"
+ls "${HOME}/Library/LaunchAgents/" | grep touryou
+```
+
+確かめる: `migrate` の終了コードが 0。supervisor が読み込み済みで、`<repoRoot>` の daemon が応答する。`<repoRoot>/.touryou/config.json` と `state` がある。`legacy-migrated.json` がある（もう一度 `/touryou:setup` で `LEGACY_CONFIG: absent`）。LaunchAgents に `touryou.supervisor.plist` があり、`touryou.daemon.plist` は消えている。前の `$HOME/.touryou/config.json` と `state` は**残っている**（消さない。確かめてから、自分で消す）。失敗の戻し（新しい `.touryou` を消し、前の常駐を起動し直す）は、再現が難しいので、`pnpm test` の試験に任せる。
 
 ### マージの後: update → /setup → Q8
 

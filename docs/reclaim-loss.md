@@ -125,6 +125,8 @@ HTML 画面（`docs/ui.md`「回収の指示」）からも、同じ破棄の指
 
 PR がマージされた子の作業ツリーとローカルブランチ（`touryou/*`）を、プレビューのうえ、まとめて回収する。**人間のロールだけ**が呼べる（統合ノード・子の AI は、`node.reclaimBatchPreview`・`node.reclaimBatch` を呼べない。ロール表と試験で確かめている）。
 
+設定のあるリポジトリ（または子の作業ツリー）の中で打つ。ほかの場所では `--config <絶対パス>` を付ける（`docs/cli.md` の「環境変数は、なくてよい」）。
+
 ```sh
 "$HOME/.touryou/current/bin/touryou" reclaim-merged                          # 一覧だけ（何も消さない。終了コード 2）
 "$HOME/.touryou/current/bin/touryou" reclaim-merged --yes --expect <digest>   # 一覧の値を付けて実行
@@ -153,6 +155,8 @@ PR がマージされた子の作業ツリーとローカルブランチ（`tour
 - 同じ内容の重複と、不正な形（小文字の 16 進でない、40 桁（SHA-256 のリポジトリは 64 桁）でない、PR 番号が正の整数でない、など）は断る。
 
 ### 使い方
+
+設定のあるリポジトリ（または子の作業ツリー）の中で打つ。ほかの場所では `--config <絶対パス>` を付ける。
 
 ```sh
 "$HOME/.touryou/current/bin/touryou" reclaim-merged                            # gh で証拠を探し、一覧を出す（まだ記録しない）
