@@ -185,7 +185,7 @@ TouRyou は、**セッションを起動しません**。**Anthropic の認証�
 | failed。`[touryou mcp] 失敗 [unauthenticated]: 根のトークン…` | `root-token` がない・リンク・自分のでない・権限が 0600 でない・ACL つき | daemon を起動して `root-token` を作らせる。権限は `chmod 600`、ACL は `chmod -N` で外す |
 | failed。`[touryou mcp] 失敗 [invalid_config]: …` | 設定ファイル（実行した場所から上へ探した `<dir>/.touryou/config.json`。`--config`・`TOURYOU_DAEMON_CONFIG` で別の場所を指しているときは、そのファイル。見つからないときは、探した場所と直し方が出る）がない・リンク・他の人が書ける、`stateDir` が絶対パスでない、置き場（設定ファイルの親ディレクトリ・`stateDir`・その親）がリンク・自分のでない・権限が `drwx------`／`drwxr-xr-x` でない・ACL つき | `/setup` をやり直す。置き場は `chmod 700` |
 | `/mcp` の Reconnect で `Failed to reconnect to plugin:touryou:node: CONNECTION_CLOSED` だけが出る | `touryou-mcp --stdio` が起動時の確認で終わった（daemon が止まっている、または `/setup` の前）。理由の文（`[touryou mcp] …`）は `/mcp` には出ない | まず daemon が動いているか（launchd か手で起動したもの）と `$HOME/.touryou/current` があるかを確かめ、直してから Reconnect。理由の文は `claude --debug` で見る |
-| 統合セッションの途中で daemon を止めると、ツールが `daemon_unreachable`（`daemon に届かない（止まっているか、起動し直している途中。トークンは送っていない）`） | daemon が止まっている | daemon を起動する。起動し直せば Reconnect なしで戻る |
+| 統合セッションの途中で daemon を止めると、ツールが `daemon_unreachable`（`daemon に届かない（止まっているか、起動し直している途中。トークンは送っていない）`） | daemon が止まっている | daemon を起動する。戻る場合: 同じ設定・同じ置き場で起動し直したなら、Reconnect なしで戻る。戻らない場合: 戻らないとき、または daemon は動いているのに出るとき（`touryou migrate`・版上げ・設定の置き場の移動のあと。開いたままの接続は前のまま）は、`/mcp` で `plugin:touryou:node` を Reconnect する（なければ Claude Code を起動し直し、`/touryou:start` で確かめる） |
 | 全ツールが拒否される（`[touryou hook]` の片方だけ） | 統合セッションの環境に `TOURYOU_DAEMON_URL` がある | `unset TOURYOU_DAEMON_URL` して起動し直す |
 
 `/mcp` の失敗の理由は、Claude Code の debug ログ（`claude --debug`）か、`/plugin` の Errors に出る（公式のドキュメントによる）。`/mcp` の Reconnect の失敗は `CONNECTION_CLOSED` だけで、理由の文は出ない。
