@@ -34,7 +34,7 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 
 - 順は「コピー → 検査 → 切り替え」。**元の設定・`state` は消しません**（動作を確かめてから、自分で消します）。前の設定が指す `repoRoot` の 1 つだけを移します（複数のリポジトリは、それぞれのリポジトリで `/setup`）。別名の daemon（`launchd init --config`）は移しません。
 - 新しい設定は、前の設定の値のままで、`stateDir` だけを `<repoRoot>/.touryou/state` に置き換えます（`worktreeRoot` は前の値のまま。動いている子の作業ツリーと、記録の中のパスを置き去りにしないため。推奨の `<repoRoot>/.touryou/worktrees` は、新しく設定を書くときだけです）。
-- 検査は、daemon と同じ `--check-config`（`stateDir`・`worktreeRoot` が `repoRoot` の内側なら、ignore 済み・未追跡か）です。**先に `<repoRoot>/.gitignore` に `.touryou/` を足し、コミットしておきます**（TouRyou は `.gitignore` を書き換えません。コミットしないと `<repoRoot>` の作業ツリーが dirty のままで、最初の `node_integrate` が `targetDirty` になります。ファイルを変えたくないときは、`<repoRoot>/.git/info/exclude` に足しても、検査は通ります。通らなければ、移行は何も残さずに止まります）。
+- 検査は、daemon と同じ `--check-config`（`stateDir`・`worktreeRoot` が `repoRoot` の内側なら、ignore 済み・未追跡か）です。**先に `<repoRoot>/.gitignore` に `.touryou/` を足し、コミットしておきます**（TouRyou は `.gitignore` を書き換えません。コミットしないと、`<repoRoot>` の作業ツリーにコミットしていない変更が残り、最初の `node_integrate` が `targetDirty` になります。ファイルを変えたくないときは、`<repoRoot>/.git/info/exclude` に足しても、検査は通ります。通らなければ、移行は何も残さずに止まります）。
 - 新しい置き場に、`config.json`・`state` がすでにあれば、上書きも併合もせずに断ります。前の daemon が動いたままなら（手で起こしたもの）、コピーせずに断ります（SQLite を一貫してコピーできないため）。
 - 失敗したとき: 作ったもの（新しい `state`・設定・登録簿の 1 行）だけを消し、止めた前の常駐を起動し直します。前の置き場は変わりません。前の常駐を外す段だけが失敗したときは、新しい daemon が動いているので、戻さずに、手で外す手順（`touryou launchd uninstall --yes`）を出して終了コード 1 で終わります。
 
@@ -92,7 +92,7 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 | `purgeTombstone` | `true` | `node.purge` で墓標を残すか |
 | `autoPurge` | 無効 | 自動の最終削除（[`auto-purge.md`](auto-purge.md)）。有効にするなら `retentionDays` は 7 以上 |
 | `discardedRefsMax` | `200` | 保管する破棄した成果の数の上限（[`discarded-work.md`](discarded-work.md)） |
-| `regenerableIgnored` | `node_modules`・`dist`・`.turbo` | 残っていても未保存の変更とみなさない gitignore の対象 |
+| `regenerableIgnored` | `node_modules`・`dist`・`.turbo` | 残っていてもコミットしていない変更とみなさない gitignore の対象 |
 | `digest` | 有効（`intervalSec: 30` など） | 配下の要約（[`digest.md`](digest.md)） |
 | `wake` | 無効 | 中間統合ノードを起こす（[`digest.md`](digest.md)） |
 | `rateLimit` | 常に有効（主体ごと容量 60・毎秒 20 など） | 窓口の回数の制限の調整（[`rate-limit.md`](rate-limit.md)） |
