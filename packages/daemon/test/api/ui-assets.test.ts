@@ -24,9 +24,13 @@ const TABLE_LINE_ONE = /^ {2}var (?:TEXT|MESSAGES|SEPS|FAILURES) = /;
 /** 「あなたの番」の窓の見出し「未解決 N 件」は、受信箱を上限で切った分も実数で数え、切ったときは「一部を表示」と出す。 */
 describe("あなたの番の見出し（未解決の件数）", () => {
   it("切った分（inboxTotal − 出した件数）を足し、切ったときだけ yours.unresolvedCut の文にする", () => {
-    expect(UI_JS).toContain("view.inboxTotal > view.inbox.length ? view.inboxTotal - view.inbox.length : 0");
+    expect(UI_JS).toContain(
+      "view.inboxTotal > view.inbox.length ? view.inboxTotal - view.inbox.length : 0",
+    );
     expect(UI_JS).toContain("var unresolved = n + rest.length + hidden;");
-    expect(UI_JS).toContain("t(hidden > 0 ? 'yours.unresolvedCut' : 'yours.unresolved', { n: unresolved })");
+    expect(UI_JS).toContain(
+      "t(hidden > 0 ? 'yours.unresolvedCut' : 'yours.unresolved', { n: unresolved })",
+    );
   });
   it("切ったときの文は、日本語・英語の両方で、実数の差し込み {n} と「一部を表示」を持つ。切らないときの文は従来のまま", () => {
     const table = UI_TEXT_TABLE as unknown as Record<string, { ja: string; en: string }>;

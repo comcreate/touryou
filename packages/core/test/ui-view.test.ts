@@ -80,7 +80,6 @@ describe("uiViewOf の inboxTotal", () => {
     expect(v.truncated).not.toContain("inbox");
     expect(uiViewOf(must(base())).inboxTotal).toBe(0);
   });
-
 });
 
 describe("uiViewOf の cli（#136）", () => {
