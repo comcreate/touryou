@@ -1,6 +1,6 @@
-## AI-SDD Instructions (v5.1.0)
+## AI-SDD Instructions (v5.3.2)
 
-<!-- sdd-workflow version: "5.1.0" -->
+<!-- sdd-workflow version: "5.3.2" -->
 
 このプロジェクトは AI-SDD（AI駆動仕様駆動開発）ワークフローに従います。
 
