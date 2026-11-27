@@ -25,3 +25,6 @@ __pycache__/
 
 # archify
 .archify/
+
+# sdd-workflow が作る、版上げ後の移行の案内。手元の絶対パスが入るので、リポジトリには入れない
+.sdd/MIGRATION_PENDING.md
