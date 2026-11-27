@@ -21,3 +21,7 @@ plugin/checksums.json
 
 # 開発の統括の skill の script（.claude/skills）が作る Python の一時ファイル
 __pycache__/
+.touryou/
+
+# archify
+.archify/
