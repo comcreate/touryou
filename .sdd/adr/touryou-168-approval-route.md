@@ -28,3 +28,9 @@ category: ""
 - **PR3 で実装したこと**: サブ統括の許可の一覧に `scope_decide` を入れた。連鎖の後半（サブ統括が親へ `scope_extend` を出す）のために、統合ロールに子の操作（`scope.extend`・`report.done` など）を足した（[touryou-168-integrator-child-operations.md](./touryou-168-integrator-child-operations.md)）。サブ統括の `scope_extend` は、サブ統括自身の直接の親が `scope_decide` で判定する。
 - **Rationale**: 承認の責任が階層で分かれ、root の受信箱に孫の細かい拡張が流れ込まない。
 - **Rejected alternatives**: 常に root が承認 — root が孫の数だけ詰まる。直接の親が決め、超える分は拒否のみ — サブ統括が詰まる。
+
+## 2026-11-22 木の深さの上限を設定値 maxTreeDepth（既定 3）にする
+
+- **Decision**: 木の深さの上限を設定値 `maxTreeDepth`（既定 3、2〜10 の整数）にする。根を深さ 0 と数え、新しいノードの深さが上限以上なら、`node_spawn`・`node_adopt` が `depthExceeded` で断る。検査は spawn と adopt の 2 箇所に置き、core の `validateTree` にも不変条件として入れて、ログの再生で壊れた木を作らないようにする。既定の 3 は、根（0）・サブ統括（1）・孫（2）まで。
+- **Rationale**: 同時起動の上限や、要約・画面・連動停止の検証範囲が、深さに比例して増える。上限を設定にして、既定は小さく保つ。
+- **Rejected alternatives**: 上限なし — 検証範囲が深さとともに際限なく増える。2 段に固定 — 深くしたい運用を設定で救えない。

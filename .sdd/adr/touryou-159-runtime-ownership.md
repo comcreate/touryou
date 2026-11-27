@@ -32,3 +32,9 @@ category: "developer-tooling"
 - **Decision**: compose は、`runtimeOf` が不明（`undefined`）を返す子を、設定 `childRuntime`（既定 cli）の値として扱う。この規則は compose の `nodeRuntimeOf` の 1 箇所に置く。アダプタ・フックの受け口などの「何が使えるか」（`cliEnabled`・`desktopEnabled`）は PR2a では設定に結び、ノードごとの振り分けだけを属性で行う。
 - **Rationale**: 単一 runtime の木の挙動を、今と完全に同じにするため（古い記録の互換）。`runtimeOf` 自体は不明を不明のまま返すので、画面・見張りは何も出さない（誤った安全面を出さない）。
 - **Rejected alternatives**: 不明の子を常に cli とみなす — `childRuntime: desktop` の木の古い子が、CLI のフックの対象になり、挙動が変わる。木に記録が 1 つもないときだけ推測する（設計書 §5.1 の元の案）— compose の 1 箇所に置く本案より、判定が 2 か所に分かれる。
+
+## 2026-11-22 Desktop の子を混ぜる条件は、設定の明示の許可（既定は無効）にする
+
+- **Decision**: `allowDesktopChildren`（既定 false）が true のときだけ、`node_spawn` の `runtime: "desktop"` を許す。既存のゲート（フックの確認・`touryouCommand`・取り消せない操作の確認）はそのまま要る。`runtime: desktop` の指定は、暗にこの許可を含むものとして互換を保つ。
+- **Rationale**: Desktop の子は FR_014 が効かず、人・root のトークンのファイルを読めるので、混ぜると木の権限が実質広がる。利用者が一度明示的に受け入れた木だけで働かせる。
+- **Rejected alternatives**: spawn の引数だけで許す案 — 呼び出し側の AI の判断で弱い子が増える。毎回の承認を挟む案 — 手順が重い割に、設定で許す案より得るものが小さい。混在を許さない案 — 「同じ木で選んで追加」という目的を満たさない。

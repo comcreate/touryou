@@ -250,6 +250,72 @@ category: "developer-tooling"
 - **Relation to earlier decisions**: 2026-11-20 の「つなぎ直しは子ロールのトークンを出し直す」を、「そのノードのロールのトークン」に広げる（条件 (1)〜(4) は変えない）。
 - **Rejected alternatives**: 統合用の別の bind 経路 — 経路が 2 本になり、防御（期限・スロットル）を二重に保つ必要がある。root が統合トークンを代行発行 — 一度きり・期限の仕組みを迂回し、root に秘密の受け渡しが集中する。統合ノードの紐付けを今後も不可にする — #168 の目的を満たさない。
 
+## 2026-11-17 project 設定の marketplace は、管理者が付ける marketplace-v<版> の tag に固定する（#90）
+
+- **Decision**: `.claude/settings.json` の `extraKnownMarketplaces.touryou.source.ref` を `marketplace-v<版>` の tag にする。`release.yml` が出す PR に、`marketplace.json` の版と `ref` の更新を同梱する。マージのあと、管理者が手元でそのマージのコミットに tag を付ける。`release-tags` の ruleset の対象に `refs/tags/marketplace-v*` を足し、作成・更新・削除は管理者だけにする。CI で、`ref` と `marketplace.json` の版の一致、tag の存在と中の版の一致を照らす。
+- **Rationale**: 固定の参照は、それを作る側（リリースの仕組み）が責任を持ち、tag は付け直し・削除ができないことで初めて不変になる。ruleset の対象に 1 つの形を足すだけで、tag を作れる者は増えない。tag の名前は `v*` に当たらない `marketplace-v<版>` にする（`v*` に当たると Release が作られてしまう）。
+- **Rejected alternatives**: workflow が自動で tag を付ける案 — tag を作れる者に GitHub Actions が加わり、ruleset の外の tag は付け直せて不変にならない。zip を再現できる形で先に作り `marketplace.json` を tag に含める案 — ビルドとリリースの流れの作り直しが大きすぎる。固定しない案 — 自動で入る経路をなくすだけで目的を下げる。保護した `marketplace` ブランチを `ref` にする案 — 不変ではない。
+
+## 2026-11-21 止まった子を開く claude attach は、セッション番号の形を優先して出す（#150・#205）
+
+- **Decision**: 状態画面が出す `claude attach` は、CLI の子の起動の報告の `sessionRef`（`claude agents --json` の id）を使う。`sessionRef` は表示モデルの応答にだけ載せ、新しい記録（イベント）は足さない。画面は、番号が分かるときは番号の形だけを出し、分からないときだけノード ID（`--name` の名前）の形を出して、番号を調べる案内を添える。
+- **Rationale**: `claude attach` が引くのは `claude agents --json` の id で、`--name` の名前ではない。名前の形は子のプロセスが動いているときしか開けず、2 つ並べると先に名前の形で失敗する。停止・削除の依頼はすでに起動の報告の id を使っており、attach だけが食い違っていた。構造化はデータソースに近い core の表示モデルで行い、画面は渡された値を使うだけにする。
+- **Rejected alternatives**: daemon が表示モデルの外から付ける案 — 構造化がデータソースから離れる。画面が `claude agents --json` を打つ形の文を出す案 — シェルの展開を含む文は「変数なし・値は引用済み」の方針に合わない。
+
+## 2026-11-21 401 を受けた子は、資格情報を捨てる前にコードなしで 1 回だけ結び直す（#185）
+
+- **Decision**: mcp は、daemon から 401（`unauthenticated`）を受けたとき、資格情報を捨てる前に、印・セッション ID・作業ツリーによるコードなしの結び直し（`rebindChild`）を 1 回だけ試す。通れば新しいトークンに差し替えて購読も張り直し、通らなければ従来どおり資格情報を空にする。空にしたあとの `not_bound` の文は、最初から未紐付けの場合と、紐付けが外れた場合に分け、外れた場合は MCP の接続ではなく紐付けが外れたと明示し、`child_bind` を引数なしで呼ぶよう案内する。
+- **Rationale**: 401 の出どころは 1 つに決まらなかった（再起動の直後に有効なトークンが 401 になる経路は見つからなかった）。出どころが特定できなくても成り立つ直しとして、mcp 側の自動の結び直しと、文の区別を選んだ。
+- **Rejected alternatives**: None considered。
+
+## 2026-11-21 外れた子の知らせは、child_bind の失敗を daemon が受信箱に出す形にする（#186）
+
+- **Decision**: 子が外れたことを知らせる専用の道具は作らない。コードなしの結び直し（`POST /v1/bind`）が、作業ツリーの確認を通ったあとで失敗したときに、daemon が自分の確かめで、既存の `rebind` の知らせを親の受信箱に出す。出すのはノードごとに 1 回で、`node.bindCode` の出し直しで解ける。
+- **Rationale**: 認証のない呼び手の自由文を親（LLM）の受信箱に入れると、プロンプト注入の入口になる。daemon が自分で確かめた事実から文を組み立てれば、守りは弱まらない。トークンも新しい権限も出さない。
+- **Rejected alternatives**: 紐付け前だけに出す専用の道具 — 認証のない入口とフックの許可が増え、守る面が広がる。子の自由文を受信箱に入れる案 — プロンプト注入の入口になる。
+
+## 2026-11-22 子の最後の動きの数え方は core の 1 か所に置き、受信箱の項目は数えない（#195）
+
+- **Decision**: 動きの数え方（`lastActivityMs`）と、待つと決まっている子の判定は、`packages/core/src/activity.ts` に 1 か所だけ置き、見張りと状態画面の両方が使う。受信箱の項目は数えない。
+- **Rationale**: 見張りと画面で数え方が違うと、同じ子が「動いている」と「止まっている」に食い違う。データに近い層で 1 か所にそろえる。受信箱の項目を数えないのは、「止まっているかも」の知らせ自体が動きに見えてしまうため。
+- **Rejected alternatives**: None considered。
+
+## 2026-11-22 子が出した判断は、子自身が取り下げられるようにする（#196）
+
+- **Decision**: 子のロールだけが、自分が出して開いたままの判断を `decision.withdraw`（イベント `decision.withdrawn`）で取り下げられる。取り下げた判断は `closed`（理由 `withdrawn`）になり、waiting でほかに開いた判断がなければ running に戻す。判断への回答は従来どおり人だけが行い、人があとから答えた場合は「取り下げ済み」と返す。
+- **Rationale**: waiting から running に戻る道が人の回答しかなく、判断が不要になった子が done にできず止まっていた。取り下げは子自身の判断だけに限り、人の回答の権限は変えない。
+- **Rejected alternatives**: None considered。
+
+## 2026-11-23 統合済みの子の回収を人間だけが一括で行えるようにし、対象は祖先判定で統合済みと分かるものに限る（#234）
+
+- **Decision**: 一括の回収（`node.reclaimBatchPreview` と `node.reclaimBatch`）は人間のロールだけに許し、integrator と child には許さず、MCP の道具としても出さない。対象は祖先判定で `merged: true` と分かるものだけにする。確認は `--yes --expect <digest>` の形で、照合の値は daemon が計算し、実行の直前に対象を再計算して、違えば `digestMismatch` で何も消さない。強制は使わず、1 件の失敗は `failed` に入れて残りを続ける。
+- **Rationale**: 取り消せない操作なので、親の AI が一括で消せないことを最優先にした。実行の直前に再計算してプレビューからの変化に追従し、git 自身の拒否を最後の防壁として残す。
+- **Rejected alternatives**: スカッシュ済みを GitHub の PR 状態で判定する案 — `gh` と認証とネットワークに依存する。`git cherry` による判定 — 複数コミットをまとめたスカッシュを検出できない。tree の一致による判定 — スカッシュ後に main が進むと外れる。件数を打ち込ませる確認と 1 件ずつの確認 — `touryou reclaim` と同じ形を選んだ。親の AI への許可 — 一括で消せないことを優先した。
+
+## 2026-11-23 スカッシュ後の統合済みは、人間の側が取った PR の証拠で判定し、verified にも破棄の道を作る（#239）
+
+- **Decision**: 統合済みの判定は、祖先判定に加えて「統合済みの証拠」（`node.mergeEvidenceRecorded`。先端 `tip` に紐付き、人間のロールだけが記録できる。事実に `mergedBy: "ancestor" | "evidence"`）を使う。証拠は人間の CLI が `gh` で PR の `headRefOid` と `MERGED` を取って渡し、使えないときは人の宣言（`touryou reclaim <nodeId> --merged-as <PR 番号 | SHA>`）に落とす。daemon は `gh` を呼ばず、先端の一致だけを確かめる。証拠つきの削除は、先端を `refs/touryou/discarded/` に保管してから `git branch -D` で行い、保管に失敗したら何も消さない。`verified` の破棄は `node.reclaimInstruct` を `verified` にも許す。一括回収は証拠つきを対象に含め、実体のない `verified` は含めない。
+- **Rationale**: 事実の判定は事実のある層（GitHub、人間の側）で行う。AI が作れない証拠だけに絞れば、人間のロールだけ・強制なし・digest 照合の原則と矛盾しない。状態の意味（`verified` は受理済み）を変えず、記録の上に破棄の道を作れる。
+- **Rejected alternatives**: ローカル git だけの判定（`git merge-tree`・差分の適用）— 上流が取り消した変更を統合済みと読む危険がある。木・パスの一致 — 削除・リネームに穴がある。`verified → stopped` の遷移や `stop` を `verified` に許す案 — 受理済みの意味が逆戻りする。state.db の直接書き換え。daemon が `gh` を呼ぶ案 — 常駐環境に認証が要る。`goneUsable` に `verified` を足すだけの案 — 判断の記録が残らない。
+
+## 2026-11-23 範囲拡張の依頼は、通らないと分かった時点で要求の段階で断る（#249）
+
+- **Decision**: `scope.extend` の要求時にも、判定と同じ `checkApprove`（規則は 1 か所）を人間の判定として走らせる。`scopeNotSubset`・`scopeDenied`・`scopeInvalid` なら、記録も受信箱の項目も作らずに子へ返す。一時的な失敗は断らず、判定時の検査に任せる。親が根で、規則に直せる依頼は、「上限にも足して承認」で通せるので、今までどおり画面に出す。`scopeNotSubset` の文には、近い許可コマンド（`nearestAllowedCommand`）を添える。
+- **Rationale**: 押せるボタンつきで必ず失敗する依頼を人に見せない。検査の規則を 2 か所に書かない。
+- **Rejected alternatives**: 収まらない依頼をすべて要求時に断る案 — 「上限にも足して承認」の道がなくなる。前方一致を末尾一致に緩める案 — 許可が広がる。画面でボタンを無効にする案 — daemon で断れば画面に出ない。
+
+## 2026-11-23 作業ツリーへの ignored ファイルの配置は、既存のコピー一覧で足し、設定したコマンドの実行は足さない（#250）
+
+- **Decision**: 新しい作業ツリーへの ignored ファイルの配置は、既存の `<repoRoot>/.claude/touryou-worktree-files.json` の `files` のコピーで足りるとする。作成後の hook も、元がないときの再生成コマンドも足さない。コピーは `COPYFILE_FICLONE` にし、丸ごと gitignore のディレクトリは、一覧のファイルを含むものだけ `--ignored=traditional` でファイルごとに開いて回収の「きれいか」の判定に反映する。一覧にないファイルが同じディレクトリにあれば、きれいでないにする。
+- **Rationale**: 一覧は利用者の `repoRoot` の `.claude/` にあり子は書けないので、設定者は信頼できる。課題は「バイナリを 1 つ置く」だけで、任意のコマンドを走らせる経路は過大。
+- **Rejected alternatives**: 作成後に走らせる設定したコマンド — 安全面の設計が重く、作成が直列なので長引くと全体が止まる。元がないときの再生成コマンド — 子の起動の成否がネットワーク次第になる。
+
+## 2026-11-23 手の空いた CLI の子の紐付けの戻しは、MCP が自分で行い、統括は利用者に聞いてコードを出す（#255）
+
+- **Decision**: 紐付け待ちの子の MCP が、起動直後と定期の確認で、コードのファイルが現れたら自分で使い、なければコードなしの結び直しを間引いて試す。通ったら購読を張り直し、自分の受信箱のソケットに固定の 1 行を 1 回だけ書いて、手の空いた子を起こす。最初の起動でコードのファイルがあるときは、コードなしの結び直しを試さない。サーバー側の条件は変えない。戻らないときは、統括が `AskUserQuestion` で利用者に聞き、承認後に既存の `node_bindCode` を呼ぶ。新しい道具は足さない。
+- **Rationale**: 攻撃面を増やさずに、子の AI が `child_bind` を呼ぶことだけに頼っていた入口を MCP 側に足せる。人の許可を挟む線引きは、既存の `node_bindCode` の権限のまま保てる。
+- **Rejected alternatives**: idle 失効後もコードなしの結び直しを通す案 — 使われていないセッションのトークンを残さない守りが薄まる。統括向けの新しい道具 `node_repairBinding` — 承認が自己申告になり守りにならない。daemon から子の受信箱のソケットへ書く案 — 認証前の入力の道ができる。統括が `claude attach` や `claude --bg` を代行する案 — 人間のロールだけの操作が曖昧になる。
+
 ## 2026-11-27 設定の「cwd から上へ」の探索は、git のリポジトリの根で止める（#312）
 
 - **Decision**: `findConfigUpward`（`locateConfig` の 3 番目の段）と、導入の script の `config_in_ancestors` は、cwd から上へ `<dir>/.touryou/config.json` を探すとき、**その階層の設定を調べたあと、`<dir>/.git/HEAD` がある階層（git のリポジトリの根）で止まる**。リンクした作業ツリー（`.git` がファイル）は根とみなさず、上へ続ける。`$HOME` は、TS 側では特別扱いしない（設計書 4-2 のまま）。script は、これまでどおり `$HOME/.touryou/config.json`（前の置き場）を当てない。core は純粋なまま、既存の `exists` だけで判定する（`.git/HEAD` の有無）。
