@@ -50,7 +50,8 @@ export interface Lane {
 export const BAR_OFFSET = 19;
 export const BAR_W = 6;
 export const LANE_OFFSET = 31;
-export const SLOT_GAP = 18;
+/** 上りと下りの線の間隔（LANE_GAP の 2 倍）にそろえる。ずれると、同じ高さの子で線に小さな段差が出る。 */
+export const SLOT_GAP = LANE_GAP * 2;
 const JOG_BASE = 26;
 const JOG_STEP = 10;
 const JOG_EXTRA_MAX = 40;
