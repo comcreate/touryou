@@ -1154,8 +1154,10 @@ export const UI_JS = `'use strict';
     // 受信箱の知らせ（上の「いまあなたがすること」に出さない種類）は、同じ窓の「受信箱の知らせ」の欄に出す。窓の見出しの「未解決 N 件」は、両方の合計
     var rest = view.inbox.filter(function (i) { return i.stall !== true && !isStopRequest(i, delegated); });
     renderInboxTab(view.flows, byId);
-    var unresolved = n + rest.length;
-    document.getElementById('yours-unresolved').textContent = unresolved ? t('yours.unresolved', { n: unresolved }) : '';
+    // 受信箱は上限で切れていることがある。切った分は実数（inboxTotal）で足し、切ったときは「一部を表示」と分かる文にする
+    var hidden = typeof view.inboxTotal === 'number' && view.inboxTotal > view.inbox.length ? view.inboxTotal - view.inbox.length : 0;
+    var unresolved = n + rest.length + hidden;
+    document.getElementById('yours-unresolved').textContent = unresolved ? t(hidden > 0 ? 'yours.unresolvedCut' : 'yours.unresolved', { n: unresolved }) : '';
     if (n === 0) box.appendChild(el('p', 'empty', t('todo.empty')));
     var countEl = document.getElementById('now-count');
     countEl.textContent = String(n);

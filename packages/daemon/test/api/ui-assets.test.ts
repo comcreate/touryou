@@ -21,6 +21,27 @@ import { UI_TEXT as UI_TEXT_TABLE } from "../../src/ui/i18n.js";
 const TABLE_LINE = /^ {2}var (?:TEXT|MESSAGES|SEPS|FAILURES) = \{[^\n]*\};$/gm;
 const TABLE_LINE_ONE = /^ {2}var (?:TEXT|MESSAGES|SEPS|FAILURES) = /;
 
+/** 「あなたの番」の窓の見出し「未解決 N 件」は、受信箱を上限で切った分も実数で数え、切ったときは「一部を表示」と出す。 */
+describe("あなたの番の見出し（未解決の件数）", () => {
+  it("切った分（inboxTotal − 出した件数）を足し、切ったときだけ yours.unresolvedCut の文にする", () => {
+    expect(UI_JS).toContain(
+      "view.inboxTotal > view.inbox.length ? view.inboxTotal - view.inbox.length : 0",
+    );
+    expect(UI_JS).toContain("var unresolved = n + rest.length + hidden;");
+    expect(UI_JS).toContain(
+      "t(hidden > 0 ? 'yours.unresolvedCut' : 'yours.unresolved', { n: unresolved })",
+    );
+  });
+  it("切ったときの文は、日本語・英語の両方で、実数の差し込み {n} と「一部を表示」を持つ。切らないときの文は従来のまま", () => {
+    const table = UI_TEXT_TABLE as unknown as Record<string, { ja: string; en: string }>;
+    expect(table["yours.unresolved"]).toEqual({ ja: "未解決 {n} 件", en: "{n} unresolved" });
+    expect(table["yours.unresolvedCut"]).toEqual({
+      ja: "未解決 {n} 件（一部を表示）",
+      en: "{n} unresolved (showing some)",
+    });
+  });
+});
+
 /** 画面の資産の走査。XSS・トークンの漏れにつながる書き方を禁じる。 */
 describe("画面の資産（走査）", () => {
   const FORBIDDEN: readonly [string, RegExp][] = [
@@ -277,6 +298,8 @@ describe("画面の資産（走査）", () => {
       "target",
       "targetHidden",
       "inbox",
+      // 受信箱の未解決の実数（上限で切る前。「あなたの番」の見出しの件数に使う）
+      "inboxTotal",
       "nodes",
       "lastSeq",
       "options",
@@ -2220,8 +2243,9 @@ describe("状態画面の見た目の戻し（#283）", () => {
     expect(UI_HTML).toContain('id="p-yours-inbox"');
     expect(UI_HTML).toContain('id="inbox-list"');
     expect(UI_JS).toContain("renderInboxTab(view.flows, byId)");
-    expect(UI_JS).toContain("t('yours.unresolved', { n: unresolved })");
+    expect(UI_JS).toContain("'yours.unresolvedCut' : 'yours.unresolved', { n: unresolved })");
     expect(UI_TEXT_TABLE["yours.unresolved"]?.ja).toContain("{n}");
+    expect(UI_TEXT_TABLE["yours.unresolvedCut"]?.ja).toContain("{n}");
     expect(UI_TEXT_TABLE["yours.tabInbox"]?.ja).toBe("受信箱の知らせ");
   });
 });

@@ -256,6 +256,8 @@ export interface UiView {
   readonly lastSeq: number;
   readonly nodes: readonly UiNode[];
   readonly inbox: readonly UiInboxItem[];
+  /** 受信箱の未解決の実数（`UI_LIMITS.inbox` で切る前。切らないときは `inbox.length` と同じ）。画面の見出しの件数に使う。 */
+  readonly inboxTotal: number;
   /** 人が片付けた項目（新しい順。`UI_LIMITS.resolved` 件まで）。 */
   readonly resolved: readonly UiResolvedItem[];
   readonly decisions: readonly UiDecision[];
@@ -528,6 +530,7 @@ export function uiViewOf(state: OrchState, options: UiViewOptions = {}): UiView 
     lastSeq: state.lastSeq,
     nodes,
     inbox,
+    inboxTotal: unresolved.length,
     resolved,
     decisions,
     extensions,
