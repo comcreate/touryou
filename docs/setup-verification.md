@@ -65,10 +65,11 @@ plutil -extract EnvironmentVariables.PATH raw "${HOME}/Library/LaunchAgents/tour
 if ls "${HOME}/Library/LaunchAgents/" | grep -q 'touryou\.supervisor\.plist$'; then mkdir -p "${HOME}/touryou-verify-launchd" && cp -fp "${HOME}/Library/LaunchAgents/touryou.supervisor.plist" "${HOME}/touryou-verify-launchd/" && "${HOME}/.touryou/current/bin/touryou" supervisor uninstall --yes; else echo "supervisor の常駐なし。飛ばします"; fi
 ```
 
-前の置き場の常駐（`touryou.daemon.plist`。v0.1.6 以前の形）が残っているときは、続けて、次の 1 行で外す（なければ何もしない。plist がないとき、`cp` の `*touryou.daemon.plist` は zsh で `no matches found` になるため、`if` で守っている）。`--org` 付きのときは、`uninstall` にも同じ `--org` を付ける。
+前の置き場の常駐（`touryou.daemon.plist`。v0.1.6 以前の形）が残っているときは、続けて、次の 2 行で外す（なければ何もしない。plist がないとき、`cp` の `*touryou.daemon.plist` は zsh で `no matches found` になるため、`if` で守っている）。1 行目で plist を写し、2 行目で外す。1 行目が失敗したら、2 行目は打たない（写しがないまま外すと、あとで比べられない）。`--org` 付きのときは、`uninstall` にも同じ `--org` を付ける。
 
 ```sh
-if ls "${HOME}/Library/LaunchAgents/" | grep -q 'touryou\.daemon\.plist$'; then mkdir -p "${HOME}/touryou-verify-launchd" && find "${HOME}/Library/LaunchAgents" -maxdepth 1 -name '*touryou.daemon.plist' -exec cp -fp {} "${HOME}/touryou-verify-launchd/" \; && "${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes; else echo "前の置き場の常駐なし。飛ばします"; fi
+if ls "${HOME}/Library/LaunchAgents/" | grep -q 'touryou\.daemon\.plist$'; then mkdir -p "${HOME}/touryou-verify-launchd" && find "${HOME}/Library/LaunchAgents" -maxdepth 1 -name '*touryou.daemon.plist' -exec cp -fp {} "${HOME}/touryou-verify-launchd/" \; ; else echo "前の置き場の常駐なし。飛ばします"; fi
+if ls "${HOME}/Library/LaunchAgents/" | grep -q 'touryou\.daemon\.plist$'; then "${HOME}/.touryou/current/bin/touryou" launchd uninstall --yes; fi
 ```
 
 `~/.touryou` を退避する。

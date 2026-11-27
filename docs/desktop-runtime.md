@@ -95,7 +95,7 @@ Desktop の子は、統合セッションが Desktop のタスク生成機能で
 
 人間は、cli の `touryou confirm-stopped <nodeId> [--note <根拠>]` か、画面の「止めたと宣言…」（ノード ID の打ち込みが要る。`docs/ui.md`）から宣言できる。
 
-**done の子の片付け**: 完了報告済み（done）の子は、**人だけが、受理せずに止められる**（`"$HOME/.touryou/current/bin/touryou" stop <nodeId> --yes`。猶予なしの即時停止。#115）。統合の `node_stop` は、done の子には `alreadyFinished` で断る（止めると受理できなくなるため）。止めて停止を確かめた（stopped）あとは、人間が `touryou reclaim <nodeId>`（`--yes --expect`）で破棄して回収できる（破棄は人の操作のまま。統合や子からは破棄できない）。止めたと宣言する（`invalidTransition`）ことはできない。受理するなら、人間は `touryou accept <nodeId>`（`node.review` の `verdict: "accept"`。人間ができるのは受理だけで、差し戻しは親だけ）で verified にできる。verified になると、ノードのトークンとフック専用のトークンが失効し、引き出しが消える（24 時間の期限を待たない）。**人間のトークンは、受理（accept）を含む**。受理は、その子に依存するノードにとって依存先の完了になる（依存する子が動き出しうる）ので、中身を確かめてから受理する。done 以外の子は `invalidTransition`、ないノードは `notFound`。そのあとは `touryou reclaim` で回収できる。
+**done の子の片付け**: `touryou` のコマンドは、設定のあるリポジトリ（または子の作業ツリー）の中で打つ。ほかの場所では `--config <絶対パス>` を付ける。完了報告済み（done）の子は、**人だけが、受理せずに止められる**（`"$HOME/.touryou/current/bin/touryou" stop <nodeId> --yes`。猶予なしの即時停止。#115）。統合の `node_stop` は、done の子には `alreadyFinished` で断る（止めると受理できなくなるため）。止めて停止を確かめた（stopped）あとは、人間が `touryou reclaim <nodeId>`（`--yes --expect`）で破棄して回収できる（破棄は人の操作のまま。統合や子からは破棄できない）。止めたと宣言する（`invalidTransition`）ことはできない。受理するなら、人間は `touryou accept <nodeId>`（`node.review` の `verdict: "accept"`。人間ができるのは受理だけで、差し戻しは親だけ）で verified にできる。verified になると、ノードのトークンとフック専用のトークンが失効し、引き出しが消える（24 時間の期限を待たない）。**人間のトークンは、受理（accept）を含む**。受理は、その子に依存するノードにとって依存先の完了になる（依存する子が動き出しうる）ので、中身を確かめてから受理する。done 以外の子は `invalidTransition`、ないノードは `notFound`。そのあとは `touryou reclaim` で回収できる。
 
 ## 配線と紐付け（**仮置き**）
 
