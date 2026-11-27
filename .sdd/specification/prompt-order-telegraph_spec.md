@@ -30,7 +30,7 @@ risk: "medium"
 
 | 事実 | 確かめた場所 |
 |:--|:--|
-| 子の受信箱の操作 `child.inbox`（mcp の道具は `inbox_fetch`）は、まだ受け取っていない追加の指示（`node.send`・差し戻しの理由・判断の回答。どれも `node.instructed`）を古い順に、番号（seq）を付けて返す | [touryou_design.md](./touryou_design.md) 138 行 |
+| 子の受信箱の操作 `child.inbox`（mcp の道具は `inbox_fetch`）は、まだ受け取っていない追加の指示（`node.send`・差し戻しの理由・判断の回答。どれも `node.instructed`）を古い順に、番号（seq）を付けて返す | `packages/daemon/src/api/handlers/child-inbox-handlers.ts` |
 | 「配送済み」は `node.instructionDelivered`（`deliveredSeq`）。mcp が応答を受け取ってから、受け取った最大の番号（`ackThrough`）を付けてもう一度呼び、daemon がそこで印を付ける | 同 194 行 |
 | 子が受け取らないまま `cliWatch.unreadMinutes`（既定 30 分）を超えた指示は、指示ごとに 1 回、親の受信箱に知らせる | 同 179 行、`docs/config.md` の `cliWatch` |
 | 子の道具は `report_progress`・`report_decision`・`decision_withdraw`・`report_outOfScope`・`report_done`・`scope_extend`・`inbox_fetch`（子の受信箱） | `plugin/skills/child/SKILL.md`、`CHANGELOG.md` の #168 PR3 の項 |

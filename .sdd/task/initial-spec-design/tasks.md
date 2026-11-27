@@ -5,7 +5,7 @@ type: "tasks"
 status: "draft"
 sdd-phase: "tasks"
 sdd-version: "5.1.0"
-depends-on: ["design-touryou"]
+depends-on: ["spec-touryou"]
 ---
 
 # タスク一覧

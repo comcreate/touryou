@@ -8,7 +8,7 @@ sdd-version: "5.1.0"
 impl-status: "not-implemented"
 created: "2026-11-17"
 updated: "2026-11-17"
-depends-on: ["spec-touryou", "design-touryou"]
+depends-on: ["spec-touryou"]
 tags: ["ui", "status-screen", "rete"]
 category: "developer-tooling"
 ---

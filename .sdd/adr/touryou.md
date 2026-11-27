@@ -6,14 +6,14 @@ status: "approved"
 sdd-phase: "implement"
 created: "2026-11-11"
 updated: "2026-11-27"
-depends-on: ["spec-touryou", "design-touryou"]
+depends-on: ["spec-touryou"]
 tags: ["claude-code", "mcp", "orchestration"]
 category: "developer-tooling"
 ---
 
 # TouRyou 決定ログ
 
-技術設計は [touryou_design.md](../specification/touryou_design.md) にある。
+未解決の課題は [open-issues.md](../task/touryou-open-issues/open-issues.md) にある。
 
 ## 2026-11-11 セッションを起動せず親のセッションに依頼する
 
