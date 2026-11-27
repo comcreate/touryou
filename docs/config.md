@@ -14,9 +14,16 @@ daemon（`touryou-daemon --config <設定ファイル>`）と、統合セッシ�
 
 1. `--config <設定ファイル>`（`touryou ui`・`touryou-mcp --stdio` が取る引数）
 2. 環境変数 `TOURYOU_DAEMON_CONFIG`（空は無視する）
-3. 実行した場所（cwd）から上へ、各階層の `<dir>/.touryou/config.json` を探し、いちばん近いものを使う
+3. 実行した場所（cwd）から上へ、各階層の `<dir>/.touryou/config.json` を探し、いちばん近いものを使う。**git のリポジトリの根（`<dir>/.git/HEAD` がある階層）で止まる**（その階層の設定は調べる）
 
-3 は、どの深さからでも、子の作業ツリー（`<repoRoot>/.touryou/worktrees/<子>`）の中からでも、親のリポジトリの `<repoRoot>/.touryou/config.json` に届きます。`$HOME` だけを特別に扱いません（cwd が `$HOME` の下にあれば、`$HOME/.touryou/config.json` も、上へ探す途中で見つかります）。
+**設定は、いま居るリポジトリの中だけで探します。見つからないときは `/touryou:setup`、リポジトリの外に置いた設定は `--config` で指します。**
+
+- 子の作業ツリー（`<repoRoot>/.touryou/worktrees/<子>`）の中からでも、どの深さからでも、親のリポジトリの `<repoRoot>/.touryou/config.json` に届きます。git worktree で作った作業ツリー（子の作業ツリーもこれ）は、`.git` がファイルで `.git/HEAD` がないので、根とみなしません。そのため、`repoRoot` の外に置いた `worktreeRoot` の子の作業ツリーからも、祖先の設定に届きます。
+- 根で止めるのは、リポジトリの外の祖先（たとえば `~/src/github.com/<org>/.touryou/config.json`）にある、**別のリポジトリの設定を拾わない**ためです。止めないと、その祖先の下の、まだ設定のない別のリポジトリでも `CONFIG: present` になり、`/touryou:setup` が設定の作成・移行（`touryou migrate`）を案内せず、別の `repoRoot` の daemon につながってしまいます。
+- 例外: `$HOME` は特別に扱いません。リポジトリでない場所から実行したときだけ、`$HOME/.touryou/config.json` に届きます。
+- 設定が根の外にあるときは、`--config`・`TOURYOU_DAEMON_CONFIG` で指します。
+
+開発者向け: 導入の script（`plugin/scripts/install-runtime.sh` の `config_in_ancestors`）も、同じ範囲で探します（ただし script は、`$HOME/.touryou/config.json` を前の置き場として当てません）。
 
 **見つからないときは、旧パス（`$HOME/.touryou/config.json`）へ黙って戻りません。** 探した場所（cwd）と直し方（`/touryou:setup` を実行する、または `--config`・`TOURYOU_DAEMON_CONFIG` で指す）を出して止まります。
 

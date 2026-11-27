@@ -85,6 +85,9 @@ config_in_ancestors() {
     f="${d%/}/.touryou/config.json"
     if [ "$(cd "${d}" 2>/dev/null && pwd -P)" != "${home}" ] && [ -f "${f}" ] && [ ! -L "${f}" ]; then return 0; fi
     [ "${d}" = "/" ] || [ -z "${d}" ] && return 1
+    # git のリポジトリの根（.git/HEAD がある階層。リンクした作業ツリーの .git はファイルなので、根とみなさない）で止まる。
+    # リポジトリの外の祖先にある、別のリポジトリの設定を拾わない（TS の findConfigUpward と同じ。#312）
+    [ -e "${d%/}/.git/HEAD" ] && return 1
     d="${d%/*}"
     [ -n "${d}" ] || d="/"
   done

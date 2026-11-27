@@ -79,6 +79,34 @@ describe("locateConfig", () => {
     }
   });
 
+  it("リポジトリの中からは、根で止まるので、前の置き場 $HOME/.touryou/config.json に届かない", () => {
+    const r = locateConfig({
+      env: { HOME: "/home/u" },
+      cwd: "/home/u/work/app/src",
+      exists: has("/home/u/.touryou/config.json", "/home/u/work/app/.git/HEAD"),
+    });
+    expect(r.ok).toBe(false);
+  });
+
+  it("git のリポジトリの根（.git/HEAD）で止まる。外の祖先の別のリポジトリの設定を拾わない（#312）", () => {
+    const exists = has("/org/.touryou/config.json", "/org/other/.git/HEAD");
+    expect(locateConfig({ env: {}, cwd: "/org/other/src", exists }).ok).toBe(false);
+  });
+
+  it("根の階層の設定は、根で止まる前に当たる", () => {
+    const exists = has("/org/other/.touryou/config.json", "/org/other/.git/HEAD");
+    expect(locateConfig({ env: {}, cwd: "/org/other/src", exists })).toMatchObject({
+      path: "/org/other/.touryou/config.json",
+    });
+  });
+
+  it("リンクした作業ツリー（.git がファイルで、.git/HEAD がない）は根でない。外に置いた worktreeRoot の祖先の設定に届く", () => {
+    const exists = has("/org/.touryou/config.json");
+    expect(
+      locateConfig({ env: {}, cwd: "/org/.touryou/.worktrees/child-1/src", exists }),
+    ).toMatchObject({ path: "/org/.touryou/config.json" });
+  });
+
   it("cwd が分からない・絶対パスでないときは止まる", () => {
     expect(locateConfig({ env: {}, exists: () => true }).ok).toBe(false);
     expect(locateConfig({ env: {}, cwd: "rel", exists: () => true }).ok).toBe(false);
