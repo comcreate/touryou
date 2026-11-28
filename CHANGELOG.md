@@ -2,6 +2,7 @@
 
 ## 未公開
 
+- **plugin の中継（`scripts/touryou-mcp-shim.sh`）が、待ち状態に入った理由を出すようにした**（#317）。これまでは試しの起動の標準出力・標準エラーを捨てていたので、Reconnect しても道具が 0 個のままの理由（`invalid_config`・`daemon_unreachable`・`unauthenticated`・権限検査の失敗など）が見えなかった。試しの起動の標準エラーの「失敗 [種類]」の種類だけを取り出し（英小文字と `_` だけ）、標準エラーの文と、`initialize` の応答の `instructions`（Claude Code の `/mcp` の画面に出る）に出す。失敗の本文（cause・次の操作）にはパス・トークンが入りうるので、読まず、出さない。種類を取り出せなければ `unknown`。
 - **状態画面の「あなたの番」の見出し「未解決 N 件」が、受信箱の上限（200 件）で切った件数のまま出るのを直した**。人が答える項目が 0 件でも「未解決 200 件」と出ていた。表示モデルに、上限で切る前の受信箱の未解決の実数 `inboxTotal` を足し（`packages/core/src/ui-view.ts`。切らないときは `inbox` の件数と同じ）、見出しは、画面に出した件数に、切った分を足した実数にした。切ったときは「未解決 N 件（一部を表示）」（英語は「N unresolved (showing some)」）と出し、切っていないときは従来の「未解決 N 件」のまま。見出しの数は、これまでどおり「判断・答え待ち」と「受信箱の知らせ」の両方の合計。
 - **設定ファイルは、いま居るリポジトリの中だけで探すようにした**（#312）。**リポジトリの外の祖先**（たとえば `~/src/github.com/<org>/.touryou/config.json`）**に置いた設定は、もう自動では見つからない**。そこに置いているときは、`--config`・`TOURYOU_DAEMON_CONFIG` で指す（`docs/config.md`）。これまでは、設定のない別のリポジトリでも、その祖先の設定を拾って「設定がある」と誤判定し、`/touryou:setup` が設定の作成・移行を案内しなかった。git worktree で作った作業ツリー（子の作業ツリー）からは、これまでどおり親の設定に届く。
 - **plugin の版上げの案内に、marketplace の `ref` の確かめ方と直し方を足した**。`claude plugin marketplace list` の Source に `@marketplace-v<版>`（たとえば `@marketplace-v0.1.6`）が付いていると、`claude plugin update` が最新を検出できない（README の「更新」・`/touryou:setup` の「plugin が古い」の定型文・`docs/plugin.md`）。

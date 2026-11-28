@@ -15,19 +15,34 @@ if [ -z "${HOME}" ]; then
   exit 1
 fi
 target="${HOME}/.touryou/current/bin/touryou-mcp"
+# 試しの起動。標準入力を閉じて起動し、0 で終われば成功。失敗したら、標準エラーの「失敗 [種類]」の種類だけを reason に入れる
+# （cause・次の操作の文にはパスなどの個人の値が入りうるので、読み取らない。種類は英小文字と _ だけ通す）
+reason=""
+probe() {
+  local err
+  err="$("${target}" --stdio </dev/null 2>&1 >/dev/null)" && return 0
+  reason="$(printf '%s\n' "${err}" | sed -n -E 's/.*失敗 \[([a-z_]+)\].*/\1/p' | head -n 1)"
+  [ -n "${reason}" ] || reason="unknown"
+  return 1
+}
 if [ -x "${target}" ]; then
   # 配布物があっても daemon が動いていなければ、touryou-mcp は起動時の確認で終わる（会話の node が CONNECTION_CLOSED になる）。
   # 先に、標準入力を閉じて試しに起動し、0 で終わったとき（daemon につながった）だけ exec する。だめなら、下で待つ
-  if "${target}" --stdio </dev/null >/dev/null 2>&1; then
+  if probe; then
     exec "${target}" --stdio
   fi
-  echo "[touryou mcp] daemon にまだつながらない。動くまで待ち、動いたら、自動でつながる" >&2
+  echo "[touryou mcp] touryou-mcp の試しの起動が失敗した（理由: ${reason}）。動くまで待ち、動いたら、自動でつながる" >&2
 else
   echo "[touryou mcp] 配布物の touryou-mcp がまだない（HOME の .touryou/current/bin）。/touryou:setup のあと、自動でつながる" >&2
 fi
 
 proto=""
 next_probe=0
+if [ -n "${reason}" ]; then
+  instructions="touryou-mcp の試しの起動が失敗した（理由: ${reason}）。daemon の状態は /touryou:service status で確かめる"
+else
+  instructions="touryou の配布物がまだない。/touryou:setup のあと、道具が出る"
+fi
 reply() { printf '%s\n' "$1"; }
 field() { printf '%s' "$2" | sed -n -E "s/.*\"$1\"[[:space:]]*:[[:space:]]*(\"[^\"]*\"|-?[0-9]+).*/\\1/p"; }
 handoff() {
@@ -46,7 +61,7 @@ handoff() {
 while :; do
   if [ -n "${proto}" ] && [ -x "${target}" ] && [ "${SECONDS}" -ge "${next_probe}" ]; then
     next_probe=$((SECONDS + 10))
-    if "${target}" --stdio </dev/null >/dev/null 2>&1; then
+    if probe; then
       echo "[touryou mcp] 配布物が置かれ、daemon につながったので、touryou-mcp に引き継ぐ" >&2
       handoff
     fi
@@ -60,7 +75,7 @@ while :; do
       '"initialize"')
         proto="$(field protocolVersion "${line}")"
         [ -n "${proto}" ] || proto='"2025-06-18"'
-        reply "{\"jsonrpc\":\"2.0\",\"id\":${id},\"result\":{\"protocolVersion\":${proto},\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"touryou-mcp-shim\",\"version\":\"1\"},\"instructions\":\"touryou の配布物がまだない。/touryou:setup のあと、道具が出る\"}}"
+        reply "{\"jsonrpc\":\"2.0\",\"id\":${id},\"result\":{\"protocolVersion\":${proto},\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"touryou-mcp-shim\",\"version\":\"1\"},\"instructions\":\"${instructions}\"}}"
         ;;
       '"ping"') reply "{\"jsonrpc\":\"2.0\",\"id\":${id},\"result\":{}}" ;;
       '"tools/list"') reply "{\"jsonrpc\":\"2.0\",\"id\":${id},\"result\":{\"tools\":[]}}" ;;
